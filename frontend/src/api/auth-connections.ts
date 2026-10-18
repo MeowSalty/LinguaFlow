@@ -9,7 +9,14 @@ export type AuthConnectionImpact = ApiSchemas['AuthConnectionImpact']
 export type AuthConnectionCheck = ApiSchemas['AuthConnectionCheck']
 export type AuthAttributeField = ApiSchemas['AuthAttributeField']
 export type AuthRuleSet = ApiSchemas['AuthRuleSet']
-export type AuthConnectionProblem = Partial<ApiSchemas['AuthPublishProblem']> & {
+export type AuthConnectionChanges = ApiSchemas['AuthConnectionChanges']
+export type AuthConnectionCandidate = ApiSchemas['AuthConnectionCandidateRequest']
+export type AuthConnectionAction = ApiSchemas['AuthConnectionActionRequest']
+export type AuthConnectionProblem = Omit<
+  Partial<ApiSchemas['AuthConnectionErrorProblem']>,
+  'status'
+> & {
+  status?: number
   remediation?: string
 }
 
@@ -19,6 +26,12 @@ export class AuthConnectionError extends ApiError {
   constructor(problem: AuthConnectionProblem | undefined, status?: number) {
     super(problem?.detail || problem?.title || t('authAdmin.requestFailed'), status, problem)
     this.name = 'AuthConnectionError'
+  }
+  get code(): ApiSchemas['AuthConnectionErrorCode'] | undefined {
+    const prefix = 'urn:linguaflow:auth-connection-'
+    return this.problem?.type?.startsWith(prefix)
+      ? (this.problem.type.slice(prefix.length) as ApiSchemas['AuthConnectionErrorCode'])
+      : undefined
   }
 }
 
@@ -60,13 +73,12 @@ export async function uploadAuthConnectionLogo(
 
 export async function fetchAuthConnectionLogo(
   connectionId: string,
-  revision: number,
   client: ApiClient = apiClient,
 ): Promise<Blob> {
   const { data, error, response } = await client.GET(
     '/admin/auth-connections/{connectionId}/logo',
     {
-      params: { path: { connectionId }, query: { expected_revision: revision } },
+      params: { path: { connectionId } },
       parseAs: 'blob',
     },
   )
@@ -129,16 +141,28 @@ export async function previewAuthConnection(
   return result(data, error, response)
 }
 
+export async function previewAuthConnectionAttributes(
+  connectionId: string,
+  body: AuthConnectionCandidate,
+  client: ApiClient = apiClient,
+) {
+  const { data, error, response } = await client.POST(
+    '/admin/auth-connections/{connectionId}/attributes',
+    { params: { path: { connectionId } }, body },
+  )
+  return result(data, error, response)
+}
+
 export async function checkAuthConnection(
   connectionId: string,
-  revision: number,
+  body: AuthConnectionCandidate,
   client: ApiClient = apiClient,
 ) {
   const { data, error, response } = await client.POST(
     '/admin/auth-connections/{connectionId}/check',
     {
       params: { path: { connectionId } },
-      body: { expected_revision: revision },
+      body,
     },
   )
   return result(data, error, response)
@@ -146,30 +170,54 @@ export async function checkAuthConnection(
 
 export async function fetchAuthConnectionImpact(
   connectionId: string,
-  revision: number,
+  body: AuthConnectionCandidate,
   client: ApiClient = apiClient,
 ) {
   const { data, error, response } = await client.POST(
     '/admin/auth-connections/{connectionId}/impact',
     {
       params: { path: { connectionId } },
-      body: { expected_revision: revision },
+      body,
     },
   )
   return result(data, error, response)
 }
 
-export async function publishAuthConnection(
+export async function configureAuthConnection(
   connectionId: string,
-  revision: number,
+  body: AuthConnectionAction,
   client: ApiClient = apiClient,
 ) {
   const { data, error, response } = await client.POST(
-    '/admin/auth-connections/{connectionId}/publish',
+    '/admin/auth-connections/{connectionId}/configure',
     {
       params: { path: { connectionId } },
-      body: { expected_revision: revision },
+      body,
     },
+  )
+  return result(data, error, response)
+}
+
+export async function enableAuthConnection(
+  connectionId: string,
+  body: AuthConnectionAction,
+  client: ApiClient = apiClient,
+) {
+  const { data, error, response } = await client.POST(
+    '/admin/auth-connections/{connectionId}/enable',
+    { params: { path: { connectionId } }, body },
+  )
+  return result(data, error, response)
+}
+
+export async function disableAuthConnection(
+  connectionId: string,
+  body: AuthConnectionAction,
+  client: ApiClient = apiClient,
+) {
+  const { data, error, response } = await client.POST(
+    '/admin/auth-connections/{connectionId}/disable',
+    { params: { path: { connectionId } }, body },
   )
   return result(data, error, response)
 }

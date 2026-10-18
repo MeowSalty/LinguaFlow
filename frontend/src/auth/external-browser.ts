@@ -6,7 +6,7 @@ import { t } from '@/i18n'
 import { safeReturnPath } from './return-path'
 
 type Action = ApiSchemas['ReauthenticationRequest']['action']
-type Purpose = 'login' | 'link' | 'reauthenticate' | 'test'
+type Purpose = 'login' | 'link' | 'reauthenticate'
 type Confirmation = ApiSchemas['ExternalConfirmationResponse']
 export interface ExternalFlow {
   baseUrl: string
@@ -14,7 +14,6 @@ export interface ExternalFlow {
   userId: number | null
   purpose: Purpose
   connectionId?: string
-  revision?: number
   action?: Action
   targetId?: string
   verifier: string
@@ -36,7 +35,6 @@ interface StoredResult {
   userId: number | null
   expiresAt: string
   proof?: ProofResult
-  test?: ApiSchemas['ExternalTestResponse']
 }
 export const EXTERNAL_FLOW_KEY = 'linguaflow.external-flow.v1'
 const RESULT_KEY = 'linguaflow.external-result.v1'
@@ -80,7 +78,7 @@ export function readExternalFlow(): ExternalFlow | null {
     !matches(flow) ||
     typeof flow.verifier !== 'string' ||
     !flow.transactionId ||
-    !['login', 'link', 'reauthenticate', 'test'].includes(flow.purpose)
+    !['login', 'link', 'reauthenticate'].includes(flow.purpose)
   ) {
     remove(EXTERNAL_FLOW_KEY)
     return null
@@ -120,7 +118,7 @@ export async function createBrowserChallenge(): Promise<{
 }
 async function start(
   purpose: Purpose,
-  details: Pick<ExternalFlow, 'connectionId' | 'action' | 'targetId' | 'revision'>,
+  details: Pick<ExternalFlow, 'connectionId' | 'action' | 'targetId'>,
   returnTo: string,
   submit: (
     input: ApiSchemas['ExternalBrowserInput'],
@@ -200,28 +198,6 @@ export async function startExternalReauthentication(
     return data
   })
 }
-export async function startExternalTest(
-  connectionId: string,
-  revision: number,
-  snapshotRevision = revision,
-): Promise<void> {
-  await start(
-    'test',
-    { connectionId, revision: snapshotRevision },
-    '/admin/authentication',
-    async (input) => {
-      const { data, error, response } = await apiClient.POST(
-        '/admin/auth-connections/{connectionId}/test',
-        {
-          params: { path: { connectionId } },
-          body: { ...input, expected_revision: revision },
-        },
-      )
-      if (!data) throw buildRequestFailureError(t('authentication.failed'), error, response)
-      return data
-    },
-  )
-}
 export async function exchangeExternalTicket(
   ticket?: string,
 ): Promise<ApiSchemas['ExternalExchangeResponse']> {
@@ -238,7 +214,6 @@ export async function exchangeExternalTicket(
     login: ['session', 'signup_confirmation'],
     link: ['link_confirmation'],
     reauthenticate: ['reauthentication_proof'],
-    test: ['test_result'],
   }
   if (!allowed[flow.purpose].includes(data.kind)) {
     clearExternalFlow()
@@ -259,11 +234,6 @@ export async function exchangeExternalTicket(
       ).toISOString(),
     })
   }
-  if (
-    data.kind === 'test_result' &&
-    (data.connection_id !== flow.connectionId || data.revision !== flow.revision)
-  )
-    throw invalid()
   return data
 }
 export async function completeExternalConfirmation(
@@ -321,9 +291,7 @@ export async function cancelExternalFlow(): Promise<void> {
     if (readExternalFlow()?.transactionId === flow.transactionId) clearExternalFlow()
   }
 }
-export function saveExternalResult(
-  result: ApiSchemas['ExternalProofResponse'] | ApiSchemas['ExternalTestResponse'],
-): void {
+export function saveExternalResult(result: ApiSchemas['ExternalProofResponse']): void {
   const flow = requireFlow()
   const stored: StoredResult = {
     baseUrl: flow.baseUrl,
@@ -331,23 +299,13 @@ export function saveExternalResult(
     userId: flow.userId,
     expiresAt: new Date(Math.min(Date.parse(flow.expiresAt), Date.now() + 300_000)).toISOString(),
   }
-  if (result.kind === 'reauthentication_proof') {
-    if (flow.purpose !== 'reauthenticate' || !flow.action || !flow.targetId) throw invalid()
-    stored.expiresAt = result.expires_at
-    stored.proof = {
-      action: flow.action,
-      targetId: flow.targetId,
-      proof: result.reauthentication_proof,
-      expiresAt: result.expires_at,
-    }
-  } else {
-    if (
-      flow.purpose !== 'test' ||
-      result.connection_id !== flow.connectionId ||
-      result.revision !== flow.revision
-    )
-      throw invalid()
-    stored.test = result
+  if (flow.purpose !== 'reauthenticate' || !flow.action || !flow.targetId) throw invalid()
+  stored.expiresAt = result.expires_at
+  stored.proof = {
+    action: flow.action,
+    targetId: flow.targetId,
+    proof: result.reauthentication_proof,
+    expiresAt: result.expires_at,
   }
   write(RESULT_KEY, stored)
   clearExternalFlow()
@@ -359,7 +317,4 @@ function takeResult(): StoredResult | null {
 }
 export function takeExternalProof(): ProofResult | null {
   return takeResult()?.proof ?? null
-}
-export function takeExternalTestResult(): ApiSchemas['ExternalTestResponse'] | null {
-  return takeResult()?.test ?? null
 }

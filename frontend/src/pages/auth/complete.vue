@@ -16,6 +16,7 @@ import {
   type ExternalFlow,
 } from '@/auth/external-browser'
 import { safeReturnPath } from '@/auth/return-path'
+import { relayConnectionTestTicket } from '@/auth/connection-test'
 import { validateUsername, normalizeUsername } from '@/utils/username'
 import { validateNewPassword } from '@/utils/password'
 import { extractErrorMessage } from '@/utils/errors'
@@ -29,6 +30,7 @@ const formRef = shallowRef<FormInst | null>(null)
 const flow = shallowRef<ExternalFlow | null>(null)
 const confirmation = shallowRef<ApiSchemas['ExternalConfirmationResponse'] | null>(null)
 const loading = shallowRef(true)
+const testRelay = shallowRef(false)
 const busy = shallowRef(false)
 const error = shallowRef('')
 const canConfirm = shallowRef(true)
@@ -46,19 +48,11 @@ const expired = computed(
       flow.value ? Date.parse(flow.value.expiresAt) : 0,
     ) <= now.value,
 )
-const returnTo = computed(() =>
-  flow.value?.purpose === 'login'
-    ? '/login'
-    : flow.value?.purpose === 'test'
-      ? '/admin/authentication'
-      : '/settings/security',
-)
+const returnTo = computed(() => (flow.value?.purpose === 'login' ? '/login' : '/settings/security'))
 const returnLabel = computed(() =>
-  flow.value?.purpose === 'test'
-    ? t('authentication.returnAdmin')
-    : flow.value && flow.value.purpose !== 'login'
-      ? t('authentication.returnSecurity')
-      : t('authentication.restart'),
+  flow.value && flow.value.purpose !== 'login'
+    ? t('authentication.returnSecurity')
+    : t('authentication.restart'),
 )
 const rules = computed<FormRules>(() => ({
   username: [
@@ -127,11 +121,11 @@ async function finish(
     clearExternalFlow()
     message.success(t('authentication.linked'))
     await router.replace('/settings/security')
-  } else if (result.kind === 'reauthentication_proof' || result.kind === 'test_result') {
+  } else if (result.kind === 'reauthentication_proof') {
     saveExternalResult(result)
-    await router.replace(
-      result.kind === 'test_result' ? '/admin/authentication' : '/settings/security',
-    )
+    await router.replace('/settings/security')
+  } else if (result.kind === 'test_result') {
+    throw new Error(t('authentication.flowInvalid'))
   } else {
     confirmation.value = result
   }
@@ -141,6 +135,11 @@ onMounted(async () => {
   const ticketWindow = window as Window & { __linguaflowAuthTicket?: string }
   const ticket = ticketWindow.__linguaflowAuthTicket
   delete ticketWindow.__linguaflowAuthTicket
+  if (relayConnectionTestTicket(ticket)) {
+    testRelay.value = true
+    loading.value = false
+    return
+  }
   flow.value = readExternalFlow()
   try {
     const result = await exchangeExternalTicket(ticket)
@@ -206,6 +205,9 @@ async function cancel() {
     }
   }
 }
+function closeTestWindow() {
+  window.close()
+}
 </script>
 
 <template>
@@ -223,6 +225,7 @@ async function cancel() {
         <NSpin size="small" /><span>{{ t('authentication.callbackLoading') }}</span>
       </div>
       <NAlert v-if="error" type="error" :show-icon="false" role="alert">{{ error }}</NAlert>
+      <NAlert v-if="testRelay" type="info">{{ t('authAdmin.testRelayHint') }}</NAlert>
       <NAlert v-if="expired" type="warning" :show-icon="false">{{
         t('authentication.flowExpired')
       }}</NAlert>
@@ -287,7 +290,10 @@ async function cancel() {
           >
         </NForm>
       </template>
-      <NButton v-if="!loading" block :disabled="busy" @click="cancel">{{
+      <NButton v-if="testRelay" block @click="closeTestWindow">{{
+        t('authAdmin.closeTestWindow')
+      }}</NButton>
+      <NButton v-else-if="!loading" block :disabled="busy" @click="cancel">{{
         confirmation ? t('authentication.cancel') : returnLabel
       }}</NButton>
     </div>

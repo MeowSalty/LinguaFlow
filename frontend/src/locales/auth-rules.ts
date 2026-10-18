@@ -16,6 +16,7 @@ export const authRulesMessages = {
   removeCondition: '删除该条件',
   conditionLimitReached: '条件数量已达上限 {max} 条。',
   emptyConditions: '条件规则至少需要 1 条条件。',
+  emptyFieldsHint: '暂无可用属性字段，无法添加条件 · 请先完善接入设置或添加属性映射',
   conditionIndex: '条件 {index}',
   fieldLabel: '字段',
   fieldPlaceholder: '选择属性字段',

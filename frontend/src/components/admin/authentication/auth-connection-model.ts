@@ -6,7 +6,8 @@ import type {
 } from '@/api/auth-connections'
 
 export type SecretMode = 'keep' | 'replace' | 'clear'
-export const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+export const clone = <T>(value: T): T =>
+  value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T)
 /** JSON numeric parsing cannot preserve integers outside the safe range. Never write these back. */
 export function hasUnsafeRuleNumbers(snapshot: AuthConnectionSnapshot | undefined | null): boolean {
   return Boolean(
@@ -28,10 +29,9 @@ export function newConnectionSnapshot(): AuthConnectionSnapshot {
     display_name: '',
     description: '',
     display_order: 0,
-    revision: 0,
+    login_policy_revision: 1,
     has_client_secret: false,
     policy: {
-      enabled: false,
       login_enabled: false,
       signup_enabled: false,
       link_enabled: false,
@@ -60,49 +60,137 @@ export function newConnectionSnapshot(): AuthConnectionSnapshot {
   }
 }
 
+/** Fill editable empty protocol fields without changing the saved record. */
+export function connectionForm(record: AuthConnection): AuthConnectionSnapshot {
+  const defaults = newConnectionSnapshot()
+  return {
+    ...defaults,
+    ...clone(record.configuration),
+    ...(record.kind === 'oidc'
+      ? { oidc: { ...defaults.oidc, ...record.configuration.oidc }, oauth2: undefined }
+      : record.kind === 'generic_oauth2'
+        ? {
+            oidc: undefined,
+            oauth2: {
+              ...defaults.oauth2,
+              ...record.configuration.oauth2,
+              subject_mapping: {
+                ...defaults.oauth2?.subject_mapping,
+                ...record.configuration.oauth2?.subject_mapping,
+              },
+            },
+          }
+        : { oidc: undefined, oauth2: undefined }),
+  }
+}
+
+export type ConnectionSaveGroup = 'presentation' | 'configuration' | 'all'
+/** Compare JSON content independently of object property insertion order. */
+export function stableJson(value: unknown): string {
+  const normalize = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(normalize)
+    if (input && typeof input === 'object')
+      return Object.fromEntries(
+        Object.entries(input)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, item]) => [key, normalize(item)]),
+      )
+    return input
+  }
+  return JSON.stringify(normalize(value))
+}
+const same = (a: unknown, b: unknown): boolean => stableJson(a) === stableJson(b)
+
+/** Partial writes keep presentation saves independent of unfinished protocol edits. */
+export function connectionChanges(
+  record: AuthConnection,
+  form: AuthConnectionSnapshot,
+  mode: SecretMode,
+  secret: string,
+  group: ConnectionSaveGroup = 'all',
+): ApiSchemas['AuthConnectionChanges'] {
+  const saved = connectionForm(record)
+  const body: ApiSchemas['AuthConnectionChanges'] = {}
+  if (group !== 'configuration') {
+    if (form.display_name.trim() !== saved.display_name)
+      body.display_name = form.display_name.trim()
+    if (form.description !== saved.description) body.description = form.description
+    if (form.display_order !== saved.display_order) body.display_order = form.display_order
+  }
+  if (group === 'presentation') return body
+  if (hasUnsafeRuleNumbers(record.configuration) || hasUnsafeRuleNumbers(form))
+    throw new Error('Unsafe rule number')
+  if (record.kind === 'password') {
+    if (
+      [form.policy.login_rules, form.policy.signup_rules, form.policy.link_rules].some(
+        (rules) => rules.mode !== 'unrestricted',
+      )
+    )
+      throw new Error('Password rules must be unrestricted')
+    return body
+  }
+  if (!same(form.policy, saved.policy)) body.policy = clone(form.policy)
+  if (!same(form.attribute_mappings, saved.attribute_mappings))
+    body.attribute_mappings = clone(form.attribute_mappings)
+  if (form.evidence_max_age_seconds !== saved.evidence_max_age_seconds)
+    body.evidence_max_age_seconds = form.evidence_max_age_seconds
+  if (record.kind === 'oidc' && !same(form.oidc, saved.oidc)) body.oidc = clone(form.oidc)
+  if (record.kind === 'generic_oauth2' && !same(form.oauth2, saved.oauth2))
+    body.oauth2 = clone(form.oauth2)
+  if (mode === 'clear') body.client_secret = null
+  if (mode === 'replace') {
+    if (!secret.length) throw new Error('Empty replacement secret')
+    body.client_secret = secret
+  }
+  return body
+}
+
+export const connectionProtocolChanged = (changes: ApiSchemas['AuthConnectionChanges']): boolean =>
+  changes.oidc !== undefined || changes.oauth2 !== undefined || 'client_secret' in changes
+
+/** The candidate diagnostic identity excludes presentation and lifecycle fields. Memory only. */
+export function connectionTestCandidate(
+  record: AuthConnection,
+  changes: ApiSchemas['AuthConnectionChanges'],
+) {
+  const effective = { ...connectionForm(record), ...clone(changes) }
+  return {
+    protocol: record.kind === 'oidc' ? effective.oidc : effective.oauth2,
+    mappings: effective.attribute_mappings,
+    evidence_max_age_seconds: effective.evidence_max_age_seconds,
+    policy: {
+      login_enabled: effective.policy.login_enabled,
+      signup_enabled: effective.policy.signup_enabled,
+      link_enabled: effective.policy.link_enabled,
+      login_rules: effective.policy.login_rules,
+      signup_rules: effective.policy.signup_rules,
+      link_rules: effective.policy.link_rules,
+    },
+    secret:
+      'client_secret' in changes ? changes.client_secret : { current: effective.has_client_secret },
+  }
+}
+
 export function connectionUpdate(
   record: AuthConnection,
   draft: AuthConnectionSnapshot,
   mode: SecretMode,
   secret: string,
+  group: ConnectionSaveGroup = 'all',
 ): ApiSchemas['UpdateAuthConnectionRequest'] {
-  if (hasUnsafeRuleNumbers(record.draft ?? record.published) || hasUnsafeRuleNumbers(draft))
-    throw new Error('Unsafe rule number')
-  const policy = clone(draft.policy)
-  if (record.kind === 'password') {
-    if (
-      [policy.login_rules, policy.signup_rules, policy.link_rules].some(
-        (rules) => rules.mode !== 'unrestricted',
-      )
-    )
-      throw new Error('Password rules must be unrestricted')
-  }
-  const body: ApiSchemas['UpdateAuthConnectionRequest'] = {
+  return {
     expected_revision: record.aggregate_revision,
-    display_name: draft.display_name.trim(),
-    description: draft.description,
-    display_order: draft.display_order,
-    policy,
+    ...connectionChanges(record, draft, mode, secret, group),
   }
-  if (record.kind !== 'password') {
-    body.attribute_mappings = clone(draft.attribute_mappings ?? [])
-    body.evidence_max_age_seconds = draft.evidence_max_age_seconds ?? 3600
-    if (record.kind === 'oidc') body.oidc = clone(draft.oidc)
-    else body.oauth2 = clone(draft.oauth2)
-    if (mode === 'clear') body.client_secret = null
-    if (mode === 'replace') {
-      if (!secret.length) throw new Error('Empty replacement secret')
-      body.client_secret = secret
-    }
-  }
-  return body
 }
 
 export function connectionFormValid(
   kind: AuthConnection['kind'],
   draft: AuthConnectionSnapshot,
+  complete = true,
 ): boolean {
-  const url = (value: string) => {
+  const url = (value: string | undefined) => {
+    if (!value) return !complete
     try {
       return ['http:', 'https:'].includes(new URL(value).protocol)
     } catch {
@@ -114,13 +202,15 @@ export function connectionFormValid(
     return [draft.policy.login_rules, draft.policy.signup_rules, draft.policy.link_rules].every(
       (rules) => rules.mode === 'unrestricted',
     )
-  if (kind === 'oidc') return Boolean(draft.oidc?.client_id.trim() && url(draft.oidc.issuer))
+  if (kind === 'oidc')
+    return Boolean((!complete || draft.oidc?.client_id?.trim()) && url(draft.oidc?.issuer))
   const cfg = draft.oauth2
   return Boolean(
     cfg &&
-    cfg.client_id.trim() &&
+    (!complete || cfg.client_id?.trim()) &&
     [cfg.authorization_endpoint, cfg.token_endpoint, cfg.profile_endpoint].every(url) &&
-    /^\/(?:[^~]|~[01])*$/.test(cfg.subject_mapping.pointer),
+    ((!complete && !cfg.subject_mapping?.pointer) ||
+      /^\/(?:[^~]|~[01])*$/.test(cfg.subject_mapping?.pointer ?? '')),
   )
 }
 

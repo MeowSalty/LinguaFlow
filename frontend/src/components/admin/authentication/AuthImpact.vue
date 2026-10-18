@@ -23,8 +23,8 @@ const labels = {
 </script>
 <template>
   <div class="space-y-3">
-    <n-alert :type="impact.can_publish ? 'success' : 'warning'">{{
-      t(impact.can_publish ? 'authAdmin.canPublish' : 'authAdmin.cannotPublish')
+    <n-alert :type="impact.can_save ? 'success' : 'warning'">{{
+      t(impact.can_save ? 'authAdmin.canSave' : 'authAdmin.cannotSave')
     }}</n-alert>
     <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div

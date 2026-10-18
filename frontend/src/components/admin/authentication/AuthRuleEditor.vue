@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, h, ref, watch } from 'vue'
+import type { VNodeChild } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NAlert,
@@ -12,6 +13,7 @@ import {
   NSelect,
   NTag,
 } from 'naive-ui'
+import type { SelectOption } from 'naive-ui'
 import type { ApiSchemas } from '@/api/client-core'
 import {
   AUTH_RULE_MAX_CONDITIONS,
@@ -41,6 +43,7 @@ import {
 const props = defineProps<{
   fields: ApiSchemas['AuthAttributeField'][]
   disabled?: boolean
+  fieldsLoading?: boolean
 }>()
 
 const value = defineModel<ApiSchemas['AuthRuleSet']>('value', { required: true })
@@ -115,10 +118,29 @@ const problemMessage = (
 
 const fieldOptions = computed(() =>
   props.fields.map((field) => ({
-    label: `${field.label} · ${field.field_id}`,
+    label: field.label,
     value: field.field_id,
   })),
 )
+
+/** Menu rows show label + machine identity on separate lines; the trigger stays label-only. */
+const renderFieldOption = (option: SelectOption, selected: boolean): VNodeChild => {
+  const label = String(option.label ?? '')
+  if (selected) return label
+  const field = findAuthAttributeField(props.fields, String(option.value ?? ''))
+  const meta = field
+    ? `${field.field_id} · ${fieldTypeLabel(field.type)}`
+    : String(option.value ?? '')
+  return h('div', { class: 'py-0.5' }, [
+    h('div', { class: 'text-sm' }, label),
+    h('div', { class: 'font-mono text-xs text-lf-text-muted' }, meta),
+  ])
+}
+/** Keep field_id searchable even though the option label now shows only the human name. */
+const filterFieldOption = (pattern: string, option: SelectOption): boolean =>
+  `${String(option.label ?? '')} ${String(option.value ?? '')}`
+    .toLowerCase()
+    .includes(pattern.toLowerCase())
 
 const unknownFieldOptions = computed(() => {
   const known = new Set(props.fields.map((field) => field.field_id))
@@ -152,6 +174,12 @@ const canRemoveCondition = computed(
     state.value.conditions.length > AUTH_RULE_MIN_CONDITIONS &&
     state.value.mode === 'conditions',
 )
+
+/** List-shaped values (dynamic tags) get the whole row so entries tile horizontally. */
+const conditionGridClass = (draft: AuthRuleConditionDraft): string =>
+  shapeOf(draft) === 'list'
+    ? 'grid gap-2 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]'
+    : 'grid gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.3fr)]'
 
 const fieldOf = (draft: AuthRuleConditionDraft): ApiSchemas['AuthAttributeField'] | undefined =>
   findAuthAttributeField(props.fields, draft.field_id)
@@ -361,7 +389,12 @@ defineExpose({ validate })
               }}
             </NTag>
           </div>
-          <NButton size="small" :disabled="!canAddCondition" @click="addCondition">
+          <NButton
+            size="small"
+            :loading="fieldsLoading"
+            :disabled="!canAddCondition"
+            @click="addCondition"
+          >
             {{ t('authRules.addCondition') }}
           </NButton>
         </div>
@@ -370,7 +403,20 @@ defineExpose({ validate })
           {{ t('authRules.invalidDurationHint') }}
         </NAlert>
 
-        <NAlert v-if="fields.length === 0" type="info" :bordered="false" size="small">
+        <NAlert
+          v-if="fields.length === 0 && !fieldsLoading"
+          type="info"
+          :bordered="false"
+          size="small"
+        >
+          {{ t('authRules.emptyFieldsHint') }}
+        </NAlert>
+        <NAlert
+          v-else-if="fields.length > 0 && state.conditions.length === 0"
+          type="info"
+          :bordered="false"
+          size="small"
+        >
           {{ t('authRules.emptyConditions') }}
         </NAlert>
 
@@ -393,15 +439,20 @@ defineExpose({ validate })
             </NButton>
           </div>
 
-          <div class="grid gap-2 md:grid-cols-3">
-            <NSelect
-              :value="draft.field_id"
-              :options="selectOptions"
-              :disabled="disabled"
-              :placeholder="t('authRules.fieldPlaceholder')"
-              filterable
-              @update:value="(fieldId: string) => onFieldChange(index, fieldId)"
-            />
+          <div :class="conditionGridClass(draft)">
+            <div class="min-w-0" :title="fieldOf(draft)?.label ?? ''">
+              <NSelect
+                :value="draft.field_id"
+                :options="selectOptions"
+                :disabled="disabled"
+                :placeholder="t('authRules.fieldPlaceholder')"
+                filterable
+                :consistent-menu-width="false"
+                :render-label="renderFieldOption"
+                :filter="filterFieldOption"
+                @update:value="(fieldId: string) => onFieldChange(index, fieldId)"
+              />
+            </div>
             <NSelect
               :value="draft.operator"
               :options="operatorOptions(draft)"
@@ -419,13 +470,14 @@ defineExpose({ validate })
               ]"
               @update:value="(next: string) => setBooleanValue(draft, next)"
             />
-            <NDynamicTags
-              v-else-if="shapeOf(draft) === 'list'"
-              :value="listValue(draft)"
-              :disabled="isRowDisabled(draft)"
-              :placeholder="t('authRules.listPlaceholder')"
-              @update:value="(next: string[]) => setListValue(draft, next)"
-            />
+            <div v-else-if="shapeOf(draft) === 'list'" class="col-span-full min-w-0">
+              <NDynamicTags
+                :value="listValue(draft)"
+                :disabled="isRowDisabled(draft)"
+                :placeholder="t('authRules.listPlaceholder')"
+                @update:value="(next: string[]) => setListValue(draft, next)"
+              />
+            </div>
             <NInput
               v-else
               :value="shapeOf(draft) ? draft.text : JSON.stringify(draft.value)"
