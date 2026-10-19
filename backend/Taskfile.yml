@@ -43,6 +43,20 @@ tasks:
       - node --check ./internal/authacceptance/github.mjs
       - node --check ./internal/authacceptance/postgres-b3.mjs
       - node --check ./internal/authacceptance/postgres-b4.mjs
+      - node --check ./internal/authacceptance/postgres-b5.mjs
+
+  test:auth:b5:
+    desc: B5 本地政策、注册要求、派生规则及部署恢复验收
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test -count=1 ./internal/accountidentity ./internal/authrules
+      - go test -count=1 ./internal/service ./internal/api ./internal/cli -run 'AuthenticationB5|AuthenticationRecovery'
+
+  test:auth:postgres:b5:
+    desc: B5 隔离 PostgreSQL 配置、注册、账号维护和部署恢复竞态验收（未配置不计通过）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/postgres-b5.mjs
 
   test:auth:postgres:b4:
     desc: 独立隔离 PostgreSQL B4 认证契约与竞态验收（等待整个 Go 测试完成再清理实例）

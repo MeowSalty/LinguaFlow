@@ -73,7 +73,7 @@ async function saveOIDCConnection(page, record, provider, clientID) {
     expected_revision: record.aggregate_revision,
     oidc: { issuer: provider.issuer, client_id: clientID },
     client_secret: provider.clientSecret,
-    policy: { login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: "unrestricted" }, signup_rules: { mode: "unrestricted" }, link_rules: { mode: "unrestricted" } }
+    policy: { login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: "unrestricted" }, signup_rules: { mode: "unrestricted" }, link_rules: { mode: "unrestricted" }, signup: { email_requirement: "optional", password_requirement: "none" } }
   }, "PATCH");
 }
 async function testOIDCConnection(page, record, provider, username = "provideradmin") {
@@ -126,9 +126,11 @@ async function rulesScenario(admin, page, app, provider, first, second, bindingI
   };
   const candidate = { expected_revision: record.aggregate_revision, changes };
   const patchPayload = { expected_revision: record.aggregate_revision, ...changes };
-  const catalog = await request(admin, path + '/attributes', candidate, 'POST');
-  must(catalog.fields.some(f => f.field_id === 'custom.department') && catalog.operators.string_list.includes('contains'), 'Candidate catalog missing typed mappings');
-  const sample = await request(admin, path + '/preview', { ...candidate, sources: { oidc_userinfo: { department: 'engineering', groups: ['ops'] } } });
+  const catalog = await request(admin, `${path}/attributes?expected_revision=${record.aggregate_revision}&purpose=login`, undefined, 'GET');
+  must(catalog.purpose === 'login' && catalog.operators.string_list.includes('contains'), 'Current attribute catalog ignored purpose');
+  const candidateCatalog = await request(admin, path + '/attributes', { expected_revision: record.aggregate_revision, purpose: 'signup', changes: { attribute_mappings: mappings } }, 'POST');
+  must(candidateCatalog.purpose === 'signup' && candidateCatalog.fields.some(f => f.field_id === 'custom.department') && candidateCatalog.operators.string_list.includes('contains'), 'Candidate catalog missing typed mappings');
+  const sample = await request(admin, path + '/preview', { ...candidate, sources: { oidc_userinfo: { department: 'engineering', groups: ['ops'] } }, registration: { email: 'alice@example.com' } });
   must(sample.simulated && sample.rules.login.status === 'pass', 'Candidate rule preview failed');
   await request(page, path + '/preview', { expected_revision: record.aggregate_revision, sources: {} }, 'POST', 403);
   const impact = await request(admin, path + '/impact', candidate);
@@ -205,14 +207,27 @@ async function scenario(app, provider, mode) {
   });
   await admin.goto(app.completionBase); await page.goto(app.completionBase);
   await loginPassword(admin, 'admin', app.adminPassword);
+  for (const passwordProbe of [
+    { method: 'GET', path: '/admin/auth-connections/password', input: undefined },
+    { method: 'PATCH', path: '/admin/auth-connections/password', input: { expected_revision: 1 } },
+    { method: 'POST', path: '/admin/auth-connections/password/test', input: { expected_revision: 1, browser_challenge: 'a'.repeat(43), completion_url: 'https://connection-test.invalid/complete' } }
+  ]) await request(admin, passwordProbe.path, passwordProbe.input, passwordProbe.method, 404);
+  const localAccount = await request(admin, '/admin/local-account', undefined, 'GET');
+  assert.deepEqual(localAccount.capabilities?.signup, { email_requirement: 'optional', password_requirement: 'required' });
+  assert.deepEqual(localAccount.capabilities?.signup_requirements, ['local_password']);
+  const localRevision = localAccount.revision;
+  const savedLocalAccount = await request(admin, '/admin/local-account', { expected_revision: localRevision, policy: localAccount.policy }, 'PATCH');
+  assert.equal(savedLocalAccount.revision, localRevision);
   const first = await createConnection(admin, provider, 'b1-first');
   const second = await createConnection(admin, provider, 'b1-second');
   await assertExplicitLifecycle(admin, provider, second);
   const capabilities = await request(page, '/auth/capabilities', undefined, 'GET', 200, null);
-  must(capabilities.connections.length === 2 && capabilities.connections.every(c => c.can_login && c.can_signup && c.signup_requirements.length === 0), 'Capabilities mismatch');
+  assert.deepEqual(capabilities.local_account?.signup, { email_requirement: 'optional', password_requirement: 'required' });
+  assert.deepEqual(capabilities.local_account?.signup_requirements, ['local_password']);
+  must(capabilities.connections.length === 2 && capabilities.connections.every(c => c.can_login && c.can_signup && c.signup?.email_requirement === 'optional' && c.signup?.password_requirement === 'none' && c.signup_requirements.length === 0), 'Capabilities mismatch');
   await request(page, '/auth/register', { username: 'taken_name', password: app.adminPassword }, 'POST', 201, null);
   const signup = await flow(page, `/auth/external/${first.id}/start`, {}, provider, 'alice', { anonymous: true });
-  must(signup.kind === 'signup_confirmation', 'Callback/exchange should require signup confirmation');
+  must(signup.kind === 'signup_confirmation' && signup.signup?.email_requirement === 'optional' && signup.signup?.password_requirement === 'none' && signup.signup_requirements.length === 0, 'Callback/exchange returned the B5 signup contract');
   const signupVerifier = await page.evaluate(() => JSON.parse(sessionStorage.getItem(flowKey)).verifier);
   await expectResponse(page.evaluate(() => auth.complete({ username: 'taken_name' })), 409, 'duplicate username');
   const signedUp = await expectResponse(page.evaluate(() => auth.complete({ username: 'alice_local', display_name: 'Alice' })), 200, 'complete signup');
@@ -351,7 +366,7 @@ let record = await request(admin, '/admin/auth-connections', { kind: 'generic_oa
       oauth2: { authorization_endpoint: provider.base + '/authorize', token_endpoint: provider.base + '/token', profile_endpoint: provider.base + '/user', client_id: clientID, client_auth_method: method, scopes: [], subject_mapping: { pointer: '/id', type: 'integer' } },
       client_secret: provider.clientSecret,
       attribute_mappings: [{ field_id: 'external.account_created_at', label: 'Account created', type: 'datetime', source: 'oauth2_profile', pointer: '/created_at' }],
-      policy: { login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: 'unrestricted' }, link_rules: { mode: 'unrestricted' }, signup_rules: { mode: 'conditions', match: 'all', conditions: [{ field_id: 'external.account_age_days', operator: 'gte', value: 365 }] } }
+      policy: { login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: 'unrestricted' }, link_rules: { mode: 'unrestricted' }, signup_rules: { mode: 'conditions', match: 'all', conditions: [{ field_id: 'external.account_age_days', operator: 'gte', value: 365 }] }, signup: { email_requirement: 'optional', password_requirement: 'required' } }
     }, 'PATCH');
     must(record.state === 'configuring', 'OAuth save must remain configuring');
     const checked = await request(admin, path + '/check', { expected_revision: record.aggregate_revision });
@@ -367,11 +382,12 @@ let record = await request(admin, '/admin/auth-connections', { kind: 'generic_oa
   const capabilities = await request(page, '/auth/capabilities', undefined, 'GET', 200, null);
   for (const connection of connections) {
     const capability = capabilities.connections.find(c => c.connection_id === connection.id);
-    must(capability?.can_signup, 'OAuth signup missing despite available password initialization');
+    must(capability?.can_signup && capability.signup?.email_requirement === 'optional' && capability.signup?.password_requirement === 'required', 'OAuth signup missing despite available password initialization');
     assert.deepEqual(capability.signup_requirements, ['local_password']);
   }
   const signup = await flow(page, `/auth/external/${first.id}/start`, {}, provider, 'alice', { anonymous: true });
   must(signup.kind === 'signup_confirmation' && !signup.session, 'OAuth signup issued a session before initialization');
+  must(signup.kind === 'signup_confirmation' && signup.signup?.email_requirement === 'optional' && signup.signup?.password_requirement === 'required', 'OAuth signup policy declaration mismatch');
   assert.deepEqual(signup.signup_requirements, ['local_password']);
   await expectResponse(page.evaluate(() => auth.complete({ username: 'oauth_alice' })), 400, 'missing initial password');
   must((await request(admin, '/admin/users?search=oauth_alice', undefined, 'GET')).total === 0, 'Missing initial password left a user');
@@ -447,9 +463,10 @@ try {
     const data = await readFile(join(runtime.root, file), 'utf8');
     for (const marker of runtime.secrets) must(!data.includes(marker), 'Server log leaked a marker secret');
   }
-  const report = { tested_at: new Date().toISOString(), keycloak: { version: keycloakVersion, sha256: keycloakSHA256 }, github: { status: 'pending', reason: 'Real GitHub OAuth application and interactive account authorization are deferred; controlled OAuth acceptance is not GitHub acceptance.' }, results };
-  await writeFile(join(runtime.root, 'report.json'), JSON.stringify(report, null, 2));
-  console.log('Acceptance report: ' + join(runtime.root, 'report.json'));
+  const reportPath = join(runtime.root, `account-authentication-b5-browser-report-${new Date().toISOString().slice(0, 10)}.json`);
+  const report = { stage: 'b5', tested_at: new Date().toISOString(), keycloak: { version: keycloakVersion, sha256: keycloakSHA256 }, github: { status: 'pending', reason: 'Real GitHub OAuth application and interactive account authorization are deferred; controlled OAuth acceptance is not GitHub acceptance.' }, results };
+  await writeFile(reportPath, JSON.stringify(report, null, 2));
+  console.log('Acceptance report: ' + reportPath);
 } catch (error) {
   console.error('Acceptance failed: ' + error.message);
   console.error('Isolated diagnostic directory: ' + runtime.root);

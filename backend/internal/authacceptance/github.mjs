@@ -19,8 +19,9 @@ const runtime = await createRuntime();
 runtime.secrets.push(clientSecret);
 let browser, terminal;
 const evidence = [];
-const outcome = { tested_at: new Date().toISOString(), github: { status: 'failed', minimum_account_age_days: minimumAge }, completed_flows: evidence, error: null };
-const reportPath = join(backendDir, 'docs', 'account-authentication-github-report-2026-10-15.json');
+const reportDate = new Date().toISOString().slice(0, 10);
+const outcome = { stage: 'b5', tested_at: new Date().toISOString(), github: { status: 'failed', minimum_account_age_days: minimumAge }, completed_flows: evidence, error: null };
+const reportPath = join(backendDir, 'docs', `account-authentication-b5-github-report-${reportDate}.json`);
 const response = async (value, expected = 200) => {
   const result = await value;
   assert.equal(result.status, expected, `GitHub acceptance API status ${result.status} (${result.body?.error_code || result.body?.title || 'unexpected response'})`);
@@ -53,6 +54,11 @@ try {
   const adminSession = await request(admin, '/auth/login', { identifier: 'admin', password: app.adminPassword }, 'POST', 200, null);
   await admin.evaluate(value => auth.adopt(value), adminSession);
   const adminID = await admin.evaluate(() => auth.session()?.user?.id);
+  for (const passwordProbe of [
+    { method: 'GET', path: '/admin/auth-connections/password', input: undefined },
+    { method: 'PATCH', path: '/admin/auth-connections/password', input: { expected_revision: 1 } },
+    { method: 'POST', path: '/admin/auth-connections/password/test', input: { expected_revision: 1, browser_challenge: 'a'.repeat(43), completion_url: app.completionBase + '/complete' } }
+  ]) await request(admin, passwordProbe.path, passwordProbe.input, passwordProbe.method, 404);
   let record = await request(admin, '/admin/auth-connections', { kind: 'generic_oauth2', display_name: 'GitHub interactive acceptance' }, 'POST', 201);
   assert.ok(record.state === 'configuring' && !record.capabilities.can_login && !record.capabilities.can_signup && !record.capabilities.can_link && !record.capabilities.can_test);
   const path = '/admin/auth-connections/' + record.id;
@@ -68,7 +74,7 @@ try {
     oauth2: { authorization_endpoint: 'https://github.com/login/oauth/authorize', token_endpoint: 'https://github.com/login/oauth/access_token', profile_endpoint: 'https://api.github.com/user', client_id: clientID, client_auth_method: 'client_secret_post', scopes: [], subject_mapping: { pointer: '/id', type: 'integer' } },
     client_secret: clientSecret,
     attribute_mappings: [{ field_id: 'external.account_created_at', label: 'Account created', type: 'datetime', source: 'oauth2_profile', pointer: '/created_at' }],
-    policy: { login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: 'unrestricted' }, link_rules: { mode: 'unrestricted' }, signup_rules: { mode: 'conditions', match: 'all', conditions: [{ field_id: 'external.account_age_days', operator: 'gte', value: minimumAge }] } }
+    policy: { login_enabled: true, signup_enabled: true, link_enabled: true, login_rules: { mode: 'unrestricted' }, link_rules: { mode: 'unrestricted' }, signup_rules: { mode: 'conditions', match: 'all', conditions: [{ field_id: 'external.account_age_days', operator: 'gte', value: minimumAge }] }, signup: { email_requirement: 'optional', password_requirement: 'required' } }
   }, 'PATCH');
   assert.ok(record.state === 'configuring' && !record.capabilities.can_login);
   const checked = await request(admin, path + '/check', { expected_revision: record.aggregate_revision });
@@ -88,7 +94,9 @@ try {
   assert.equal(record.validation.applied_test_id, tested.test_id);
   evidence.push('github_authorization_code_pkce_s256', 'github_current_user_integer_subject', 'github_created_at_derived_age_rule', 'real_test_explicit_enable');
   const signup = await authorize(page, `/auth/external/${record.id}/start`, {}, true);
-  assert.equal(signup.kind, 'signup_confirmation'); assert.deepEqual(signup.signup_requirements, ['local_password']);
+  assert.equal(signup.kind, 'signup_confirmation');
+  assert.deepEqual(signup.signup, { email_requirement: 'optional', password_requirement: 'required' });
+  assert.deepEqual(signup.signup_requirements, ['local_password']);
   await response(page.evaluate(() => auth.complete({ username: 'github_acceptance' })), 400);
   assert.equal((await request(admin, '/admin/users?search=github_acceptance', undefined, 'GET')).total, 0);
   const password = randomBytes(32).toString('base64url'); runtime.secrets.push(password);
@@ -99,7 +107,7 @@ try {
   await request(page, '/users/me/password', { reauthentication_proof: proof.reauthentication_proof }, 'DELETE', 409);
   const login = await authorize(page, `/auth/external/${record.id}/start`, {}, true);
   assert.equal(login.kind, 'session'); assert.equal(login.session.user.id, completed.session.user.id);
-  evidence.push('atomic_signup_initial_password', 'password_reauthentication', 'maintenance_password_protected', 'same_subject_subsequent_login');
+  evidence.push('signup_policy_declaration', 'atomic_signup_initial_password', 'password_reauthentication', 'maintenance_password_protected', 'same_subject_subsequent_login');
   outcome.github.status = 'passed'; outcome.error = null;
   console.log('GitHub acceptance passed. Sanitized report: ' + reportPath);
 } catch (error) {
