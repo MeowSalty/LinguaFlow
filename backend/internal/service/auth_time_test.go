@@ -9,6 +9,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
 )
 
@@ -21,6 +22,9 @@ func TestSessionExpiryMatchesCredentials(t *testing.T) {
 func assertSessionExpiryMatchesCredentials(t *testing.T, client *ent.Client, account *ent.User) {
 	t.Helper()
 	ctx := context.Background()
+	if !client.SystemSetting.Query().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).ExistX(ctx) {
+		client.SystemSetting.Create().SetKey(SettingRegistrationEnabled).SetValue("true").SaveX(ctx)
+	}
 	if err := initializePasswordConnection(ctx, client); err != nil {
 		t.Fatal(err)
 	}

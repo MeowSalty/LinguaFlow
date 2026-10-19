@@ -304,7 +304,7 @@ func TestRegistrationAtomicAndUnverifiedEmailDoesNotClaimAddress(t *testing.T) {
 	}
 }
 
-func TestPasswordPublishedConfigurationIsolation(t *testing.T) {
+func TestLocalAccountPolicyReadIsolation(t *testing.T) {
 	svc, client := newAccountTestAuth(t)
 	ctx := context.Background()
 	account := createTestUser(t, client, "policy-user")
@@ -312,13 +312,14 @@ func TestPasswordPublishedConfigurationIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	candidate := client.AuthConnectionRevision.Create().SetConnectionID(PasswordConnectionID).SetRevision(2).SetDisplayName("Draft").SetUsernameLoginEnabled(false).SaveX(ctx)
-	if err := client.AuthConnectionRevision.UpdateOneID(candidate.ID).Exec(ctx); err == nil {
-		t.Fatal("immutable snapshot updated")
+	// Corrupt the singleton beyond a normal write path: readers must reject
+	// the active policy without consulting any password connection snapshot.
+	if _, err := client.ExecContext(ctx, "UPDATE local_account_policies SET password_login_enabled=false WHERE id=1"); err != nil {
+		t.Fatal(err)
 	}
 	caps, err := svc.Capabilities(ctx)
-	if err != nil || !caps.Password.CanLogin {
-		t.Fatalf("unsaved revision changed runtime: %+v %v", caps, err)
+	if !errors.Is(err, ErrSettingsUnavailable) || caps.LocalAccount.CanLogin {
+		t.Fatalf("damaged local policy accepted: %+v %v", caps, err)
 	}
 	if err := client.AuthConnection.DeleteOneID(PasswordConnectionID).Exec(ctx); err == nil {
 		t.Fatal("deleted built-in connection")
@@ -328,7 +329,7 @@ func TestPasswordPublishedConfigurationIsolation(t *testing.T) {
 	}
 	client.AuthConnection.UpdateOneID(PasswordConnectionID).SetCurrentRevision(2).SaveX(ctx)
 	if _, err := svc.Capabilities(ctx); !errors.Is(err, ErrSettingsUnavailable) {
-		t.Fatalf("missing current policy accepted: %v", err)
+		t.Fatalf("missing password policy accepted: %v", err)
 	}
 	if _, err := svc.Refresh(ctx, session.RefreshToken); !errors.Is(err, ErrSettingsUnavailable) {
 		t.Fatalf("refresh ignored missing policy: %v", err)

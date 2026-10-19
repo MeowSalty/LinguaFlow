@@ -40,6 +40,9 @@ type externalConnection struct {
 
 func readExternalConnection(ctx context.Context, c *ent.Client, id string, revision int64) (externalConnection, error) {
 	var out externalConnection
+	if id == PasswordConnectionID {
+		return out, ErrAuthConnectionNotFound
+	}
 	row, err := c.AuthConnection.Get(ctx, id)
 	if ent.IsNotFound(err) {
 		return out, ErrAuthConnectionNotFound
@@ -58,7 +61,7 @@ func readExternalConnection(ctx context.Context, c *ent.Client, id string, revis
 	if err != nil {
 		return out, ErrSettingsUnavailable
 	}
-	if cfg.ConfigVersion != 1 || (!supportedExternalKind(row.Kind) && row.Kind != authconnection.KindPassword) {
+	if cfg.ConfigVersion != 1 || !supportedExternalKind(row.Kind) {
 		return out, ErrSettingsUnavailable
 	}
 	if row.Kind == authconnection.KindGenericOauth2 {
@@ -68,15 +71,13 @@ func readExternalConnection(ctx context.Context, c *ent.Client, id string, revis
 	} else if cfg.Oauth2ClientID != "" {
 		return out, ErrSettingsUnavailable
 	}
-	if err := authrules.Validate(configProtocol(cfg), cfg.AttributeMappings, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
+	if err := validateConnectionPolicyRules(cfg, policyInput(p)); err != nil {
 		return out, ErrSettingsUnavailable
 	}
 	if cfg.EvidenceMaxAgeSeconds < 1 || cfg.EvidenceMaxAgeSeconds > 31536000 {
 		return out, ErrSettingsUnavailable
 	}
-	if row.Kind != authconnection.KindPassword {
-		p.Enabled = row.State == authconnection.StateEnabled
-	}
+	p.Enabled = row.State == authconnection.StateEnabled
 	return externalConnection{Connection: row, Config: cfg, Policy: p}, nil
 }
 func connectionFingerprint(c *ent.AuthConnectionRevision) string {
@@ -151,6 +152,9 @@ func checkConnectionAdmin(ctx context.Context, c *ent.Client, actorID int) error
 	return nil
 }
 func lockExternalConfiguration(ctx context.Context, c *ent.Client, actorID int) error {
+	if err := lockAuthenticationConfiguration(ctx, c); err != nil {
+		return err
+	}
 	r, err := c.ExecContext(ctx, "UPDATE instance_initializations SET version=version WHERE id=1")
 	if err != nil {
 		return err
@@ -161,18 +165,6 @@ func lockExternalConfiguration(ctx context.Context, c *ent.Client, actorID int) 
 	}
 	if n != 1 {
 		return ErrInstanceUninitialized
-	}
-	if err = lockSetting(ctx, c, SettingRegistrationEnabled); err != nil {
-		return err
-	}
-	ids, err := c.AuthConnection.Query().Order(ent.Asc(authconnection.FieldID)).IDs(ctx)
-	if err != nil {
-		return err
-	}
-	for _, id := range ids {
-		if _, err = c.ExecContext(ctx, "UPDATE auth_connections SET auth_generation=auth_generation WHERE id='"+strings.ReplaceAll(id, "'", "''")+"'"); err != nil {
-			return err
-		}
 	}
 	// Management can inspect all users' remaining methods. Lock in stable order
 	// before policy changes so unlink and administrator maintenance cannot race.
@@ -198,13 +190,15 @@ func lockExternalConfiguration(ctx context.Context, c *ent.Client, actorID int) 
 	return checkConnectionAdmin(ctx, c, actorID)
 }
 func policyInput(p *ent.AuthChannelPolicy) AuthConnectionPolicyInput {
-	return AuthConnectionPolicyInput{p.LoginEnabled, p.SignupEnabled, p.LinkEnabled, p.LoginRules, p.SignupRules, p.LinkRules}
+	return AuthConnectionPolicyInput{LoginEnabled: p.LoginEnabled, SignupEnabled: p.SignupEnabled, LinkEnabled: p.LinkEnabled,
+		LoginRules: p.LoginRules, SignupRules: p.SignupRules, LinkRules: p.LinkRules, Signup: externalSignupPolicy(p)}
 }
 func validConnectionPolicy(p AuthConnectionPolicyInput) bool {
-	return (!p.SignupEnabled || p.LoginEnabled)
+	return (!p.SignupEnabled || p.LoginEnabled) && validSignupRequirements(p.Signup) &&
+		(!referencesRegistrationDomain(p.SignupRules) || p.Signup.EmailRequirement == "required")
 }
 func defaultExternalPolicy() AuthConnectionPolicyInput {
-	return AuthConnectionPolicyInput{LoginRules: authrules.Unrestricted(), SignupRules: authrules.Unrestricted(), LinkRules: authrules.Unrestricted()}
+	return AuthConnectionPolicyInput{LoginRules: authrules.Unrestricted(), SignupRules: authrules.Unrestricted(), LinkRules: authrules.Unrestricted(), Signup: SignupPolicyRequirements{EmailRequirement: "optional", PasswordRequirement: "none"}}
 }
 func normalizeOIDCInput(in OIDCConnectionInput) (OIDCConnectionInput, error) {
 	if len(in.ClientID) > 1024 || len(in.Issuer) > 2048 {
@@ -242,7 +236,7 @@ func (s *ExternalAuthService) ListConnections(ctx context.Context, actorID int) 
 	if err := checkConnectionAdmin(ctx, s.client, actorID); err != nil {
 		return nil, err
 	}
-	rows, err := s.client.AuthConnection.Query().Order(ent.Asc(authconnection.FieldID)).All(ctx)
+	rows, err := s.client.AuthConnection.Query().Where(authconnection.KindIn(authconnection.KindOidc, authconnection.KindGenericOauth2)).Order(ent.Asc(authconnection.FieldID)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -260,6 +254,9 @@ func (s *ExternalAuthService) GetConnection(ctx context.Context, actorID int, id
 	if err := checkConnectionAdmin(ctx, s.client, actorID); err != nil {
 		return AuthConnectionRecord{}, err
 	}
+	if id == PasswordConnectionID {
+		return AuthConnectionRecord{}, ErrAuthConnectionNotFound
+	}
 	row, err := s.client.AuthConnection.Get(ctx, id)
 	if ent.IsNotFound(err) {
 		return AuthConnectionRecord{}, ErrAuthConnectionNotFound
@@ -270,14 +267,24 @@ func (s *ExternalAuthService) GetConnection(ctx context.Context, actorID int, id
 	return s.connectionRecord(ctx, s.client, row)
 }
 
-func saveExternalSnapshot(ctx context.Context, c *ent.Client, id string, revision, loginRevision int64, cfg *ent.AuthConnectionRevision, p AuthConnectionPolicyInput) error {
+func saveExternalSnapshot(ctx context.Context, c *ent.Client, id string, revision, loginRevision int64, cfg *ent.AuthConnectionRevision, p AuthConnectionPolicyInput, purposeRevisions ...int64) error {
 	if cfg.EvidenceMaxAgeSeconds < 1 || cfg.EvidenceMaxAgeSeconds > 31536000 {
 		return ErrInvalidInput
 	}
-	if err := authrules.Validate(configProtocol(cfg), cfg.AttributeMappings, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
+	if err := validateConnectionPolicyRules(cfg, p); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidInput, err)
 	}
-	if err := validateConnectionRules(cfg, p.LoginRules, p.SignupRules, p.LinkRules); err != nil {
+	var err error
+	p.LoginRules, err = authrules.NormalizeRuleForPurpose(configProtocol(cfg), cfg.AttributeMappings, "login", p.LoginRules)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidInput, err)
+	}
+	p.SignupRules, err = authrules.NormalizeRuleForPurpose(configProtocol(cfg), cfg.AttributeMappings, "signup", p.SignupRules)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidInput, err)
+	}
+	p.LinkRules, err = authrules.NormalizeRuleForPurpose(configProtocol(cfg), cfg.AttributeMappings, "link", p.LinkRules)
+	if err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidInput, err)
 	}
 	if !validConnectionPolicy(p) || strings.TrimSpace(cfg.DisplayName) == "" || len(cfg.DisplayName) > 120 || len(cfg.Description) > 2000 {
@@ -297,7 +304,27 @@ func saveExternalSnapshot(ctx context.Context, c *ent.Client, id string, revisio
 	if err := q.Exec(ctx); err != nil {
 		return err
 	}
-	return c.AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(revision).SetLoginPolicyRevision(loginRevision).SetEnabled(false).SetLoginEnabled(p.LoginEnabled).SetSignupEnabled(p.SignupEnabled).SetLinkEnabled(p.LinkEnabled).SetLoginRules(p.LoginRules).SetSignupRules(p.SignupRules).SetLinkRules(p.LinkRules).Exec(ctx)
+	signupRevision, linkRevision := int64(1), int64(1)
+	if len(purposeRevisions) == 2 {
+		signupRevision, linkRevision = purposeRevisions[0], purposeRevisions[1]
+	} else if revision > 1 {
+		previous, readErr := readExternalConnection(ctx, c, id, revision-1)
+		if readErr != nil {
+			return readErr
+		}
+		signupRevision, linkRevision = previous.Policy.SignupPolicyRevision, previous.Policy.LinkPolicyRevision
+		candidate := externalConnection{Connection: previous.Connection, Config: cfg, Policy: &ent.AuthChannelPolicy{SignupEnabled: p.SignupEnabled, SignupRules: p.SignupRules, LinkEnabled: p.LinkEnabled, LinkRules: p.LinkRules, SignupEmailRequirement: authchannelpolicy.SignupEmailRequirement(p.Signup.EmailRequirement), SignupPasswordRequirement: authchannelpolicy.SignupPasswordRequirement(p.Signup.PasswordRequirement)}}
+		if purposePolicyChanged(previous, candidate, "signup") {
+			signupRevision++
+		}
+		if purposePolicyChanged(previous, candidate, "link") {
+			linkRevision++
+		}
+	}
+	if signupRevision < 1 || signupRevision > maxAuthVersion || linkRevision < 1 || linkRevision > maxAuthVersion {
+		return ErrAuthConnectionConflict
+	}
+	return c.AuthChannelPolicy.Create().SetConnectionID(id).SetRevision(revision).SetLoginPolicyRevision(loginRevision).SetSignupPolicyRevision(signupRevision).SetLinkPolicyRevision(linkRevision).SetEnabled(false).SetLoginEnabled(p.LoginEnabled).SetSignupEnabled(p.SignupEnabled).SetLinkEnabled(p.LinkEnabled).SetSignupEmailRequirement(authchannelpolicy.SignupEmailRequirement(p.Signup.EmailRequirement)).SetSignupPasswordRequirement(authchannelpolicy.SignupPasswordRequirement(p.Signup.PasswordRequirement)).SetLoginRules(p.LoginRules).SetSignupRules(p.SignupRules).SetLinkRules(p.LinkRules).Exec(ctx)
 }
 func revokeConnectionSessions(ctx context.Context, c *ent.Client, id string, now time.Time) error {
 	sessions, err := c.RefreshSession.Query().Where(refreshsession.ConnectionIDEQ(id), refreshsession.RevokedAtIsNil()).IDs(ctx)
@@ -308,23 +335,6 @@ func revokeConnectionSessions(ctx context.Context, c *ent.Client, id string, now
 		if err = revokeRefreshSession(ctx, c, sid, now); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-func ensurePasswordAdministrator(ctx context.Context, c *ent.Client) error {
-	p, err := readPasswordPolicy(ctx, c)
-	if err != nil {
-		return err
-	}
-	if !p.canLogin() {
-		return ErrAuthConnectionConflict
-	}
-	ok, err := c.User.Query().Where(user.ActiveEQ(true), user.RoleEQ(SystemRoleAdmin), user.PasswordHashNotNil(), user.PasswordHashNEQ("")).Exist(ctx)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return ErrAuthConnectionConflict
 	}
 	return nil
 }

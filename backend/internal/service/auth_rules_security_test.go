@@ -115,7 +115,9 @@ func TestAuthRulesSaveAndFallbackRemovalRace(t *testing.T) {
 				if method == "binding" {
 					other := b4RulesFixture(t, f, false)
 					fallbackBinding = ruleBindingFixture(t, c, owner, other.ID, now, c.AuthConnection.GetX(ctx, other.ID).AuthGeneration)
-					owner = c.User.UpdateOneID(owner.ID).ClearPasswordHash().SaveX(ctx)
+					oauthWriteLocalPolicyTest(t, ctx, c, func(candidate *LocalAccountPolicyInput) {
+						candidate.PasswordEnrollmentEnabled = false
+					})
 					action, target = "unlink", strconv.Itoa(fallbackBinding.ID)
 				}
 				proof, err := s.issueReauthenticationProof(ctx, c, owner, "oidc", rec.ID, action, target, now)
@@ -148,11 +150,11 @@ func TestAuthRulesSaveAndFallbackRemovalRace(t *testing.T) {
 				}
 				if saveErr != nil {
 					var conflict *AuthConnectionError
-					if !errors.As(saveErr, &conflict) {
+					if !errors.As(saveErr, &conflict) || conflict.Code != "fallback-required" {
 						t.Fatalf("save race: %v", saveErr)
 					}
 				}
-				if removeErr != nil && !errors.Is(removeErr, ErrLoginMethodConflict) && !errors.Is(removeErr, ErrReauthenticationRequired) {
+				if removeErr != nil && !errors.Is(removeErr, ErrInvalidInput) && !errors.Is(removeErr, ErrLoginMethodConflict) && !errors.Is(removeErr, ErrReauthenticationRequired) {
 					t.Fatalf("removal race: %v", removeErr)
 				}
 				if saveErr != nil && removeErr != nil {
@@ -281,7 +283,11 @@ func TestAuthRulesSaveAndCompleteRace(t *testing.T) {
 				}()
 				go func() {
 					<-start
-					_, e := f.services[1].Complete(ctx, actor, ExternalCompleteInput{ConfirmationToken: confirmation.Confirmation.ConfirmationToken, Verifier: flowTestVerifier, Username: "signup-race-owner"})
+					completeInput := ExternalCompleteInput{ConfirmationToken: confirmation.Confirmation.ConfirmationToken, Verifier: flowTestVerifier}
+					if purpose == "signup" {
+						completeInput.Username = "signup-race-owner"
+					}
+					_, e := f.services[1].Complete(ctx, actor, completeInput)
 					complete <- e
 				}()
 				close(start)
@@ -289,8 +295,12 @@ func TestAuthRulesSaveAndCompleteRace(t *testing.T) {
 				if purpose == "signup" {
 					expectOneExternalWinner(t, []error{saveErr, completeErr}, ErrAuthConnectionConflict)
 				} else {
-					if !errors.Is(saveErr, ErrAuthConnectionConflict) || completeErr != nil {
-						t.Fatalf("unverified binding became fallback: %v / %v", saveErr, completeErr)
+					var blocked *AuthConnectionError
+					if !errors.As(saveErr, &blocked) || blocked.Code != "fallback-required" {
+						t.Fatalf("unverified linked binding must block fallback-dependent save: %v", saveErr)
+					}
+					if completeErr != nil {
+						t.Fatalf("link complete race: %v", completeErr)
 					}
 					if c.RefreshSession.Query().CountX(ctx) != sessions {
 						t.Fatal("link completion signed a session")

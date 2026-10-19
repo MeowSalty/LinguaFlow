@@ -69,6 +69,7 @@ type AuthRulesPreviewInput struct {
 	Changes          *AuthConnectionChanges     `json:"changes,omitempty"`
 	ExpectedRevision int64                      `json:"expected_revision"`
 	Sources          map[string]json.RawMessage `json:"sources"`
+	Registration     *RegistrationAttributes    `json:"registration,omitempty"`
 }
 type AuthRulesDiagnostics struct {
 	Login  authrules.Result `json:"login"`
@@ -83,6 +84,7 @@ type AuthRulesPreview struct {
 }
 type AuthAttributeCatalog struct {
 	Revision  int64               `json:"revision"`
+	Purpose   string              `json:"purpose"`
 	Fields    []authrules.Field   `json:"fields"`
 	Operators map[string][]string `json:"operators"`
 }
@@ -102,9 +104,7 @@ func sourceTrustFingerprint(cfg *ent.AuthConnectionRevision) string {
 	return hex.EncodeToString(digest[:])
 }
 func loginRulesChanged(a, b externalConnection) bool {
-	return sourceTrustFingerprint(a.Config) != sourceTrustFingerprint(b.Config) ||
-		authrules.RulesFingerprint(configProtocol(a.Config), a.Policy.LoginRules, a.Config.AttributeMappings) != authrules.RulesFingerprint(configProtocol(b.Config), b.Policy.LoginRules, b.Config.AttributeMappings) ||
-		((a.Policy.LoginRules.Mode == "conditions" || b.Policy.LoginRules.Mode == "conditions") && a.Config.EvidenceMaxAgeSeconds != b.Config.EvidenceMaxAgeSeconds)
+	return purposePolicyChanged(a, b, "login")
 }
 
 func authenticationSourceVersion(ctx context.Context, c *ent.Client, id string) (int64, int64, error) {
@@ -116,7 +116,7 @@ func authenticationSourceVersion(ctx context.Context, c *ent.Client, id string) 
 		if !p.canLogin() {
 			return 0, 0, ErrReauthenticationRequired
 		}
-		return p.Connection.AuthGeneration, p.Policy.LoginPolicyRevision, nil
+		return p.Connection.AuthGeneration, p.Local.LoginPolicyRevision, nil
 	}
 	p, err := readExternalConnection(ctx, c, id, 0)
 	if err != nil {
@@ -146,7 +146,7 @@ func rulesForPurpose(p externalConnection, purpose authtransaction.Purpose) []au
 	case authtransaction.PurposeTest:
 		return []authrules.RuleSet{p.Policy.LoginRules, p.Policy.SignupRules, p.Policy.LinkRules}
 	default:
-		return []authrules.RuleSet{p.Policy.LoginRules, p.Policy.SignupRules}
+		return []authrules.RuleSet{p.Policy.LoginRules}
 	}
 }
 
@@ -166,14 +166,28 @@ func transactionRulesCurrent(ctx context.Context, c *ent.Client, row *ent.AuthTr
 	if p.Connection.ArchivedAt != nil || p.Connection.AuthGeneration != row.ConnectionGeneration || sourceTrustFingerprint(old.Config) != sourceTrustFingerprint(p.Config) {
 		return ErrAuthConnectionConflict
 	}
-	a, b := rulesForPurpose(old, row.Purpose), rulesForPurpose(p, row.Purpose)
-	for i := range a {
-		if authrules.RulesFingerprint(configProtocol(old.Config), a[i], old.Config.AttributeMappings) != authrules.RulesFingerprint(configProtocol(p.Config), b[i], p.Config.AttributeMappings) {
+	purpose := "login"
+	if row.Purpose == authtransaction.PurposeLink {
+		purpose = "link"
+	}
+	if purposePolicyChanged(old, p, purpose) {
+		return ErrAuthConnectionConflict
+	}
+	if row.Purpose == authtransaction.PurposeLink && row.LinkPolicyRevision != p.Policy.LinkPolicyRevision {
+		return ErrAuthConnectionConflict
+	}
+	if row.Status == authtransaction.StatusAwaitingConfirmation && row.Purpose == authtransaction.PurposeLogin {
+		enabled, revision, err := readRegistrationState(ctx, c)
+		if err != nil {
+			return err
+		}
+		fingerprint, err := signupDependencyFingerprint(ctx, c, p)
+		if err != nil {
+			return err
+		}
+		if !enabled || !p.Policy.SignupEnabled || row.RegistrationPolicyRevision != revision || row.SignupPolicyRevision != p.Policy.SignupPolicyRevision || row.SignupDependencyFingerprint != fingerprint {
 			return ErrAuthConnectionConflict
 		}
-	}
-	if old.Config.EvidenceMaxAgeSeconds != p.Config.EvidenceMaxAgeSeconds {
-		return ErrAuthConnectionConflict
 	}
 	switch row.Purpose {
 	case authtransaction.PurposeLink:
@@ -189,6 +203,10 @@ func transactionRulesCurrent(ctx context.Context, c *ent.Client, row *ent.AuthTr
 }
 
 func ruleEvidence(p externalConnection, evidence authrules.Evidence, rule authrules.RuleSet, now time.Time, candidate bool) authrules.Result {
+	return ruleEvidenceForPurpose(p, evidence, "login", rule, now, candidate)
+}
+
+func ruleEvidenceForPurpose(p externalConnection, evidence authrules.Evidence, purpose string, rule authrules.RuleSet, now time.Time, candidate bool) authrules.Result {
 	if rule.Mode == "conditions" && (evidence.ObservedAt.IsZero() || evidence.ExpiresAt.IsZero()) {
 		evidence.Attributes = nil
 	}
@@ -198,13 +216,17 @@ func ruleEvidence(p externalConnection, evidence authrules.Evidence, rule authru
 			evidence.ExpiresAt = deadline
 		}
 	}
-	if evidence.SourceFingerprint != sourceTrustFingerprint(p.Config) || evidence.Issuer != connectionAuthority(p) || evidence.Subject == "" || (!candidate && evidence.LoginPolicyRevision != p.Policy.LoginPolicyRevision) {
+	if evidence.SourceFingerprint != sourceTrustFingerprint(p.Config) || evidence.Issuer != connectionAuthority(p) || evidence.Subject == "" || (purpose == "login" && !candidate && evidence.LoginPolicyRevision != p.Policy.LoginPolicyRevision) {
 		evidence.Attributes = nil
 	}
-	return authrules.Evaluate(configProtocol(p.Config), rule, p.Config.AttributeMappings, evidence, now)
+	return authrules.EvaluateForPurpose(configProtocol(p.Config), purpose, rule, p.Config.AttributeMappings, evidence, now)
 }
 func requireRule(p externalConnection, evidence authrules.Evidence, rule authrules.RuleSet, now time.Time) error {
-	result := ruleEvidence(p, evidence, rule, now, false)
+	return requireRuleForPurpose(p, evidence, "login", rule, now)
+}
+
+func requireRuleForPurpose(p externalConnection, evidence authrules.Evidence, purpose string, rule authrules.RuleSet, now time.Time) error {
+	result := ruleEvidenceForPurpose(p, evidence, purpose, rule, now, false)
 	if result.Status == "pass" {
 		return nil
 	}
@@ -214,7 +236,7 @@ func requireRule(p externalConnection, evidence authrules.Evidence, rule authrul
 	return ErrAuthenticationRuleDenied
 }
 func loginEvidence(p externalConnection, e authrules.Evidence) authrules.Evidence {
-	e.Attributes = authrules.SelectAttributes(e.Attributes, authrules.RequiredAttributes(p.Config.AttributeMappings, p.Policy.LoginRules))
+	e.Attributes = authrules.SelectAttributes(e.Attributes, authrules.RequiredAttributesForPurpose(configProtocol(p.Config), p.Config.AttributeMappings, "login", p.Policy.LoginRules))
 	if p.Policy.LoginRules.Mode == "unrestricted" {
 		e.ExpiresAt = time.Time{}
 	} else {
@@ -223,17 +245,29 @@ func loginEvidence(p externalConnection, e authrules.Evidence) authrules.Evidenc
 	return e
 }
 func diagnostics(p externalConnection, e authrules.Evidence, now time.Time) AuthRulesDiagnostics {
-	return AuthRulesDiagnostics{Login: ruleEvidence(p, e, p.Policy.LoginRules, now, false), Signup: ruleEvidence(p, e, p.Policy.SignupRules, now, false), Link: ruleEvidence(p, e, p.Policy.LinkRules, now, false)}
+	return AuthRulesDiagnostics{Login: ruleEvidenceForPurpose(p, e, "login", p.Policy.LoginRules, now, false), Signup: ruleEvidenceForPurpose(p, e, "signup", p.Policy.SignupRules, now, false), Link: ruleEvidenceForPurpose(p, e, "link", p.Policy.LinkRules, now, false)}
 }
 
-func (s *ExternalAuthService) ConnectionAttributes(ctx context.Context, actorID int, id string, in AuthConnectionCandidateInput) (AuthAttributeCatalog, error) {
+func authOperatorCatalog() map[string][]string {
+	return map[string][]string{"string": {"eq", "ne", "in", "not_in", "contains", "not_contains", "starts_with", "not_starts_with", "ends_with", "not_ends_with"},
+		"boolean": {"eq"}, "integer": {"eq", "ne", "gt", "gte", "lt", "lte"}, "number": {"eq", "ne", "gt", "gte", "lt", "lte"},
+		"datetime": {"gt", "gte", "lt", "lte"}, "string_list": {"contains", "not_contains", "contains_any", "contains_all"}}
+}
+
+func (s *ExternalAuthService) ConnectionAttributes(ctx context.Context, actorID int, id string, in AuthConnectionCandidateInput, purposes ...string) (AuthAttributeCatalog, error) {
 	p, err := s.candidateConnection(ctx, actorID, id, in)
 	if err != nil {
 		return AuthAttributeCatalog{}, err
 	}
-	fields, err := authrules.Catalog(configProtocol(p.Config), p.Config.AttributeMappings)
-	return AuthAttributeCatalog{Revision: p.Config.Revision, Fields: fields, Operators: map[string][]string{
-		"string": {"eq", "ne", "in"}, "boolean": {"eq"}, "integer": {"eq", "ne", "gt", "gte", "lt", "lte"}, "number": {"eq", "ne", "gt", "gte", "lt", "lte"}, "datetime": {"gt", "gte", "lt", "lte"}, "string_list": {"contains", "not_contains", "contains_any", "contains_all"}}}, err
+	purpose := "signup"
+	if len(purposes) == 1 {
+		purpose = purposes[0]
+	}
+	fields, err := authrules.CatalogForPurpose(configProtocol(p.Config), p.Config.AttributeMappings, purpose)
+	if err != nil {
+		return AuthAttributeCatalog{}, ErrInvalidInput
+	}
+	return AuthAttributeCatalog{Revision: p.Config.Revision, Purpose: purpose, Fields: fields, Operators: authOperatorCatalog()}, nil
 }
 func (s *ExternalAuthService) PreviewConnectionRules(ctx context.Context, actorID int, id string, in AuthRulesPreviewInput) (AuthRulesPreview, error) {
 	p, err := s.candidateConnection(ctx, actorID, id, AuthConnectionCandidateInput{ExpectedRevision: in.ExpectedRevision, Changes: in.Changes})
@@ -246,11 +280,28 @@ func (s *ExternalAuthService) PreviewConnectionRules(ctx context.Context, actorI
 		}
 	}
 	now := s.now()
-	attrs, err := authrules.Extract(configProtocol(p.Config), p.Config.AttributeMappings, in.Sources, nil, now)
+	attrs, err := authrules.ExtractForPurpose(configProtocol(p.Config), p.Config.AttributeMappings, "signup", in.Sources, nil, now)
 	if err != nil {
 		return AuthRulesPreview{}, ErrInvalidInput
 	}
 	e := authrules.Evidence{Issuer: connectionAuthority(p), Subject: "simulated", SourceFingerprint: sourceTrustFingerprint(p.Config), LoginPolicyRevision: p.Policy.LoginPolicyRevision, ObservedAt: now, ExpiresAt: now.Add(time.Duration(p.Config.EvidenceMaxAgeSeconds) * time.Second), Attributes: attrs}
+	if in.Registration != nil {
+		email := ""
+		if in.Registration.Email != nil {
+			email = *in.Registration.Email
+		}
+		email, err = validateRegistrationForRule(email, externalSignupPolicy(p.Policy).EmailRequirement, p.Policy.SignupRules)
+		if err != nil {
+			return AuthRulesPreview{}, err
+		}
+		e, err = registrationEvidence(configProtocol(p.Config), p.Config.AttributeMappings, e, email, now)
+		if err != nil {
+			return AuthRulesPreview{}, err
+		}
+		attrs = e.Attributes
+	} else if p.Policy.SignupEmailRequirement == "required" {
+		return AuthRulesPreview{}, invalidAccountField("email", ErrInvalidInput)
+	}
 	return AuthRulesPreview{Revision: p.Config.Revision, Simulated: true, Attributes: attrs, Rules: diagnostics(p, e, now)}, nil
 }
 

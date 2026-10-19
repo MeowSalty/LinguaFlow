@@ -2,12 +2,12 @@ package service
 
 import (
 	"context"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"strings"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
@@ -80,12 +80,12 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 		if err != nil {
 			return ErrAuthConnectionConflict
 		}
-		if p.Connection.AuthGeneration != current.ConnectionGeneration || p.Policy.LoginPolicyRevision != current.PolicyRevision {
+		if p.Connection.AuthGeneration != current.ConnectionGeneration || (current.Purpose != authtransaction.PurposeLink && p.Policy.LoginPolicyRevision != current.PolicyRevision) {
 			return ErrAuthConnectionConflict
 		}
 		if current.Purpose != authtransaction.PurposeTest {
 			runtime, runtimeErr := readExternalConnection(ctx, c, current.ConnectionID, 0)
-			if runtimeErr != nil || runtime.Connection.AuthGeneration != current.ConnectionGeneration || runtime.Policy.LoginPolicyRevision != current.PolicyRevision {
+			if runtimeErr != nil || runtime.Connection.AuthGeneration != current.ConnectionGeneration || (current.Purpose != authtransaction.PurposeLink && runtime.Policy.LoginPolicyRevision != current.PolicyRevision) {
 				return ErrAuthConnectionConflict
 			}
 			p = runtime
@@ -132,9 +132,6 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 				if !registration || !p.Policy.SignupEnabled || !initializable {
 					return ErrRegistrationClosed
 				}
-				if err := requireRule(p, current.Evidence, p.Policy.SignupRules, now); err != nil {
-					return err
-				}
 				return s.awaitConfirmation(ctx, c, current, p, "signup_confirmation", &result)
 			}
 			if identityErr != nil {
@@ -171,7 +168,7 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			result = ExternalExchangeResult{Kind: "session", Session: session}
 			return nil
 		case authtransaction.PurposeLink:
-			if err := requireRule(p, current.Evidence, p.Policy.LinkRules, now); err != nil {
+			if err := requireRuleForPurpose(p, current.Evidence, "link", p.Policy.LinkRules, now); err != nil {
 				return err
 			}
 			if err := validateTransactionAuthorization(ctx, c, current, now); err != nil {
@@ -279,7 +276,22 @@ func (s *ExternalAuthService) awaitConfirmation(ctx context.Context, c *ent.Clie
 	if !now.Before(deadline) {
 		return ErrExternalFlowInvalid
 	}
-	n, err := c.AuthTransaction.Update().Where(authtransaction.IDEQ(row.ID), authtransaction.StatusEQ(authtransaction.StatusCallbackVerified)).SetStatus(authtransaction.StatusAwaitingConfirmation).ClearExchangeTicketHash().ClearExchangeTicketExpiresAt().SetConfirmationTokenHash(hash.Full(raw)).SetConfirmationExpiresAt(deadline).Save(ctx)
+	update := c.AuthTransaction.Update().Where(authtransaction.IDEQ(row.ID), authtransaction.StatusEQ(authtransaction.StatusCallbackVerified)).SetStatus(authtransaction.StatusAwaitingConfirmation).ClearExchangeTicketHash().ClearExchangeTicketExpiresAt().SetConfirmationTokenHash(hash.Full(raw)).SetConfirmationExpiresAt(deadline)
+	if kind == "signup_confirmation" {
+		enabled, revision, err := readRegistrationState(ctx, c)
+		if err != nil {
+			return err
+		}
+		if !enabled || !p.Policy.SignupEnabled {
+			return ErrRegistrationClosed
+		}
+		fingerprint, err := signupDependencyFingerprint(ctx, c, p)
+		if err != nil {
+			return err
+		}
+		update.SetSignupPolicyRevision(p.Policy.SignupPolicyRevision).SetRegistrationPolicyRevision(revision).SetSignupDependencyFingerprint(fingerprint)
+	}
+	n, err := update.Save(ctx)
 	if err != nil {
 		return err
 	}
@@ -306,6 +318,17 @@ func (s *ExternalAuthService) awaitConfirmation(ctx context.Context, c *ent.Clie
 	}
 	result.Kind = kind
 	result.Confirmation = &ExternalConfirmation{SignupRequirements: requirements, TransactionID: row.ID, ConfirmationToken: raw, ExpiresAt: deadline, Profile: ExternalProfile{ConnectionID: row.ConnectionID, ConnectionName: p.Config.DisplayName, ExternalDisplay: display}}
+	if kind == "signup_confirmation" {
+		signup := externalSignupPolicy(p.Policy)
+		result.Confirmation.Signup = &signup
+		candidate, err := accountidentity.NormalizeUsername(row.IdentityUsername)
+		if err == nil && accountidentity.ValidateAllocation(candidate, accountidentity.Public) == nil {
+			result.Confirmation.UsernameCandidate = candidate
+		}
+		if email, err := accountidentity.NormalizeEmail(row.IdentityEmail); err == nil && email != "" {
+			result.Confirmation.Email = &email
+		}
+	}
 	return nil
 }
 
@@ -323,6 +346,9 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 	now := timeutil.Normalize(s.now())
 	if row.Status != authtransaction.StatusAwaitingConfirmation || row.ConfirmationExpiresAt == nil || !now.Before(*row.ConfirmationExpiresAt) || !now.Before(row.ExpiresAt) || !verifierMatches(row.BrowserChallenge, input.Verifier) {
 		return ExternalCompleteResult{}, ErrExternalFlowInvalid
+	}
+	if row.Purpose != authtransaction.PurposeLogin && (input.InitialPassword != nil || input.EmailPresent || input.Email != nil || input.UsernamePresent || input.Username != "" || input.DisplayNamePresent || input.DisplayName != "") {
+		return ExternalCompleteResult{}, ErrInvalidInput
 	}
 	var initialHash string
 	if input.InitialPassword != nil {
@@ -371,7 +397,7 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 		if err != nil {
 			return err
 		}
-		if p.Connection.ArchivedAt != nil || p.Connection.AuthGeneration != current.ConnectionGeneration || p.Policy.LoginPolicyRevision != current.PolicyRevision {
+		if p.Connection.ArchivedAt != nil || p.Connection.AuthGeneration != current.ConnectionGeneration || (current.Purpose != authtransaction.PurposeLink && p.Policy.LoginPolicyRevision != current.PolicyRevision) {
 			return ErrAuthConnectionConflict
 		}
 		if string(current.IdentityProtocol) != configProtocol(p.Config) || current.IdentityIssuer != connectionAuthority(p) || current.IdentitySubject == "" {
@@ -385,9 +411,6 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			if err := requireRule(p, current.Evidence, p.Policy.LoginRules, now); err != nil {
 				return err
 			}
-			if err := requireRule(p, current.Evidence, p.Policy.SignupRules, now); err != nil {
-				return err
-			}
 			if actorID != nil {
 				return ErrAuthConnectionConflict
 			}
@@ -398,16 +421,24 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			if !registration || !p.Policy.Enabled || !p.Policy.LoginEnabled || !p.Policy.SignupEnabled {
 				return ErrRegistrationClosed
 			}
-			requirements, initializable, err := signupRequirements(ctx, c, p)
+			_, initializable, err := signupRequirements(ctx, c, p)
 			if err != nil {
 				return err
 			}
 			if !initializable {
 				return ErrRegistrationClosed
 			}
-			requiresPassword := len(requirements) > 0
-			if requiresPassword != (input.InitialPassword != nil) {
+			signup := externalSignupPolicy(p.Policy)
+			if signup.PasswordRequirement == "none" && input.InitialPassword != nil || signup.PasswordRequirement == "required" && input.InitialPassword == nil {
 				return ErrInvalidInput
+			}
+			email := ""
+			if input.Email != nil {
+				email = *input.Email
+			}
+			email, err = validateRegistrationForRule(email, signup.EmailRequirement, p.Policy.SignupRules)
+			if err != nil {
+				return err
 			}
 			username, err := accountidentity.NormalizeUsername(input.Username)
 			if err != nil {
@@ -415,6 +446,13 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			}
 			if err = accountidentity.ValidateAllocation(username, accountidentity.Public); err != nil {
 				return ErrInvalidInput
+			}
+			evidence, err := registrationEvidence(configProtocol(p.Config), p.Config.AttributeMappings, current.Evidence, email, now)
+			if err != nil {
+				return err
+			}
+			if err := requireRuleForPurpose(p, evidence, "signup", p.Policy.SignupRules, now); err != nil {
+				return err
 			}
 			exists, err := c.ExternalIdentity.Query().Where(externalidentity.ProtocolEQ(externalidentity.Protocol(current.IdentityProtocol)), externalidentity.AuthorityEQ(current.IdentityIssuer), externalidentity.SubjectEQ(current.IdentitySubject)).Exist(ctx)
 			if err != nil {
@@ -424,8 +462,11 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 				return ErrAuthConnectionConflict
 			}
 			create := c.User.Create().SetUsername(username).SetDisplayName(strings.TrimSpace(input.DisplayName)).SetRole(SystemRoleUser).SetActive(true)
-			if requiresPassword {
-				create.SetPasswordHash(initialHash)
+			if input.InitialPassword != nil {
+				create.SetPasswordHash(initialHash).SetPasswordVerifiedHash(hash.Full(initialHash)).SetPasswordVerifiedAt(now)
+			}
+			if email != "" {
+				create.SetEmail(email)
 			}
 			account, err := create.Save(ctx)
 			if ent.IsConstraintError(err) {
@@ -441,7 +482,7 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			if err != nil {
 				return err
 			}
-			binding, err := c.LoginBinding.Create().SetUserID(account.ID).SetConnectionID(current.ConnectionID).SetExternalIdentityID(identity.ID).SetLastUsedAt(now).Save(ctx)
+			binding, err := c.LoginBinding.Create().SetUserID(account.ID).SetConnectionID(current.ConnectionID).SetExternalIdentityID(identity.ID).SetLastUsedAt(now).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(p.Connection.AuthGeneration).SetVerifiedLoginPolicyRevision(p.Policy.LoginPolicyRevision).SetEvidence(loginEvidence(p, current.Evidence)).Save(ctx)
 			if err != nil {
 				return err
 			}
@@ -458,7 +499,7 @@ func (s *ExternalAuthService) Complete(ctx context.Context, actorID *int, input 
 			result = ExternalCompleteResult{Kind: "session", Session: session}
 			return nil
 		case authtransaction.PurposeLink:
-			if err := requireRule(p, current.Evidence, p.Policy.LinkRules, now); err != nil {
+			if err := requireRuleForPurpose(p, current.Evidence, "link", p.Policy.LinkRules, now); err != nil {
 				return err
 			}
 			if err := validateTransactionAuthorization(ctx, c, current, now); err != nil {

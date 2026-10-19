@@ -14,12 +14,10 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authprotocol"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
 )
 
@@ -74,6 +72,7 @@ func oauthTestConnection(t *testing.T, svc *ExternalAuthService, admin *ent.User
 	}
 	policy := rec.Configuration.Policy
 	policy.LoginEnabled, policy.SignupEnabled, policy.LinkEnabled = true, true, true
+	policy.Signup = SignupPolicyRequirements{EmailRequirement: "optional", PasswordRequirement: "required"}
 	rec, err = svc.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, AuthConnectionChanges: AuthConnectionChanges{Policy: &policy}})
 	if err != nil {
 		t.Fatal(err)
@@ -153,17 +152,39 @@ func oauthAssertAccountCounts(t *testing.T, c *ent.Client, users, identities, se
 	}
 }
 
+func oauthWriteLocalPolicy(ctx context.Context, c *ent.Client, mutate func(*LocalAccountPolicyInput)) error {
+	return withOrganizationTransaction(ctx, c, func(tx *ent.Client) error {
+		if err := lockAuthenticationConfiguration(ctx, tx); err != nil {
+			return err
+		}
+		current, err := readPasswordPolicy(ctx, tx)
+		if err != nil {
+			return err
+		}
+		candidate := localAccountInput(current.Local)
+		mutate(&candidate)
+		return writeLocalAccountPolicy(ctx, tx, current, candidate, time.Now().UTC())
+	})
+}
+
+func oauthWriteLocalPolicyTest(t *testing.T, ctx context.Context, c *ent.Client, mutate func(*LocalAccountPolicyInput)) {
+	t.Helper()
+	if err := oauthWriteLocalPolicy(ctx, c, mutate); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAuthenticationB4OAuthSignupAndMaintenance(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
 			svcs, clients, admin, protocol := oauthTestServices(t, driver)
 			s, c, ctx := svcs[0], clients[0], context.Background()
 			rec := oauthTestConnection(t, s, admin, protocol)
-			if _, err := c.ExecContext(ctx, "UPDATE auth_channel_policies SET signup_enabled=false WHERE connection_id='password'"); err != nil {
-				t.Fatal(err)
-			}
+			oauthWriteLocalPolicyTest(t, ctx, c, func(candidate *LocalAccountPolicyInput) {
+				candidate.Signup.Enabled = false
+			})
 			caps, err := s.auth.Capabilities(ctx)
-			if err != nil || caps.Password.CanSignup || len(caps.Connections) != 1 || !caps.Connections[0].CanSignup {
+			if err != nil || caps.LocalAccount.CanSignup || len(caps.Connections) != 1 || !caps.Connections[0].CanSignup {
 				t.Fatalf("signup capabilities=%+v err=%v", caps, err)
 			}
 			if _, err := s.auth.Register(ctx, RegisterInput{Username: "direct-signup", Password: "password-123"}); !errors.Is(err, ErrRegistrationClosed) {
@@ -186,8 +207,11 @@ func TestAuthenticationB4OAuthSignupAndMaintenance(t *testing.T) {
 				t.Fatalf("initial-password signup=%+v err=%v", out, err)
 			}
 			account := c.User.GetX(ctx, out.Session.User.ID)
-			if comparePassword(account.PasswordHash, *input.InitialPassword) != nil || account.PasswordVerifiedAt != nil || account.PasswordVerifiedHash != "" {
-				t.Fatal("signup failed to set password or fabricated password-login evidence")
+			if compareErr := comparePassword(account.PasswordHash, *input.InitialPassword); compareErr != nil {
+				t.Fatalf("signup password mismatch: %v", compareErr)
+			}
+			if account.PasswordVerifiedAt == nil || account.PasswordVerifiedHash != hash.Full(account.PasswordHash) {
+				t.Fatal("required initial password did not create verified fallback")
 			}
 			identity := c.ExternalIdentity.Query().OnlyX(ctx)
 			if identity.Protocol != externalidentity.ProtocolOauth2 || identity.Authority != *rec.IdentityAuthorityID || identity.Subject != "new-subject" || identity.UserID != account.ID {
@@ -237,36 +261,49 @@ func TestAuthenticationB4OAuthSignupAndMaintenance(t *testing.T) {
 func TestAuthenticationB4OAuthPolicyDependencies(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
-			for _, setting := range []string{"password_link", "password_login", "password_enabled", "username_login", "global_registration"} {
+			for _, setting := range []string{"password_enrollment", "password_login", "username_login", "global_registration"} {
 				t.Run(setting, func(t *testing.T) {
 					svcs, clients, admin, protocol := oauthTestServices(t, driver)
 					s, c, ctx := svcs[0], clients[0], context.Background()
 					rec := oauthTestConnection(t, s, admin, protocol)
 					_, input := oauthTestConfirmation(t, s, protocol, rec.ID, "pending-subject", "pending-member")
-					var statements []string
 					switch setting {
-					case "password_link":
-						statements = []string{"UPDATE auth_channel_policies SET link_enabled=false WHERE connection_id='password'"}
-					case "password_login":
-						statements = []string{"UPDATE auth_channel_policies SET signup_enabled=false, login_enabled=false WHERE connection_id='password'"}
-					case "password_enabled":
-						statements = []string{"UPDATE auth_channel_policies SET enabled=false WHERE connection_id='password'"}
-					case "username_login":
-						statements = []string{"UPDATE auth_channel_policies SET signup_enabled=false, login_enabled=false WHERE connection_id='password'", "UPDATE auth_connection_revisions SET username_login_enabled=false WHERE connection_id='password'"}
+					case "password_enrollment":
+						oauthWriteLocalPolicyTest(t, ctx, c, func(candidate *LocalAccountPolicyInput) {
+							candidate.PasswordEnrollmentEnabled = false
+						})
+					case "password_login", "username_login":
+						oauthWriteLocalPolicyTest(t, ctx, c, func(candidate *LocalAccountPolicyInput) {
+							candidate.PasswordLoginEnabled = false
+							candidate.PasswordEnrollmentEnabled = false
+							candidate.Signup.Enabled = false
+						})
 					case "global_registration":
-						c.SystemSetting.Update().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).SetValue("false").ExecX(ctx)
-					}
-					for _, statement := range statements {
-						if _, err := c.ExecContext(ctx, statement); err != nil {
-							t.Fatal(err)
+						c.SystemSetting.Create().SetKey(SettingTaskRetention).
+							SetValue(`{"enabled":false,"retention_days":30,"revision":1}`).ExecX(ctx)
+						registration := false
+						settings, settingsErr := NewSettingsService(c).Patch(ctx, admin.ID, SettingsPatch{
+							RegistrationEnabled: &registration,
+							TaskRetention:       &TaskRetentionPatch{Enabled: false, RetentionDays: 30, ExpectedRevision: 1},
+						})
+						if settingsErr != nil {
+							t.Fatal(settingsErr)
 						}
+						if settings.RegistrationEnabled {
+							t.Fatal("registration remained enabled")
+						}
+						if _, revision, revisionErr := readRegistrationState(ctx, c); revisionErr != nil || revision != 2 {
+							t.Fatalf("registration revision=%d err=%v", revision, revisionErr)
+						}
+					default:
+						t.Fatalf("unknown dependency case %q", setting)
 					}
 					caps, err := s.auth.Capabilities(ctx)
 					if err != nil || len(caps.Connections) != 1 || caps.Connections[0].CanSignup {
 						t.Fatalf("disabled dependency advertised signup: %+v, %v", caps, err)
 					}
-					if _, err := s.Complete(ctx, nil, input); !errors.Is(err, ErrRegistrationClosed) {
-						t.Fatalf("complete ignored changed dependency: %v", err)
+					if _, err := s.Complete(ctx, nil, input); !errors.Is(err, ErrAuthConnectionConflict) {
+						t.Fatalf("complete accepted stale confirmation after dependency change: %v", err)
 					}
 					if _, _, err := oauthTestExchange(t, s, protocol, rec.ID, "another-subject"); !errors.Is(err, ErrRegistrationClosed) {
 						t.Fatalf("exchange ignored signup dependency: %v", err)
@@ -359,6 +396,9 @@ func TestAuthenticationB4OAuthCompletePasswordPolicySaveRace(t *testing.T) {
 			ctx, c := context.Background(), clients[0]
 			rec := oauthTestConnection(t, svcs[0], admin, protocol)
 			started, input := oauthTestConfirmation(t, svcs[0], protocol, rec.ID, "policy-race-subject", "policy-race-member")
+			// The local singleton is the password configuration. A concurrent
+			// signup-disabled save must serialize against an in-flight OAuth
+			// confirmation without creating an obsolete password revision.
 			type outcome struct {
 				save      bool
 				completed ExternalCompleteResult
@@ -367,28 +407,26 @@ func TestAuthenticationB4OAuthCompletePasswordPolicySaveRace(t *testing.T) {
 			start, results := make(chan struct{}), make(chan outcome, 2)
 			go func() {
 				<-start
-				completed, err := svcs[0].Complete(ctx, nil, input)
-				results <- outcome{completed: completed, err: err}
+				completed, completeErr := svcs[0].Complete(ctx, nil, input)
+				results <- outcome{completed: completed, err: completeErr}
 			}()
 			go func() {
 				<-start
-				adminCtx := protocol.adminCtx
-				err := withOrganizationTransaction(adminCtx, clients[1], func(tx *ent.Client) error {
-					if err := lockExternalConfiguration(adminCtx, tx, admin.ID); err != nil {
+				err := withOrganizationTransaction(ctx, clients[1], func(tx *ent.Client) error {
+					if err := lockAuthenticationConfiguration(ctx, tx); err != nil {
 						return err
 					}
-					current, err := readPasswordPolicy(adminCtx, tx)
-					if err != nil {
-						return err
+					current, policyErr := readPasswordPolicy(ctx, tx)
+					if policyErr != nil {
+						return policyErr
 					}
-					next := current.Connection.AggregateRevision + 1
-					if err := tx.AuthConnectionRevision.Create().SetConnectionID(PasswordConnectionID).SetRevision(next).SetConfigVersion(current.Config.ConfigVersion).SetDisplayName(current.Config.DisplayName).SetDescription(current.Config.Description).SetDisplayOrder(current.Config.DisplayOrder).SetUsernameLoginEnabled(current.Config.UsernameLoginEnabled).SetEmailLoginEnabled(current.Config.EmailLoginEnabled).Exec(adminCtx); err != nil {
-						return err
-					}
-					if err := tx.AuthChannelPolicy.Create().SetConnectionID(PasswordConnectionID).SetRevision(next).SetLoginPolicyRevision(current.Policy.LoginPolicyRevision).SetEnabled(current.Policy.Enabled).SetLoginEnabled(current.Policy.LoginEnabled).SetSignupEnabled(current.Policy.SignupEnabled).SetLinkEnabled(false).SetLoginRules(current.Policy.LoginRules).SetSignupRules(current.Policy.SignupRules).SetLinkRules(current.Policy.LinkRules).Exec(adminCtx); err != nil {
-						return err
-					}
-					return tx.AuthConnection.UpdateOneID(PasswordConnectionID).SetAggregateRevision(next).SetCurrentRevision(next).Exec(adminCtx)
+					// Local signup is deliberately independent of external
+					// signup initialization; changing it must not no-op merely
+					// because the enabled OAuth source already requires a
+					// local password.
+					candidate := localAccountInput(current.Local)
+					candidate.Signup.Enabled = false
+					return writeLocalAccountPolicy(ctx, tx, current, candidate, time.Now().UTC())
 				})
 				results <- outcome{save: true, err: err}
 			}()
@@ -398,39 +436,31 @@ func TestAuthenticationB4OAuthCompletePasswordPolicySaveRace(t *testing.T) {
 				result := <-results
 				if result.save {
 					if result.err != nil {
-						t.Fatalf("password policy save failed: %v", result.err)
+						t.Fatalf("local policy save failed: %v", result.err)
 					}
 				} else {
 					completed = result
 				}
 			}
 			saved, err := readPasswordPolicy(ctx, c)
-			if err != nil || saved.Policy.LinkEnabled || saved.Policy.Revision != 2 || saved.Connection.CurrentRevision != 2 {
-				t.Fatalf("new password policy was not saved: %+v, %v", saved, err)
+			if err != nil || saved.Local.SignupEnabled || saved.Local.SignupPolicyRevision != 2 || saved.Local.Revision != 2 {
+				t.Fatalf("local signup policy was not saved: %+v, %v", saved, err)
 			}
-			previous := c.AuthChannelPolicy.Query().Where(authchannelpolicy.ConnectionIDEQ(PasswordConnectionID), authchannelpolicy.RevisionEQ(1)).OnlyX(ctx)
-			if !previous.LinkEnabled {
-				t.Fatal("save rewrote the previous immutable policy")
+			// Both serial orders must complete: the external source already
+			// requires a local password, so a local-signup-only revision is
+			// outside its confirmation dependency fingerprint.
+			if completed.err != nil || completed.completed.Session == nil {
+				t.Fatalf("external required-password signup ignored local-signup isolation: %+v, %v", completed.completed, completed.err)
 			}
 			transaction := c.AuthTransaction.GetX(ctx, started.TransactionID)
-			switch {
-			case completed.err == nil:
-				if completed.completed.Session == nil || transaction.Status != authtransaction.StatusCompleted {
-					t.Fatal("winning completion did not issue and finish a session")
-				}
-				account := c.User.GetX(ctx, completed.completed.Session.User.ID)
-				if comparePassword(account.PasswordHash, *input.InitialPassword) != nil {
-					t.Fatal("completion before policy save omitted the initial password")
-				}
-				oauthAssertAccountCounts(t, c, 2, 1, 1)
-			case errors.Is(completed.err, ErrRegistrationClosed):
-				if transaction.Status != authtransaction.StatusAwaitingConfirmation || transaction.ConfirmationTokenHash == nil {
-					t.Fatal("rejected completion consumed the pending confirmation")
-				}
-				oauthAssertAccountCounts(t, c, 1, 0, 0)
-			default:
-				t.Fatalf("completion was not serialized with policy save: %v", completed.err)
+			if transaction.Status != authtransaction.StatusCompleted {
+				t.Fatalf("completed transaction=%s", transaction.Status)
 			}
+			account := c.User.GetX(ctx, completed.completed.Session.User.ID)
+			if comparePassword(account.PasswordHash, *input.InitialPassword) != nil {
+				t.Fatal("completed signup did not retain the required initial password")
+			}
+			oauthAssertAccountCounts(t, c, 2, 1, 1)
 		})
 	}
 }
@@ -518,6 +548,7 @@ func TestAuthenticationB4OAuthOIDCWithoutAuthTime(t *testing.T) {
 			}
 			policy := rec.Configuration.Policy
 			policy.LoginEnabled, policy.SignupEnabled, policy.LinkEnabled = true, true, true
+			policy.Signup = SignupPolicyRequirements{EmailRequirement: "optional", PasswordRequirement: "required"}
 			rec, err = s.UpdateConnection(ctx, admin.ID, rec.ID, UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, AuthConnectionChanges: AuthConnectionChanges{Policy: &policy}})
 			if err != nil {
 				t.Fatal(err)

@@ -145,8 +145,17 @@ func TestAuthRulesTemporarySourceAndPurposeIsolation(t *testing.T) {
 	protocol.exchange = func(context.Context, authoidc.Config, authoidc.ExchangeRequest) (authoidc.Identity, error) {
 		return authoidc.Identity{Issuer: cfg.OidcIssuer, Subject: "unavailable", SourceErrors: map[string]string{"oidc_userinfo": "source_unavailable"}}, nil
 	}
-	if _, _, err = ruleFlow(t, s, protocol); !errors.Is(err, ErrExternalUnavailable) {
-		t.Fatalf("signup transient source: %v", err)
+	signup, signupVerifier, err := ruleFlow(t, s, protocol)
+	if err != nil || signup.Kind != "signup_confirmation" || signup.Confirmation == nil {
+		t.Fatalf("signup transient source: %+v, %v", signup, err)
+	}
+	before, identities, bindings, sessions, tokens := c.User.Query().CountX(ctx), c.ExternalIdentity.Query().CountX(ctx), c.LoginBinding.Query().CountX(ctx), c.RefreshSession.Query().CountX(ctx), c.RefreshToken.Query().CountX(ctx)
+	invalidInput := ExternalCompleteInput{ConfirmationToken: signup.Confirmation.ConfirmationToken, Verifier: signupVerifier, Username: "signup-unavailable"}
+	if _, err := s.Complete(ctx, nil, invalidInput); !errors.Is(err, ErrExternalUnavailable) {
+		t.Fatalf("unavailable signup-only source at completion: %v (requirements=%v signup=%+v)", err, signup.Confirmation.SignupRequirements, signup.Confirmation.Signup)
+	}
+	if c.User.Query().CountX(ctx) != before || c.ExternalIdentity.Query().CountX(ctx) != identities || c.LoginBinding.Query().CountX(ctx) != bindings || c.RefreshSession.Query().CountX(ctx) != sessions || c.RefreshToken.Query().CountX(ctx) != tokens {
+		t.Fatal("unavailable signup rule left partial account state")
 	}
 	protocol.exchange = func(context.Context, authoidc.Config, authoidc.ExchangeRequest) (authoidc.Identity, error) {
 		return authoidc.Identity{Issuer: cfg.OidcIssuer, Subject: "unavailable", Sources: map[string]json.RawMessage{"oidc_userinfo": json.RawMessage(`{"department":"engineering"}`)}}, nil

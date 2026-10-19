@@ -35,7 +35,7 @@ func TestAuthenticationB1MigrationPreservesStageA(t *testing.T) {
 			if current.Username != account.Username || current.PasswordHash != account.PasswordHash || current.AuthVersion != account.AuthVersion || owned.OwnerUserID == nil || *owned.OwnerUserID != account.ID {
 				t.Fatal("upgrade changed existing identity or business ownership")
 			}
-			if before.Connection.AuthGeneration != after.Connection.AuthGeneration || before.Policy.Revision != after.Policy.Revision {
+			if before.Connection.AuthGeneration != after.Connection.AuthGeneration || before.Local.Revision != after.Local.Revision {
 				t.Fatal("upgrade reset password policy")
 			}
 			if c.AuthConnection.Query().CountX(ctx) != 1 || c.ExternalIdentity.Query().CountX(ctx) != 0 {

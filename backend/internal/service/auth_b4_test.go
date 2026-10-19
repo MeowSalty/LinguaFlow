@@ -90,7 +90,7 @@ func (f *b4Fixture) login(t *testing.T) context.Context {
 	return WithExternalActorSession(context.Background(), f.admin.ID, f.admin.AuthVersion, claims.SessionID)
 }
 func b4Policy() AuthConnectionPolicyInput {
-	return AuthConnectionPolicyInput{LoginEnabled: true, SignupEnabled: true, LinkEnabled: true, LoginRules: authrules.Unrestricted(), SignupRules: authrules.Unrestricted(), LinkRules: authrules.Unrestricted()}
+	return AuthConnectionPolicyInput{LoginEnabled: true, SignupEnabled: true, LinkEnabled: true, LoginRules: authrules.Unrestricted(), SignupRules: authrules.Unrestricted(), LinkRules: authrules.Unrestricted(), Signup: SignupPolicyRequirements{EmailRequirement: "optional", PasswordRequirement: "none"}}
 }
 func (f *b4Fixture) configured(t *testing.T) AuthConnectionRecord {
 	t.Helper()

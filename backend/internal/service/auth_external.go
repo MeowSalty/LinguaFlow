@@ -127,7 +127,7 @@ func (s *ExternalAuthService) StartLogin(ctx context.Context, connectionID strin
 	return s.startExternal(ctx, p, authtransaction.PurposeLogin, nil, nil, input, "", "", time.Time{})
 }
 
-func (s *ExternalAuthService) startExternal(ctx context.Context, p externalConnection, purpose authtransaction.Purpose, userID *int, bindingID *int, input ExternalBrowserInput, action, target string, authorizationExpiry time.Time, authorizations ...*ent.ReauthenticationProof) (ExternalStartResult, error) {
+func (s *ExternalAuthService) startExternal(ctx context.Context, p externalConnection, purpose authtransaction.Purpose, userID *int, bindingID *int, input ExternalBrowserInput, action, target string, authorizationExpiry time.Time, linkProofs ...string) (ExternalStartResult, error) {
 	if !validBrowserChallenge(input.BrowserChallenge) || !s.validCompletionURL(input.CompletionURL) || !validReturnTo(input.ReturnTo) {
 		return ExternalStartResult{}, ErrInvalidInput
 	}
@@ -180,14 +180,18 @@ func (s *ExternalAuthService) startExternal(ctx context.Context, p externalConne
 		}
 	}
 	err = withOrganizationTransaction(ctx, s.client, func(c *ent.Client) error {
-		if err := lockAuthConnection(ctx, c, p.Connection.ID); err != nil {
+		if err := lockAuthenticationConfiguration(ctx, c); err != nil {
 			return err
 		}
 		current, err := readExternalConnection(ctx, c, p.Connection.ID, 0)
 		if err != nil {
 			return err
 		}
-		if current.Connection.AuthGeneration != p.Connection.AuthGeneration || current.Connection.AggregateRevision != p.Connection.AggregateRevision {
+		purposeName := "login"
+		if purpose == authtransaction.PurposeLink {
+			purposeName = "link"
+		}
+		if current.Connection.AuthGeneration != p.Connection.AuthGeneration || (purpose == authtransaction.PurposeTest && current.Connection.AggregateRevision != p.Connection.AggregateRevision) || (purpose != authtransaction.PurposeTest && purposePolicyChanged(p, current, purposeName)) {
 			return connectionError("revision-conflict")
 		}
 		if current.Connection.ArchivedAt != nil {
@@ -203,6 +207,9 @@ func (s *ExternalAuthService) startExternal(ctx context.Context, p externalConne
 			}
 		}
 		create := c.AuthTransaction.Create().SetID(id).SetPurpose(purpose).SetConnectionID(p.Connection.ID).SetConnectionRevision(p.Config.Revision).SetConnectionGeneration(p.Connection.AuthGeneration).SetPolicyRevision(p.Policy.LoginPolicyRevision).SetStateHash(hash.Full(state)).SetNonce(sealedNonce).SetPkceVerifier(sealedPKCE).SetBrowserChallenge(input.BrowserChallenge).SetCompletionURL(input.CompletionURL).SetReturnTo(input.ReturnTo).SetExpiresAt(expires)
+		if purpose == authtransaction.PurposeLink {
+			create.SetLinkPolicyRevision(p.Policy.LinkPolicyRevision)
+		}
 		if userID != nil {
 			if err := lockAuthUser(ctx, c, *userID); err != nil {
 				return err
@@ -226,8 +233,19 @@ func (s *ExternalAuthService) startExternal(ctx context.Context, p externalConne
 		if bindingID != nil {
 			create.SetBindingID(*bindingID)
 		}
-		if len(authorizations) > 0 && authorizations[0] != nil {
-			proof := authorizations[0]
+		if purpose == authtransaction.PurposeLink {
+			if userID == nil || len(linkProofs) != 1 {
+				return ErrReauthenticationRequired
+			}
+			proof, err := s.consumeReauthenticationProof(ctx, c, *userID, linkProofs[0], "link", target)
+			if err != nil {
+				return err
+			}
+			if proof.ExpiresAt.Before(expires) {
+				expires = proof.ExpiresAt
+			}
+			authorizationExpiry = proof.ExpiresAt
+			create.SetExpiresAt(expires)
 			create.SetAuthorizationConnectionID(proof.ConnectionID).SetAuthorizationConnectionGeneration(proof.ConnectionGeneration).SetAuthorizationPolicyRevision(proof.LoginPolicyRevision)
 		}
 		if action != "" {
@@ -356,12 +374,19 @@ func (s *ExternalAuthService) HandleCallback(ctx context.Context, connectionID, 
 	if err := validateIdentityResult(p, identity); err != nil {
 		return issueFailure("provider_verification_failed")
 	}
-	attrs, err := authrules.Extract(configProtocol(p.Config), p.Config.AttributeMappings, identity.Sources, identity.SourceErrors, now)
+	purposeName := "login"
+	if row.Purpose == authtransaction.PurposeLink {
+		purposeName = "link"
+	}
+	if row.Purpose == authtransaction.PurposeLogin || row.Purpose == authtransaction.PurposeTest {
+		purposeName = "signup"
+	}
+	attrs, err := authrules.ExtractForPurpose(configProtocol(p.Config), p.Config.AttributeMappings, purposeName, identity.Sources, identity.SourceErrors, now)
 	if err != nil {
 		return issueFailure("provider_verification_failed")
 	}
-	if row.Purpose != authtransaction.PurposeTest {
-		attrs = authrules.SelectAttributes(attrs, authrules.RequiredAttributes(p.Config.AttributeMappings, rulesForPurpose(p, row.Purpose)...))
+	if row.Purpose != authtransaction.PurposeTest && row.Purpose != authtransaction.PurposeLogin {
+		attrs = authrules.SelectAttributes(attrs, authrules.RequiredAttributesForPurpose(configProtocol(p.Config), p.Config.AttributeMappings, purposeName, rulesForPurpose(p, row.Purpose)...))
 	}
 	evidence := authrules.Evidence{Issuer: identity.Authority, Subject: identity.Subject, SourceFingerprint: sourceTrustFingerprint(p.Config), LoginPolicyRevision: p.Policy.LoginPolicyRevision, ObservedAt: now, ExpiresAt: now.Add(time.Duration(p.Config.EvidenceMaxAgeSeconds) * time.Second), Attributes: attrs}
 	if row.Purpose != authtransaction.PurposeTest {

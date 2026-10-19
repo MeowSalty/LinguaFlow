@@ -122,14 +122,6 @@ func oauthIdentityContract(in OAuth2ConnectionInput) string {
 	b, _ := json.Marshal([]any{in.AuthorizationEndpoint, in.TokenEndpoint, in.ProfileEndpoint, in.ClientID, in.SubjectMapping})
 	return string(b)
 }
-func validateConnectionRules(c *ent.AuthConnectionRevision, rules ...authrules.RuleSet) error {
-	scopes, userinfo := c.OidcScopes, c.OidcUserinfoEnabled
-	if configProtocol(c) == "oauth2" {
-		scopes = c.Oauth2Scopes
-		userinfo = false
-	}
-	return authrules.ValidateScopes(configProtocol(c), c.AttributeMappings, scopes, userinfo, rules...)
-}
 func (s *ExternalAuthService) externalOAuthConfig(ctx context.Context, p externalConnection) (authoauth2.Config, error) {
 	cfg := oauthConfig(oauthInput(p.Config), connectionAuthority(p))
 	// Credential encryption is independent of the selected protocol.
@@ -191,17 +183,6 @@ func (s *ExternalAuthService) verifyExternal(ctx context.Context, p externalConn
 	identity.Authority = identity.Issuer
 	return identity, err
 }
-func signupRequirements(ctx context.Context, c *ent.Client, p externalConnection) ([]string, bool, error) {
-	fresh := p.Config.FreshSupported
-	if fresh && p.Connection.Kind == authconnection.KindOidc {
-		return []string{}, true, nil
-	}
-	password, err := readPasswordPolicy(ctx, c)
-	if err != nil {
-		return nil, false, err
-	}
-	return []string{"local_password"}, password.canLogin() && password.Policy.LinkEnabled, nil
-}
 func validateIdentityResult(p externalConnection, i authprotocol.Identity) error {
 	if i.Protocol != configProtocol(p.Config) || i.Authority != connectionAuthority(p) || i.Subject == "" {
 		return fmt.Errorf("%w: identity source mismatch", ErrExternalFlowInvalid)
@@ -228,12 +209,5 @@ func ensureIdentityContract(ctx context.Context, c *ent.Client, p externalConnec
 
 // Match configuration publication's stable row order before locking a user.
 func lockSignupConnections(ctx context.Context, c *ent.Client, id string) error {
-	ids := []string{id, PasswordConnectionID}
-	sort.Strings(ids)
-	for _, id := range ids {
-		if err := lockAuthConnection(ctx, c, id); err != nil {
-			return err
-		}
-	}
-	return nil
+	return lockAuthenticationConfiguration(ctx, c)
 }

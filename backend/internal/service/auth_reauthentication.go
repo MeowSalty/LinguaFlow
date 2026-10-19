@@ -186,20 +186,7 @@ func (s *ExternalAuthService) StartLink(ctx context.Context, userID int, connect
 	if p.Connection.ArchivedAt != nil || !p.Policy.Enabled || !p.Policy.LinkEnabled {
 		return ExternalStartResult{}, ErrAuthConnectionConflict
 	}
-	var proof *ent.ReauthenticationProof
-	err = withOrganizationTransaction(ctx, s.client, func(c *ent.Client) error {
-		if err := lockAuthConnection(ctx, c, connectionID); err != nil {
-			return err
-		}
-		if err := lockAuthUser(ctx, c, userID); err != nil {
-			return err
-		}
-		var consumeErr error
-		proof, consumeErr = s.consumeReauthenticationProof(ctx, c, userID, input.ReauthenticationProof, "link", connectionID)
-		return consumeErr
-	})
-	if err != nil {
-		return ExternalStartResult{}, err
-	}
-	return s.startExternal(WithExternalActor(ctx, userID, proof.AuthVersion), p, authtransaction.PurposeLink, &userID, nil, input.ExternalBrowserInput, "link", connectionID, proof.ExpiresAt, proof)
+	// The proof is consumed in the same transaction that creates the link flow.
+	// Network preparation happens after that transaction releases its locks.
+	return s.startExternal(ctx, p, authtransaction.PurposeLink, &userID, nil, input.ExternalBrowserInput, "link", connectionID, time.Time{}, input.ReauthenticationProof)
 }

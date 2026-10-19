@@ -68,6 +68,22 @@ func TestAuthenticationB4OAuthFreshDowngradeNeedsMaintenanceFallback(t *testing.
 			f := newB4Fixture(t, driver)
 			s, c, ctx := f.services[0], f.clients[0], f.ctx
 			rec := f.enabled(t)
+			// The downgrade test owns the signup dependency explicitly: only a
+			// required local password lets a fresh-only source remain valid when
+			// its fresh capability is removed.
+			policy := rec.Configuration.Policy
+			policy.Signup.PasswordRequirement = "required"
+			policyChange := AuthConnectionChanges{Policy: &policy}
+			policyProof := f.test(t, rec, &policyChange)
+			rec, err := s.UpdateConnection(ctx, f.admin.ID, rec.ID, UpdateAuthConnectionInput{
+				ExpectedRevision:      rec.AggregateRevision,
+				TestID:                policyProof.TestID,
+				Verifier:              b4Verifier,
+				AuthConnectionChanges: policyChange,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
 			owner := c.User.Create().SetUsername("fresh-only-owner").SaveX(ctx)
 			ruleBindingFixture(t, c, owner, rec.ID, s.now(), c.AuthConnection.GetX(ctx, rec.ID).AuthGeneration)
 			changes := AuthConnectionChanges{ClientSecret: json.RawMessage(`"non-fresh-new-secret"`)}
@@ -79,7 +95,7 @@ func TestAuthenticationB4OAuthFreshDowngradeNeedsMaintenanceFallback(t *testing.
 				t.Fatal("missing auth_time advertised fresh capability")
 			}
 			input := UpdateAuthConnectionInput{ExpectedRevision: rec.AggregateRevision, TestID: tested.TestID, Verifier: b4Verifier, AuthConnectionChanges: changes}
-			_, err := s.UpdateConnection(ctx, f.admin.ID, rec.ID, input)
+			_, err = s.UpdateConnection(ctx, f.admin.ID, rec.ID, input)
 			b4Code(t, err, "fallback-required")
 			var conflict *AuthConnectionError
 			if !errors.As(err, &conflict) || conflict.Impact == nil || conflict.Impact.CanSave || !reflect.DeepEqual(conflict.Impact.BlockedUsers, []int{owner.ID}) {

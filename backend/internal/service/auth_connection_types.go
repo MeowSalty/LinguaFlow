@@ -16,12 +16,13 @@ type OIDCConnectionInput struct {
 }
 
 type AuthConnectionPolicyInput struct {
-	LoginEnabled  bool              `json:"login_enabled" auth:"required"`
-	SignupEnabled bool              `json:"signup_enabled" auth:"required"`
-	LinkEnabled   bool              `json:"link_enabled" auth:"required"`
-	LoginRules    authrules.RuleSet `json:"login_rules" auth:"required"`
-	SignupRules   authrules.RuleSet `json:"signup_rules" auth:"required"`
-	LinkRules     authrules.RuleSet `json:"link_rules" auth:"required"`
+	LoginEnabled  bool                     `json:"login_enabled" auth:"required"`
+	SignupEnabled bool                     `json:"signup_enabled" auth:"required"`
+	LinkEnabled   bool                     `json:"link_enabled" auth:"required"`
+	LoginRules    authrules.RuleSet        `json:"login_rules" auth:"required"`
+	SignupRules   authrules.RuleSet        `json:"signup_rules" auth:"required"`
+	LinkRules     authrules.RuleSet        `json:"link_rules" auth:"required"`
+	Signup        SignupPolicyRequirements `json:"signup" auth:"required"`
 }
 
 type CreateAuthConnectionInput struct {
@@ -70,6 +71,8 @@ type AuthConnectionSnapshot struct {
 	AttributeMappings     []authrules.Field         `json:"attribute_mappings"`
 	EvidenceMaxAgeSeconds int                       `json:"evidence_max_age_seconds"`
 	LoginPolicyRevision   int64                     `json:"login_policy_revision"`
+	SignupPolicyRevision  int64                     `json:"signup_policy_revision"`
+	LinkPolicyRevision    int64                     `json:"link_policy_revision"`
 	DisplayName           string                    `json:"display_name"`
 	Description           string                    `json:"description"`
 	DisplayOrder          int                       `json:"display_order"`
@@ -139,6 +142,7 @@ type AuthConnectionImpactResult struct {
 	BlockedUsers       []int     `json:"blocked_users"`
 	AffectedSessions   int       `json:"affected_sessions"`
 	CanSave            bool      `json:"can_save"`
+	AffectsSignup      bool      `json:"affects_signup"`
 }
 
 // AuthConnectionError distinguishes an actionable configuration problem from

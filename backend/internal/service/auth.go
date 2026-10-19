@@ -132,8 +132,11 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Sessi
 		if err != nil {
 			return err
 		}
-		if !registration || !p.canLogin() || !p.Policy.SignupEnabled {
+		if !registration || !p.canLogin() || !p.Local.SignupEnabled {
 			return ErrRegistrationClosed
+		}
+		if err := requireLocalSignup(p, email, s.now()); err != nil {
+			return err
 		}
 		create := tx.User.Create().SetUsername(username).SetPasswordHash(passwordHash).SetDisplayName(strings.TrimSpace(input.DisplayName)).SetRole(SystemRoleUser).SetActive(true)
 		if email != "" {
@@ -147,7 +150,10 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Sessi
 			return err
 		}
 		result, err = s.createSession(ctx, tx, account, p, nil)
-		return err
+		if err != nil {
+			return err
+		}
+		return recordAuditEvent(ctx, tx, AuditEvent{ActorUserID: account.ID, Action: "account.authentication.registered", ResourceType: "user", ResourceID: account.ID, VisibilityScope: "personal", Metadata: map[string]any{"connection_id": PasswordConnectionID}})
 	})
 	if err != nil {
 		return nil, err
@@ -278,7 +284,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ses
 			if policyErr != nil {
 				return policyErr
 			}
-			connection, policyRevision = p.Connection, p.Policy.LoginPolicyRevision
+			connection, policyRevision = p.Connection, p.Local.LoginPolicyRevision
 			validConnection = p.canLogin() && account.PasswordHash != "" && chain.BindingID == nil
 		} else {
 			p, policyErr := readExternalConnection(ctx, tx, chain.ConnectionID, 0)
@@ -474,7 +480,7 @@ func (s *AuthService) createSession(ctx context.Context, tx *ent.Client, account
 			return nil, err
 		}
 	}
-	return s.createSessionForConnection(ctx, tx, account, p.Connection, p.Policy.LoginPolicyRevision, nil, chain)
+	return s.createSessionForConnection(ctx, tx, account, p.Connection, p.Local.LoginPolicyRevision, nil, chain)
 }
 
 func (s *AuthService) createSessionForConnection(ctx context.Context, tx *ent.Client, account *ent.User, connection *ent.AuthConnection, policyRevision int64, binding *ent.LoginBinding, chain *ent.RefreshSession, evidences ...authrules.Evidence) (*Session, error) {
@@ -521,9 +527,17 @@ func (s *AuthService) createSessionForConnection(ctx context.Context, tx *ent.Cl
 }
 
 func lockAuthConnection(ctx context.Context, client *ent.Client, id string) error {
-	if id == PasswordConnectionID {
-		return lockPasswordConnection(ctx, client)
+	if err := lockPasswordConnection(ctx, client); err != nil {
+		return err
 	}
+	if id == PasswordConnectionID {
+		return nil
+	}
+	return lockExternalSource(ctx, client, id)
+}
+
+// Call only after the global policy and local source/policy rows are locked.
+func lockExternalSource(ctx context.Context, client *ent.Client, id string) error {
 	result, err := client.ExecContext(ctx, "UPDATE auth_connections SET auth_generation = auth_generation WHERE id = '"+strings.ReplaceAll(id, "'", "''")+"'")
 	if err != nil {
 		return err

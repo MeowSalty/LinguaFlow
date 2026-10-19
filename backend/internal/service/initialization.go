@@ -207,6 +207,8 @@ func initializationBusinessChecks(c *ent.Client) map[string]func(context.Context
 		"auth_connections":           c.AuthConnection.Query().Exist,
 		"auth_connection_revisions":  c.AuthConnectionRevision.Query().Exist,
 		"auth_channel_policies":      c.AuthChannelPolicy.Query().Exist,
+		"local_account_policies":     c.LocalAccountPolicy.Query().Exist,
+		"authentication_recoveries":  c.AuthenticationRecovery.Query().Exist,
 		"auth_connection_secrets":    c.AuthConnectionSecret.Query().Exist,
 		"auth_transactions":          c.AuthTransaction.Query().Exist,
 		"reauthentication_proofs":    c.ReauthenticationProof.Query().Exist,
@@ -283,6 +285,9 @@ func (s *InitializationService) MaintainAdministrator(ctx context.Context, input
 	var result *ent.User
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		// 串行化维护操作，并建立 SQLite 的写快照。
+		if err := lockAuthenticationConfiguration(ctx, tx); err != nil {
+			return err
+		}
 		if _, err := tx.InstanceInitialization.Update().Where(instanceinitialization.IDEQ(1)).SetUpdatedAt(timeutil.NowUTC()).Save(ctx); err != nil {
 			return err
 		}

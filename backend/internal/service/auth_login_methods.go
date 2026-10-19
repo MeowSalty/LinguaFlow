@@ -11,7 +11,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/reauthenticationproof"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
@@ -68,7 +67,7 @@ func (s *ExternalAuthService) LoginMethods(ctx context.Context, userID int) (Log
 	out.Password.IsSet = account.PasswordHash != ""
 	out.Password.CanLogin = out.Password.IsSet && passwordPolicy.canLogin()
 	out.Password.Verified = verifiedPasswordFallback(account, passwordPolicy)
-	out.Password.CanSet = !out.Password.IsSet && passwordPolicy.canLogin() && passwordPolicy.Policy.LinkEnabled
+	out.Password.CanSet = !out.Password.IsSet && passwordPolicy.canEnrollPassword()
 	if account.Email != "" {
 		value := account.Email
 		out.Email.Address = &value
@@ -155,7 +154,7 @@ func (s *ExternalAuthService) Unlink(ctx context.Context, userID, bindingID int,
 		if err != nil {
 			return err
 		}
-		if err = lockAuthConnection(ctx, c, binding.ConnectionID); err != nil {
+		if err = lockAuthenticationConfiguration(ctx, c); err != nil {
 			return err
 		}
 		if err = lockAuthUser(ctx, c, userID); err != nil {
@@ -225,7 +224,7 @@ func (s *ExternalAuthService) SetInitialPassword(ctx context.Context, userID int
 		return err
 	}
 	return withOrganizationTransaction(ctx, s.client, func(c *ent.Client) error {
-		if err := lockPasswordConnection(ctx, c); err != nil {
+		if err := lockAuthenticationConfiguration(ctx, c); err != nil {
 			return err
 		}
 		if err := lockAuthUser(ctx, c, userID); err != nil {
@@ -242,7 +241,7 @@ func (s *ExternalAuthService) SetInitialPassword(ctx context.Context, userID int
 		if err != nil {
 			return err
 		}
-		if account.PasswordHash != "" || !p.canLogin() || !p.Policy.LinkEnabled {
+		if account.PasswordHash != "" || !p.canEnrollPassword() {
 			return ErrLoginMethodConflict
 		}
 		if _, err = s.consumeReauthenticationProof(ctx, c, userID, rawProof, "password_set", PasswordConnectionID); err != nil {
@@ -260,7 +259,7 @@ func (s *ExternalAuthService) SetInitialPassword(ctx context.Context, userID int
 
 func (s *ExternalAuthService) DeletePassword(ctx context.Context, userID int, rawProof string) error {
 	return withOrganizationTransaction(ctx, s.client, func(c *ent.Client) error {
-		if err := lockPasswordConnection(ctx, c); err != nil {
+		if err := lockAuthenticationConfiguration(ctx, c); err != nil {
 			return err
 		}
 		if err := lockAuthUser(ctx, c, userID); err != nil {
@@ -289,15 +288,6 @@ func (s *ExternalAuthService) DeletePassword(ctx context.Context, userID int, ra
 		}
 		if proof.Method == reauthenticationproof.MethodPassword || proof.ConnectionID == PasswordConnectionID {
 			return ErrReauthenticationRequired
-		}
-		if account.Role == SystemRoleAdmin {
-			remaining, err := c.User.Query().Where(user.IDNEQ(userID), user.ActiveEQ(true), user.RoleEQ(SystemRoleAdmin), user.PasswordHashNotNil(), user.PasswordHashNEQ("")).Count(ctx)
-			if err != nil {
-				return err
-			}
-			if remaining < 1 {
-				return ErrLoginMethodConflict
-			}
 		}
 		now := timeutil.Normalize(s.now())
 		if err = revokeUserSessions(ctx, c, userID, now); err != nil {

@@ -11,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authhttp"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 )
@@ -20,12 +21,6 @@ func (s *ExternalAuthService) connectionSetup(p externalConnection) AuthConnecti
 		Protocol: AuthConnectionProtocolSetup{ClientAuthMethods: []string{"client_secret_basic", "client_secret_post"}}}
 	missing := func(field string) {
 		out.Issues = append(out.Issues, AuthConfigurationIssue{Code: "required", Field: field, Message: "A value is required"})
-	}
-	if p.Connection.Kind == authconnection.KindPassword {
-		out.ConfigurationComplete = true
-		out.Protocol.RequiredFields = []string{}
-		out.Protocol.ClientAuthMethods = []string{}
-		return out
 	}
 	if p.Connection.Kind == authconnection.KindOidc {
 		out.Protocol.RequiredFields = []string{"oidc.issuer", "oidc.client_id", "client_secret"}
@@ -91,7 +86,7 @@ func (s *ExternalAuthService) requireConnectionReady(p externalConnection) error
 func connectionSnapshot(p externalConnection) *AuthConnectionSnapshot {
 	out := &AuthConnectionSnapshot{DisplayName: p.Config.DisplayName, Description: p.Config.Description, DisplayOrder: p.Config.DisplayOrder,
 		AttributeMappings: append([]authrules.Field{}, p.Config.AttributeMappings...), EvidenceMaxAgeSeconds: p.Config.EvidenceMaxAgeSeconds,
-		LoginPolicyRevision: p.Policy.LoginPolicyRevision, Policy: policyInput(p.Policy), HasClientSecret: connectionSecretVersion(p.Config) > 0}
+		LoginPolicyRevision: p.Policy.LoginPolicyRevision, SignupPolicyRevision: p.Policy.SignupPolicyRevision, LinkPolicyRevision: p.Policy.LinkPolicyRevision, Policy: policyInput(p.Policy), HasClientSecret: connectionSecretVersion(p.Config) > 0}
 	if p.SecretOverride != nil {
 		out.HasClientSecret = *p.SecretOverride != ""
 	}
@@ -130,6 +125,13 @@ func (s *ExternalAuthService) connectionRecord(ctx context.Context, c *ent.Clien
 	if err != nil {
 		return out, err
 	}
+	local, err := readPasswordPolicy(ctx, c)
+	if err != nil {
+		return out, err
+	}
+	if p.Policy.SignupEnabled {
+		out.Setup.Issues = append(out.Setup.Issues, externalSignupIssues(p, localAccountInput(local.Local))...)
+	}
 	out.Capabilities = AuthConnectionCapabilities{CanLogin: active && p.Policy.LoginEnabled, CanLink: active && p.Policy.LinkEnabled,
 		CanSignup: active && p.Policy.LoginEnabled && p.Policy.SignupEnabled && registration && initializable,
 		CanTest:   supportedExternalKind(row.Kind) && row.ArchivedAt == nil && row.State != authconnection.StateDisabled && setup.ConfigurationComplete && len(setup.Issues) == 0}
@@ -165,6 +167,8 @@ func (s *ExternalAuthService) applyConnectionChanges(ctx context.Context, c *ent
 		policy.LoginRules = v.LoginRules
 		policy.SignupRules = v.SignupRules
 		policy.LinkRules = v.LinkRules
+		policy.SignupEmailRequirement = authchannelpolicy.SignupEmailRequirement(v.Signup.EmailRequirement)
+		policy.SignupPasswordRequirement = authchannelpolicy.SignupPasswordRequirement(v.Signup.PasswordRequirement)
 	}
 	if in.OIDC != nil {
 		if p.Connection.Kind != authconnection.KindOidc {
@@ -213,10 +217,20 @@ func (s *ExternalAuthService) applyConnectionChanges(ctx context.Context, c *ent
 	if cfg.DisplayName == "" || len(cfg.DisplayName) > 120 || len(cfg.Description) > 2000 || cfg.EvidenceMaxAgeSeconds < 1 || cfg.EvidenceMaxAgeSeconds > 31536000 || !validConnectionPolicy(policyInput(&policy)) {
 		return p, ErrInvalidInput
 	}
-	if err := authrules.Validate(configProtocol(&cfg), cfg.AttributeMappings, policy.LoginRules, policy.SignupRules, policy.LinkRules); err != nil {
+	if err := validateConnectionPolicyRules(&cfg, policyInput(&policy)); err != nil {
 		return p, ErrInvalidInput
 	}
-	if err := validateConnectionRules(&cfg, policy.LoginRules, policy.SignupRules, policy.LinkRules); err != nil {
+	var err error
+	policy.LoginRules, err = authrules.NormalizeRuleForPurpose(configProtocol(&cfg), cfg.AttributeMappings, "login", policy.LoginRules)
+	if err != nil {
+		return p, ErrInvalidInput
+	}
+	policy.SignupRules, err = authrules.NormalizeRuleForPurpose(configProtocol(&cfg), cfg.AttributeMappings, "signup", policy.SignupRules)
+	if err != nil {
+		return p, ErrInvalidInput
+	}
+	policy.LinkRules, err = authrules.NormalizeRuleForPurpose(configProtocol(&cfg), cfg.AttributeMappings, "link", policy.LinkRules)
+	if err != nil {
 		return p, ErrInvalidInput
 	}
 	if err := ensureIdentityContract(ctx, c, p); err != nil {
@@ -264,7 +278,29 @@ func (s *ExternalAuthService) ImpactConnection(ctx context.Context, actorID int,
 		return AuthConnectionImpactResult{}, err
 	}
 	if !loginRulesChanged(current, p) && current.Policy.LoginEnabled == p.Policy.LoginEnabled && current.Config.FreshSupported == p.Config.FreshSupported {
-		return emptyAuthImpact(p.Connection.AggregateRevision, s.now()), nil
+		out := emptyAuthImpact(p.Connection.AggregateRevision, s.now())
+		out.AffectsSignup = purposePolicyChanged(current, p, "signup")
+		return s.signupImpact(ctx, p, out)
 	}
-	return candidateImpact(ctx, s.client, p, s.now(), !p.Policy.Enabled || !p.Policy.LoginEnabled)
+	out, err := candidateImpact(ctx, s.client, p, s.now(), !p.Policy.Enabled || !p.Policy.LoginEnabled)
+	out.AffectsSignup = purposePolicyChanged(current, p, "signup")
+	if err != nil {
+		return out, err
+	}
+	return s.signupImpact(ctx, p, out)
+}
+
+func (s *ExternalAuthService) signupImpact(ctx context.Context, p externalConnection, out AuthConnectionImpactResult) (AuthConnectionImpactResult, error) {
+	if !p.Policy.Enabled || !p.Policy.SignupEnabled {
+		return out, nil
+	}
+	local, err := readPasswordPolicy(ctx, s.client)
+	if err != nil {
+		return out, err
+	}
+	if len(externalSignupIssues(p, localAccountInput(local.Local))) != 0 {
+		out.CanSave = false
+		out.Remediation = "Provide the declared local password prerequisites and an independent maintenance path for registration without a required password."
+	}
+	return out, nil
 }

@@ -109,15 +109,13 @@ func TestInitializationRollbackAtEveryWrite(t *testing.T) {
 		{config.ModeServer, "InstanceInitialization", ent.OpCreate},
 		{config.ModeServer, "SystemSetting", ent.OpCreate},
 		{config.ModeServer, "AuthConnection", ent.OpCreate},
-		{config.ModeServer, "AuthConnectionRevision", ent.OpCreate},
-		{config.ModeServer, "AuthChannelPolicy", ent.OpCreate},
+		{config.ModeServer, "LocalAccountPolicy", ent.OpCreate},
 		{config.ModeServer, "User", ent.OpCreate},
 		{config.ModeServer, "ActivityLog", ent.OpCreate},
 		{config.ModeLocal, "InstanceInitialization", ent.OpCreate},
 		{config.ModeLocal, "SystemSetting", ent.OpCreate},
 		{config.ModeLocal, "AuthConnection", ent.OpCreate},
-		{config.ModeLocal, "AuthConnectionRevision", ent.OpCreate},
-		{config.ModeLocal, "AuthChannelPolicy", ent.OpCreate},
+		{config.ModeLocal, "LocalAccountPolicy", ent.OpCreate},
 		{config.ModeLocal, "User", ent.OpCreate},
 		{config.ModeLocal, "InstanceInitialization", ent.OpUpdateOne},
 		{config.ModeLocal, "ActivityLog", ent.OpCreate},
@@ -488,10 +486,9 @@ func TestInitializationRejectsInvalidAdministratorNames(t *testing.T) {
 
 func TestInitializationRejectsDamagedAuthPolicyWithoutRepair(t *testing.T) {
 	for _, statement := range []string{
-		"DELETE FROM auth_connection_revisions",
-		"DELETE FROM auth_channel_policies",
-		"UPDATE auth_connections SET current_revision = 999",
-		"UPDATE auth_connection_revisions SET email_login_enabled = true",
+		"DELETE FROM local_account_policies",
+		"UPDATE local_account_policies SET username_login_enabled = false WHERE id = 1",
+		"DELETE FROM auth_connections WHERE id = 'password'",
 	} {
 		t.Run(statement, func(t *testing.T) {
 			ctx := context.Background()

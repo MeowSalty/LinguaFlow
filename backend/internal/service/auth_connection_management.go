@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
@@ -45,7 +46,7 @@ func (s *ExternalAuthService) CreateConnection(ctx context.Context, actorID int,
 			setOAuthInput(cfg, v)
 		}
 		policy := defaultExternalPolicy()
-		p := externalConnection{Connection: row, Config: cfg, Policy: &ent.AuthChannelPolicy{Revision: 1, LoginPolicyRevision: 1, LoginRules: policy.LoginRules, SignupRules: policy.SignupRules, LinkRules: policy.LinkRules}}
+		p := externalConnection{Connection: row, Config: cfg, Policy: &ent.AuthChannelPolicy{Revision: 1, LoginPolicyRevision: 1, SignupPolicyRevision: 1, LinkPolicyRevision: 1, LoginRules: policy.LoginRules, SignupRules: policy.SignupRules, LinkRules: policy.LinkRules, SignupEmailRequirement: authchannelpolicy.SignupEmailRequirementOptional, SignupPasswordRequirement: authchannelpolicy.SignupPasswordRequirementNone}}
 		changes := AuthConnectionChanges{OIDC: in.OIDC, OAuth2: in.OAuth2}
 		if in.ClientSecret != "" {
 			changes.ClientSecret, _ = json.Marshal(in.ClientSecret)
@@ -110,7 +111,7 @@ func (s *ExternalAuthService) persistConnectionSnapshot(ctx context.Context, c *
 			p.Config.SecretVersion = &next
 		}
 	}
-	return saveExternalSnapshot(ctx, c, p.Connection.ID, next, p.Policy.LoginPolicyRevision, p.Config, policyInput(p.Policy))
+	return saveExternalSnapshot(ctx, c, p.Connection.ID, next, p.Policy.LoginPolicyRevision, p.Config, policyInput(p.Policy), p.Policy.SignupPolicyRevision, p.Policy.LinkPolicyRevision)
 }
 
 func sameConnectionContent(a, b externalConnection) bool {
@@ -156,6 +157,21 @@ func (s *ExternalAuthService) UpdateConnection(ctx context.Context, actorID int,
 		if sameConnectionContent(current, p) {
 			return nil
 		}
+		if err := ensureExternalSignupReady(ctx, c, p); err != nil {
+			return err
+		}
+		if purposePolicyChanged(current, p, "signup") {
+			if p.Policy.SignupPolicyRevision >= maxAuthVersion {
+				return connectionError("revision-conflict")
+			}
+			p.Policy.SignupPolicyRevision++
+		}
+		if purposePolicyChanged(current, p, "link") {
+			if p.Policy.LinkPolicyRevision >= maxAuthVersion {
+				return connectionError("revision-conflict")
+			}
+			p.Policy.LinkPolicyRevision++
+		}
 		generation := row.AuthGeneration
 		invalidates := loginRulesChanged(current, p)
 		turnsOff := current.Policy.Enabled && current.Policy.LoginEnabled && !p.Policy.LoginEnabled
@@ -199,7 +215,7 @@ func (s *ExternalAuthService) ensureConnectionImpact(ctx context.Context, c *ent
 	if !impact.CanSave {
 		return &AuthConnectionError{Code: "fallback-required", Impact: &impact}
 	}
-	return ensurePasswordAdministrator(ctx, c)
+	return nil
 }
 
 func (s *ExternalAuthService) ConfigureConnection(ctx context.Context, actorID int, id string, in AuthConnectionActionInput) (AuthConnectionRecord, error) {
@@ -281,6 +297,9 @@ func (s *ExternalAuthService) changeConnectionState(ctx context.Context, actorID
 			}
 			applyTestCapability(p.Config, proof, s.now())
 			p.Policy.Enabled = true
+			if err := ensureExternalSignupReady(ctx, c, p); err != nil {
+				return err
+			}
 			if err = s.ensureConnectionImpact(ctx, c, p, !p.Policy.LoginEnabled); err != nil {
 				return err
 			}

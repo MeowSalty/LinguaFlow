@@ -4,11 +4,11 @@ import (
 	"context"
 	crand "crypto/rand"
 	"errors"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/authhttp"
 	"io"
 	"sync"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authhttp"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoauth2"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authoidc"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
@@ -121,11 +121,16 @@ type ExternalExchangeInput struct{ Ticket, Verifier string }
 type ExternalCompleteInput struct {
 	ConfirmationToken, Verifier, Username, DisplayName string
 	InitialPassword                                    *string
+	Email                                              *string
+	UsernamePresent, DisplayNamePresent, EmailPresent  bool
 }
 type ExternalCancelInput struct{ TransactionID, Verifier string }
 type ExternalProfile struct{ ConnectionID, ConnectionName, ExternalDisplay string }
 type ExternalConfirmation struct {
 	SignupRequirements               []string
+	Signup                           *SignupPolicyRequirements
+	UsernameCandidate                string
+	Email                            *string
 	TransactionID, ConfirmationToken string
 	ExpiresAt                        time.Time
 	Profile                          ExternalProfile

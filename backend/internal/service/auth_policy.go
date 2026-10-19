@@ -7,9 +7,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 )
 
 const PasswordConnectionID = "password"
@@ -17,12 +15,31 @@ const maxAuthVersion int64 = 1<<53 - 1
 
 type passwordPolicy struct {
 	Connection *ent.AuthConnection
-	Config     *ent.AuthConnectionRevision
-	Policy     *ent.AuthChannelPolicy
+	Local      *ent.LocalAccountPolicy
 }
 
 func (p passwordPolicy) canLogin() bool {
-	return p.Connection.ArchivedAt == nil && p.Policy.Enabled && p.Policy.LoginEnabled && p.Config.UsernameLoginEnabled
+	return p.Local.PasswordLoginEnabled && p.Local.UsernameLoginEnabled && !p.Local.EmailLoginEnabled
+}
+
+func (p passwordPolicy) canEnrollPassword() bool {
+	return p.canLogin() && p.Local.PasswordEnrollmentEnabled && p.Local.UsernameLoginEnabled
+}
+
+type SignupPolicyRequirements struct {
+	EmailRequirement    string `json:"email_requirement" auth:"required"`
+	PasswordRequirement string `json:"password_requirement" auth:"required"`
+}
+
+func signupSteps(signup SignupPolicyRequirements) []string {
+	steps := []string{}
+	if signup.EmailRequirement == "required" {
+		steps = append(steps, "email")
+	}
+	if signup.PasswordRequirement == "required" {
+		steps = append(steps, "local_password")
+	}
+	return steps
 }
 
 // initializePasswordConnection runs only inside first-instance initialization.
@@ -31,14 +48,7 @@ func initializePasswordConnection(ctx context.Context, client *ent.Client) error
 	if err := client.AuthConnection.Create().SetID(PasswordConnectionID).SetKind(authconnection.KindPassword).SetCurrentRevision(1).Exec(ctx); err != nil {
 		return err
 	}
-	if err := client.AuthConnectionRevision.Create().SetConnectionID(PasswordConnectionID).SetRevision(1).
-		SetDisplayName("Password").SetUsernameLoginEnabled(true).Exec(ctx); err != nil {
-		return err
-	}
-	return client.AuthChannelPolicy.Create().SetConnectionID(PasswordConnectionID).SetRevision(1).SetLoginPolicyRevision(1).
-		SetEnabled(true).SetLoginEnabled(true).SetSignupEnabled(true).SetLinkEnabled(true).
-		SetLoginRules(authrules.Unrestricted()).SetSignupRules(authrules.Unrestricted()).
-		SetLinkRules(authrules.Unrestricted()).Exec(ctx)
+	return client.LocalAccountPolicy.Create().SetID(1).SetSignupRules(authrules.Unrestricted()).Exec(ctx)
 }
 
 func readPasswordPolicy(ctx context.Context, client *ent.Client) (passwordPolicy, error) {
@@ -47,51 +57,58 @@ func readPasswordPolicy(ctx context.Context, client *ent.Client) (passwordPolicy
 	if err != nil {
 		return p, fmt.Errorf("%w: password connection: %w", ErrSettingsUnavailable, err)
 	}
-	if connection.Kind != authconnection.KindPassword || connection.CurrentRevision < 1 || connection.CurrentRevision > maxAuthVersion || connection.AuthGeneration < 1 || connection.AuthGeneration > maxAuthVersion {
+	if connection.Kind != authconnection.KindPassword || connection.AuthGeneration < 1 || connection.AuthGeneration > maxAuthVersion {
 		return p, fmt.Errorf("%w: invalid password connection version", ErrSettingsUnavailable)
 	}
-	revision := connection.CurrentRevision
-	cfg, err := client.AuthConnectionRevision.Query().Where(authconnectionrevision.ConnectionIDEQ(PasswordConnectionID), authconnectionrevision.RevisionEQ(revision)).Only(ctx)
-	if err != nil {
-		return p, fmt.Errorf("%w: password configuration: %w", ErrSettingsUnavailable, err)
-	}
-	policy, err := client.AuthChannelPolicy.Query().Where(authchannelpolicy.ConnectionIDEQ(PasswordConnectionID), authchannelpolicy.RevisionEQ(revision)).Only(ctx)
+	policy, err := client.LocalAccountPolicy.Get(ctx, 1)
 	if err != nil {
 		return p, fmt.Errorf("%w: password policy: %w", ErrSettingsUnavailable, err)
 	}
-	if cfg.ConfigVersion != 1 || cfg.EmailLoginEnabled || policy.LoginPolicyRevision < 1 || policy.LoginPolicyRevision > maxAuthVersion ||
-		policy.LoginRules.Mode != "unrestricted" || policy.SignupRules.Mode != "unrestricted" || policy.LinkRules.Mode != "unrestricted" ||
-		authrules.Validate("oidc", nil, policy.LoginRules, policy.SignupRules, policy.LinkRules) != nil ||
-		(policy.SignupEnabled && !policy.LoginEnabled) || (policy.LoginEnabled && !cfg.UsernameLoginEnabled) {
+	if !validLocalAccountPolicy(localAccountInput(policy)) || policy.Revision < 1 || policy.Revision > maxAuthVersion ||
+		policy.LoginPolicyRevision < 1 || policy.LoginPolicyRevision > maxAuthVersion || policy.SignupPolicyRevision < 1 || policy.SignupPolicyRevision > maxAuthVersion ||
+		policy.EnrollmentPolicyRevision < 1 || policy.EnrollmentPolicyRevision > maxAuthVersion {
 		return p, fmt.Errorf("%w: unsupported password policy", ErrSettingsUnavailable)
 	}
-	return passwordPolicy{Connection: connection, Config: cfg, Policy: policy}, nil
+	return passwordPolicy{Connection: connection, Local: policy}, nil
 }
 
-type PasswordCapabilities struct {
-	CanLogin             bool `json:"can_login"`
-	CanSignup            bool `json:"can_signup"`
-	UsernameLoginEnabled bool `json:"username_login_enabled"`
-	EmailLoginEnabled    bool `json:"email_login_enabled"`
+type LocalAccountCapabilities struct {
+	CanLogin                  bool                     `json:"can_login"`
+	CanSignup                 bool                     `json:"can_signup"`
+	CanEnrollPassword         bool                     `json:"can_enroll_password"`
+	PasswordLoginEnabled      bool                     `json:"password_login_enabled"`
+	PasswordEnrollmentEnabled bool                     `json:"password_enrollment_enabled"`
+	UsernameLoginEnabled      bool                     `json:"username_login_enabled"`
+	EmailLoginEnabled         bool                     `json:"email_login_enabled"`
+	Signup                    SignupPolicyRequirements `json:"signup"`
+	SignupRequirements        []string                 `json:"signup_requirements"`
+}
+
+func localAccountCapabilities(p passwordPolicy, registration bool) LocalAccountCapabilities {
+	signup := SignupPolicyRequirements{EmailRequirement: string(p.Local.SignupEmailRequirement), PasswordRequirement: "required"}
+	return LocalAccountCapabilities{CanLogin: p.canLogin(), CanSignup: registration && p.canLogin() && p.Local.SignupEnabled && p.Local.UsernameLoginEnabled,
+		CanEnrollPassword: p.canEnrollPassword(), PasswordLoginEnabled: p.Local.PasswordLoginEnabled, PasswordEnrollmentEnabled: p.Local.PasswordEnrollmentEnabled, UsernameLoginEnabled: p.canLogin() && p.Local.UsernameLoginEnabled,
+		EmailLoginEnabled: p.canLogin() && p.Local.EmailLoginEnabled, Signup: signup, SignupRequirements: signupSteps(signup)}
 }
 
 type AuthCapabilities struct {
 	Mode                     string                           `json:"mode"`
-	Password                 PasswordCapabilities             `json:"password"`
+	LocalAccount             LocalAccountCapabilities         `json:"local_account"`
 	Connections              []PublicAuthConnectionCapability `json:"connections"`
 	EmailVerificationEnabled bool                             `json:"email_verification_enabled"`
 	PasswordResetEnabled     bool                             `json:"password_reset_enabled"`
 }
 
 type PublicAuthConnectionCapability struct {
-	ConnectionID       string   `json:"connection_id"`
-	DisplayName        string   `json:"display_name"`
-	Description        string   `json:"description"`
-	DisplayOrder       int      `json:"display_order"`
-	LogoURL            *string  `json:"logo_url,omitempty"`
-	CanLogin           bool     `json:"can_login"`
-	CanSignup          bool     `json:"can_signup"`
-	SignupRequirements []string `json:"signup_requirements"`
+	ConnectionID       string                   `json:"connection_id"`
+	DisplayName        string                   `json:"display_name"`
+	Description        string                   `json:"description"`
+	DisplayOrder       int                      `json:"display_order"`
+	LogoURL            *string                  `json:"logo_url,omitempty"`
+	CanLogin           bool                     `json:"can_login"`
+	CanSignup          bool                     `json:"can_signup"`
+	Signup             SignupPolicyRequirements `json:"signup"`
+	SignupRequirements []string                 `json:"signup_requirements"`
 }
 
 func (s *AuthService) Capabilities(ctx context.Context) (AuthCapabilities, error) {
@@ -104,7 +121,7 @@ func (s *AuthService) Capabilities(ctx context.Context) (AuthCapabilities, error
 	if err != nil {
 		return result, fmt.Errorf("%w: %w", ErrSettingsUnavailable, err)
 	}
-	result.Password = PasswordCapabilities{CanLogin: p.canLogin(), CanSignup: registration && p.canLogin() && p.Policy.SignupEnabled, UsernameLoginEnabled: p.canLogin()}
+	result.LocalAccount = localAccountCapabilities(p, registration)
 	connections, err := s.client.AuthConnection.Query().All(ctx)
 	if err != nil {
 		return result, err
@@ -124,7 +141,7 @@ func (s *AuthService) Capabilities(ctx context.Context) (AuthCapabilities, error
 		if err != nil {
 			return result, err
 		}
-		result.Connections = append(result.Connections, PublicAuthConnectionCapability{ConnectionID: connection.ID, DisplayName: x.Config.DisplayName, Description: x.Config.Description, DisplayOrder: x.Config.DisplayOrder, CanLogin: x.Policy.LoginEnabled, CanSignup: registration && x.Policy.LoginEnabled && x.Policy.SignupEnabled && initializable, SignupRequirements: requirements})
+		result.Connections = append(result.Connections, PublicAuthConnectionCapability{ConnectionID: connection.ID, DisplayName: x.Config.DisplayName, Description: x.Config.Description, DisplayOrder: x.Config.DisplayOrder, CanLogin: x.Policy.LoginEnabled, CanSignup: registration && x.Policy.LoginEnabled && x.Policy.SignupEnabled && initializable, Signup: externalSignupPolicy(x.Policy), SignupRequirements: requirements})
 	}
 	sort.Slice(result.Connections, func(i, j int) bool { return result.Connections[i].DisplayOrder < result.Connections[j].DisplayOrder })
 	return result, nil
@@ -134,6 +151,9 @@ func (s *AuthService) Capabilities(ctx context.Context) (AuthCapabilities, error
 // same database row lock on PostgreSQL and write reservation on SQLite without
 // changing a display timestamp or relying on an in-process mutex.
 func lockPasswordConnection(ctx context.Context, client *ent.Client) error {
+	if err := lockSetting(ctx, client, SettingRegistrationEnabled); err != nil {
+		return err
+	}
 	result, err := client.ExecContext(ctx, "UPDATE auth_connections SET auth_generation = auth_generation WHERE id = 'password'")
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrSettingsUnavailable, err)
@@ -143,6 +163,14 @@ func lockPasswordConnection(ctx context.Context, client *ent.Client) error {
 		return err
 	}
 	if n != 1 {
+		return ErrSettingsUnavailable
+	}
+	result, err = client.ExecContext(ctx, "UPDATE local_account_policies SET revision = revision WHERE id = 1")
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrSettingsUnavailable, err)
+	}
+	n, err = result.RowsAffected()
+	if err != nil || n != 1 {
 		return ErrSettingsUnavailable
 	}
 	return nil
