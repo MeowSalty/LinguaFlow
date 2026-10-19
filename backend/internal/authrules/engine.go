@@ -162,73 +162,6 @@ func validType(t string) bool {
 	}
 	return false
 }
-func Catalog(protocol string, mappings []Field) ([]Field, error) {
-	if len(mappings) > maxEntries {
-		return nil, fmt.Errorf("attribute_mappings: at most %d mappings", maxEntries)
-	}
-	fields := []Field{
-		{FieldID: "external.name", Label: "Name", Type: "string", Source: "oidc_id_token", Pointer: "/name", RequiredScopes: []string{"profile"}, Optional: true, UserEditable: true},
-		{FieldID: "external.preferred_username", Label: "Preferred username", Type: "string", Source: "oidc_id_token", Pointer: "/preferred_username", RequiredScopes: []string{"profile"}, Optional: true, UserEditable: true},
-		{FieldID: "external.email", Label: "External email (not a platform verified email)", Type: "string", Source: "oidc_id_token", Pointer: "/email", RequiredScopes: []string{"email"}, Optional: true, UserEditable: true},
-	}
-	if protocol == "oauth2" {
-		fields = []Field{}
-	} else if protocol != "oidc" && protocol != "password" {
-		return nil, fmt.Errorf("unsupported protocol")
-	}
-	seen, paths := map[string]bool{}, map[string]bool{}
-	for _, f := range fields {
-		seen[f.FieldID] = true
-		paths[f.Source+"\x00"+f.Pointer] = true
-	}
-	created := false
-	for i, f := range mappings {
-		fail := func(message string) ([]Field, error) {
-			return nil, fmt.Errorf("attribute_mappings[%d]: %s", i, message)
-		}
-		if !customID.MatchString(f.FieldID) && f.FieldID != "external.account_created_at" {
-			return fail("field_id must use custom.* or external.account_created_at")
-		}
-		if seen[f.FieldID] || paths[f.Source+"\x00"+f.Pointer] {
-			return fail("duplicate field or ambiguous mapping")
-		}
-		if !validType(f.Type) || strings.TrimSpace(f.Label) == "" || len(f.Label) > 120 {
-			return fail("invalid type or label")
-		}
-		if len(f.DerivedFrom) != 0 {
-			return fail("derived relationships are defined by the server")
-		}
-		if !ValidSource(protocol, f.Source) {
-			return fail("unsupported verified source")
-		}
-		if _, err := pointerParts(f.Pointer); err != nil {
-			return fail(err.Error())
-		}
-		if len(f.RequiredScopes) > 32 {
-			return fail("too many required scopes")
-		}
-		scopes := map[string]bool{}
-		for _, scope := range f.RequiredScopes {
-			if scope == "" || len(scope) > 128 || strings.ContainsAny(scope, " \r\n\t") || scopes[scope] {
-				return fail("invalid required scope")
-			}
-			scopes[scope] = true
-		}
-		if f.FieldID == "external.account_created_at" {
-			if f.Type != "datetime" {
-				return fail("creation time must be datetime")
-			}
-			created = true
-		}
-		seen[f.FieldID] = true
-		paths[f.Source+"\x00"+f.Pointer] = true
-		fields = append(fields, f)
-	}
-	if created {
-		fields = append(fields, Field{FieldID: "external.account_age_days", Label: "Account age (days)", Type: "integer", Source: "derived", Pointer: "external.account_created_at", Optional: true, DerivedFrom: []string{"external.account_created_at"}})
-	}
-	return fields, nil
-}
 func fieldMap(fields []Field) map[string]Field {
 	out := make(map[string]Field, len(fields))
 	for _, f := range fields {
@@ -239,7 +172,12 @@ func fieldMap(fields []Field) map[string]Field {
 func allowedOperator(t, op string) bool {
 	switch t {
 	case "string":
-		return op == "eq" || op == "ne" || op == "in"
+		switch op {
+		case "eq", "ne", "in", "not_in", "contains", "not_contains",
+			"starts_with", "not_starts_with", "ends_with", "not_ends_with":
+			return true
+		}
+		return false
 	case "boolean":
 		return op == "eq"
 	case "number", "integer":
@@ -316,7 +254,7 @@ func typed(t string, v any) (any, error) {
 	return nil, fmt.Errorf("expected %s", t)
 }
 func conditionType(f Field, op string) string {
-	if op == "in" || op == "contains_any" || op == "contains_all" {
+	if op == "in" || op == "not_in" || op == "contains_any" || op == "contains_all" {
 		return "string_list"
 	}
 	if op == "contains" || op == "not_contains" {
@@ -324,103 +262,20 @@ func conditionType(f Field, op string) string {
 	}
 	return f.Type
 }
-func Validate(protocol string, mappings []Field, rules ...RuleSet) error {
-	fields, err := Catalog(protocol, mappings)
-	if err != nil {
-		return err
-	}
-	catalog := fieldMap(fields)
-	for purpose, rule := range rules {
-		if rule.Mode == "unrestricted" {
-			if rule.Match != "" || len(rule.Conditions) != 0 {
-				return fmt.Errorf("rules[%d]: unrestricted must not contain conditions", purpose)
-			}
-			continue
-		}
-		if rule.Mode != "conditions" || (rule.Match != "all" && rule.Match != "any") || len(rule.Conditions) == 0 || len(rule.Conditions) > maxEntries {
-			return fmt.Errorf("rules[%d]: invalid mode, match or condition count", purpose)
-		}
-		for i, condition := range rule.Conditions {
-			f, ok := catalog[condition.FieldID]
-			if !ok || !allowedOperator(f.Type, condition.Operator) {
-				return fmt.Errorf("rules[%d].conditions[%d]: unknown field or invalid operator", purpose, i)
-			}
-			v, err := parse(condition.Value)
-			if err != nil {
-				return fmt.Errorf("rules[%d].conditions[%d].value: invalid JSON", purpose, i)
-			}
-			if _, err := typed(conditionType(f, condition.Operator), v); err != nil {
-				return fmt.Errorf("rules[%d].conditions[%d].value: %w", purpose, i, err)
-			}
-		}
-	}
-	return nil
-}
-func ValidateScopes(protocol string, mappings []Field, scopes []string, userinfoEnabled bool, rules ...RuleSet) error {
-	if err := Validate(protocol, mappings, rules...); err != nil {
-		return err
-	}
-	fields, _ := Catalog(protocol, mappings)
-	catalog := fieldMap(fields)
-	available := map[string]bool{}
-	for _, scope := range scopes {
-		available[scope] = true
-	}
-	for _, id := range RequiredAttributes(mappings, rules...) {
-		f := catalog[id]
-		if f.Source == "oidc_userinfo" && !userinfoEnabled {
-			return fmt.Errorf("%s: UserInfo is disabled", id)
-		}
-		for _, scope := range f.RequiredScopes {
-			if !available[scope] {
-				return fmt.Errorf("%s: required scope %s is missing", id, scope)
-			}
-		}
-	}
-	return nil
-}
 func digest(v any) string {
 	data, _ := json.Marshal(v)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
 func FingerprintField(f Field) string {
+	f = fillMetadata(f)
 	scopes := append([]string{}, f.RequiredScopes...)
 	sort.Strings(scopes)
-	return digest([]any{f.FieldID, f.Type, f.Source, f.Pointer, scopes, f.Optional, f.UserEditable})
-}
-func RequiredAttributes(mappings []Field, rules ...RuleSet) []string {
-	seen := map[string]bool{}
-	for _, rule := range rules {
-		for _, condition := range rule.Conditions {
-			seen[condition.FieldID] = true
-			if condition.FieldID == "external.account_age_days" {
-				seen["external.account_created_at"] = true
-			}
-		}
-	}
-	out := make([]string, 0, len(seen))
-	for id := range seen {
-		out = append(out, id)
-	}
-	sort.Strings(out)
-	return out
-}
-func RulesFingerprint(protocol string, rule RuleSet, mappings []Field) string {
-	fields, err := Catalog(protocol, mappings)
-	if err != nil {
-		return "invalid"
-	}
-	catalog := fieldMap(fields)
-	fingerprints := []string{}
-	for _, id := range RequiredAttributes(mappings, rule) {
-		f, ok := catalog[id]
-		if !ok {
-			return "invalid"
-		}
-		fingerprints = append(fingerprints, FingerprintField(f))
-	}
-	return digest([]any{rule, fingerprints})
+	allowed := append([]string{}, f.AllowedOperators...)
+	sort.Strings(allowed)
+	derived := append([]string{}, f.DerivedFrom...)
+	sort.Strings(derived)
+	return digest([]any{f.FieldID, f.Type, f.Source, f.Pointer, scopes, f.Optional, f.UserEditable, derived, allowed, f.SemanticFormat, f.NormalizationVersion, f.TrustPair, f.DependencyFingerprint})
 }
 func SelectAttributes(attrs map[string]Attribute, ids []string) map[string]Attribute {
 	out := map[string]Attribute{}
@@ -448,65 +303,6 @@ func canonical(f Field, raw any, now time.Time) (json.RawMessage, error) {
 		return json.Marshal(raw)
 	}
 	return json.Marshal(v)
-}
-func Extract(protocol string, mappings []Field, sources map[string]json.RawMessage, sourceErrors map[string]string, now time.Time) (map[string]Attribute, error) {
-	fields, err := Catalog(protocol, mappings)
-	if err != nil {
-		return nil, err
-	}
-	roots := map[string]any{}
-	for source, raw := range sources {
-		if !ValidSource(protocol, source) {
-			return nil, fmt.Errorf("unsupported attribute source")
-		}
-		root, err := parse(raw)
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := root.(map[string]any); !ok {
-			return nil, fmt.Errorf("attribute source must be an object")
-		}
-		roots[source] = root
-	}
-	out := map[string]Attribute{}
-	for _, f := range fields {
-		a := Attribute{Status: "unknown", Reason: "missing", Fingerprint: FingerprintField(f)}
-		if f.Source == "derived" {
-			out[f.FieldID] = a
-			continue
-		}
-		if reason := sourceErrors[f.Source]; reason != "" {
-			a.Reason = reason
-			out[f.FieldID] = a
-			continue
-		}
-		raw, ok := lookup(roots[f.Source], f.Pointer)
-		if !ok {
-			out[f.FieldID] = a
-			continue
-		}
-		value, err := canonical(f, raw, now)
-		if err != nil {
-			a.Reason = "invalid_type"
-		} else {
-			a.Value = value
-			a.Status = "pass"
-			a.Reason = ""
-		}
-		out[f.FieldID] = a
-	}
-	if created, ok := out["external.account_created_at"]; ok {
-		age := out["external.account_age_days"]
-		age.Status, age.Reason = created.Status, created.Reason
-		if created.Status == "pass" {
-			var value string
-			_ = json.Unmarshal(created.Value, &value)
-			when, _ := time.Parse(time.RFC3339Nano, value)
-			age.Value = json.RawMessage(strconv.FormatInt(accountAgeDays(now, when), 10))
-		}
-		out["external.account_age_days"] = age
-	}
-	return out, nil
 }
 
 // RFC3339 dates can span more than time.Duration's approximately 292 years.
@@ -546,8 +342,23 @@ func matches(f Field, op string, actual, expected any) bool {
 	switch f.Type {
 	case "string":
 		a := actual.(string)
-		if op == "in" {
+		switch op {
+		case "in":
 			return contains(expected.([]string), a)
+		case "not_in":
+			return !contains(expected.([]string), a)
+		case "contains":
+			return strings.Contains(a, expected.(string))
+		case "not_contains":
+			return !strings.Contains(a, expected.(string))
+		case "starts_with":
+			return strings.HasPrefix(a, expected.(string))
+		case "not_starts_with":
+			return !strings.HasPrefix(a, expected.(string))
+		case "ends_with":
+			return strings.HasSuffix(a, expected.(string))
+		case "not_ends_with":
+			return !strings.HasSuffix(a, expected.(string))
 		}
 		return compare(op, strings.Compare(a, expected.(string)))
 	case "boolean":
@@ -581,101 +392,15 @@ func matches(f Field, op string, actual, expected any) bool {
 	}
 	return false
 }
-func Evaluate(protocol string, rule RuleSet, mappings []Field, evidence Evidence, now time.Time) Result {
-	out := Result{Status: "unknown", Conditions: []ConditionResult{}}
-	if err := Validate(protocol, mappings, rule); err != nil {
-		return out
-	}
-	if rule.Mode == "unrestricted" {
-		out.Status = "pass"
-		return out
-	}
-	fields, _ := Catalog(protocol, mappings)
-	catalog := fieldMap(fields)
-	pass, fail, unknown := 0, 0, 0
-	for _, condition := range rule.Conditions {
-		f := catalog[condition.FieldID]
-		a, ok := evidence.Attributes[f.FieldID]
-		result := ConditionResult{FieldID: f.FieldID, Operator: condition.Operator, Status: "unknown", Reason: "missing"}
-		if !evidence.ExpiresAt.IsZero() && !now.Before(evidence.ExpiresAt) {
-			result.Reason = "expired"
-		} else if !evidence.ObservedAt.IsZero() && evidence.ObservedAt.After(now) {
-			result.Reason = "future_observation"
-		} else if ok {
-			result.Reason = a.Reason
-			if a.Fingerprint != FingerprintField(f) {
-				result.Reason = "mapping_changed"
-			} else if a.Status == "pass" {
-				raw, err := parse(a.Value)
-				if f.Source == "derived" {
-					created, exists := evidence.Attributes["external.account_created_at"]
-					cf := catalog["external.account_created_at"]
-					if !exists || created.Fingerprint != FingerprintField(cf) || created.Status != "pass" {
-						err = fmt.Errorf("creation evidence unavailable")
-						result.Reason = "missing_dependency"
-					} else {
-						var value string
-						if json.Unmarshal(created.Value, &value) != nil {
-							err = fmt.Errorf("invalid creation time")
-						} else {
-							when, e := time.Parse(time.RFC3339Nano, value)
-							if e != nil || when.After(now) {
-								err = fmt.Errorf("invalid creation time")
-							} else {
-								raw = json.Number(strconv.FormatInt(accountAgeDays(now, when), 10))
-								err = nil
-							}
-						}
-					}
-				}
-				actual, typeErr := typed(f.Type, raw)
-				expectedRaw, expectedErr := parse(condition.Value)
-				expected, valueErr := typed(conditionType(f, condition.Operator), expectedRaw)
-				if err == nil && typeErr == nil && expectedErr == nil && valueErr == nil {
-					result.Status = "fail"
-					result.Reason = ""
-					if matches(f, condition.Operator, actual, expected) {
-						result.Status = "pass"
-					}
-				} else if result.Reason == "" {
-					result.Reason = "invalid_type"
-				}
-			}
-		}
-		switch result.Status {
-		case "pass":
-			pass++
-		case "fail":
-			fail++
-		default:
-			unknown++
-			if result.Reason == "source_unavailable" {
-				out.Retryable = true
-			}
-		}
-		out.Conditions = append(out.Conditions, result)
-	}
-	if rule.Match == "all" {
-		if fail > 0 {
-			out.Status = "fail"
-		} else if unknown == 0 {
-			out.Status = "pass"
-		}
-	} else {
-		if pass > 0 {
-			out.Status = "pass"
-		} else if unknown == 0 {
-			out.Status = "fail"
-		}
-	}
-	if out.Status != "unknown" {
-		out.Retryable = false
-	}
-	return out
-}
 
 func ValidSource(protocol, source string) bool {
-	return protocol == "oidc" && (source == "oidc_id_token" || source == "oidc_userinfo") || protocol == "oauth2" && source == "oauth2_profile"
+	switch protocol {
+	case "oidc":
+		return source == "oidc_id_token" || source == "oidc_userinfo"
+	case "oauth2":
+		return source == "oauth2_profile"
+	}
+	return false
 }
 
 // Subject extraction uses the same bounded JSON Pointer grammar as ordinary mappings.

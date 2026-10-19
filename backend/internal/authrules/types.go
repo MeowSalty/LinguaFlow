@@ -7,15 +7,25 @@ import (
 )
 
 type Field struct {
-	FieldID        string   `json:"field_id"`
-	Label          string   `json:"label"`
-	Type           string   `json:"type"`
-	Source         string   `json:"source"`
-	Pointer        string   `json:"pointer"`
-	RequiredScopes []string `json:"required_scopes,omitempty"`
-	Optional       bool     `json:"optional"`
-	UserEditable   bool     `json:"user_editable"`
-	DerivedFrom    []string `json:"derived_from,omitempty"`
+	FieldID               string          `json:"field_id"`
+	Label                 string          `json:"label"`
+	Type                  string          `json:"type"`
+	Source                string          `json:"source"`
+	Pointer               string          `json:"pointer"`
+	RequiredScopes        []string        `json:"required_scopes,omitempty"`
+	Optional              bool            `json:"optional"`
+	UserEditable          bool            `json:"user_editable"`
+	DerivedFrom           []string        `json:"derived_from,omitempty" auth:"readonly"`
+	AllowedOperators      []string        `json:"allowed_operators,omitempty" auth:"readonly"`
+	SemanticFormat        string          `json:"semantic_format,omitempty" auth:"readonly"`
+	NormalizationVersion  string          `json:"normalization_version,omitempty" auth:"readonly"`
+	TrustPair             *FieldTrustPair `json:"trust_pair,omitempty" auth:"readonly"`
+	DependencyFingerprint string          `json:"-" auth:"readonly"`
+}
+
+type FieldTrustPair struct {
+	PeerFieldID string `json:"peer_field_id,omitempty"`
+	PeerSource  string `json:"peer_source,omitempty"`
 }
 type RuleSet struct {
 	Mode       string      `json:"mode"`
