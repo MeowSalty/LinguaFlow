@@ -73,6 +73,7 @@ func newAdminCmd(rt *appCtx) *cobra.Command {
 		group.AddCommand(cmd)
 	}
 	group.AddCommand(newAdminCredentialsCmd(rt))
+	group.AddCommand(newAuthenticationRecoveryCmd(rt))
 	return group
 }
 
