@@ -24,7 +24,23 @@ AuthRuleCondition:
     field_id: {type: string}
     operator:
       type: string
-      enum: [eq, ne, in, gt, gte, lt, lte, contains, not_contains, contains_any, contains_all]
+      enum:
+        - eq
+        - ne
+        - in
+        - not_in
+        - gt
+        - gte
+        - lt
+        - lte
+        - contains
+        - not_contains
+        - starts_with
+        - not_starts_with
+        - ends_with
+        - not_ends_with
+        - contains_any
+        - contains_all
     value:
       description: Strictly typed against the referenced field. Strings are case-sensitive; integers retain precision; datetimes require RFC3339 with timezone. No coercion or null values.
       oneOf:
@@ -33,15 +49,16 @@ AuthRuleCondition:
         - {type: number}
         - type: array
           items: {type: string}
-AuthAttributeField:
+AuthAttributeMapping:
   type: object
   additionalProperties: false
+  description: Client-provided attribute mapping input. Server-owned field metadata is not accepted here.
   required: [field_id, label, type, source, pointer]
   properties:
     field_id: {type: string}
     label: {type: string}
     type: {type: string, enum: [string, boolean, integer, number, datetime, string_list]}
-    source: {type: string, enum: [oidc_id_token, oidc_userinfo, oauth2_profile, derived]}
+    source: {type: string, enum: [oidc_id_token, oidc_userinfo, oauth2_profile]}
     pointer: {type: string}
     required_scopes:
       type: array
@@ -51,16 +68,59 @@ AuthAttributeField:
       type: boolean
       default: false
       description: Administrator-declared property of the upstream field; never grants trust or platform permissions.
-    derived_from:
+
+AuthAttributeField:
+  type: object
+  additionalProperties: false
+  required: [field_id, label, type, source, pointer, user_editable, allowed_operators]
+  properties:
+    field_id: {type: string}
+    label: {type: string}
+    type: {type: string, enum: [string, boolean, integer, number, datetime, string_list]}
+    source:
+      type: string
+      enum: [oidc_id_token, oidc_userinfo, oauth2_profile, derived, registration]
+    pointer: {type: string}
+    required_scopes:
       type: array
-      readOnly: true
-      description: Server-defined dependencies of a derived field.
       items: {type: string}
+    optional: {type: boolean}
+    user_editable:
+      type: boolean
+    derived_from:
+      readOnly: true
+      type: array
+      items: {type: string}
+    allowed_operators:
+      readOnly: true
+      type: array
+      items: {type: string}
+    semantic_format:
+      readOnly: true
+      type: string
+    normalization_version:
+      readOnly: true
+      type: string
+    trust_pair:
+      $ref: '#/AuthFieldTrustPair'
+    dependency_fingerprint:
+      readOnly: true
+      type: string
+
+AuthFieldTrustPair:
+  type: object
+  additionalProperties: false
+  properties:
+    peer_field_id:
+      type: string
+    peer_source:
+      type: string
 AuthAttributeCatalog:
   type: object
-  required: [revision, fields, operators]
+  required: [revision, purpose, fields, operators]
   properties:
     revision: {type: integer, format: int64}
+    purpose: {type: string, enum: [login, signup, link]}
     fields:
       type: array
       items: {$ref: '#/AuthAttributeField'}
@@ -100,7 +160,13 @@ AuthRulesPreviewRequest:
     expected_revision: {type: integer, format: int64, minimum: 1}
     changes:
       $ref: './auth-external.yaml#/AuthConnectionChanges'
-      description: Optional candidate policy changes evaluated together with the simulated sources; falls back to the saved configuration when omitted.
+    registration:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          nullable: true
     sources:
       type: object
       additionalProperties: false
@@ -136,4 +202,4 @@ AuthConnectionErrorProblem:
           type: array
           items: {$ref: './auth-external.yaml#/AuthConfigurationIssue'}
         impact:
-          $ref: './auth-external.yaml#/AuthConnectionImpact'
+          $ref: './auth-external.yaml#/AuthConnectionImpactResult'

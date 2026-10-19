@@ -72,8 +72,7 @@ func TestRouter_AuthConnectionSpecificationMatchesIncompleteConfiguration(t *tes
 		accountAssertStatus(t, accountRequest(router, http.MethodPatch, "/admin/auth-connections/"+id, token, missingSwitches), http.StatusBadRequest)
 	}
 	password := accountRequest(router, http.MethodGet, "/admin/auth-connections/password", token, "")
-	accountAssertStatus(t, password, http.StatusOK)
-	validate("AuthConnectionRecord", decode(password))
+	accountAssertStatus(t, password, http.StatusNotFound)
 }
 
 // b4ConnectionProtocol answers discovery locally so the HTTP contract tests
@@ -186,7 +185,7 @@ func TestRouter_AuthConnectionLifecycleContract(t *testing.T) {
 	if !inspected.Valid || inspected.Revision != 1 || inspected.FreshSupported || len(inspected.Issues) != 0 {
 		t.Fatalf("check: %+v", inspected)
 	}
-	catalog := accountRequest(router, http.MethodPost, path+"/attributes", token, `{"expected_revision":1,"changes":{"policy":{"login_enabled":true,"signup_enabled":true,"link_enabled":true,"login_rules":{"mode":"unrestricted"},"signup_rules":{"mode":"unrestricted"},"link_rules":{"mode":"unrestricted"}}}}`)
+	catalog := accountRequest(router, http.MethodPost, path+"/attributes", token, `{"expected_revision":1,"purpose":"signup","changes":{"policy":{"login_enabled":true,"signup_enabled":true,"link_enabled":true,"signup":{"email_requirement":"optional","password_requirement":"none"},"login_rules":{"mode":"unrestricted"},"signup_rules":{"mode":"unrestricted"},"link_rules":{"mode":"unrestricted"}}}}`)
 	accountAssertStatus(t, catalog, http.StatusOK)
 	preview := accountRequest(router, http.MethodPost, path+"/preview", token, `{"expected_revision":1,"sources":{"oidc_id_token":{"sub":"simulated"}}}`)
 	accountAssertStatus(t, preview, http.StatusOK)

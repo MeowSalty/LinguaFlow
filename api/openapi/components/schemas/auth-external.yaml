@@ -72,6 +72,8 @@ AuthConnectionPolicy:
       $ref: "./auth-rules.yaml#/AuthRuleSet"
     link_rules:
       $ref: "./auth-rules.yaml#/AuthRuleSet"
+    signup:
+      $ref: "./common.yaml#/SignupPolicyRequirements"
 ExternalBrowserInput:
   type: "object"
   additionalProperties: false
@@ -164,6 +166,10 @@ ExternalCompleteRequest:
       $ref: "./auth.yaml#/UsernameInput"
     display_name:
       type: "string"
+    email:
+      type: string
+      nullable: true
+      description: "Signup-only platform email; omitted, null, and after trimming an empty value are missing when signup.email_requirement is required."
 ExternalCancelRequest:
   type: "object"
   additionalProperties: false
@@ -266,10 +272,24 @@ ExternalConfirmationResponse:
       format: "date-time"
     signup_requirements:
       type: array
-      items: {type: string, enum: [local_password]}
+      maxItems: 2
+      items: {type: string, enum: [email, local_password]}
       description: Empty for linking and signup with fresh authentication support.
     profile:
       $ref: "#/ExternalProfile"
+    username_candidate:
+      type: "string"
+      readOnly: true
+      description: "Normalized candidate username proposed for signup confirmation; empty for link confirmation."
+    email:
+      type: "string"
+      nullable: true
+      readOnly: true
+      description: "Normalized external email proposal only; never grants ownership or a verified email key."
+    signup:
+      allOf:
+        - $ref: "./common.yaml#/SignupPolicyRequirements"
+      readOnly: true
 ExternalSessionResponse:
   type: "object"
   additionalProperties: false
@@ -396,6 +416,7 @@ PublicAuthConnection:
     - "display_order"
     - "can_login"
     - "can_signup"
+    - "signup"
     - "signup_requirements"
   properties:
     connection_id:
@@ -415,11 +436,14 @@ PublicAuthConnection:
       type: "boolean"
     signup_requirements:
       type: "array"
-      maxItems: 1
+      maxItems: 2
       items:
         type: "string"
         enum:
+          - "email"
           - "local_password"
+    signup:
+      $ref: "./common.yaml#/SignupPolicyRequirements"
 CreateAuthConnectionRequest:
   type: "object"
   additionalProperties: false
@@ -467,7 +491,7 @@ UpdateAuthConnectionRequest:
       type: array
       maxItems: 64
       items:
-        $ref: "./auth-rules.yaml#/AuthAttributeField"
+        $ref: "./auth-rules.yaml#/AuthAttributeMapping"
     evidence_max_age_seconds:
       type: integer
       minimum: 1
@@ -550,7 +574,7 @@ AuthConnectionChanges:
       type: array
       maxItems: 64
       items:
-        $ref: "./auth-rules.yaml#/AuthAttributeField"
+        $ref: "./auth-rules.yaml#/AuthAttributeMapping"
     evidence_max_age_seconds:
       type: integer
       minimum: 1
@@ -581,17 +605,21 @@ AuthConnectionSnapshot:
     - "description"
     - "display_order"
     - "login_policy_revision"
+    - "signup_policy_revision"
+    - "link_policy_revision"
     - "attribute_mappings"
     - "evidence_max_age_seconds"
     - "policy"
     - "has_client_secret"
   properties:
     login_policy_revision: {type: integer, format: int64}
+    signup_policy_revision: {type: integer, format: int64}
+    link_policy_revision: {type: integer, format: int64}
     attribute_mappings:
       type: array
       maxItems: 64
       items:
-        $ref: './auth-rules.yaml#/AuthAttributeField'
+        $ref: './auth-rules.yaml#/AuthAttributeMapping'
     evidence_max_age_seconds:
       type: integer
       minimum: 1
@@ -638,6 +666,7 @@ AuthConnectionRecord:
     - "id"
     - "kind"
     - "aggregate_revision"
+    - "state"
     - "archived"
     - "configuration"
     - "configuration_complete"
@@ -654,7 +683,6 @@ AuthConnectionRecord:
     kind:
       type: "string"
       enum:
-        - "password"
         - "oidc"
         - "generic_oauth2"
     aggregate_revision:
@@ -780,7 +808,7 @@ AuthConnectionErrorProblem:
       items:
         $ref: "#/AuthConfigurationIssue"
     impact:
-      $ref: "#/AuthConnectionImpact"
+      $ref: "#/AuthConnectionImpactResult"
 AuthConnectionErrorCode:
   type: string
   enum:
@@ -823,7 +851,7 @@ AuthConnectionCheck:
       type: "array"
       items:
         $ref: "#/AuthConfigurationIssue"
-AuthConnectionImpact:
+AuthConnectionImpactResult:
   type: "object"
   additionalProperties: false
   required:
@@ -859,6 +887,8 @@ AuthConnectionImpact:
       type: "integer"
     can_save:
       type: "boolean"
+    affects_signup:
+      type: boolean
 LoginMethod:
   type: "object"
   additionalProperties: false

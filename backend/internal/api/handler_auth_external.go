@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,6 +26,7 @@ func (b externalBrowserRequest) input() service.ExternalBrowserInput {
 
 type externalCompleteRequest struct {
 	InitialPassword   *string `json:"initial_password"`
+	Email             *string `json:"email"`
 	ConfirmationToken string  `json:"confirmation_token"`
 	Verifier          string  `json:"verifier"`
 	Username          string  `json:"username"`
@@ -209,6 +211,13 @@ func (s *Server) ExchangeExternalAuthentication(w http.ResponseWriter, r *http.R
 		}
 		c := out.Confirmation
 		response["signup_requirements"] = c.SignupRequirements
+		if out.Kind == "signup_confirmation" {
+			response["signup"] = c.Signup
+			response["username_candidate"] = c.UsernameCandidate
+			if c.Email != nil {
+				response["email"] = c.Email
+			}
+		}
 		response["confirmation_token"] = c.ConfirmationToken
 		response["transaction_id"] = c.TransactionID
 		response["expires_at"] = c.ExpiresAt
@@ -244,11 +253,23 @@ func (s *Server) CompleteExternalAuthentication(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	var in externalCompleteRequest
-	if !s.decodeExternalRequest(w, r, &in) {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		s.writeExternalError(w, r, service.ErrInvalidInput)
 		return
 	}
-	out, err := s.externalAuth.Complete(r.Context(), actor, service.ExternalCompleteInput{InitialPassword: in.InitialPassword, ConfirmationToken: in.ConfirmationToken, Verifier: in.Verifier, Username: in.Username, DisplayName: in.DisplayName})
+	fields, ok := s.decodeAccountFields(w, r, "confirmation_token", "verifier", "username", "display_name", "email", "initial_password")
+	if !ok {
+		return
+	}
+	if fields["confirmation_token"] == nil || fields["verifier"] == nil {
+		s.writeExternalError(w, r, service.ErrInvalidInput)
+		return
+	}
+	_, usernamePresent := fields["username"]
+	_, displayPresent := fields["display_name"]
+	_, emailPresent := fields["email"]
+	out, err := s.externalAuth.Complete(r.Context(), actor, service.ExternalCompleteInput{InitialPassword: fields["initial_password"], Email: fields["email"], ConfirmationToken: *fields["confirmation_token"], Verifier: *fields["verifier"], Username: organizationStringField(fields["username"]), DisplayName: organizationStringField(fields["display_name"]), UsernamePresent: usernamePresent, DisplayNamePresent: displayPresent, EmailPresent: emailPresent})
 	if err != nil {
 		s.writeExternalError(w, r, err)
 		return

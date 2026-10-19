@@ -61,3 +61,31 @@ Problem:
       type: integer
     detail:
       type: string
+SignupEmailRequirement:
+  type: string
+  enum: [optional, required]
+SignupPasswordRequirement:
+  type: string
+  enum: [none, optional, required]
+SignupPolicyRequirements:
+  type: object
+  additionalProperties: false
+  required: [email_requirement, password_requirement]
+  properties:
+    email_requirement:
+      $ref: '#/SignupEmailRequirement'
+    password_requirement:
+      $ref: '#/SignupPasswordRequirement'
+AuthSignupRequirements:
+  type: object
+  additionalProperties: false
+  required: [signup, signup_requirements]
+  properties:
+    signup:
+      $ref: '#/SignupPolicyRequirements'
+    signup_requirements:
+      type: array
+      maxItems: 2
+      items:
+        type: string
+        enum: [email, local_password]

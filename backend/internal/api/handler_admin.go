@@ -320,7 +320,11 @@ func (s *Server) handleAdminUpdateSettings(w http.ResponseWriter, r *http.Reques
 		}
 		patch.TaskRetention = &service.TaskRetentionPatch{Enabled: *policy.Enabled, RetentionDays: *policy.RetentionDays, ExpectedRevision: *policy.ExpectedRevision}
 	}
-	settings, err := s.settingsService.Patch(r.Context(), authUser.User.ID, patch)
+	ctx := r.Context()
+	if authUser.Claims != nil {
+		ctx = service.WithExternalActor(ctx, authUser.User.ID, authUser.Claims.AuthVersion)
+	}
+	settings, err := s.settingsService.Patch(ctx, authUser.User.ID, patch)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return

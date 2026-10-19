@@ -52,9 +52,9 @@ func TestRouter_AuthOAuthConfigurationContract(t *testing.T) {
 		t.Fatal("client secret was returned")
 	}
 	path := "/admin/auth-connections/" + rec.ID
-	catalog := accountRequest(router, http.MethodGet, path+"/attributes?expected_revision=1", session.AccessToken, "")
+	catalog := accountRequest(router, http.MethodGet, path+"/attributes?expected_revision=1&purpose=signup", session.AccessToken, "")
 	accountAssertStatus(t, catalog, 200)
-	if strings.Contains(catalog.Body.String(), "oidc_id_token") || strings.Contains(catalog.Body.String(), "external.email") {
+	if strings.Contains(catalog.Body.String(), "oidc_id_token") || strings.Contains(catalog.Body.String(), `"field_id":"external.email"`) {
 		t.Fatal("generic catalog claims OIDC default attributes")
 	}
 	bad := `{"expected_revision":1,"attribute_mappings":[{"field_id":"custom.name","label":"Name","type":"string","source":"oidc_id_token","pointer":"/name"}]}`

@@ -200,7 +200,7 @@ impact:
         content:
           application/json:
             schema:
-              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionImpact"
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionImpactResult"
       '400':
         $ref: '../base.yaml#/components/responses/Problem'
       '401':
@@ -590,6 +590,10 @@ attributes:
         in: query
         required: true
         schema: {type: integer, format: int64, minimum: 1}
+      - name: purpose
+        in: query
+        required: true
+        schema: {type: string, enum: [login, signup, link]}
     responses:
       '200':
         description: Attribute catalogue
@@ -609,7 +613,14 @@ attributes:
       required: true
       content:
         application/json:
-          schema: {$ref: '../components/schemas/auth-external.yaml#/AuthConnectionCandidateRequest'}
+          schema:
+            type: object
+            additionalProperties: false
+            required: [expected_revision, purpose]
+            properties:
+              expected_revision: {type: integer, format: int64, minimum: 1}
+              purpose: {type: string, enum: [login, signup, link]}
+              changes: {$ref: '../components/schemas/auth-external.yaml#/AuthConnectionChanges'}
     responses:
       '200':
         description: Attribute catalogue for the candidate configuration

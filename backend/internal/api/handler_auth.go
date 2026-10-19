@@ -136,7 +136,7 @@ func newAuthSessionResponse(session *service.Session) authSessionResponse {
 func (s *Server) handleAuthCapabilities(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if s.isLocal() {
-		writeJSON(w, http.StatusOK, service.AuthCapabilities{Mode: "local", Connections: []service.PublicAuthConnectionCapability{}})
+		writeJSON(w, http.StatusOK, service.AuthCapabilities{Mode: "local", Connections: []service.PublicAuthConnectionCapability{}, LocalAccount: service.LocalAccountCapabilities{Signup: service.SignupPolicyRequirements{EmailRequirement: "optional", PasswordRequirement: "required"}, SignupRequirements: []string{"local_password"}}})
 		return
 	}
 	capabilities, err := s.authService.Capabilities(r.Context())

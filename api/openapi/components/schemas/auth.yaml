@@ -16,26 +16,14 @@ Username:
 AuthCapabilities:
   type: object
   additionalProperties: false
-  required: [mode, password, connections, email_verification_enabled, password_reset_enabled]
+  required: [mode, local_account, connections, email_verification_enabled, password_reset_enabled]
   properties:
     mode:
       type: string
       enum: [local, server]
       x-enum-varnames: [AuthCapabilitiesModeLocal, AuthCapabilitiesModeServer]
-    password:
-      type: object
-      additionalProperties: false
-      required: [can_login, can_signup, username_login_enabled, email_login_enabled]
-      properties:
-        can_login:
-          type: boolean
-        can_signup:
-          type: boolean
-          description: 同时满足已发布密码渠道政策及全局公开注册政策。
-        username_login_enabled:
-          type: boolean
-        email_login_enabled:
-          type: boolean
+    local_account:
+      $ref: '#/LocalAccountCapabilities'
     connections:
       type: array
       description: 已发布且具备有效用途的 OIDC 连接；不暴露绑定、私有规则或配置。local 始终为空。
@@ -113,3 +101,67 @@ AuthSession:
       format: date-time
     user:
       $ref: './user.yaml#/User'
+
+LocalAccountPolicyInput:
+  type: object
+  additionalProperties: false
+  required: [password_login_enabled, username_login_enabled, email_login_enabled, password_enrollment_enabled, signup]
+  properties:
+    password_login_enabled:
+      type: boolean
+    username_login_enabled:
+      type: boolean
+    email_login_enabled:
+      type: boolean
+    password_enrollment_enabled:
+      type: boolean
+    signup:
+      type: object
+      additionalProperties: false
+      required: [enabled, email_requirement, rules]
+      properties:
+        enabled:
+          type: boolean
+        email_requirement:
+          $ref: './common.yaml#/SignupEmailRequirement'
+        rules:
+          $ref: './auth-rules.yaml#/AuthRuleSet'
+
+LocalAccountCapabilities:
+  type: object
+  additionalProperties: false
+  required:
+    - can_login
+    - can_signup
+    - can_enroll_password
+    - password_login_enabled
+    - username_login_enabled
+    - email_login_enabled
+    - password_enrollment_enabled
+    - signup
+    - signup_requirements
+  properties:
+    can_login:
+      type: boolean
+      description: Effective local password login, including the required stable and currently active locator policy.
+    can_signup:
+      type: boolean
+      description: Effective signup only; global registration and local signup prerequisites still apply.
+    can_enroll_password:
+      type: boolean
+    password_login_enabled:
+      type: boolean
+    username_login_enabled:
+      type: boolean
+    email_login_enabled:
+      type: boolean
+    password_enrollment_enabled:
+      type: boolean
+    signup:
+      $ref: './common.yaml#/SignupPolicyRequirements'
+    signup_requirements:
+      type: array
+      maxItems: 2
+      items:
+        type: string
+        enum: [email, local_password]

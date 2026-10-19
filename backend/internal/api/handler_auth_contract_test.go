@@ -104,21 +104,21 @@ func TestRouter_AuthCapabilitiesFailClosedAndLocalIsIndependent(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &capabilities); err != nil {
 			t.Fatal(err)
 		}
-		if capabilities.Connections == nil || len(capabilities.Connections) != 0 || capabilities.EmailVerificationEnabled || capabilities.PasswordResetEnabled || capabilities.Password.EmailLoginEnabled {
+		if capabilities.Connections == nil || len(capabilities.Connections) != 0 || capabilities.EmailVerificationEnabled || capabilities.PasswordResetEnabled || capabilities.LocalAccount.EmailLoginEnabled {
 			t.Fatalf("unimplemented capabilities leaked: %s", w.Body.String())
 		}
 		return &capabilities
 	}
 	server := get()
-	if server.Mode != "server" || !server.Password.CanLogin || !server.Password.CanSignup || !server.Password.UsernameLoginEnabled {
+	if server.Mode != "server" || !server.LocalAccount.CanLogin || !server.LocalAccount.CanSignup || !server.LocalAccount.UsernameLoginEnabled {
 		t.Fatalf("wrong server capabilities: %+v", server)
 	}
-	client.AuthChannelPolicy.Delete().ExecX(t.Context())
+	client.LocalAccountPolicy.Delete().ExecX(t.Context())
 	accountAssertProblem(t, accountRequest(s.newRouter(), http.MethodGet, "/auth/capabilities", "", ""), http.StatusServiceUnavailable, "urn:linguaflow:settings-unavailable")
 	accountAssertProblem(t, accountRequest(s.newRouter(), http.MethodPost, "/auth/login", "", `{"identifier":"testuser","password":"original-password"}`), http.StatusServiceUnavailable, "urn:linguaflow:settings-unavailable")
 	s.mode, s.localUser = config.ModeLocal, account
 	local := get()
-	if local.Mode != "local" || local.Password.CanLogin || local.Password.CanSignup || local.Password.UsernameLoginEnabled {
+	if local.Mode != "local" || local.LocalAccount.CanLogin || local.LocalAccount.CanSignup || local.LocalAccount.UsernameLoginEnabled {
 		t.Fatalf("wrong local capabilities: %+v", local)
 	}
 }

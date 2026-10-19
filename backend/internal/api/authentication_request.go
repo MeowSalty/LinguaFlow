@@ -31,7 +31,7 @@ func authenticationFields(t reflect.Type) map[string]reflect.Type {
 			}
 			continue
 		}
-		if f.PkgPath != "" {
+		if f.PkgPath != "" || f.Tag.Get("auth") == "readonly" {
 			continue
 		}
 		name := strings.Split(f.Tag.Get("json"), ",")[0]
@@ -64,6 +64,9 @@ func validateAuthenticationJSON(dec *json.Decoder, t reflect.Type, path string) 
 		return err
 	}
 	if token == nil {
+		if (path == "email" || path == "registration.email") && t.Kind() == reflect.String {
+			return nil
+		}
 		if path == "client_secret" && t == reflect.TypeFor[json.RawMessage]() {
 			return nil
 		}

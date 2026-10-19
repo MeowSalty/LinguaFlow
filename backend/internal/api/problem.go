@@ -191,6 +191,8 @@ func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err e
 		return
 	}
 	switch {
+	case errors.Is(err, service.ErrAuthenticationRuleDenied):
+		s.writeProblemWithType(w, r, http.StatusForbidden, urnPrefix+"authentication-rule-denied", "authentication_rule_denied", "当前注册资料不满足准入条件")
 	case errors.Is(err, event.ErrHistoryUnavailable):
 		s.writeProblem(w, r, http.StatusServiceUnavailable, "history_unavailable", "任务事件历史暂不可用")
 	case errors.Is(err, service.ErrTaskHistoryNotFound), errors.Is(err, service.ErrJobNotFound), errors.Is(err, service.ErrSyncTaskNotFound), errors.Is(err, service.ErrProjectNotFound):

@@ -24,11 +24,7 @@ func accountTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	client.InstanceInitialization.Create().SetID(1).SetVersion(service.InitializationVersion).SetDataVersion(service.CurrentDataVersion).SetMode("serve").ExecX(t.Context())
 	client.SystemSetting.Create().SetKey(service.SettingRegistrationEnabled).SetValue("true").SaveX(context.Background())
 	client.AuthConnection.Create().SetID(service.PasswordConnectionID).SetKind("password").SetCurrentRevision(1).ExecX(t.Context())
-	client.AuthConnectionRevision.Create().SetConnectionID(service.PasswordConnectionID).SetRevision(1).
-		SetDisplayName("Password").SetUsernameLoginEnabled(true).ExecX(t.Context())
-	client.AuthChannelPolicy.Create().SetConnectionID(service.PasswordConnectionID).SetRevision(1).SetLoginPolicyRevision(1).
-		SetEnabled(true).SetLoginEnabled(true).SetSignupEnabled(true).SetLinkEnabled(true).
-		SetLoginRules(authrules.Unrestricted()).SetSignupRules(authrules.Unrestricted()).SetLinkRules(authrules.Unrestricted()).ExecX(t.Context())
+	client.LocalAccountPolicy.Create().SetID(1).SetSignupRules(authrules.Unrestricted()).ExecX(t.Context())
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(accountTestPassword), bcrypt.MinCost)
 	if err != nil {
 		t.Fatal(err)

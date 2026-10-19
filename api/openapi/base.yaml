@@ -61,6 +61,14 @@ paths:
     $ref: './paths/auth-connections.yaml#/restore'
   /admin/auth-connections/{connectionId}/logo:
     $ref: './paths/auth-connections.yaml#/logo'
+  /admin/local-account:
+    $ref: './paths/admin-local-account.yaml#/localAccount'
+  /admin/local-account/attributes:
+    $ref: './paths/admin-local-account.yaml#/localAccountAttributes'
+  /admin/local-account/preview:
+    $ref: './paths/admin-local-account.yaml#/localAccountPreview'
+  /admin/local-account/impact:
+    $ref: './paths/admin-local-account.yaml#/localAccountImpact'
   /admin/task-retention/preview:
     $ref: './paths/task-retention.yaml#/preview'
   /admin/task-retention/status:
@@ -442,8 +450,8 @@ components:
       $ref: './components/schemas/auth-external.yaml#/AuthConnectionsResponse'
     AuthConnectionCheck:
       $ref: './components/schemas/auth-external.yaml#/AuthConnectionCheck'
-    AuthConnectionImpact:
-      $ref: './components/schemas/auth-external.yaml#/AuthConnectionImpact'
+    AuthConnectionImpactResult:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionImpactResult'
     LoginMethod:
       $ref: './components/schemas/auth-external.yaml#/LoginMethod'
     LoginMethodsResponse:
@@ -484,6 +492,16 @@ components:
       $ref: './components/schemas/auth.yaml#/LogoutRequest'
     AuthSession:
       $ref: './components/schemas/auth.yaml#/AuthSession'
+    LocalAccountPolicyInput:
+      $ref: './components/schemas/auth.yaml#/LocalAccountPolicyInput'
+    LocalAccountCapabilities:
+      $ref: './components/schemas/auth.yaml#/LocalAccountCapabilities'
+    LocalAccountPreviewRequest:
+      $ref: './components/schemas/auth-local.yaml#/LocalAccountPreviewRequest'
+    SignupPolicyRequirements:
+      $ref: './components/schemas/common.yaml#/SignupPolicyRequirements'
+    AuthSignupRequirements:
+      $ref: './components/schemas/common.yaml#/AuthSignupRequirements'
     UpdateCurrentUserRequest:
       $ref: './components/schemas/user.yaml#/UpdateCurrentUserRequest'
     ChangePasswordRequest:

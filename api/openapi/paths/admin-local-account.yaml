@@ -1,0 +1,147 @@
+localAccount:
+  get:
+    operationId: GetLocalAccount
+    summary: 读取本地账号固定政策
+    security: [{bearerAuth: []}]
+    responses:
+      "200":
+        description: Local account policy, capabilities and diagnostic issues
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [policy, revision, capabilities, issues]
+              properties:
+                policy: {$ref: '../components/schemas/auth.yaml#/LocalAccountPolicyInput'}
+                revision: {type: integer, format: int64, minimum: 1}
+                capabilities: {$ref: '../components/schemas/auth.yaml#/LocalAccountCapabilities'}
+                issues:
+                  type: array
+                  items: {$ref: '../components/schemas/auth-external.yaml#/AuthConfigurationIssue'}
+      401: {$ref: '../base.yaml#/components/responses/Problem'}
+      403: {$ref: '../base.yaml#/components/responses/Problem'}
+      503: {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}
+  patch:
+    operationId: UpdateLocalAccount
+    summary: 保存完整本地账号政策
+    description: Uses expected_revision and requires all policy fields; identical effective input does not allocate a new revision.
+    security: [{bearerAuth: []}]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [expected_revision, policy]
+            properties:
+              expected_revision: {type: integer, format: int64, minimum: 1}
+              policy: {$ref: '../components/schemas/auth.yaml#/LocalAccountPolicyInput'}
+    responses:
+      "200":
+        description: Saved local account policy
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [policy, revision, capabilities, issues]
+              properties:
+                policy: {$ref: '../components/schemas/auth.yaml#/LocalAccountPolicyInput'}
+                revision: {type: integer, format: int64, minimum: 1}
+                capabilities: {$ref: '../components/schemas/auth.yaml#/LocalAccountCapabilities'}
+                issues:
+                  type: array
+                  items: {$ref: '../components/schemas/auth-external.yaml#/AuthConfigurationIssue'}
+      400: {$ref: '../base.yaml#/components/responses/Problem'}
+      401: {$ref: '../base.yaml#/components/responses/Problem'}
+      403: {$ref: '../base.yaml#/components/responses/Problem'}
+      409: {$ref: '../base.yaml#/components/responses/Problem'}
+      429: {$ref: '../base.yaml#/components/responses/Problem'}
+      503: {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}
+localAccountAttributes:
+  get:
+    operationId: GetLocalAccountAttributes
+    summary: 读取本地注册属性目录
+    description: Signup-purpose registration fields only; fixed purpose is returned in the payload.
+    security: [{bearerAuth: []}]
+    parameters:
+      - name: expected_revision
+        in: query
+        required: true
+        schema: {type: integer, format: int64, minimum: 1}
+    responses:
+      "200":
+        description: Local signup attribute catalogue
+        content:
+          application/json:
+            schema: {$ref: '../components/schemas/auth-rules.yaml#/AuthAttributeCatalog'}
+      400: {$ref: '../base.yaml#/components/responses/Problem'}
+      401: {$ref: '../base.yaml#/components/responses/Problem'}
+      403: {$ref: '../base.yaml#/components/responses/Problem'}
+      409: {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}
+localAccountPreview:
+  post:
+    operationId: PreviewLocalAccount
+    summary: 模拟本地注册规则结果
+    description: Read-only preview; registration input is not authentication evidence.
+    security: [{bearerAuth: []}]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '../components/schemas/auth-local.yaml#/LocalAccountPreviewRequest'}
+    responses:
+      "200":
+        description: Simulated local signup result
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [revision, simulated, attributes, signup]
+              properties:
+                revision: {type: integer, format: int64, minimum: 1}
+                simulated: {type: boolean, enum: [true]}
+                attributes:
+                  type: object
+                  additionalProperties:
+                    $ref: '../components/schemas/auth-rules.yaml#/AuthAttributeValue'
+                signup: {$ref: '../components/schemas/auth-rules.yaml#/AuthRuleResult'}
+      400: {$ref: '../base.yaml#/components/responses/Problem'}
+      401: {$ref: '../base.yaml#/components/responses/Problem'}
+      403: {$ref: '../base.yaml#/components/responses/Problem'}
+      409: {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}
+localAccountImpact:
+  post:
+    operationId: GetLocalAccountImpact
+    summary: 评估本地政策对现有用户的登录与维护影响
+    description: Read-only impact evaluation; saving still performs final dependency checks.
+    security: [{bearerAuth: []}]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [expected_revision]
+            properties:
+              expected_revision: {type: integer, format: int64, minimum: 1}
+              policy: {$ref: '../components/schemas/auth.yaml#/LocalAccountPolicyInput'}
+    responses:
+      "200":
+        description: Local account impact
+        content:
+          application/json:
+            schema: {$ref: '../components/schemas/auth-external.yaml#/AuthConnectionImpactResult'}
+      400: {$ref: '../base.yaml#/components/responses/Problem'}
+      401: {$ref: '../base.yaml#/components/responses/Problem'}
+      403: {$ref: '../base.yaml#/components/responses/Problem'}
+      409: {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}

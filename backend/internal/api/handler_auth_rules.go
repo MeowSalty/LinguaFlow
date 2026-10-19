@@ -12,7 +12,7 @@ func (s *Server) GetAuthConnectionAttributes(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	in := service.AuthConnectionCandidateInput{ExpectedRevision: p.ExpectedRevision}
-	out, err := s.externalAuth.ConnectionAttributes(r.Context(), *actor, id, in)
+	out, err := s.externalAuth.ConnectionAttributes(r.Context(), *actor, id, in, string(p.Purpose))
 	if err != nil {
 		s.writeExternalError(w, r, err)
 		return
@@ -24,11 +24,14 @@ func (s *Server) PreviewAuthConnectionAttributes(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	var in service.AuthConnectionCandidateInput
+	var in struct {
+		service.AuthConnectionCandidateInput
+		Purpose string `json:"purpose" auth:"required"`
+	}
 	if !s.decodeExternalRequest(w, r, &in) {
 		return
 	}
-	out, err := s.externalAuth.ConnectionAttributes(r.Context(), *actor, id, in)
+	out, err := s.externalAuth.ConnectionAttributes(r.Context(), *actor, id, in.AuthConnectionCandidateInput, in.Purpose)
 	if err != nil {
 		s.writeExternalError(w, r, err)
 		return
