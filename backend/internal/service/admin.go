@@ -162,6 +162,9 @@ func (s *AdminService) CreateUser(ctx context.Context, input AdminCreateUserInpu
 
 // Serialize changes to the active administrator set before locking any users.
 func lockAdministratorState(ctx context.Context, tx *ent.Client, actorID, targetID int) error {
+	if err := lockAuthenticationConfiguration(ctx, tx); err != nil {
+		return err
+	}
 	r, err := tx.ExecContext(ctx, "UPDATE instance_initializations SET version = version WHERE id = 1")
 	if err != nil {
 		return err
