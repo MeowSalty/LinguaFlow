@@ -24,6 +24,9 @@ type AuthConnectionSecret func(*sql.Selector)
 // AuthTransaction is the predicate function for authtransaction builders.
 type AuthTransaction func(*sql.Selector)
 
+// AuthenticationRecovery is the predicate function for authenticationrecovery builders.
+type AuthenticationRecovery func(*sql.Selector)
+
 // Backend is the predicate function for backend builders.
 type Backend func(*sql.Selector)
 
@@ -80,6 +83,9 @@ type JobRound func(*sql.Selector)
 
 // JobRoundSegment is the predicate function for jobroundsegment builders.
 type JobRoundSegment func(*sql.Selector)
+
+// LocalAccountPolicy is the predicate function for localaccountpolicy builders.
+type LocalAccountPolicy func(*sql.Selector)
 
 // LoginBinding is the predicate function for loginbinding builders.
 type LoginBinding func(*sql.Selector)

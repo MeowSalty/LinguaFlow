@@ -68,10 +68,6 @@ const (
 	FieldLogoData = "logo_data"
 	// FieldLogoMediaType holds the string denoting the logo_media_type field in the database.
 	FieldLogoMediaType = "logo_media_type"
-	// FieldUsernameLoginEnabled holds the string denoting the username_login_enabled field in the database.
-	FieldUsernameLoginEnabled = "username_login_enabled"
-	// FieldEmailLoginEnabled holds the string denoting the email_login_enabled field in the database.
-	FieldEmailLoginEnabled = "email_login_enabled"
 	// FieldFreshSupported holds the string denoting the fresh_supported field in the database.
 	FieldFreshSupported = "fresh_supported"
 	// FieldTestedAt holds the string denoting the tested_at field in the database.
@@ -120,8 +116,6 @@ var Columns = []string{
 	FieldSecretVersion,
 	FieldLogoData,
 	FieldLogoMediaType,
-	FieldUsernameLoginEnabled,
-	FieldEmailLoginEnabled,
 	FieldFreshSupported,
 	FieldTestedAt,
 	FieldAppliedTestID,
@@ -172,10 +166,6 @@ var (
 	DefaultOidcUserinfoEnabled bool
 	// SecretVersionValidator is a validator for the "secret_version" field. It is called by the builders before save.
 	SecretVersionValidator func(int64) error
-	// DefaultUsernameLoginEnabled holds the default value on creation for the "username_login_enabled" field.
-	DefaultUsernameLoginEnabled bool
-	// DefaultEmailLoginEnabled holds the default value on creation for the "email_login_enabled" field.
-	DefaultEmailLoginEnabled bool
 	// DefaultFreshSupported holds the default value on creation for the "fresh_supported" field.
 	DefaultFreshSupported bool
 )
@@ -365,16 +355,6 @@ func BySecretVersion(opts ...sql.OrderTermOption) OrderOption {
 // ByLogoMediaType orders the results by the logo_media_type field.
 func ByLogoMediaType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLogoMediaType, opts...).ToFunc()
-}
-
-// ByUsernameLoginEnabled orders the results by the username_login_enabled field.
-func ByUsernameLoginEnabled(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldUsernameLoginEnabled, opts...).ToFunc()
-}
-
-// ByEmailLoginEnabled orders the results by the email_login_enabled field.
-func ByEmailLoginEnabled(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldEmailLoginEnabled, opts...).ToFunc()
 }
 
 // ByFreshSupported orders the results by the fresh_supported field.

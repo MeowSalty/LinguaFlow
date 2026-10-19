@@ -43,8 +43,6 @@ func (AuthConnectionRevision) Fields() []ent.Field {
 		field.Int64("secret_version").Optional().Nillable().Positive().Immutable(),
 		field.Bytes("logo_data").Optional().Sensitive().Immutable(),
 		field.String("logo_media_type").Optional().Immutable(),
-		field.Bool("username_login_enabled").Default(false).Immutable(),
-		field.Bool("email_login_enabled").Default(false).Immutable(),
 		field.Bool("fresh_supported").Default(false).Immutable(),
 		field.Time("tested_at").Optional().Nillable().Immutable(),
 		field.String("applied_test_id").Optional().Immutable(),

@@ -26,6 +26,8 @@ type Tx struct {
 	AuthConnectionSecret *AuthConnectionSecretClient
 	// AuthTransaction is the client for interacting with the AuthTransaction builders.
 	AuthTransaction *AuthTransactionClient
+	// AuthenticationRecovery is the client for interacting with the AuthenticationRecovery builders.
+	AuthenticationRecovery *AuthenticationRecoveryClient
 	// Backend is the client for interacting with the Backend builders.
 	Backend *BackendClient
 	// BackupPin is the client for interacting with the BackupPin builders.
@@ -64,6 +66,8 @@ type Tx struct {
 	JobRound *JobRoundClient
 	// JobRoundSegment is the client for interacting with the JobRoundSegment builders.
 	JobRoundSegment *JobRoundSegmentClient
+	// LocalAccountPolicy is the client for interacting with the LocalAccountPolicy builders.
+	LocalAccountPolicy *LocalAccountPolicyClient
 	// LoginBinding is the client for interacting with the LoginBinding builders.
 	LoginBinding *LoginBindingClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
@@ -277,6 +281,7 @@ func (tx *Tx) init() {
 	tx.AuthConnectionRevision = NewAuthConnectionRevisionClient(tx.config)
 	tx.AuthConnectionSecret = NewAuthConnectionSecretClient(tx.config)
 	tx.AuthTransaction = NewAuthTransactionClient(tx.config)
+	tx.AuthenticationRecovery = NewAuthenticationRecoveryClient(tx.config)
 	tx.Backend = NewBackendClient(tx.config)
 	tx.BackupPin = NewBackupPinClient(tx.config)
 	tx.Blob = NewBlobClient(tx.config)
@@ -296,6 +301,7 @@ func (tx *Tx) init() {
 	tx.JobResource = NewJobResourceClient(tx.config)
 	tx.JobRound = NewJobRoundClient(tx.config)
 	tx.JobRoundSegment = NewJobRoundSegmentClient(tx.config)
+	tx.LocalAccountPolicy = NewLocalAccountPolicyClient(tx.config)
 	tx.LoginBinding = NewLoginBindingClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)

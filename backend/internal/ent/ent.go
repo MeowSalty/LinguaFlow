@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authenticationrecovery"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
@@ -37,6 +38,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/localaccountpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -141,6 +143,7 @@ func checkColumn(t, c string) error {
 			authconnectionrevision.Table:    authconnectionrevision.ValidColumn,
 			authconnectionsecret.Table:      authconnectionsecret.ValidColumn,
 			authtransaction.Table:           authtransaction.ValidColumn,
+			authenticationrecovery.Table:    authenticationrecovery.ValidColumn,
 			backend.Table:                   backend.ValidColumn,
 			backuppin.Table:                 backuppin.ValidColumn,
 			blob.Table:                      blob.ValidColumn,
@@ -160,6 +163,7 @@ func checkColumn(t, c string) error {
 			jobresource.Table:               jobresource.ValidColumn,
 			jobround.Table:                  jobround.ValidColumn,
 			jobroundsegment.Table:           jobroundsegment.ValidColumn,
+			localaccountpolicy.Table:        localaccountpolicy.ValidColumn,
 			loginbinding.Table:              loginbinding.ValidColumn,
 			orgmembership.Table:             orgmembership.ValidColumn,
 			organization.Table:              organization.ValidColumn,

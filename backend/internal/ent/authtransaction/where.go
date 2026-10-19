@@ -95,6 +95,26 @@ func PolicyRevision(v int64) predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldEQ(FieldPolicyRevision, v))
 }
 
+// SignupPolicyRevision applies equality check predicate on the "signup_policy_revision" field. It's identical to SignupPolicyRevisionEQ.
+func SignupPolicyRevision(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldSignupPolicyRevision, v))
+}
+
+// LinkPolicyRevision applies equality check predicate on the "link_policy_revision" field. It's identical to LinkPolicyRevisionEQ.
+func LinkPolicyRevision(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldLinkPolicyRevision, v))
+}
+
+// RegistrationPolicyRevision applies equality check predicate on the "registration_policy_revision" field. It's identical to RegistrationPolicyRevisionEQ.
+func RegistrationPolicyRevision(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldRegistrationPolicyRevision, v))
+}
+
+// SignupDependencyFingerprint applies equality check predicate on the "signup_dependency_fingerprint" field. It's identical to SignupDependencyFingerprintEQ.
+func SignupDependencyFingerprint(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldSignupDependencyFingerprint, v))
+}
+
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
 func UserID(v int) predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldEQ(FieldUserID, v))
@@ -578,6 +598,231 @@ func PolicyRevisionLT(v int64) predicate.AuthTransaction {
 // PolicyRevisionLTE applies the LTE predicate on the "policy_revision" field.
 func PolicyRevisionLTE(v int64) predicate.AuthTransaction {
 	return predicate.AuthTransaction(sql.FieldLTE(FieldPolicyRevision, v))
+}
+
+// SignupPolicyRevisionEQ applies the EQ predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionNEQ applies the NEQ predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionNEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionIn applies the In predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldSignupPolicyRevision, vs...))
+}
+
+// SignupPolicyRevisionNotIn applies the NotIn predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionNotIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldSignupPolicyRevision, vs...))
+}
+
+// SignupPolicyRevisionGT applies the GT predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionGT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionGTE applies the GTE predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionGTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionLT applies the LT predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionLT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionLTE applies the LTE predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionLTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionIsNil applies the IsNil predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldSignupPolicyRevision))
+}
+
+// SignupPolicyRevisionNotNil applies the NotNil predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldSignupPolicyRevision))
+}
+
+// LinkPolicyRevisionEQ applies the EQ predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionNEQ applies the NEQ predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionNEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionIn applies the In predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldLinkPolicyRevision, vs...))
+}
+
+// LinkPolicyRevisionNotIn applies the NotIn predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionNotIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldLinkPolicyRevision, vs...))
+}
+
+// LinkPolicyRevisionGT applies the GT predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionGT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionGTE applies the GTE predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionGTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionLT applies the LT predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionLT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionLTE applies the LTE predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionLTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionIsNil applies the IsNil predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldLinkPolicyRevision))
+}
+
+// LinkPolicyRevisionNotNil applies the NotNil predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldLinkPolicyRevision))
+}
+
+// RegistrationPolicyRevisionEQ applies the EQ predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldRegistrationPolicyRevision, v))
+}
+
+// RegistrationPolicyRevisionNEQ applies the NEQ predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionNEQ(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldRegistrationPolicyRevision, v))
+}
+
+// RegistrationPolicyRevisionIn applies the In predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldRegistrationPolicyRevision, vs...))
+}
+
+// RegistrationPolicyRevisionNotIn applies the NotIn predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionNotIn(vs ...int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldRegistrationPolicyRevision, vs...))
+}
+
+// RegistrationPolicyRevisionGT applies the GT predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionGT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldRegistrationPolicyRevision, v))
+}
+
+// RegistrationPolicyRevisionGTE applies the GTE predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionGTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldRegistrationPolicyRevision, v))
+}
+
+// RegistrationPolicyRevisionLT applies the LT predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionLT(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldRegistrationPolicyRevision, v))
+}
+
+// RegistrationPolicyRevisionLTE applies the LTE predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionLTE(v int64) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldRegistrationPolicyRevision, v))
+}
+
+// RegistrationPolicyRevisionIsNil applies the IsNil predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldRegistrationPolicyRevision))
+}
+
+// RegistrationPolicyRevisionNotNil applies the NotNil predicate on the "registration_policy_revision" field.
+func RegistrationPolicyRevisionNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldRegistrationPolicyRevision))
+}
+
+// SignupDependencyFingerprintEQ applies the EQ predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEQ(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintNEQ applies the NEQ predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintNEQ(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNEQ(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintIn applies the In predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIn(FieldSignupDependencyFingerprint, vs...))
+}
+
+// SignupDependencyFingerprintNotIn applies the NotIn predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintNotIn(vs ...string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotIn(FieldSignupDependencyFingerprint, vs...))
+}
+
+// SignupDependencyFingerprintGT applies the GT predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintGT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGT(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintGTE applies the GTE predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintGTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldGTE(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintLT applies the LT predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintLT(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLT(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintLTE applies the LTE predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintLTE(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldLTE(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintContains applies the Contains predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintContains(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContains(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintHasPrefix applies the HasPrefix predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintHasPrefix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasPrefix(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintHasSuffix applies the HasSuffix predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintHasSuffix(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldHasSuffix(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintIsNil applies the IsNil predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintIsNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldIsNull(FieldSignupDependencyFingerprint))
+}
+
+// SignupDependencyFingerprintNotNil applies the NotNil predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintNotNil() predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldNotNull(FieldSignupDependencyFingerprint))
+}
+
+// SignupDependencyFingerprintEqualFold applies the EqualFold predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintEqualFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldEqualFold(FieldSignupDependencyFingerprint, v))
+}
+
+// SignupDependencyFingerprintContainsFold applies the ContainsFold predicate on the "signup_dependency_fingerprint" field.
+func SignupDependencyFingerprintContainsFold(v string) predicate.AuthTransaction {
+	return predicate.AuthTransaction(sql.FieldContainsFold(FieldSignupDependencyFingerprint, v))
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.

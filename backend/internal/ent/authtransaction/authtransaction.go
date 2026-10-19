@@ -31,6 +31,14 @@ const (
 	FieldConnectionGeneration = "connection_generation"
 	// FieldPolicyRevision holds the string denoting the policy_revision field in the database.
 	FieldPolicyRevision = "policy_revision"
+	// FieldSignupPolicyRevision holds the string denoting the signup_policy_revision field in the database.
+	FieldSignupPolicyRevision = "signup_policy_revision"
+	// FieldLinkPolicyRevision holds the string denoting the link_policy_revision field in the database.
+	FieldLinkPolicyRevision = "link_policy_revision"
+	// FieldRegistrationPolicyRevision holds the string denoting the registration_policy_revision field in the database.
+	FieldRegistrationPolicyRevision = "registration_policy_revision"
+	// FieldSignupDependencyFingerprint holds the string denoting the signup_dependency_fingerprint field in the database.
+	FieldSignupDependencyFingerprint = "signup_dependency_fingerprint"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
 	// FieldAuthVersion holds the string denoting the auth_version field in the database.
@@ -131,6 +139,10 @@ var Columns = []string{
 	FieldConnectionRevision,
 	FieldConnectionGeneration,
 	FieldPolicyRevision,
+	FieldSignupPolicyRevision,
+	FieldLinkPolicyRevision,
+	FieldRegistrationPolicyRevision,
+	FieldSignupDependencyFingerprint,
 	FieldUserID,
 	FieldAuthVersion,
 	FieldBindingID,
@@ -196,6 +208,12 @@ var (
 	ConnectionGenerationValidator func(int64) error
 	// PolicyRevisionValidator is a validator for the "policy_revision" field. It is called by the builders before save.
 	PolicyRevisionValidator func(int64) error
+	// SignupPolicyRevisionValidator is a validator for the "signup_policy_revision" field. It is called by the builders before save.
+	SignupPolicyRevisionValidator func(int64) error
+	// LinkPolicyRevisionValidator is a validator for the "link_policy_revision" field. It is called by the builders before save.
+	LinkPolicyRevisionValidator func(int64) error
+	// RegistrationPolicyRevisionValidator is a validator for the "registration_policy_revision" field. It is called by the builders before save.
+	RegistrationPolicyRevisionValidator func(int64) error
 	// UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
 	UserIDValidator func(int) error
 	// AuthVersionValidator is a validator for the "auth_version" field. It is called by the builders before save.
@@ -351,6 +369,26 @@ func ByConnectionGeneration(opts ...sql.OrderTermOption) OrderOption {
 // ByPolicyRevision orders the results by the policy_revision field.
 func ByPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPolicyRevision, opts...).ToFunc()
+}
+
+// BySignupPolicyRevision orders the results by the signup_policy_revision field.
+func BySignupPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSignupPolicyRevision, opts...).ToFunc()
+}
+
+// ByLinkPolicyRevision orders the results by the link_policy_revision field.
+func ByLinkPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLinkPolicyRevision, opts...).ToFunc()
+}
+
+// ByRegistrationPolicyRevision orders the results by the registration_policy_revision field.
+func ByRegistrationPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRegistrationPolicyRevision, opts...).ToFunc()
+}
+
+// BySignupDependencyFingerprint orders the results by the signup_dependency_fingerprint field.
+func BySignupDependencyFingerprint(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSignupDependencyFingerprint, opts...).ToFunc()
 }
 
 // ByUserID orders the results by the user_id field.

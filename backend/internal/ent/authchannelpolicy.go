@@ -30,6 +30,10 @@ type AuthChannelPolicy struct {
 	Revision int64 `json:"revision,omitempty"`
 	// LoginPolicyRevision holds the value of the "login_policy_revision" field.
 	LoginPolicyRevision int64 `json:"login_policy_revision,omitempty"`
+	// SignupPolicyRevision holds the value of the "signup_policy_revision" field.
+	SignupPolicyRevision int64 `json:"signup_policy_revision,omitempty"`
+	// LinkPolicyRevision holds the value of the "link_policy_revision" field.
+	LinkPolicyRevision int64 `json:"link_policy_revision,omitempty"`
 	// Enabled holds the value of the "enabled" field.
 	Enabled bool `json:"enabled,omitempty"`
 	// LoginEnabled holds the value of the "login_enabled" field.
@@ -38,6 +42,10 @@ type AuthChannelPolicy struct {
 	SignupEnabled bool `json:"signup_enabled,omitempty"`
 	// LinkEnabled holds the value of the "link_enabled" field.
 	LinkEnabled bool `json:"link_enabled,omitempty"`
+	// SignupEmailRequirement holds the value of the "signup_email_requirement" field.
+	SignupEmailRequirement authchannelpolicy.SignupEmailRequirement `json:"signup_email_requirement,omitempty"`
+	// SignupPasswordRequirement holds the value of the "signup_password_requirement" field.
+	SignupPasswordRequirement authchannelpolicy.SignupPasswordRequirement `json:"signup_password_requirement,omitempty"`
 	// LoginRules holds the value of the "login_rules" field.
 	LoginRules authrules.RuleSet `json:"login_rules,omitempty"`
 	// SignupRules holds the value of the "signup_rules" field.
@@ -79,9 +87,9 @@ func (*AuthChannelPolicy) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case authchannelpolicy.FieldEnabled, authchannelpolicy.FieldLoginEnabled, authchannelpolicy.FieldSignupEnabled, authchannelpolicy.FieldLinkEnabled:
 			values[i] = new(sql.NullBool)
-		case authchannelpolicy.FieldID, authchannelpolicy.FieldRevision, authchannelpolicy.FieldLoginPolicyRevision:
+		case authchannelpolicy.FieldID, authchannelpolicy.FieldRevision, authchannelpolicy.FieldLoginPolicyRevision, authchannelpolicy.FieldSignupPolicyRevision, authchannelpolicy.FieldLinkPolicyRevision:
 			values[i] = new(sql.NullInt64)
-		case authchannelpolicy.FieldConnectionID:
+		case authchannelpolicy.FieldConnectionID, authchannelpolicy.FieldSignupEmailRequirement, authchannelpolicy.FieldSignupPasswordRequirement:
 			values[i] = new(sql.NullString)
 		case authchannelpolicy.FieldCreatedAt, authchannelpolicy.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -136,6 +144,18 @@ func (_m *AuthChannelPolicy) assignValues(columns []string, values []any) error 
 			} else if value.Valid {
 				_m.LoginPolicyRevision = value.Int64
 			}
+		case authchannelpolicy.FieldSignupPolicyRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field signup_policy_revision", values[i])
+			} else if value.Valid {
+				_m.SignupPolicyRevision = value.Int64
+			}
+		case authchannelpolicy.FieldLinkPolicyRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field link_policy_revision", values[i])
+			} else if value.Valid {
+				_m.LinkPolicyRevision = value.Int64
+			}
 		case authchannelpolicy.FieldEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field enabled", values[i])
@@ -159,6 +179,18 @@ func (_m *AuthChannelPolicy) assignValues(columns []string, values []any) error 
 				return fmt.Errorf("unexpected type %T for field link_enabled", values[i])
 			} else if value.Valid {
 				_m.LinkEnabled = value.Bool
+			}
+		case authchannelpolicy.FieldSignupEmailRequirement:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field signup_email_requirement", values[i])
+			} else if value.Valid {
+				_m.SignupEmailRequirement = authchannelpolicy.SignupEmailRequirement(value.String)
+			}
+		case authchannelpolicy.FieldSignupPasswordRequirement:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field signup_password_requirement", values[i])
+			} else if value.Valid {
+				_m.SignupPasswordRequirement = authchannelpolicy.SignupPasswordRequirement(value.String)
 			}
 		case authchannelpolicy.FieldLoginRules:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -240,6 +272,12 @@ func (_m *AuthChannelPolicy) String() string {
 	builder.WriteString("login_policy_revision=")
 	builder.WriteString(fmt.Sprintf("%v", _m.LoginPolicyRevision))
 	builder.WriteString(", ")
+	builder.WriteString("signup_policy_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SignupPolicyRevision))
+	builder.WriteString(", ")
+	builder.WriteString("link_policy_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.LinkPolicyRevision))
+	builder.WriteString(", ")
 	builder.WriteString("enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Enabled))
 	builder.WriteString(", ")
@@ -251,6 +289,12 @@ func (_m *AuthChannelPolicy) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("link_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.LinkEnabled))
+	builder.WriteString(", ")
+	builder.WriteString("signup_email_requirement=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SignupEmailRequirement))
+	builder.WriteString(", ")
+	builder.WriteString("signup_password_requirement=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SignupPasswordRequirement))
 	builder.WriteString(", ")
 	builder.WriteString("login_rules=")
 	builder.WriteString(fmt.Sprintf("%v", _m.LoginRules))

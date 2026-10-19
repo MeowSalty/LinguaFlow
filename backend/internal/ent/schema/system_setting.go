@@ -17,6 +17,7 @@ func (SystemSetting) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("key").NotEmpty().Unique(),
 		field.Text("value").Optional(),
+		field.Int64("revision").Default(1).Positive(),
 		field.String("description").Optional(),
 	}
 }

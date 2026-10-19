@@ -68,6 +68,34 @@ func (_c *AuthChannelPolicyCreate) SetLoginPolicyRevision(v int64) *AuthChannelP
 	return _c
 }
 
+// SetSignupPolicyRevision sets the "signup_policy_revision" field.
+func (_c *AuthChannelPolicyCreate) SetSignupPolicyRevision(v int64) *AuthChannelPolicyCreate {
+	_c.mutation.SetSignupPolicyRevision(v)
+	return _c
+}
+
+// SetNillableSignupPolicyRevision sets the "signup_policy_revision" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableSignupPolicyRevision(v *int64) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetSignupPolicyRevision(*v)
+	}
+	return _c
+}
+
+// SetLinkPolicyRevision sets the "link_policy_revision" field.
+func (_c *AuthChannelPolicyCreate) SetLinkPolicyRevision(v int64) *AuthChannelPolicyCreate {
+	_c.mutation.SetLinkPolicyRevision(v)
+	return _c
+}
+
+// SetNillableLinkPolicyRevision sets the "link_policy_revision" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableLinkPolicyRevision(v *int64) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetLinkPolicyRevision(*v)
+	}
+	return _c
+}
+
 // SetEnabled sets the "enabled" field.
 func (_c *AuthChannelPolicyCreate) SetEnabled(v bool) *AuthChannelPolicyCreate {
 	_c.mutation.SetEnabled(v)
@@ -120,6 +148,34 @@ func (_c *AuthChannelPolicyCreate) SetLinkEnabled(v bool) *AuthChannelPolicyCrea
 func (_c *AuthChannelPolicyCreate) SetNillableLinkEnabled(v *bool) *AuthChannelPolicyCreate {
 	if v != nil {
 		_c.SetLinkEnabled(*v)
+	}
+	return _c
+}
+
+// SetSignupEmailRequirement sets the "signup_email_requirement" field.
+func (_c *AuthChannelPolicyCreate) SetSignupEmailRequirement(v authchannelpolicy.SignupEmailRequirement) *AuthChannelPolicyCreate {
+	_c.mutation.SetSignupEmailRequirement(v)
+	return _c
+}
+
+// SetNillableSignupEmailRequirement sets the "signup_email_requirement" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableSignupEmailRequirement(v *authchannelpolicy.SignupEmailRequirement) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetSignupEmailRequirement(*v)
+	}
+	return _c
+}
+
+// SetSignupPasswordRequirement sets the "signup_password_requirement" field.
+func (_c *AuthChannelPolicyCreate) SetSignupPasswordRequirement(v authchannelpolicy.SignupPasswordRequirement) *AuthChannelPolicyCreate {
+	_c.mutation.SetSignupPasswordRequirement(v)
+	return _c
+}
+
+// SetNillableSignupPasswordRequirement sets the "signup_password_requirement" field if the given value is not nil.
+func (_c *AuthChannelPolicyCreate) SetNillableSignupPasswordRequirement(v *authchannelpolicy.SignupPasswordRequirement) *AuthChannelPolicyCreate {
+	if v != nil {
+		_c.SetSignupPasswordRequirement(*v)
 	}
 	return _c
 }
@@ -222,6 +278,14 @@ func (_c *AuthChannelPolicyCreate) defaults() error {
 		v := authchannelpolicy.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.SignupPolicyRevision(); !ok {
+		v := authchannelpolicy.DefaultSignupPolicyRevision
+		_c.mutation.SetSignupPolicyRevision(v)
+	}
+	if _, ok := _c.mutation.LinkPolicyRevision(); !ok {
+		v := authchannelpolicy.DefaultLinkPolicyRevision
+		_c.mutation.SetLinkPolicyRevision(v)
+	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		v := authchannelpolicy.DefaultEnabled
 		_c.mutation.SetEnabled(v)
@@ -237,6 +301,14 @@ func (_c *AuthChannelPolicyCreate) defaults() error {
 	if _, ok := _c.mutation.LinkEnabled(); !ok {
 		v := authchannelpolicy.DefaultLinkEnabled
 		_c.mutation.SetLinkEnabled(v)
+	}
+	if _, ok := _c.mutation.SignupEmailRequirement(); !ok {
+		v := authchannelpolicy.DefaultSignupEmailRequirement
+		_c.mutation.SetSignupEmailRequirement(v)
+	}
+	if _, ok := _c.mutation.SignupPasswordRequirement(); !ok {
+		v := authchannelpolicy.DefaultSignupPasswordRequirement
+		_c.mutation.SetSignupPasswordRequirement(v)
 	}
 	return nil
 }
@@ -273,6 +345,22 @@ func (_c *AuthChannelPolicyCreate) check() error {
 			return &ValidationError{Name: "login_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthChannelPolicy.login_policy_revision": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.SignupPolicyRevision(); !ok {
+		return &ValidationError{Name: "signup_policy_revision", err: errors.New(`ent: missing required field "AuthChannelPolicy.signup_policy_revision"`)}
+	}
+	if v, ok := _c.mutation.SignupPolicyRevision(); ok {
+		if err := authchannelpolicy.SignupPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "signup_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthChannelPolicy.signup_policy_revision": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.LinkPolicyRevision(); !ok {
+		return &ValidationError{Name: "link_policy_revision", err: errors.New(`ent: missing required field "AuthChannelPolicy.link_policy_revision"`)}
+	}
+	if v, ok := _c.mutation.LinkPolicyRevision(); ok {
+		if err := authchannelpolicy.LinkPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "link_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthChannelPolicy.link_policy_revision": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "AuthChannelPolicy.enabled"`)}
 	}
@@ -284,6 +372,22 @@ func (_c *AuthChannelPolicyCreate) check() error {
 	}
 	if _, ok := _c.mutation.LinkEnabled(); !ok {
 		return &ValidationError{Name: "link_enabled", err: errors.New(`ent: missing required field "AuthChannelPolicy.link_enabled"`)}
+	}
+	if _, ok := _c.mutation.SignupEmailRequirement(); !ok {
+		return &ValidationError{Name: "signup_email_requirement", err: errors.New(`ent: missing required field "AuthChannelPolicy.signup_email_requirement"`)}
+	}
+	if v, ok := _c.mutation.SignupEmailRequirement(); ok {
+		if err := authchannelpolicy.SignupEmailRequirementValidator(v); err != nil {
+			return &ValidationError{Name: "signup_email_requirement", err: fmt.Errorf(`ent: validator failed for field "AuthChannelPolicy.signup_email_requirement": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SignupPasswordRequirement(); !ok {
+		return &ValidationError{Name: "signup_password_requirement", err: errors.New(`ent: missing required field "AuthChannelPolicy.signup_password_requirement"`)}
+	}
+	if v, ok := _c.mutation.SignupPasswordRequirement(); ok {
+		if err := authchannelpolicy.SignupPasswordRequirementValidator(v); err != nil {
+			return &ValidationError{Name: "signup_password_requirement", err: fmt.Errorf(`ent: validator failed for field "AuthChannelPolicy.signup_password_requirement": %w`, err)}
+		}
 	}
 	if len(_c.mutation.ConnectionIDs()) == 0 {
 		return &ValidationError{Name: "connection", err: errors.New(`ent: missing required edge "AuthChannelPolicy.connection"`)}
@@ -330,6 +434,14 @@ func (_c *AuthChannelPolicyCreate) createSpec() (*AuthChannelPolicy, *sqlgraph.C
 		_spec.SetField(authchannelpolicy.FieldLoginPolicyRevision, field.TypeInt64, value)
 		_node.LoginPolicyRevision = value
 	}
+	if value, ok := _c.mutation.SignupPolicyRevision(); ok {
+		_spec.SetField(authchannelpolicy.FieldSignupPolicyRevision, field.TypeInt64, value)
+		_node.SignupPolicyRevision = value
+	}
+	if value, ok := _c.mutation.LinkPolicyRevision(); ok {
+		_spec.SetField(authchannelpolicy.FieldLinkPolicyRevision, field.TypeInt64, value)
+		_node.LinkPolicyRevision = value
+	}
 	if value, ok := _c.mutation.Enabled(); ok {
 		_spec.SetField(authchannelpolicy.FieldEnabled, field.TypeBool, value)
 		_node.Enabled = value
@@ -345,6 +457,14 @@ func (_c *AuthChannelPolicyCreate) createSpec() (*AuthChannelPolicy, *sqlgraph.C
 	if value, ok := _c.mutation.LinkEnabled(); ok {
 		_spec.SetField(authchannelpolicy.FieldLinkEnabled, field.TypeBool, value)
 		_node.LinkEnabled = value
+	}
+	if value, ok := _c.mutation.SignupEmailRequirement(); ok {
+		_spec.SetField(authchannelpolicy.FieldSignupEmailRequirement, field.TypeEnum, value)
+		_node.SignupEmailRequirement = value
+	}
+	if value, ok := _c.mutation.SignupPasswordRequirement(); ok {
+		_spec.SetField(authchannelpolicy.FieldSignupPasswordRequirement, field.TypeEnum, value)
+		_node.SignupPasswordRequirement = value
 	}
 	if value, ok := _c.mutation.LoginRules(); ok {
 		_spec.SetField(authchannelpolicy.FieldLoginRules, field.TypeJSON, value)

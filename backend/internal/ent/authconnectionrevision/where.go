@@ -155,16 +155,6 @@ func LogoMediaType(v string) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldLogoMediaType, v))
 }
 
-// UsernameLoginEnabled applies equality check predicate on the "username_login_enabled" field. It's identical to UsernameLoginEnabledEQ.
-func UsernameLoginEnabled(v bool) predicate.AuthConnectionRevision {
-	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldUsernameLoginEnabled, v))
-}
-
-// EmailLoginEnabled applies equality check predicate on the "email_login_enabled" field. It's identical to EmailLoginEnabledEQ.
-func EmailLoginEnabled(v bool) predicate.AuthConnectionRevision {
-	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldEmailLoginEnabled, v))
-}
-
 // FreshSupported applies equality check predicate on the "fresh_supported" field. It's identical to FreshSupportedEQ.
 func FreshSupported(v bool) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldFreshSupported, v))
@@ -1443,26 +1433,6 @@ func LogoMediaTypeEqualFold(v string) predicate.AuthConnectionRevision {
 // LogoMediaTypeContainsFold applies the ContainsFold predicate on the "logo_media_type" field.
 func LogoMediaTypeContainsFold(v string) predicate.AuthConnectionRevision {
 	return predicate.AuthConnectionRevision(sql.FieldContainsFold(FieldLogoMediaType, v))
-}
-
-// UsernameLoginEnabledEQ applies the EQ predicate on the "username_login_enabled" field.
-func UsernameLoginEnabledEQ(v bool) predicate.AuthConnectionRevision {
-	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldUsernameLoginEnabled, v))
-}
-
-// UsernameLoginEnabledNEQ applies the NEQ predicate on the "username_login_enabled" field.
-func UsernameLoginEnabledNEQ(v bool) predicate.AuthConnectionRevision {
-	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldUsernameLoginEnabled, v))
-}
-
-// EmailLoginEnabledEQ applies the EQ predicate on the "email_login_enabled" field.
-func EmailLoginEnabledEQ(v bool) predicate.AuthConnectionRevision {
-	return predicate.AuthConnectionRevision(sql.FieldEQ(FieldEmailLoginEnabled, v))
-}
-
-// EmailLoginEnabledNEQ applies the NEQ predicate on the "email_login_enabled" field.
-func EmailLoginEnabledNEQ(v bool) predicate.AuthConnectionRevision {
-	return predicate.AuthConnectionRevision(sql.FieldNEQ(FieldEmailLoginEnabled, v))
 }
 
 // FreshSupportedEQ applies the EQ predicate on the "fresh_supported" field.

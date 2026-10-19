@@ -36,6 +36,14 @@ type AuthTransaction struct {
 	ConnectionGeneration int64 `json:"connection_generation,omitempty"`
 	// PolicyRevision holds the value of the "policy_revision" field.
 	PolicyRevision int64 `json:"policy_revision,omitempty"`
+	// SignupPolicyRevision holds the value of the "signup_policy_revision" field.
+	SignupPolicyRevision int64 `json:"signup_policy_revision,omitempty"`
+	// LinkPolicyRevision holds the value of the "link_policy_revision" field.
+	LinkPolicyRevision int64 `json:"link_policy_revision,omitempty"`
+	// RegistrationPolicyRevision holds the value of the "registration_policy_revision" field.
+	RegistrationPolicyRevision int64 `json:"registration_policy_revision,omitempty"`
+	// SignupDependencyFingerprint holds the value of the "signup_dependency_fingerprint" field.
+	SignupDependencyFingerprint string `json:"signup_dependency_fingerprint,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID *int `json:"user_id,omitempty"`
 	// AuthVersion holds the value of the "auth_version" field.
@@ -145,9 +153,9 @@ func (*AuthTransaction) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case authtransaction.FieldEvidence:
 			values[i] = new([]byte)
-		case authtransaction.FieldConnectionRevision, authtransaction.FieldConnectionGeneration, authtransaction.FieldPolicyRevision, authtransaction.FieldUserID, authtransaction.FieldAuthVersion, authtransaction.FieldBindingID, authtransaction.FieldAuthorizationConnectionGeneration, authtransaction.FieldAuthorizationPolicyRevision, authtransaction.FieldActorSessionID, authtransaction.FieldTestAppliedRevision, authtransaction.FieldTestBaseRevision:
+		case authtransaction.FieldConnectionRevision, authtransaction.FieldConnectionGeneration, authtransaction.FieldPolicyRevision, authtransaction.FieldSignupPolicyRevision, authtransaction.FieldLinkPolicyRevision, authtransaction.FieldRegistrationPolicyRevision, authtransaction.FieldUserID, authtransaction.FieldAuthVersion, authtransaction.FieldBindingID, authtransaction.FieldAuthorizationConnectionGeneration, authtransaction.FieldAuthorizationPolicyRevision, authtransaction.FieldActorSessionID, authtransaction.FieldTestAppliedRevision, authtransaction.FieldTestBaseRevision:
 			values[i] = new(sql.NullInt64)
-		case authtransaction.FieldID, authtransaction.FieldPurpose, authtransaction.FieldStatus, authtransaction.FieldConnectionID, authtransaction.FieldStateHash, authtransaction.FieldNonce, authtransaction.FieldPkceVerifier, authtransaction.FieldBrowserChallenge, authtransaction.FieldCompletionURL, authtransaction.FieldReturnTo, authtransaction.FieldExchangeTicketHash, authtransaction.FieldConfirmationTokenHash, authtransaction.FieldIdentityProtocol, authtransaction.FieldIdentityIssuer, authtransaction.FieldIdentitySubject, authtransaction.FieldIdentityDisplayName, authtransaction.FieldIdentityUsername, authtransaction.FieldIdentityEmail, authtransaction.FieldAuthorizationConnectionID, authtransaction.FieldAuthorizedAction, authtransaction.FieldAuthorizedTargetID, authtransaction.FieldFailureCode, authtransaction.FieldTestSnapshot, authtransaction.FieldTestProtocolFingerprint, authtransaction.FieldTestDiagnosticFingerprint, authtransaction.FieldTestDeploymentFingerprint:
+		case authtransaction.FieldID, authtransaction.FieldPurpose, authtransaction.FieldStatus, authtransaction.FieldConnectionID, authtransaction.FieldSignupDependencyFingerprint, authtransaction.FieldStateHash, authtransaction.FieldNonce, authtransaction.FieldPkceVerifier, authtransaction.FieldBrowserChallenge, authtransaction.FieldCompletionURL, authtransaction.FieldReturnTo, authtransaction.FieldExchangeTicketHash, authtransaction.FieldConfirmationTokenHash, authtransaction.FieldIdentityProtocol, authtransaction.FieldIdentityIssuer, authtransaction.FieldIdentitySubject, authtransaction.FieldIdentityDisplayName, authtransaction.FieldIdentityUsername, authtransaction.FieldIdentityEmail, authtransaction.FieldAuthorizationConnectionID, authtransaction.FieldAuthorizedAction, authtransaction.FieldAuthorizedTargetID, authtransaction.FieldFailureCode, authtransaction.FieldTestSnapshot, authtransaction.FieldTestProtocolFingerprint, authtransaction.FieldTestDiagnosticFingerprint, authtransaction.FieldTestDeploymentFingerprint:
 			values[i] = new(sql.NullString)
 		case authtransaction.FieldCreatedAt, authtransaction.FieldUpdatedAt, authtransaction.FieldExchangeTicketExpiresAt, authtransaction.FieldConfirmationExpiresAt, authtransaction.FieldIdentityAuthTime, authtransaction.FieldAuthorizationExpiresAt, authtransaction.FieldTestValidatedAt, authtransaction.FieldExpiresAt, authtransaction.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
@@ -219,6 +227,30 @@ func (_m *AuthTransaction) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field policy_revision", values[i])
 			} else if value.Valid {
 				_m.PolicyRevision = value.Int64
+			}
+		case authtransaction.FieldSignupPolicyRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field signup_policy_revision", values[i])
+			} else if value.Valid {
+				_m.SignupPolicyRevision = value.Int64
+			}
+		case authtransaction.FieldLinkPolicyRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field link_policy_revision", values[i])
+			} else if value.Valid {
+				_m.LinkPolicyRevision = value.Int64
+			}
+		case authtransaction.FieldRegistrationPolicyRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field registration_policy_revision", values[i])
+			} else if value.Valid {
+				_m.RegistrationPolicyRevision = value.Int64
+			}
+		case authtransaction.FieldSignupDependencyFingerprint:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field signup_dependency_fingerprint", values[i])
+			} else if value.Valid {
+				_m.SignupDependencyFingerprint = value.String
 			}
 		case authtransaction.FieldUserID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -527,6 +559,18 @@ func (_m *AuthTransaction) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("policy_revision=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PolicyRevision))
+	builder.WriteString(", ")
+	builder.WriteString("signup_policy_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SignupPolicyRevision))
+	builder.WriteString(", ")
+	builder.WriteString("link_policy_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.LinkPolicyRevision))
+	builder.WriteString(", ")
+	builder.WriteString("registration_policy_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RegistrationPolicyRevision))
+	builder.WriteString(", ")
+	builder.WriteString("signup_dependency_fingerprint=")
+	builder.WriteString(_m.SignupDependencyFingerprint)
 	builder.WriteString(", ")
 	if v := _m.UserID; v != nil {
 		builder.WriteString("user_id=")

@@ -68,6 +68,20 @@ func (_c *SystemSettingCreate) SetNillableValue(v *string) *SystemSettingCreate 
 	return _c
 }
 
+// SetRevision sets the "revision" field.
+func (_c *SystemSettingCreate) SetRevision(v int64) *SystemSettingCreate {
+	_c.mutation.SetRevision(v)
+	return _c
+}
+
+// SetNillableRevision sets the "revision" field if the given value is not nil.
+func (_c *SystemSettingCreate) SetNillableRevision(v *int64) *SystemSettingCreate {
+	if v != nil {
+		_c.SetRevision(*v)
+	}
+	return _c
+}
+
 // SetDescription sets the "description" field.
 func (_c *SystemSettingCreate) SetDescription(v string) *SystemSettingCreate {
 	_c.mutation.SetDescription(v)
@@ -125,6 +139,10 @@ func (_c *SystemSettingCreate) defaults() {
 		v := systemsetting.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.Revision(); !ok {
+		v := systemsetting.DefaultRevision
+		_c.mutation.SetRevision(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -141,6 +159,14 @@ func (_c *SystemSettingCreate) check() error {
 	if v, ok := _c.mutation.Key(); ok {
 		if err := systemsetting.KeyValidator(v); err != nil {
 			return &ValidationError{Name: "key", err: fmt.Errorf(`ent: validator failed for field "SystemSetting.key": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Revision(); !ok {
+		return &ValidationError{Name: "revision", err: errors.New(`ent: missing required field "SystemSetting.revision"`)}
+	}
+	if v, ok := _c.mutation.Revision(); ok {
+		if err := systemsetting.RevisionValidator(v); err != nil {
+			return &ValidationError{Name: "revision", err: fmt.Errorf(`ent: validator failed for field "SystemSetting.revision": %w`, err)}
 		}
 	}
 	return nil
@@ -184,6 +210,10 @@ func (_c *SystemSettingCreate) createSpec() (*SystemSetting, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.Value(); ok {
 		_spec.SetField(systemsetting.FieldValue, field.TypeString, value)
 		_node.Value = value
+	}
+	if value, ok := _c.mutation.Revision(); ok {
+		_spec.SetField(systemsetting.FieldRevision, field.TypeInt64, value)
+		_node.Revision = value
 	}
 	if value, ok := _c.mutation.Description(); ok {
 		_spec.SetField(systemsetting.FieldDescription, field.TypeString, value)

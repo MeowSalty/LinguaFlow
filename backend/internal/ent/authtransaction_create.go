@@ -94,6 +94,62 @@ func (_c *AuthTransactionCreate) SetPolicyRevision(v int64) *AuthTransactionCrea
 	return _c
 }
 
+// SetSignupPolicyRevision sets the "signup_policy_revision" field.
+func (_c *AuthTransactionCreate) SetSignupPolicyRevision(v int64) *AuthTransactionCreate {
+	_c.mutation.SetSignupPolicyRevision(v)
+	return _c
+}
+
+// SetNillableSignupPolicyRevision sets the "signup_policy_revision" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableSignupPolicyRevision(v *int64) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetSignupPolicyRevision(*v)
+	}
+	return _c
+}
+
+// SetLinkPolicyRevision sets the "link_policy_revision" field.
+func (_c *AuthTransactionCreate) SetLinkPolicyRevision(v int64) *AuthTransactionCreate {
+	_c.mutation.SetLinkPolicyRevision(v)
+	return _c
+}
+
+// SetNillableLinkPolicyRevision sets the "link_policy_revision" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableLinkPolicyRevision(v *int64) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetLinkPolicyRevision(*v)
+	}
+	return _c
+}
+
+// SetRegistrationPolicyRevision sets the "registration_policy_revision" field.
+func (_c *AuthTransactionCreate) SetRegistrationPolicyRevision(v int64) *AuthTransactionCreate {
+	_c.mutation.SetRegistrationPolicyRevision(v)
+	return _c
+}
+
+// SetNillableRegistrationPolicyRevision sets the "registration_policy_revision" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableRegistrationPolicyRevision(v *int64) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetRegistrationPolicyRevision(*v)
+	}
+	return _c
+}
+
+// SetSignupDependencyFingerprint sets the "signup_dependency_fingerprint" field.
+func (_c *AuthTransactionCreate) SetSignupDependencyFingerprint(v string) *AuthTransactionCreate {
+	_c.mutation.SetSignupDependencyFingerprint(v)
+	return _c
+}
+
+// SetNillableSignupDependencyFingerprint sets the "signup_dependency_fingerprint" field if the given value is not nil.
+func (_c *AuthTransactionCreate) SetNillableSignupDependencyFingerprint(v *string) *AuthTransactionCreate {
+	if v != nil {
+		_c.SetSignupDependencyFingerprint(*v)
+	}
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *AuthTransactionCreate) SetUserID(v int) *AuthTransactionCreate {
 	_c.mutation.SetUserID(v)
@@ -698,6 +754,21 @@ func (_c *AuthTransactionCreate) check() error {
 			return &ValidationError{Name: "policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.policy_revision": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.SignupPolicyRevision(); ok {
+		if err := authtransaction.SignupPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "signup_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.signup_policy_revision": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.LinkPolicyRevision(); ok {
+		if err := authtransaction.LinkPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "link_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.link_policy_revision": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.RegistrationPolicyRevision(); ok {
+		if err := authtransaction.RegistrationPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "registration_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.registration_policy_revision": %w`, err)}
+		}
+	}
 	if v, ok := _c.mutation.UserID(); ok {
 		if err := authtransaction.UserIDValidator(v); err != nil {
 			return &ValidationError{Name: "user_id", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.user_id": %w`, err)}
@@ -849,6 +920,22 @@ func (_c *AuthTransactionCreate) createSpec() (*AuthTransaction, *sqlgraph.Creat
 	if value, ok := _c.mutation.PolicyRevision(); ok {
 		_spec.SetField(authtransaction.FieldPolicyRevision, field.TypeInt64, value)
 		_node.PolicyRevision = value
+	}
+	if value, ok := _c.mutation.SignupPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldSignupPolicyRevision, field.TypeInt64, value)
+		_node.SignupPolicyRevision = value
+	}
+	if value, ok := _c.mutation.LinkPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldLinkPolicyRevision, field.TypeInt64, value)
+		_node.LinkPolicyRevision = value
+	}
+	if value, ok := _c.mutation.RegistrationPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldRegistrationPolicyRevision, field.TypeInt64, value)
+		_node.RegistrationPolicyRevision = value
+	}
+	if value, ok := _c.mutation.SignupDependencyFingerprint(); ok {
+		_spec.SetField(authtransaction.FieldSignupDependencyFingerprint, field.TypeString, value)
+		_node.SignupDependencyFingerprint = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(authtransaction.FieldUserID, field.TypeInt, value)

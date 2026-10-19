@@ -80,6 +80,16 @@ func LoginPolicyRevision(v int64) predicate.AuthChannelPolicy {
 	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLoginPolicyRevision, v))
 }
 
+// SignupPolicyRevision applies equality check predicate on the "signup_policy_revision" field. It's identical to SignupPolicyRevisionEQ.
+func SignupPolicyRevision(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldSignupPolicyRevision, v))
+}
+
+// LinkPolicyRevision applies equality check predicate on the "link_policy_revision" field. It's identical to LinkPolicyRevisionEQ.
+func LinkPolicyRevision(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLinkPolicyRevision, v))
+}
+
 // Enabled applies equality check predicate on the "enabled" field. It's identical to EnabledEQ.
 func Enabled(v bool) predicate.AuthChannelPolicy {
 	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldEnabled, v))
@@ -325,6 +335,86 @@ func LoginPolicyRevisionLTE(v int64) predicate.AuthChannelPolicy {
 	return predicate.AuthChannelPolicy(sql.FieldLTE(FieldLoginPolicyRevision, v))
 }
 
+// SignupPolicyRevisionEQ applies the EQ predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionEQ(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionNEQ applies the NEQ predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionNEQ(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionIn applies the In predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionIn(vs ...int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIn(FieldSignupPolicyRevision, vs...))
+}
+
+// SignupPolicyRevisionNotIn applies the NotIn predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionNotIn(vs ...int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldSignupPolicyRevision, vs...))
+}
+
+// SignupPolicyRevisionGT applies the GT predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionGT(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGT(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionGTE applies the GTE predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionGTE(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGTE(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionLT applies the LT predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionLT(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLT(FieldSignupPolicyRevision, v))
+}
+
+// SignupPolicyRevisionLTE applies the LTE predicate on the "signup_policy_revision" field.
+func SignupPolicyRevisionLTE(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLTE(FieldSignupPolicyRevision, v))
+}
+
+// LinkPolicyRevisionEQ applies the EQ predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionEQ(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionNEQ applies the NEQ predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionNEQ(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionIn applies the In predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionIn(vs ...int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIn(FieldLinkPolicyRevision, vs...))
+}
+
+// LinkPolicyRevisionNotIn applies the NotIn predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionNotIn(vs ...int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldLinkPolicyRevision, vs...))
+}
+
+// LinkPolicyRevisionGT applies the GT predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionGT(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGT(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionGTE applies the GTE predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionGTE(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldGTE(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionLT applies the LT predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionLT(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLT(FieldLinkPolicyRevision, v))
+}
+
+// LinkPolicyRevisionLTE applies the LTE predicate on the "link_policy_revision" field.
+func LinkPolicyRevisionLTE(v int64) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldLTE(FieldLinkPolicyRevision, v))
+}
+
 // EnabledEQ applies the EQ predicate on the "enabled" field.
 func EnabledEQ(v bool) predicate.AuthChannelPolicy {
 	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldEnabled, v))
@@ -363,6 +453,46 @@ func LinkEnabledEQ(v bool) predicate.AuthChannelPolicy {
 // LinkEnabledNEQ applies the NEQ predicate on the "link_enabled" field.
 func LinkEnabledNEQ(v bool) predicate.AuthChannelPolicy {
 	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldLinkEnabled, v))
+}
+
+// SignupEmailRequirementEQ applies the EQ predicate on the "signup_email_requirement" field.
+func SignupEmailRequirementEQ(v SignupEmailRequirement) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldSignupEmailRequirement, v))
+}
+
+// SignupEmailRequirementNEQ applies the NEQ predicate on the "signup_email_requirement" field.
+func SignupEmailRequirementNEQ(v SignupEmailRequirement) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldSignupEmailRequirement, v))
+}
+
+// SignupEmailRequirementIn applies the In predicate on the "signup_email_requirement" field.
+func SignupEmailRequirementIn(vs ...SignupEmailRequirement) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIn(FieldSignupEmailRequirement, vs...))
+}
+
+// SignupEmailRequirementNotIn applies the NotIn predicate on the "signup_email_requirement" field.
+func SignupEmailRequirementNotIn(vs ...SignupEmailRequirement) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldSignupEmailRequirement, vs...))
+}
+
+// SignupPasswordRequirementEQ applies the EQ predicate on the "signup_password_requirement" field.
+func SignupPasswordRequirementEQ(v SignupPasswordRequirement) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldEQ(FieldSignupPasswordRequirement, v))
+}
+
+// SignupPasswordRequirementNEQ applies the NEQ predicate on the "signup_password_requirement" field.
+func SignupPasswordRequirementNEQ(v SignupPasswordRequirement) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNEQ(FieldSignupPasswordRequirement, v))
+}
+
+// SignupPasswordRequirementIn applies the In predicate on the "signup_password_requirement" field.
+func SignupPasswordRequirementIn(vs ...SignupPasswordRequirement) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldIn(FieldSignupPasswordRequirement, vs...))
+}
+
+// SignupPasswordRequirementNotIn applies the NotIn predicate on the "signup_password_requirement" field.
+func SignupPasswordRequirementNotIn(vs ...SignupPasswordRequirement) predicate.AuthChannelPolicy {
+	return predicate.AuthChannelPolicy(sql.FieldNotIn(FieldSignupPasswordRequirement, vs...))
 }
 
 // LoginRulesIsNil applies the IsNil predicate on the "login_rules" field.

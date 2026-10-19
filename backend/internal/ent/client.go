@@ -20,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authenticationrecovery"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
@@ -40,6 +41,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/localaccountpolicy"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -99,6 +101,8 @@ type Client struct {
 	AuthConnectionSecret *AuthConnectionSecretClient
 	// AuthTransaction is the client for interacting with the AuthTransaction builders.
 	AuthTransaction *AuthTransactionClient
+	// AuthenticationRecovery is the client for interacting with the AuthenticationRecovery builders.
+	AuthenticationRecovery *AuthenticationRecoveryClient
 	// Backend is the client for interacting with the Backend builders.
 	Backend *BackendClient
 	// BackupPin is the client for interacting with the BackupPin builders.
@@ -137,6 +141,8 @@ type Client struct {
 	JobRound *JobRoundClient
 	// JobRoundSegment is the client for interacting with the JobRoundSegment builders.
 	JobRoundSegment *JobRoundSegmentClient
+	// LocalAccountPolicy is the client for interacting with the LocalAccountPolicy builders.
+	LocalAccountPolicy *LocalAccountPolicyClient
 	// LoginBinding is the client for interacting with the LoginBinding builders.
 	LoginBinding *LoginBindingClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
@@ -230,6 +236,7 @@ func (c *Client) init() {
 	c.AuthConnectionRevision = NewAuthConnectionRevisionClient(c.config)
 	c.AuthConnectionSecret = NewAuthConnectionSecretClient(c.config)
 	c.AuthTransaction = NewAuthTransactionClient(c.config)
+	c.AuthenticationRecovery = NewAuthenticationRecoveryClient(c.config)
 	c.Backend = NewBackendClient(c.config)
 	c.BackupPin = NewBackupPinClient(c.config)
 	c.Blob = NewBlobClient(c.config)
@@ -249,6 +256,7 @@ func (c *Client) init() {
 	c.JobResource = NewJobResourceClient(c.config)
 	c.JobRound = NewJobRoundClient(c.config)
 	c.JobRoundSegment = NewJobRoundSegmentClient(c.config)
+	c.LocalAccountPolicy = NewLocalAccountPolicyClient(c.config)
 	c.LoginBinding = NewLoginBindingClient(c.config)
 	c.OrgMembership = NewOrgMembershipClient(c.config)
 	c.Organization = NewOrganizationClient(c.config)
@@ -385,6 +393,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		AuthConnectionRevision:    NewAuthConnectionRevisionClient(cfg),
 		AuthConnectionSecret:      NewAuthConnectionSecretClient(cfg),
 		AuthTransaction:           NewAuthTransactionClient(cfg),
+		AuthenticationRecovery:    NewAuthenticationRecoveryClient(cfg),
 		Backend:                   NewBackendClient(cfg),
 		BackupPin:                 NewBackupPinClient(cfg),
 		Blob:                      NewBlobClient(cfg),
@@ -404,6 +413,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		JobResource:               NewJobResourceClient(cfg),
 		JobRound:                  NewJobRoundClient(cfg),
 		JobRoundSegment:           NewJobRoundSegmentClient(cfg),
+		LocalAccountPolicy:        NewLocalAccountPolicyClient(cfg),
 		LoginBinding:              NewLoginBindingClient(cfg),
 		OrgMembership:             NewOrgMembershipClient(cfg),
 		Organization:              NewOrganizationClient(cfg),
@@ -467,6 +477,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		AuthConnectionRevision:    NewAuthConnectionRevisionClient(cfg),
 		AuthConnectionSecret:      NewAuthConnectionSecretClient(cfg),
 		AuthTransaction:           NewAuthTransactionClient(cfg),
+		AuthenticationRecovery:    NewAuthenticationRecoveryClient(cfg),
 		Backend:                   NewBackendClient(cfg),
 		BackupPin:                 NewBackupPinClient(cfg),
 		Blob:                      NewBlobClient(cfg),
@@ -486,6 +497,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		JobResource:               NewJobResourceClient(cfg),
 		JobRound:                  NewJobRoundClient(cfg),
 		JobRoundSegment:           NewJobRoundSegmentClient(cfg),
+		LocalAccountPolicy:        NewLocalAccountPolicyClient(cfg),
 		LoginBinding:              NewLoginBindingClient(cfg),
 		OrgMembership:             NewOrgMembershipClient(cfg),
 		Organization:              NewOrganizationClient(cfg),
@@ -554,22 +566,22 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.ActivityLog, c.AuthChannelPolicy, c.AuthConnection, c.AuthConnectionRevision,
-		c.AuthConnectionSecret, c.AuthTransaction, c.Backend, c.BackupPin, c.Blob,
-		c.BlobLocation, c.BootstrapPromptTemplate, c.Credential,
+		c.AuthConnectionSecret, c.AuthTransaction, c.AuthenticationRecovery, c.Backend,
+		c.BackupPin, c.Blob, c.BlobLocation, c.BootstrapPromptTemplate, c.Credential,
 		c.CredentialJobReference, c.CredentialVersion, c.DeletionEntry,
 		c.ExecutionPlanTemplate, c.ExecutionProfile, c.ExportArtifact,
 		c.ExternalIdentity, c.GlossaryEntry, c.InstanceInitialization, c.Job,
-		c.JobResource, c.JobRound, c.JobRoundSegment, c.LoginBinding, c.OrgMembership,
-		c.Organization, c.Project, c.PrunePromptTemplate, c.ReauthenticationProof,
-		c.RefreshSession, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
-		c.SegmentRevision, c.SourceRevision, c.StorageAuthVersion, c.StorageBackup,
-		c.StorageCheck, c.StorageCheckWrite, c.StorageConnection,
-		c.StorageMigrationItem, c.StorageNamespace, c.StoragePathClaim,
-		c.StorageReservation, c.StorageRetirement, c.StorageRetirementEntry,
-		c.StorageSpace, c.StorageTask, c.StorageUploadBatch, c.StorageUploadBatchItem,
-		c.StorageWrite, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationPromptTemplate, c.UsageRecord, c.User, c.WorkCandidate,
-		c.WorkItem, c.WorkRequest,
+		c.JobResource, c.JobRound, c.JobRoundSegment, c.LocalAccountPolicy,
+		c.LoginBinding, c.OrgMembership, c.Organization, c.Project,
+		c.PrunePromptTemplate, c.ReauthenticationProof, c.RefreshSession,
+		c.RefreshToken, c.Resource, c.SSEEvent, c.Segment, c.SegmentRevision,
+		c.SourceRevision, c.StorageAuthVersion, c.StorageBackup, c.StorageCheck,
+		c.StorageCheckWrite, c.StorageConnection, c.StorageMigrationItem,
+		c.StorageNamespace, c.StoragePathClaim, c.StorageReservation,
+		c.StorageRetirement, c.StorageRetirementEntry, c.StorageSpace, c.StorageTask,
+		c.StorageUploadBatch, c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask,
+		c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.WorkCandidate, c.WorkItem, c.WorkRequest,
 	} {
 		n.Use(hooks...)
 	}
@@ -580,22 +592,22 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.ActivityLog, c.AuthChannelPolicy, c.AuthConnection, c.AuthConnectionRevision,
-		c.AuthConnectionSecret, c.AuthTransaction, c.Backend, c.BackupPin, c.Blob,
-		c.BlobLocation, c.BootstrapPromptTemplate, c.Credential,
+		c.AuthConnectionSecret, c.AuthTransaction, c.AuthenticationRecovery, c.Backend,
+		c.BackupPin, c.Blob, c.BlobLocation, c.BootstrapPromptTemplate, c.Credential,
 		c.CredentialJobReference, c.CredentialVersion, c.DeletionEntry,
 		c.ExecutionPlanTemplate, c.ExecutionProfile, c.ExportArtifact,
 		c.ExternalIdentity, c.GlossaryEntry, c.InstanceInitialization, c.Job,
-		c.JobResource, c.JobRound, c.JobRoundSegment, c.LoginBinding, c.OrgMembership,
-		c.Organization, c.Project, c.PrunePromptTemplate, c.ReauthenticationProof,
-		c.RefreshSession, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
-		c.SegmentRevision, c.SourceRevision, c.StorageAuthVersion, c.StorageBackup,
-		c.StorageCheck, c.StorageCheckWrite, c.StorageConnection,
-		c.StorageMigrationItem, c.StorageNamespace, c.StoragePathClaim,
-		c.StorageReservation, c.StorageRetirement, c.StorageRetirementEntry,
-		c.StorageSpace, c.StorageTask, c.StorageUploadBatch, c.StorageUploadBatchItem,
-		c.StorageWrite, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationPromptTemplate, c.UsageRecord, c.User, c.WorkCandidate,
-		c.WorkItem, c.WorkRequest,
+		c.JobResource, c.JobRound, c.JobRoundSegment, c.LocalAccountPolicy,
+		c.LoginBinding, c.OrgMembership, c.Organization, c.Project,
+		c.PrunePromptTemplate, c.ReauthenticationProof, c.RefreshSession,
+		c.RefreshToken, c.Resource, c.SSEEvent, c.Segment, c.SegmentRevision,
+		c.SourceRevision, c.StorageAuthVersion, c.StorageBackup, c.StorageCheck,
+		c.StorageCheckWrite, c.StorageConnection, c.StorageMigrationItem,
+		c.StorageNamespace, c.StoragePathClaim, c.StorageReservation,
+		c.StorageRetirement, c.StorageRetirementEntry, c.StorageSpace, c.StorageTask,
+		c.StorageUploadBatch, c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask,
+		c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
+		c.WorkCandidate, c.WorkItem, c.WorkRequest,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -616,6 +628,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.AuthConnectionSecret.mutate(ctx, m)
 	case *AuthTransactionMutation:
 		return c.AuthTransaction.mutate(ctx, m)
+	case *AuthenticationRecoveryMutation:
+		return c.AuthenticationRecovery.mutate(ctx, m)
 	case *BackendMutation:
 		return c.Backend.mutate(ctx, m)
 	case *BackupPinMutation:
@@ -654,6 +668,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.JobRound.mutate(ctx, m)
 	case *JobRoundSegmentMutation:
 		return c.JobRoundSegment.mutate(ctx, m)
+	case *LocalAccountPolicyMutation:
+		return c.LocalAccountPolicy.mutate(ctx, m)
 	case *LoginBindingMutation:
 		return c.LoginBinding.mutate(ctx, m)
 	case *OrgMembershipMutation:
@@ -1741,6 +1757,139 @@ func (c *AuthTransactionClient) mutate(ctx context.Context, m *AuthTransactionMu
 		return (&AuthTransactionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AuthTransaction mutation op: %q", m.Op())
+	}
+}
+
+// AuthenticationRecoveryClient is a client for the AuthenticationRecovery schema.
+type AuthenticationRecoveryClient struct {
+	config
+}
+
+// NewAuthenticationRecoveryClient returns a client for the AuthenticationRecovery from the given config.
+func NewAuthenticationRecoveryClient(c config) *AuthenticationRecoveryClient {
+	return &AuthenticationRecoveryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `authenticationrecovery.Hooks(f(g(h())))`.
+func (c *AuthenticationRecoveryClient) Use(hooks ...Hook) {
+	c.hooks.AuthenticationRecovery = append(c.hooks.AuthenticationRecovery, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `authenticationrecovery.Intercept(f(g(h())))`.
+func (c *AuthenticationRecoveryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AuthenticationRecovery = append(c.inters.AuthenticationRecovery, interceptors...)
+}
+
+// Create returns a builder for creating a AuthenticationRecovery entity.
+func (c *AuthenticationRecoveryClient) Create() *AuthenticationRecoveryCreate {
+	mutation := newAuthenticationRecoveryMutation(c.config, OpCreate)
+	return &AuthenticationRecoveryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AuthenticationRecovery entities.
+func (c *AuthenticationRecoveryClient) CreateBulk(builders ...*AuthenticationRecoveryCreate) *AuthenticationRecoveryCreateBulk {
+	return &AuthenticationRecoveryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AuthenticationRecoveryClient) MapCreateBulk(slice any, setFunc func(*AuthenticationRecoveryCreate, int)) *AuthenticationRecoveryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AuthenticationRecoveryCreateBulk{err: fmt.Errorf("calling to AuthenticationRecoveryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AuthenticationRecoveryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AuthenticationRecoveryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AuthenticationRecovery.
+func (c *AuthenticationRecoveryClient) Update() *AuthenticationRecoveryUpdate {
+	mutation := newAuthenticationRecoveryMutation(c.config, OpUpdate)
+	return &AuthenticationRecoveryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AuthenticationRecoveryClient) UpdateOne(_m *AuthenticationRecovery) *AuthenticationRecoveryUpdateOne {
+	mutation := newAuthenticationRecoveryMutation(c.config, OpUpdateOne, withAuthenticationRecovery(_m))
+	return &AuthenticationRecoveryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AuthenticationRecoveryClient) UpdateOneID(id int) *AuthenticationRecoveryUpdateOne {
+	mutation := newAuthenticationRecoveryMutation(c.config, OpUpdateOne, withAuthenticationRecoveryID(id))
+	return &AuthenticationRecoveryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AuthenticationRecovery.
+func (c *AuthenticationRecoveryClient) Delete() *AuthenticationRecoveryDelete {
+	mutation := newAuthenticationRecoveryMutation(c.config, OpDelete)
+	return &AuthenticationRecoveryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AuthenticationRecoveryClient) DeleteOne(_m *AuthenticationRecovery) *AuthenticationRecoveryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AuthenticationRecoveryClient) DeleteOneID(id int) *AuthenticationRecoveryDeleteOne {
+	builder := c.Delete().Where(authenticationrecovery.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AuthenticationRecoveryDeleteOne{builder}
+}
+
+// Query returns a query builder for AuthenticationRecovery.
+func (c *AuthenticationRecoveryClient) Query() *AuthenticationRecoveryQuery {
+	return &AuthenticationRecoveryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAuthenticationRecovery},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AuthenticationRecovery entity by its id.
+func (c *AuthenticationRecoveryClient) Get(ctx context.Context, id int) (*AuthenticationRecovery, error) {
+	return c.Query().Where(authenticationrecovery.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AuthenticationRecoveryClient) GetX(ctx context.Context, id int) *AuthenticationRecovery {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AuthenticationRecoveryClient) Hooks() []Hook {
+	return c.hooks.AuthenticationRecovery
+}
+
+// Interceptors returns the client interceptors.
+func (c *AuthenticationRecoveryClient) Interceptors() []Interceptor {
+	return c.inters.AuthenticationRecovery
+}
+
+func (c *AuthenticationRecoveryClient) mutate(ctx context.Context, m *AuthenticationRecoveryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AuthenticationRecoveryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AuthenticationRecoveryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AuthenticationRecoveryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AuthenticationRecoveryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AuthenticationRecovery mutation op: %q", m.Op())
 	}
 }
 
@@ -4940,6 +5089,139 @@ func (c *JobRoundSegmentClient) mutate(ctx context.Context, m *JobRoundSegmentMu
 		return (&JobRoundSegmentDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown JobRoundSegment mutation op: %q", m.Op())
+	}
+}
+
+// LocalAccountPolicyClient is a client for the LocalAccountPolicy schema.
+type LocalAccountPolicyClient struct {
+	config
+}
+
+// NewLocalAccountPolicyClient returns a client for the LocalAccountPolicy from the given config.
+func NewLocalAccountPolicyClient(c config) *LocalAccountPolicyClient {
+	return &LocalAccountPolicyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `localaccountpolicy.Hooks(f(g(h())))`.
+func (c *LocalAccountPolicyClient) Use(hooks ...Hook) {
+	c.hooks.LocalAccountPolicy = append(c.hooks.LocalAccountPolicy, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `localaccountpolicy.Intercept(f(g(h())))`.
+func (c *LocalAccountPolicyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.LocalAccountPolicy = append(c.inters.LocalAccountPolicy, interceptors...)
+}
+
+// Create returns a builder for creating a LocalAccountPolicy entity.
+func (c *LocalAccountPolicyClient) Create() *LocalAccountPolicyCreate {
+	mutation := newLocalAccountPolicyMutation(c.config, OpCreate)
+	return &LocalAccountPolicyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of LocalAccountPolicy entities.
+func (c *LocalAccountPolicyClient) CreateBulk(builders ...*LocalAccountPolicyCreate) *LocalAccountPolicyCreateBulk {
+	return &LocalAccountPolicyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *LocalAccountPolicyClient) MapCreateBulk(slice any, setFunc func(*LocalAccountPolicyCreate, int)) *LocalAccountPolicyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &LocalAccountPolicyCreateBulk{err: fmt.Errorf("calling to LocalAccountPolicyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*LocalAccountPolicyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &LocalAccountPolicyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for LocalAccountPolicy.
+func (c *LocalAccountPolicyClient) Update() *LocalAccountPolicyUpdate {
+	mutation := newLocalAccountPolicyMutation(c.config, OpUpdate)
+	return &LocalAccountPolicyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *LocalAccountPolicyClient) UpdateOne(_m *LocalAccountPolicy) *LocalAccountPolicyUpdateOne {
+	mutation := newLocalAccountPolicyMutation(c.config, OpUpdateOne, withLocalAccountPolicy(_m))
+	return &LocalAccountPolicyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *LocalAccountPolicyClient) UpdateOneID(id int) *LocalAccountPolicyUpdateOne {
+	mutation := newLocalAccountPolicyMutation(c.config, OpUpdateOne, withLocalAccountPolicyID(id))
+	return &LocalAccountPolicyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for LocalAccountPolicy.
+func (c *LocalAccountPolicyClient) Delete() *LocalAccountPolicyDelete {
+	mutation := newLocalAccountPolicyMutation(c.config, OpDelete)
+	return &LocalAccountPolicyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *LocalAccountPolicyClient) DeleteOne(_m *LocalAccountPolicy) *LocalAccountPolicyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *LocalAccountPolicyClient) DeleteOneID(id int) *LocalAccountPolicyDeleteOne {
+	builder := c.Delete().Where(localaccountpolicy.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &LocalAccountPolicyDeleteOne{builder}
+}
+
+// Query returns a query builder for LocalAccountPolicy.
+func (c *LocalAccountPolicyClient) Query() *LocalAccountPolicyQuery {
+	return &LocalAccountPolicyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeLocalAccountPolicy},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a LocalAccountPolicy entity by its id.
+func (c *LocalAccountPolicyClient) Get(ctx context.Context, id int) (*LocalAccountPolicy, error) {
+	return c.Query().Where(localaccountpolicy.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *LocalAccountPolicyClient) GetX(ctx context.Context, id int) *LocalAccountPolicy {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *LocalAccountPolicyClient) Hooks() []Hook {
+	return c.hooks.LocalAccountPolicy
+}
+
+// Interceptors returns the client interceptors.
+func (c *LocalAccountPolicyClient) Interceptors() []Interceptor {
+	return c.inters.LocalAccountPolicy
+}
+
+func (c *LocalAccountPolicyClient) mutate(ctx context.Context, m *LocalAccountPolicyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&LocalAccountPolicyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&LocalAccountPolicyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&LocalAccountPolicyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&LocalAccountPolicyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown LocalAccountPolicy mutation op: %q", m.Op())
 	}
 }
 
@@ -11476,13 +11758,14 @@ func (c *WorkRequestClient) mutate(ctx context.Context, m *WorkRequestMutation) 
 type (
 	hooks struct {
 		ActivityLog, AuthChannelPolicy, AuthConnection, AuthConnectionRevision,
-		AuthConnectionSecret, AuthTransaction, Backend, BackupPin, Blob, BlobLocation,
-		BootstrapPromptTemplate, Credential, CredentialJobReference, CredentialVersion,
-		DeletionEntry, ExecutionPlanTemplate, ExecutionProfile, ExportArtifact,
-		ExternalIdentity, GlossaryEntry, InstanceInitialization, Job, JobResource,
-		JobRound, JobRoundSegment, LoginBinding, OrgMembership, Organization, Project,
-		PrunePromptTemplate, ReauthenticationProof, RefreshSession, RefreshToken,
-		Resource, SSEEvent, Segment, SegmentRevision, SourceRevision,
+		AuthConnectionSecret, AuthTransaction, AuthenticationRecovery, Backend,
+		BackupPin, Blob, BlobLocation, BootstrapPromptTemplate, Credential,
+		CredentialJobReference, CredentialVersion, DeletionEntry,
+		ExecutionPlanTemplate, ExecutionProfile, ExportArtifact, ExternalIdentity,
+		GlossaryEntry, InstanceInitialization, Job, JobResource, JobRound,
+		JobRoundSegment, LocalAccountPolicy, LoginBinding, OrgMembership, Organization,
+		Project, PrunePromptTemplate, ReauthenticationProof, RefreshSession,
+		RefreshToken, Resource, SSEEvent, Segment, SegmentRevision, SourceRevision,
 		StorageAuthVersion, StorageBackup, StorageCheck, StorageCheckWrite,
 		StorageConnection, StorageMigrationItem, StorageNamespace, StoragePathClaim,
 		StorageReservation, StorageRetirement, StorageRetirementEntry, StorageSpace,
@@ -11492,13 +11775,14 @@ type (
 	}
 	inters struct {
 		ActivityLog, AuthChannelPolicy, AuthConnection, AuthConnectionRevision,
-		AuthConnectionSecret, AuthTransaction, Backend, BackupPin, Blob, BlobLocation,
-		BootstrapPromptTemplate, Credential, CredentialJobReference, CredentialVersion,
-		DeletionEntry, ExecutionPlanTemplate, ExecutionProfile, ExportArtifact,
-		ExternalIdentity, GlossaryEntry, InstanceInitialization, Job, JobResource,
-		JobRound, JobRoundSegment, LoginBinding, OrgMembership, Organization, Project,
-		PrunePromptTemplate, ReauthenticationProof, RefreshSession, RefreshToken,
-		Resource, SSEEvent, Segment, SegmentRevision, SourceRevision,
+		AuthConnectionSecret, AuthTransaction, AuthenticationRecovery, Backend,
+		BackupPin, Blob, BlobLocation, BootstrapPromptTemplate, Credential,
+		CredentialJobReference, CredentialVersion, DeletionEntry,
+		ExecutionPlanTemplate, ExecutionProfile, ExportArtifact, ExternalIdentity,
+		GlossaryEntry, InstanceInitialization, Job, JobResource, JobRound,
+		JobRoundSegment, LocalAccountPolicy, LoginBinding, OrgMembership, Organization,
+		Project, PrunePromptTemplate, ReauthenticationProof, RefreshSession,
+		RefreshToken, Resource, SSEEvent, Segment, SegmentRevision, SourceRevision,
 		StorageAuthVersion, StorageBackup, StorageCheck, StorageCheckWrite,
 		StorageConnection, StorageMigrationItem, StorageNamespace, StoragePathClaim,
 		StorageReservation, StorageRetirement, StorageRetirementEntry, StorageSpace,

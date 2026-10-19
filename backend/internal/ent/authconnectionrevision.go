@@ -72,10 +72,6 @@ type AuthConnectionRevision struct {
 	LogoData []byte `json:"-"`
 	// LogoMediaType holds the value of the "logo_media_type" field.
 	LogoMediaType string `json:"logo_media_type,omitempty"`
-	// UsernameLoginEnabled holds the value of the "username_login_enabled" field.
-	UsernameLoginEnabled bool `json:"username_login_enabled,omitempty"`
-	// EmailLoginEnabled holds the value of the "email_login_enabled" field.
-	EmailLoginEnabled bool `json:"email_login_enabled,omitempty"`
 	// FreshSupported holds the value of the "fresh_supported" field.
 	FreshSupported bool `json:"fresh_supported,omitempty"`
 	// TestedAt holds the value of the "tested_at" field.
@@ -115,7 +111,7 @@ func (*AuthConnectionRevision) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case authconnectionrevision.FieldAttributeMappings, authconnectionrevision.FieldOauth2Scopes, authconnectionrevision.FieldOidcScopes, authconnectionrevision.FieldLogoData:
 			values[i] = new([]byte)
-		case authconnectionrevision.FieldOidcUserinfoEnabled, authconnectionrevision.FieldUsernameLoginEnabled, authconnectionrevision.FieldEmailLoginEnabled, authconnectionrevision.FieldFreshSupported:
+		case authconnectionrevision.FieldOidcUserinfoEnabled, authconnectionrevision.FieldFreshSupported:
 			values[i] = new(sql.NullBool)
 		case authconnectionrevision.FieldID, authconnectionrevision.FieldRevision, authconnectionrevision.FieldDisplayOrder, authconnectionrevision.FieldConfigVersion, authconnectionrevision.FieldEvidenceMaxAgeSeconds, authconnectionrevision.FieldSecretVersion:
 			values[i] = new(sql.NullInt64)
@@ -307,18 +303,6 @@ func (_m *AuthConnectionRevision) assignValues(columns []string, values []any) e
 			} else if value.Valid {
 				_m.LogoMediaType = value.String
 			}
-		case authconnectionrevision.FieldUsernameLoginEnabled:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field username_login_enabled", values[i])
-			} else if value.Valid {
-				_m.UsernameLoginEnabled = value.Bool
-			}
-		case authconnectionrevision.FieldEmailLoginEnabled:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field email_login_enabled", values[i])
-			} else if value.Valid {
-				_m.EmailLoginEnabled = value.Bool
-			}
 		case authconnectionrevision.FieldFreshSupported:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field fresh_supported", values[i])
@@ -457,12 +441,6 @@ func (_m *AuthConnectionRevision) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("logo_media_type=")
 	builder.WriteString(_m.LogoMediaType)
-	builder.WriteString(", ")
-	builder.WriteString("username_login_enabled=")
-	builder.WriteString(fmt.Sprintf("%v", _m.UsernameLoginEnabled))
-	builder.WriteString(", ")
-	builder.WriteString("email_login_enabled=")
-	builder.WriteString(fmt.Sprintf("%v", _m.EmailLoginEnabled))
 	builder.WriteString(", ")
 	builder.WriteString("fresh_supported=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FreshSupported))

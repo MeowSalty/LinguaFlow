@@ -57,10 +57,14 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "revision", Type: field.TypeInt64},
 		{Name: "login_policy_revision", Type: field.TypeInt64},
+		{Name: "signup_policy_revision", Type: field.TypeInt64, Default: 1},
+		{Name: "link_policy_revision", Type: field.TypeInt64, Default: 1},
 		{Name: "enabled", Type: field.TypeBool, Default: false},
 		{Name: "login_enabled", Type: field.TypeBool, Default: false},
 		{Name: "signup_enabled", Type: field.TypeBool, Default: false},
 		{Name: "link_enabled", Type: field.TypeBool, Default: false},
+		{Name: "signup_email_requirement", Type: field.TypeEnum, Enums: []string{"optional", "required"}, Default: "optional"},
+		{Name: "signup_password_requirement", Type: field.TypeEnum, Enums: []string{"none", "optional", "required"}, Default: "none"},
 		{Name: "login_rules", Type: field.TypeJSON, Nullable: true},
 		{Name: "signup_rules", Type: field.TypeJSON, Nullable: true},
 		{Name: "link_rules", Type: field.TypeJSON, Nullable: true},
@@ -74,7 +78,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "auth_channel_policies_auth_connections_policies",
-				Columns:    []*schema.Column{AuthChannelPoliciesColumns[12]},
+				Columns:    []*schema.Column{AuthChannelPoliciesColumns[16]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -83,7 +87,7 @@ var (
 			{
 				Name:    "authchannelpolicy_connection_id_revision",
 				Unique:  true,
-				Columns: []*schema.Column{AuthChannelPoliciesColumns[12], AuthChannelPoliciesColumns[3]},
+				Columns: []*schema.Column{AuthChannelPoliciesColumns[16], AuthChannelPoliciesColumns[3]},
 			},
 		},
 	}
@@ -135,8 +139,6 @@ var (
 		{Name: "secret_version", Type: field.TypeInt64, Nullable: true},
 		{Name: "logo_data", Type: field.TypeBytes, Nullable: true},
 		{Name: "logo_media_type", Type: field.TypeString, Nullable: true},
-		{Name: "username_login_enabled", Type: field.TypeBool, Default: false},
-		{Name: "email_login_enabled", Type: field.TypeBool, Default: false},
 		{Name: "fresh_supported", Type: field.TypeBool, Default: false},
 		{Name: "tested_at", Type: field.TypeTime, Nullable: true},
 		{Name: "applied_test_id", Type: field.TypeString, Nullable: true},
@@ -150,7 +152,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "auth_connection_revisions_auth_connections_revisions",
-				Columns:    []*schema.Column{AuthConnectionRevisionsColumns[31]},
+				Columns:    []*schema.Column{AuthConnectionRevisionsColumns[29]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -159,7 +161,7 @@ var (
 			{
 				Name:    "authconnectionrevision_connection_id_revision",
 				Unique:  true,
-				Columns: []*schema.Column{AuthConnectionRevisionsColumns[31], AuthConnectionRevisionsColumns[3]},
+				Columns: []*schema.Column{AuthConnectionRevisionsColumns[29], AuthConnectionRevisionsColumns[3]},
 			},
 		},
 	}
@@ -207,6 +209,10 @@ var (
 		{Name: "connection_revision", Type: field.TypeInt64},
 		{Name: "connection_generation", Type: field.TypeInt64},
 		{Name: "policy_revision", Type: field.TypeInt64},
+		{Name: "signup_policy_revision", Type: field.TypeInt64, Nullable: true},
+		{Name: "link_policy_revision", Type: field.TypeInt64, Nullable: true},
+		{Name: "registration_policy_revision", Type: field.TypeInt64, Nullable: true},
+		{Name: "signup_dependency_fingerprint", Type: field.TypeString, Nullable: true},
 		{Name: "user_id", Type: field.TypeInt, Nullable: true},
 		{Name: "auth_version", Type: field.TypeInt64, Nullable: true},
 		{Name: "binding_id", Type: field.TypeInt, Nullable: true},
@@ -255,7 +261,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "auth_transactions_auth_connections_transactions",
-				Columns:    []*schema.Column{AuthTransactionsColumns[46]},
+				Columns:    []*schema.Column{AuthTransactionsColumns[50]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -264,12 +270,39 @@ var (
 			{
 				Name:    "authtransaction_status_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{AuthTransactionsColumns[4], AuthTransactionsColumns[44]},
+				Columns: []*schema.Column{AuthTransactionsColumns[4], AuthTransactionsColumns[48]},
 			},
 			{
 				Name:    "authtransaction_user_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{AuthTransactionsColumns[8], AuthTransactionsColumns[4]},
+				Columns: []*schema.Column{AuthTransactionsColumns[12], AuthTransactionsColumns[4]},
+			},
+		},
+	}
+	// AuthenticationRecoveriesColumns holds the columns for the "authentication_recoveries" table.
+	AuthenticationRecoveriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "token_hash", Type: field.TypeString, Unique: true},
+		{Name: "user_id", Type: field.TypeInt},
+		{Name: "auth_version", Type: field.TypeInt64},
+		{Name: "local_policy_revision", Type: field.TypeInt64},
+		{Name: "action", Type: field.TypeEnum, Enums: []string{"restore_local_login"}},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "consumed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+	}
+	// AuthenticationRecoveriesTable holds the schema information for the "authentication_recoveries" table.
+	AuthenticationRecoveriesTable = &schema.Table{
+		Name:       "authentication_recoveries",
+		Columns:    AuthenticationRecoveriesColumns,
+		PrimaryKey: []*schema.Column{AuthenticationRecoveriesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "authenticationrecovery_user_id_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{AuthenticationRecoveriesColumns[4], AuthenticationRecoveriesColumns[8]},
 			},
 		},
 	}
@@ -984,6 +1017,29 @@ var (
 				Columns: []*schema.Column{JobRoundSegmentsColumns[4], JobRoundSegmentsColumns[5]},
 			},
 		},
+	}
+	// LocalAccountPoliciesColumns holds the columns for the "local_account_policies" table.
+	LocalAccountPoliciesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+		{Name: "login_policy_revision", Type: field.TypeInt64, Default: 1},
+		{Name: "signup_policy_revision", Type: field.TypeInt64, Default: 1},
+		{Name: "enrollment_policy_revision", Type: field.TypeInt64, Default: 1},
+		{Name: "password_login_enabled", Type: field.TypeBool, Default: true},
+		{Name: "username_login_enabled", Type: field.TypeBool, Default: true},
+		{Name: "email_login_enabled", Type: field.TypeBool, Default: false},
+		{Name: "password_enrollment_enabled", Type: field.TypeBool, Default: true},
+		{Name: "signup_enabled", Type: field.TypeBool, Default: true},
+		{Name: "signup_email_requirement", Type: field.TypeEnum, Enums: []string{"optional", "required"}, Default: "optional"},
+		{Name: "signup_rules", Type: field.TypeJSON},
+	}
+	// LocalAccountPoliciesTable holds the schema information for the "local_account_policies" table.
+	LocalAccountPoliciesTable = &schema.Table{
+		Name:       "local_account_policies",
+		Columns:    LocalAccountPoliciesColumns,
+		PrimaryKey: []*schema.Column{LocalAccountPoliciesColumns[0]},
 	}
 	// LoginBindingsColumns holds the columns for the "login_bindings" table.
 	LoginBindingsColumns = []*schema.Column{
@@ -2190,6 +2246,7 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "key", Type: field.TypeString, Unique: true},
 		{Name: "value", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
 		{Name: "description", Type: field.TypeString, Nullable: true},
 	}
 	// SystemSettingsTable holds the schema information for the "system_settings" table.
@@ -2519,6 +2576,7 @@ var (
 		AuthConnectionRevisionsTable,
 		AuthConnectionSecretsTable,
 		AuthTransactionsTable,
+		AuthenticationRecoveriesTable,
 		BackendsTable,
 		BackupPinsTable,
 		BlobsTable,
@@ -2538,6 +2596,7 @@ var (
 		JobResourcesTable,
 		JobRoundsTable,
 		JobRoundSegmentsTable,
+		LocalAccountPoliciesTable,
 		LoginBindingsTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
@@ -2629,6 +2688,11 @@ func init() {
 	JobRoundsTable.ForeignKeys[1].RefTable = JobResourcesTable
 	JobRoundSegmentsTable.ForeignKeys[0].RefTable = JobRoundsTable
 	JobRoundSegmentsTable.ForeignKeys[1].RefTable = SegmentsTable
+	LocalAccountPoliciesTable.Annotation = &entsql.Annotation{}
+	LocalAccountPoliciesTable.Annotation.Checks = map[string]string{
+		"local_account_revisions_safe": "revision BETWEEN 1 AND 9007199254740991 AND login_policy_revision BETWEEN 1 AND 9007199254740991 AND signup_policy_revision BETWEEN 1 AND 9007199254740991 AND enrollment_policy_revision BETWEEN 1 AND 9007199254740991",
+		"local_account_singleton":      "id = 1",
+	}
 	LoginBindingsTable.ForeignKeys[0].RefTable = AuthConnectionsTable
 	LoginBindingsTable.ForeignKeys[1].RefTable = ExternalIdentitiesTable
 	LoginBindingsTable.ForeignKeys[2].RefTable = UsersTable

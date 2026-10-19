@@ -330,34 +330,6 @@ func (_c *AuthConnectionRevisionCreate) SetNillableLogoMediaType(v *string) *Aut
 	return _c
 }
 
-// SetUsernameLoginEnabled sets the "username_login_enabled" field.
-func (_c *AuthConnectionRevisionCreate) SetUsernameLoginEnabled(v bool) *AuthConnectionRevisionCreate {
-	_c.mutation.SetUsernameLoginEnabled(v)
-	return _c
-}
-
-// SetNillableUsernameLoginEnabled sets the "username_login_enabled" field if the given value is not nil.
-func (_c *AuthConnectionRevisionCreate) SetNillableUsernameLoginEnabled(v *bool) *AuthConnectionRevisionCreate {
-	if v != nil {
-		_c.SetUsernameLoginEnabled(*v)
-	}
-	return _c
-}
-
-// SetEmailLoginEnabled sets the "email_login_enabled" field.
-func (_c *AuthConnectionRevisionCreate) SetEmailLoginEnabled(v bool) *AuthConnectionRevisionCreate {
-	_c.mutation.SetEmailLoginEnabled(v)
-	return _c
-}
-
-// SetNillableEmailLoginEnabled sets the "email_login_enabled" field if the given value is not nil.
-func (_c *AuthConnectionRevisionCreate) SetNillableEmailLoginEnabled(v *bool) *AuthConnectionRevisionCreate {
-	if v != nil {
-		_c.SetEmailLoginEnabled(*v)
-	}
-	return _c
-}
-
 // SetFreshSupported sets the "fresh_supported" field.
 func (_c *AuthConnectionRevisionCreate) SetFreshSupported(v bool) *AuthConnectionRevisionCreate {
 	_c.mutation.SetFreshSupported(v)
@@ -476,14 +448,6 @@ func (_c *AuthConnectionRevisionCreate) defaults() error {
 		v := authconnectionrevision.DefaultOidcUserinfoEnabled
 		_c.mutation.SetOidcUserinfoEnabled(v)
 	}
-	if _, ok := _c.mutation.UsernameLoginEnabled(); !ok {
-		v := authconnectionrevision.DefaultUsernameLoginEnabled
-		_c.mutation.SetUsernameLoginEnabled(v)
-	}
-	if _, ok := _c.mutation.EmailLoginEnabled(); !ok {
-		v := authconnectionrevision.DefaultEmailLoginEnabled
-		_c.mutation.SetEmailLoginEnabled(v)
-	}
 	if _, ok := _c.mutation.FreshSupported(); !ok {
 		v := authconnectionrevision.DefaultFreshSupported
 		_c.mutation.SetFreshSupported(v)
@@ -567,12 +531,6 @@ func (_c *AuthConnectionRevisionCreate) check() error {
 		if err := authconnectionrevision.SecretVersionValidator(v); err != nil {
 			return &ValidationError{Name: "secret_version", err: fmt.Errorf(`ent: validator failed for field "AuthConnectionRevision.secret_version": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.UsernameLoginEnabled(); !ok {
-		return &ValidationError{Name: "username_login_enabled", err: errors.New(`ent: missing required field "AuthConnectionRevision.username_login_enabled"`)}
-	}
-	if _, ok := _c.mutation.EmailLoginEnabled(); !ok {
-		return &ValidationError{Name: "email_login_enabled", err: errors.New(`ent: missing required field "AuthConnectionRevision.email_login_enabled"`)}
 	}
 	if _, ok := _c.mutation.FreshSupported(); !ok {
 		return &ValidationError{Name: "fresh_supported", err: errors.New(`ent: missing required field "AuthConnectionRevision.fresh_supported"`)}
@@ -705,14 +663,6 @@ func (_c *AuthConnectionRevisionCreate) createSpec() (*AuthConnectionRevision, *
 	if value, ok := _c.mutation.LogoMediaType(); ok {
 		_spec.SetField(authconnectionrevision.FieldLogoMediaType, field.TypeString, value)
 		_node.LogoMediaType = value
-	}
-	if value, ok := _c.mutation.UsernameLoginEnabled(); ok {
-		_spec.SetField(authconnectionrevision.FieldUsernameLoginEnabled, field.TypeBool, value)
-		_node.UsernameLoginEnabled = value
-	}
-	if value, ok := _c.mutation.EmailLoginEnabled(); ok {
-		_spec.SetField(authconnectionrevision.FieldEmailLoginEnabled, field.TypeBool, value)
-		_node.EmailLoginEnabled = value
 	}
 	if value, ok := _c.mutation.FreshSupported(); ok {
 		_spec.SetField(authconnectionrevision.FieldFreshSupported, field.TypeBool, value)

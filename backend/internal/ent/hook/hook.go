@@ -81,6 +81,18 @@ func (f AuthTransactionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthTransactionMutation", m)
 }
 
+// The AuthenticationRecoveryFunc type is an adapter to allow the use of ordinary
+// function as AuthenticationRecovery mutator.
+type AuthenticationRecoveryFunc func(context.Context, *ent.AuthenticationRecoveryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthenticationRecoveryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthenticationRecoveryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthenticationRecoveryMutation", m)
+}
+
 // The BackendFunc type is an adapter to allow the use of ordinary
 // function as Backend mutator.
 type BackendFunc func(context.Context, *ent.BackendMutation) (ent.Value, error)
@@ -307,6 +319,18 @@ func (f JobRoundSegmentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobRoundSegmentMutation", m)
+}
+
+// The LocalAccountPolicyFunc type is an adapter to allow the use of ordinary
+// function as LocalAccountPolicy mutator.
+type LocalAccountPolicyFunc func(context.Context, *ent.LocalAccountPolicyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f LocalAccountPolicyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.LocalAccountPolicyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.LocalAccountPolicyMutation", m)
 }
 
 // The LoginBindingFunc type is an adapter to allow the use of ordinary

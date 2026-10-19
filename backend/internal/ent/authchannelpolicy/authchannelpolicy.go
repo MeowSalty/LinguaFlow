@@ -3,6 +3,7 @@
 package authchannelpolicy
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent"
@@ -25,6 +26,10 @@ const (
 	FieldRevision = "revision"
 	// FieldLoginPolicyRevision holds the string denoting the login_policy_revision field in the database.
 	FieldLoginPolicyRevision = "login_policy_revision"
+	// FieldSignupPolicyRevision holds the string denoting the signup_policy_revision field in the database.
+	FieldSignupPolicyRevision = "signup_policy_revision"
+	// FieldLinkPolicyRevision holds the string denoting the link_policy_revision field in the database.
+	FieldLinkPolicyRevision = "link_policy_revision"
 	// FieldEnabled holds the string denoting the enabled field in the database.
 	FieldEnabled = "enabled"
 	// FieldLoginEnabled holds the string denoting the login_enabled field in the database.
@@ -33,6 +38,10 @@ const (
 	FieldSignupEnabled = "signup_enabled"
 	// FieldLinkEnabled holds the string denoting the link_enabled field in the database.
 	FieldLinkEnabled = "link_enabled"
+	// FieldSignupEmailRequirement holds the string denoting the signup_email_requirement field in the database.
+	FieldSignupEmailRequirement = "signup_email_requirement"
+	// FieldSignupPasswordRequirement holds the string denoting the signup_password_requirement field in the database.
+	FieldSignupPasswordRequirement = "signup_password_requirement"
 	// FieldLoginRules holds the string denoting the login_rules field in the database.
 	FieldLoginRules = "login_rules"
 	// FieldSignupRules holds the string denoting the signup_rules field in the database.
@@ -60,10 +69,14 @@ var Columns = []string{
 	FieldConnectionID,
 	FieldRevision,
 	FieldLoginPolicyRevision,
+	FieldSignupPolicyRevision,
+	FieldLinkPolicyRevision,
 	FieldEnabled,
 	FieldLoginEnabled,
 	FieldSignupEnabled,
 	FieldLinkEnabled,
+	FieldSignupEmailRequirement,
+	FieldSignupPasswordRequirement,
 	FieldLoginRules,
 	FieldSignupRules,
 	FieldLinkRules,
@@ -98,6 +111,14 @@ var (
 	RevisionValidator func(int64) error
 	// LoginPolicyRevisionValidator is a validator for the "login_policy_revision" field. It is called by the builders before save.
 	LoginPolicyRevisionValidator func(int64) error
+	// DefaultSignupPolicyRevision holds the default value on creation for the "signup_policy_revision" field.
+	DefaultSignupPolicyRevision int64
+	// SignupPolicyRevisionValidator is a validator for the "signup_policy_revision" field. It is called by the builders before save.
+	SignupPolicyRevisionValidator func(int64) error
+	// DefaultLinkPolicyRevision holds the default value on creation for the "link_policy_revision" field.
+	DefaultLinkPolicyRevision int64
+	// LinkPolicyRevisionValidator is a validator for the "link_policy_revision" field. It is called by the builders before save.
+	LinkPolicyRevisionValidator func(int64) error
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
 	// DefaultLoginEnabled holds the default value on creation for the "login_enabled" field.
@@ -107,6 +128,59 @@ var (
 	// DefaultLinkEnabled holds the default value on creation for the "link_enabled" field.
 	DefaultLinkEnabled bool
 )
+
+// SignupEmailRequirement defines the type for the "signup_email_requirement" enum field.
+type SignupEmailRequirement string
+
+// SignupEmailRequirementOptional is the default value of the SignupEmailRequirement enum.
+const DefaultSignupEmailRequirement = SignupEmailRequirementOptional
+
+// SignupEmailRequirement values.
+const (
+	SignupEmailRequirementOptional SignupEmailRequirement = "optional"
+	SignupEmailRequirementRequired SignupEmailRequirement = "required"
+)
+
+func (ser SignupEmailRequirement) String() string {
+	return string(ser)
+}
+
+// SignupEmailRequirementValidator is a validator for the "signup_email_requirement" field enum values. It is called by the builders before save.
+func SignupEmailRequirementValidator(ser SignupEmailRequirement) error {
+	switch ser {
+	case SignupEmailRequirementOptional, SignupEmailRequirementRequired:
+		return nil
+	default:
+		return fmt.Errorf("authchannelpolicy: invalid enum value for signup_email_requirement field: %q", ser)
+	}
+}
+
+// SignupPasswordRequirement defines the type for the "signup_password_requirement" enum field.
+type SignupPasswordRequirement string
+
+// SignupPasswordRequirementNone is the default value of the SignupPasswordRequirement enum.
+const DefaultSignupPasswordRequirement = SignupPasswordRequirementNone
+
+// SignupPasswordRequirement values.
+const (
+	SignupPasswordRequirementNone     SignupPasswordRequirement = "none"
+	SignupPasswordRequirementOptional SignupPasswordRequirement = "optional"
+	SignupPasswordRequirementRequired SignupPasswordRequirement = "required"
+)
+
+func (spr SignupPasswordRequirement) String() string {
+	return string(spr)
+}
+
+// SignupPasswordRequirementValidator is a validator for the "signup_password_requirement" field enum values. It is called by the builders before save.
+func SignupPasswordRequirementValidator(spr SignupPasswordRequirement) error {
+	switch spr {
+	case SignupPasswordRequirementNone, SignupPasswordRequirementOptional, SignupPasswordRequirementRequired:
+		return nil
+	default:
+		return fmt.Errorf("authchannelpolicy: invalid enum value for signup_password_requirement field: %q", spr)
+	}
+}
 
 // OrderOption defines the ordering options for the AuthChannelPolicy queries.
 type OrderOption func(*sql.Selector)
@@ -141,6 +215,16 @@ func ByLoginPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLoginPolicyRevision, opts...).ToFunc()
 }
 
+// BySignupPolicyRevision orders the results by the signup_policy_revision field.
+func BySignupPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSignupPolicyRevision, opts...).ToFunc()
+}
+
+// ByLinkPolicyRevision orders the results by the link_policy_revision field.
+func ByLinkPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLinkPolicyRevision, opts...).ToFunc()
+}
+
 // ByEnabled orders the results by the enabled field.
 func ByEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEnabled, opts...).ToFunc()
@@ -159,6 +243,16 @@ func BySignupEnabled(opts ...sql.OrderTermOption) OrderOption {
 // ByLinkEnabled orders the results by the link_enabled field.
 func ByLinkEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLinkEnabled, opts...).ToFunc()
+}
+
+// BySignupEmailRequirement orders the results by the signup_email_requirement field.
+func BySignupEmailRequirement(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSignupEmailRequirement, opts...).ToFunc()
+}
+
+// BySignupPasswordRequirement orders the results by the signup_password_requirement field.
+func BySignupPasswordRequirement(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSignupPasswordRequirement, opts...).ToFunc()
 }
 
 // ByConnectionField orders the results by connection field.

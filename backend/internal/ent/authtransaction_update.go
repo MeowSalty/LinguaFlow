@@ -49,6 +49,80 @@ func (_u *AuthTransactionUpdate) SetNillableStatus(v *authtransaction.Status) *A
 	return _u
 }
 
+// SetSignupPolicyRevision sets the "signup_policy_revision" field.
+func (_u *AuthTransactionUpdate) SetSignupPolicyRevision(v int64) *AuthTransactionUpdate {
+	_u.mutation.ResetSignupPolicyRevision()
+	_u.mutation.SetSignupPolicyRevision(v)
+	return _u
+}
+
+// SetNillableSignupPolicyRevision sets the "signup_policy_revision" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableSignupPolicyRevision(v *int64) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetSignupPolicyRevision(*v)
+	}
+	return _u
+}
+
+// AddSignupPolicyRevision adds value to the "signup_policy_revision" field.
+func (_u *AuthTransactionUpdate) AddSignupPolicyRevision(v int64) *AuthTransactionUpdate {
+	_u.mutation.AddSignupPolicyRevision(v)
+	return _u
+}
+
+// ClearSignupPolicyRevision clears the value of the "signup_policy_revision" field.
+func (_u *AuthTransactionUpdate) ClearSignupPolicyRevision() *AuthTransactionUpdate {
+	_u.mutation.ClearSignupPolicyRevision()
+	return _u
+}
+
+// SetRegistrationPolicyRevision sets the "registration_policy_revision" field.
+func (_u *AuthTransactionUpdate) SetRegistrationPolicyRevision(v int64) *AuthTransactionUpdate {
+	_u.mutation.ResetRegistrationPolicyRevision()
+	_u.mutation.SetRegistrationPolicyRevision(v)
+	return _u
+}
+
+// SetNillableRegistrationPolicyRevision sets the "registration_policy_revision" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableRegistrationPolicyRevision(v *int64) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetRegistrationPolicyRevision(*v)
+	}
+	return _u
+}
+
+// AddRegistrationPolicyRevision adds value to the "registration_policy_revision" field.
+func (_u *AuthTransactionUpdate) AddRegistrationPolicyRevision(v int64) *AuthTransactionUpdate {
+	_u.mutation.AddRegistrationPolicyRevision(v)
+	return _u
+}
+
+// ClearRegistrationPolicyRevision clears the value of the "registration_policy_revision" field.
+func (_u *AuthTransactionUpdate) ClearRegistrationPolicyRevision() *AuthTransactionUpdate {
+	_u.mutation.ClearRegistrationPolicyRevision()
+	return _u
+}
+
+// SetSignupDependencyFingerprint sets the "signup_dependency_fingerprint" field.
+func (_u *AuthTransactionUpdate) SetSignupDependencyFingerprint(v string) *AuthTransactionUpdate {
+	_u.mutation.SetSignupDependencyFingerprint(v)
+	return _u
+}
+
+// SetNillableSignupDependencyFingerprint sets the "signup_dependency_fingerprint" field if the given value is not nil.
+func (_u *AuthTransactionUpdate) SetNillableSignupDependencyFingerprint(v *string) *AuthTransactionUpdate {
+	if v != nil {
+		_u.SetSignupDependencyFingerprint(*v)
+	}
+	return _u
+}
+
+// ClearSignupDependencyFingerprint clears the value of the "signup_dependency_fingerprint" field.
+func (_u *AuthTransactionUpdate) ClearSignupDependencyFingerprint() *AuthTransactionUpdate {
+	_u.mutation.ClearSignupDependencyFingerprint()
+	return _u
+}
+
 // SetExchangeTicketHash sets the "exchange_ticket_hash" field.
 func (_u *AuthTransactionUpdate) SetExchangeTicketHash(v string) *AuthTransactionUpdate {
 	_u.mutation.SetExchangeTicketHash(v)
@@ -498,6 +572,16 @@ func (_u *AuthTransactionUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SignupPolicyRevision(); ok {
+		if err := authtransaction.SignupPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "signup_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.signup_policy_revision": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RegistrationPolicyRevision(); ok {
+		if err := authtransaction.RegistrationPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "registration_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.registration_policy_revision": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.IdentityProtocol(); ok {
 		if err := authtransaction.IdentityProtocolValidator(v); err != nil {
 			return &ValidationError{Name: "identity_protocol", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.identity_protocol": %w`, err)}
@@ -531,6 +615,33 @@ func (_u *AuthTransactionUpdate) sqlSave(ctx context.Context) (_node int, err er
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(authtransaction.FieldStatus, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.SignupPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldSignupPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSignupPolicyRevision(); ok {
+		_spec.AddField(authtransaction.FieldSignupPolicyRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.SignupPolicyRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldSignupPolicyRevision, field.TypeInt64)
+	}
+	if _u.mutation.LinkPolicyRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldLinkPolicyRevision, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.RegistrationPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldRegistrationPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRegistrationPolicyRevision(); ok {
+		_spec.AddField(authtransaction.FieldRegistrationPolicyRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.RegistrationPolicyRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldRegistrationPolicyRevision, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.SignupDependencyFingerprint(); ok {
+		_spec.SetField(authtransaction.FieldSignupDependencyFingerprint, field.TypeString, value)
+	}
+	if _u.mutation.SignupDependencyFingerprintCleared() {
+		_spec.ClearField(authtransaction.FieldSignupDependencyFingerprint, field.TypeString)
 	}
 	if _u.mutation.UserIDCleared() {
 		_spec.ClearField(authtransaction.FieldUserID, field.TypeInt)
@@ -728,6 +839,80 @@ func (_u *AuthTransactionUpdateOne) SetNillableStatus(v *authtransaction.Status)
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetSignupPolicyRevision sets the "signup_policy_revision" field.
+func (_u *AuthTransactionUpdateOne) SetSignupPolicyRevision(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.ResetSignupPolicyRevision()
+	_u.mutation.SetSignupPolicyRevision(v)
+	return _u
+}
+
+// SetNillableSignupPolicyRevision sets the "signup_policy_revision" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableSignupPolicyRevision(v *int64) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetSignupPolicyRevision(*v)
+	}
+	return _u
+}
+
+// AddSignupPolicyRevision adds value to the "signup_policy_revision" field.
+func (_u *AuthTransactionUpdateOne) AddSignupPolicyRevision(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.AddSignupPolicyRevision(v)
+	return _u
+}
+
+// ClearSignupPolicyRevision clears the value of the "signup_policy_revision" field.
+func (_u *AuthTransactionUpdateOne) ClearSignupPolicyRevision() *AuthTransactionUpdateOne {
+	_u.mutation.ClearSignupPolicyRevision()
+	return _u
+}
+
+// SetRegistrationPolicyRevision sets the "registration_policy_revision" field.
+func (_u *AuthTransactionUpdateOne) SetRegistrationPolicyRevision(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.ResetRegistrationPolicyRevision()
+	_u.mutation.SetRegistrationPolicyRevision(v)
+	return _u
+}
+
+// SetNillableRegistrationPolicyRevision sets the "registration_policy_revision" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableRegistrationPolicyRevision(v *int64) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetRegistrationPolicyRevision(*v)
+	}
+	return _u
+}
+
+// AddRegistrationPolicyRevision adds value to the "registration_policy_revision" field.
+func (_u *AuthTransactionUpdateOne) AddRegistrationPolicyRevision(v int64) *AuthTransactionUpdateOne {
+	_u.mutation.AddRegistrationPolicyRevision(v)
+	return _u
+}
+
+// ClearRegistrationPolicyRevision clears the value of the "registration_policy_revision" field.
+func (_u *AuthTransactionUpdateOne) ClearRegistrationPolicyRevision() *AuthTransactionUpdateOne {
+	_u.mutation.ClearRegistrationPolicyRevision()
+	return _u
+}
+
+// SetSignupDependencyFingerprint sets the "signup_dependency_fingerprint" field.
+func (_u *AuthTransactionUpdateOne) SetSignupDependencyFingerprint(v string) *AuthTransactionUpdateOne {
+	_u.mutation.SetSignupDependencyFingerprint(v)
+	return _u
+}
+
+// SetNillableSignupDependencyFingerprint sets the "signup_dependency_fingerprint" field if the given value is not nil.
+func (_u *AuthTransactionUpdateOne) SetNillableSignupDependencyFingerprint(v *string) *AuthTransactionUpdateOne {
+	if v != nil {
+		_u.SetSignupDependencyFingerprint(*v)
+	}
+	return _u
+}
+
+// ClearSignupDependencyFingerprint clears the value of the "signup_dependency_fingerprint" field.
+func (_u *AuthTransactionUpdateOne) ClearSignupDependencyFingerprint() *AuthTransactionUpdateOne {
+	_u.mutation.ClearSignupDependencyFingerprint()
 	return _u
 }
 
@@ -1193,6 +1378,16 @@ func (_u *AuthTransactionUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SignupPolicyRevision(); ok {
+		if err := authtransaction.SignupPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "signup_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.signup_policy_revision": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RegistrationPolicyRevision(); ok {
+		if err := authtransaction.RegistrationPolicyRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "registration_policy_revision", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.registration_policy_revision": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.IdentityProtocol(); ok {
 		if err := authtransaction.IdentityProtocolValidator(v); err != nil {
 			return &ValidationError{Name: "identity_protocol", err: fmt.Errorf(`ent: validator failed for field "AuthTransaction.identity_protocol": %w`, err)}
@@ -1243,6 +1438,33 @@ func (_u *AuthTransactionUpdateOne) sqlSave(ctx context.Context) (_node *AuthTra
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(authtransaction.FieldStatus, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.SignupPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldSignupPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSignupPolicyRevision(); ok {
+		_spec.AddField(authtransaction.FieldSignupPolicyRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.SignupPolicyRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldSignupPolicyRevision, field.TypeInt64)
+	}
+	if _u.mutation.LinkPolicyRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldLinkPolicyRevision, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.RegistrationPolicyRevision(); ok {
+		_spec.SetField(authtransaction.FieldRegistrationPolicyRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRegistrationPolicyRevision(); ok {
+		_spec.AddField(authtransaction.FieldRegistrationPolicyRevision, field.TypeInt64, value)
+	}
+	if _u.mutation.RegistrationPolicyRevisionCleared() {
+		_spec.ClearField(authtransaction.FieldRegistrationPolicyRevision, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.SignupDependencyFingerprint(); ok {
+		_spec.SetField(authtransaction.FieldSignupDependencyFingerprint, field.TypeString, value)
+	}
+	if _u.mutation.SignupDependencyFingerprintCleared() {
+		_spec.ClearField(authtransaction.FieldSignupDependencyFingerprint, field.TypeString)
 	}
 	if _u.mutation.UserIDCleared() {
 		_spec.ClearField(authtransaction.FieldUserID, field.TypeInt)
