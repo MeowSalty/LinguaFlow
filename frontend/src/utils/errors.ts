@@ -5,11 +5,41 @@ export interface ApiProblem {
 }
 
 /**
+ * 请求未送达时浏览器 / 运行时抛出的传输层原文(离线、连接被拒、跨域拦截、请求中断等)。
+ * 它们是排查用的原文而不是给用户看的提示，命中这些形态时应改用调用方给的中文兜底。
+ * 例如 Chromium 的 `Failed to fetch`、Safari 的 `Load failed`、
+ * Firefox 的 `NetworkError when attempting to fetch resource.`、undici(测试环境)的 `fetch failed`。
+ */
+const TRANSPORT_FAILURE_PATTERNS: readonly RegExp[] = [
+  /(?:^|:\s*)failed to fetch$/u,
+  /^load failed(?::|$)/u,
+  /networkerror when attempting to fetch resource/u,
+  /^fetch failed$/u,
+  /^network request failed$/u,
+  /^the internet connection appears to be offline/u,
+  /^network connection lost/u,
+  /^the operation was aborted/u,
+  /^the user aborted a request/u,
+  /^signal is aborted without reason$/u,
+  /^the request timed out/u,
+]
+
+/** 判定是否为传输层故障原文；这类 `Error.message` 不该直接展示给用户。 */
+export const isTransportFailureMessage = (message: string): boolean => {
+  const normalized = message
+    .trim()
+    .toLowerCase()
+    .replace(/^typeerror:\s*/u, '')
+  return TRANSPORT_FAILURE_PATTERNS.some((pattern) => pattern.test(normalized))
+}
+
+/**
  * 从未知错误对象中提取用户可读的消息：
- * Error 实例取 message，否则按 Problem Details 结构取 detail/title，最后回退到 fallback。
+ * Error 实例取 message(传输层故障原文除外)。否则按 Problem Details 结构取 detail/title。
+ * 最后回退到 fallback。
  */
 export const extractErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof Error && error.message) {
+  if (error instanceof Error && error.message && !isTransportFailureMessage(error.message)) {
     return error.message
   }
   if (error && typeof error === 'object') {
