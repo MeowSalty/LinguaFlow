@@ -8,5 +8,8 @@ export const accountInputMessages = {
   },
   email: {
     optionalHint: '选填；填写后仅作为未验证邮箱资料保存，不作为唯一登录归属。',
+    requiredHint: '必填；作为未验证的注册邮箱资料保存，不授予登录或找回权限。',
+    required: '请输入注册邮箱。',
+    invalid: '请输入单个有效邮箱地址，不支持显示名称或多个邮箱。',
   },
 } as const

@@ -4,6 +4,7 @@ import { accountAuthMessages } from './account-auth'
 import { authAdminMessages } from './auth-admin'
 import { authRulesMessages } from './auth-rules'
 import { accountInputMessages } from './account-input'
+import { localAccountMessages } from './local-account'
 import taskHistory from './task-history'
 import taskHistoryErrors from './task-history-errors'
 import taskRetention from './task-retention'
@@ -31,6 +32,7 @@ const messages = {
   accountAuth: accountAuthMessages,
   authAdmin: authAdminMessages,
   authRules: authRulesMessages,
+  localAccount: localAccountMessages,
   accountInput: accountInputMessages,
   rubyAlignmentConfig,
   jobStages,
