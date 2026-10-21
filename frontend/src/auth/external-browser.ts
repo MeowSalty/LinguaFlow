@@ -1,7 +1,9 @@
 import { apiClient, createApiClient, type ApiSchemas } from '@/api/client-core'
 import { assertSessionCurrent, captureSession, changeSessionContext } from '@/api/session-context'
 import { clearAuthTokens, getAuthEpoch } from '@/api/token-storage'
-import { ApiError, buildRequestFailureError } from '@/api/utils'
+import { buildRequestFailureError } from '@/api/utils'
+import { isExternalConfirmation } from '@/api/auth-contract'
+import { canRetryExternalConfirmation } from '@/auth/errors'
 import { t } from '@/i18n'
 import { safeReturnPath } from './return-path'
 
@@ -78,7 +80,13 @@ export function readExternalFlow(): ExternalFlow | null {
     !matches(flow) ||
     typeof flow.verifier !== 'string' ||
     !flow.transactionId ||
-    !['login', 'link', 'reauthenticate'].includes(flow.purpose)
+    !['login', 'link', 'reauthenticate'].includes(flow.purpose) ||
+    (flow.confirmation !== undefined &&
+      (!isExternalConfirmation(flow.confirmation) ||
+        flow.confirmation.transaction_id !== flow.transactionId ||
+        flow.confirmation.profile.connection_id !== flow.connectionId ||
+        (flow.purpose === 'login' && flow.confirmation.kind !== 'signup_confirmation') ||
+        (flow.purpose !== 'login' && flow.confirmation.kind !== 'link_confirmation')))
   ) {
     remove(EXTERNAL_FLOW_KEY)
     return null
@@ -221,10 +229,13 @@ export async function exchangeExternalTicket(
   }
   if (data.kind === 'signup_confirmation' || data.kind === 'link_confirmation') {
     if (
+      !isExternalConfirmation(data) ||
       data.transaction_id !== flow.transactionId ||
       data.profile.connection_id !== flow.connectionId
-    )
+    ) {
+      clearExternalFlow()
       throw invalid()
+    }
     write(EXTERNAL_FLOW_KEY, {
       ...flow,
       stage: 'confirming',
@@ -239,7 +250,7 @@ export async function exchangeExternalTicket(
 export async function completeExternalConfirmation(
   input: Pick<
     ApiSchemas['ExternalCompleteRequest'],
-    'username' | 'display_name' | 'initial_password'
+    'username' | 'display_name' | 'email' | 'initial_password'
   > = {},
 ): Promise<ApiSchemas['ExternalCompleteResponse']> {
   const flow = requireFlow()
@@ -262,16 +273,13 @@ export async function completeExternalConfirmation(
       throw invalid()
     return data
   } catch (error) {
-    // Definite validation/conflict responses did not commit; uncertain transport failures cannot be replayed.
+    // Only explicit unconsumed input and username conflicts may resume this confirmation.
     if (
-      error instanceof ApiError &&
-      (error.status === 400 || error.status === 409) &&
-      error.problem?.type !== 'urn:linguaflow:external-flow-invalid' &&
-      error.problem?.type !== 'urn:linguaflow:authentication-conflict' &&
-      error.problem?.title !== 'external_flow_invalid' &&
+      canRetryExternalConfirmation(error) &&
       readExternalFlow()?.transactionId === flow.transactionId
     )
       write(EXTERNAL_FLOW_KEY, flow)
+    else clearExternalFlow()
     throw error
   }
 }

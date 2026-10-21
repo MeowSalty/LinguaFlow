@@ -1,5 +1,5 @@
 import type { ApiSchemas } from '@/api/client-core'
-import { ApiError } from '@/api/utils'
+import { authenticationFailure } from '@/auth/errors'
 
 export type SecurityAction = ApiSchemas['ReauthenticationRequest']['action']
 export type LoginMethods = ApiSchemas['LoginMethodsResponse']
@@ -115,6 +115,9 @@ export const actionAllowed = (
   }
 }
 
-/** 服务器拒绝本次证明（403）：应重新验证，而不是登出。 */
+/**
+ * 仅稳定的 reauthentication-required 表示本次证明失效，应重新验证；
+ * 其余 403（规则拒绝、授权失败等）不是证明拒绝，不能混用重试验证流程。
+ */
 export const isProofRejection = (error: unknown): boolean =>
-  error instanceof ApiError && error.status === 403
+  authenticationFailure(error, 'security') === 'reauthentication-required'

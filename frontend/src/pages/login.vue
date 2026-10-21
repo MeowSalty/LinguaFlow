@@ -6,7 +6,12 @@ import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 import { extractErrorMessage } from '@/utils/errors'
-import { captureSession, isSessionCurrent, StaleSessionError } from '@/api/session-context'
+import {
+  captureSession,
+  isSessionCurrent,
+  onSessionChange,
+  StaleSessionError,
+} from '@/api/session-context'
 import { useAuthCapabilities } from '@/composables/useAuthCapabilities'
 import { safeReturnPath } from '@/auth/return-path'
 import ExternalLoginOptions from '@/components/auth/ExternalLoginOptions.vue'
@@ -26,7 +31,7 @@ const message = useMessage()
 const { t } = useI18n()
 const {
   capabilities,
-  connections,
+  loginConnections,
   canSignup,
   loading,
   error: capabilitiesError,
@@ -35,8 +40,8 @@ const {
 const externalBusy = ref(false)
 const returnTo = computed(() => safeReturnPath(route.query.redirect))
 const identifierLabel = computed(() =>
-  capabilities.value?.password.email_login_enabled
-    ? capabilities.value.password.username_login_enabled
+  capabilities.value?.local_account.email_login_enabled
+    ? capabilities.value.local_account.username_login_enabled
       ? t('authentication.identifier')
       : t('authentication.emailIdentifier')
     : t('authentication.usernameIdentifier'),
@@ -45,13 +50,19 @@ const identifierLabel = computed(() =>
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
 let alive = true
+let startingLogin = false
 onBeforeUnmount(() => {
   alive = false
+  formValue.password = ''
+  stopSession()
 })
 
 const formValue = reactive({
   identifier: '',
   password: '',
+})
+const stopSession = onSessionChange(() => {
+  if (!startingLogin) formValue.password = ''
 })
 
 const rules = computed<FormRules>(() => ({
@@ -64,8 +75,8 @@ const rules = computed<FormRules>(() => ({
 }))
 
 const onSubmit = async () => {
-  if (submitting.value || externalBusy.value || !capabilities.value?.password.can_login) return
-  const context = captureSession()
+  if (submitting.value || externalBusy.value || !capabilities.value?.local_account.can_login) return
+  let context = captureSession()
   submitting.value = true
   try {
     await formRef.value?.validate()
@@ -79,22 +90,28 @@ const onSubmit = async () => {
     return
   }
   try {
-    await auth.login({
+    startingLogin = true
+    const request = auth.login({
       identifier: formValue.identifier,
       password: formValue.password,
     })
+    startingLogin = false
+    context = captureSession()
+    await request
     if (!alive) return
     message.success(t('login.messages.success'))
     await router.push(returnTo.value)
   } catch (error) {
     if (
       !alive ||
+      !isSessionCurrent(context) ||
       error instanceof StaleSessionError ||
       (error instanceof DOMException && error.name === 'AbortError')
     )
       return
     message.error(extractErrorMessage(error, t('login.messages.failed')))
   } finally {
+    startingLogin = false
     if (alive) submitting.value = false
   }
 }
@@ -109,14 +126,14 @@ const onSubmit = async () => {
         <NButton class="mt-3" @click="reload">{{ t('authentication.retry') }}</NButton>
       </NAlert>
       <NAlert
-        v-else-if="!capabilities?.password.can_login && !connections.length"
+        v-else-if="!capabilities?.local_account.can_login && !loginConnections.length"
         type="info"
         :show-icon="false"
       >
         {{ t('authentication.noLogin') }}
       </NAlert>
       <NForm
-        v-if="!loading && capabilities?.password.can_login"
+        v-if="!loading && capabilities?.local_account.can_login"
         ref="formRef"
         :model="formValue"
         :rules="rules"
@@ -154,13 +171,13 @@ const onSubmit = async () => {
           {{ t('login.form.submit') }}
         </NButton>
       </NForm>
-      <NDivider v-if="capabilities?.password.can_login && connections.length">{{
+      <NDivider v-if="capabilities?.local_account.can_login && loginConnections.length">{{
         t('authentication.externalDivider')
       }}</NDivider>
       <ExternalLoginOptions
-        v-if="connections.length"
+        v-if="loginConnections.length"
         v-model:busy="externalBusy"
-        :connections="connections"
+        :connections="loginConnections"
         :return-to="returnTo"
         :disabled="submitting"
       />

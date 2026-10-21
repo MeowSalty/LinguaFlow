@@ -58,7 +58,6 @@ export function startConnectionTest(
   const epoch = getAuthEpoch()
   if (
     context.userId === null ||
-    record.kind === 'password' ||
     record.archived ||
     !['configuring', 'enabled'].includes(record.state ?? '')
   )

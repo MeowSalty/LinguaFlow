@@ -18,6 +18,7 @@ const currentError = ref<string | null>(null)
 const error = ref<string | null>(null)
 const loggingOut = ref(false)
 const methodsBusy = ref(false)
+const passwordMaintenance = ref(false)
 const formValue = reactive({ current_password: '', new_password: '', confirm_password: '' })
 const rules = computed<FormRules>(() => ({
   current_password: [
@@ -54,6 +55,9 @@ const reset = (): void => {
   currentError.value = null
   error.value = null
 }
+watch(passwordMaintenance, (value) => {
+  if (!value) reset()
+})
 watch(sessionGeneration, reset, { flush: 'sync' })
 watch(
   () => formValue.current_password,
@@ -136,6 +140,7 @@ const logout = async (): Promise<void> => {
       <NAlert v-if="error" type="error" class="mb-5">{{ error }}</NAlert>
       <LoginMethodsPanel
         :disabled="auth.passwordChanging || loggingOut"
+        @password-maintenance="passwordMaintenance = $event"
         @busy="methodsBusy = $event"
       >
         <template #password>

@@ -32,7 +32,7 @@ import {
 } from './proof'
 
 const props = defineProps<{ disabled?: boolean }>()
-const emit = defineEmits<{ busy: [value: boolean] }>()
+const emit = defineEmits<{ busy: [value: boolean]; passwordMaintenance: [value: boolean] }>()
 const { t } = useI18n()
 const auth = useAuthStore()
 const router = useRouter()
@@ -50,6 +50,7 @@ const confirmation = ref('')
 let revision = 0
 let disposed = false
 const blocked = computed(() => busy.value || !!props.disabled)
+const passwordMaintenance = computed(() => !!methods.value?.password.can_login)
 const candidates = computed(() =>
   pending.value
     ? reauthCandidates(methods.value, pending.value.action, pending.value.targetId)
@@ -94,6 +95,14 @@ const confirmLabel = computed(() => {
   }
 })
 watch(busy, (value) => emit('busy', value), { flush: 'sync' })
+watch(
+  passwordMaintenance,
+  (value) => {
+    if (!value) clearAction()
+    emit('passwordMaintenance', value)
+  },
+  { flush: 'sync' },
+)
 function clearAction(): void {
   pending.value = null
   proof.value = null
@@ -324,18 +333,22 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <template v-if="methods.password.is_set">
-          <p class="text-sm text-lf-text-muted">
+          <p v-if="methods.password.can_login" class="text-sm text-lf-text-muted">
             {{ t('accountAuth.security.password.changeHint') }}
           </p>
-          <slot name="password" />
+          <slot v-if="methods.password.can_login" name="password" />
           <NButton
+            v-if="methods.password.can_login || methods.password.can_delete"
             type="error"
             secondary
             :disabled="blocked || !methods.password.can_delete"
             @click="begin('password_delete', 'password')"
             >{{ t('accountAuth.security.password.remove') }}</NButton
           >
-          <p v-if="!methods.password.can_delete" class="text-xs text-lf-text-muted">
+          <p
+            v-if="methods.password.can_login && !methods.password.can_delete"
+            class="text-xs text-lf-text-muted"
+          >
             {{ t('accountAuth.security.password.removeBlocked') }}
           </p>
         </template>
@@ -344,6 +357,7 @@ onBeforeUnmount(() => {
             {{ t('accountAuth.security.password.emptyDescription') }}
           </p>
           <NButton
+            v-if="methods.password.can_set"
             type="primary"
             :disabled="blocked || !methods.password.can_set"
             @click="begin('password_set', 'password')"
@@ -457,7 +471,8 @@ onBeforeUnmount(() => {
         }
       "
     >
-      <section
+      <!-- vueuc FocusTrap locates the modal body by its div root. -->
+      <div
         role="dialog"
         aria-modal="true"
         :aria-label="title"
@@ -548,7 +563,7 @@ onBeforeUnmount(() => {
         <NButton :disabled="blocked" @click="cancel">{{
           t('accountAuth.security.confirm.cancel')
         }}</NButton>
-      </section>
+      </div>
     </NModal>
   </div>
 </template>
