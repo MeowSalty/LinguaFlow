@@ -9,6 +9,7 @@ import {
   type AuthConnection,
 } from '@/api/auth-connections'
 import { captureSession, isSessionCurrent } from '@/api/session-context'
+import { extractErrorMessage } from '@/utils/errors'
 
 const emit = defineEmits<{
   created: [record: AuthConnection]
@@ -47,7 +48,7 @@ async function create() {
       emit('denied', cause.message)
       return
     }
-    message.error(cause instanceof Error ? cause.message : t('authAdmin.requestFailed'))
+    message.error(extractErrorMessage(cause, t('authAdmin.requestFailed')))
   } finally {
     if (alive && isSessionCurrent(context)) busy.value = false
   }

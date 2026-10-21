@@ -33,7 +33,13 @@ const labels = {
         class="min-w-0 rounded-lg border border-lf-border p-3"
       >
         <dt class="text-sm text-lf-text-muted">{{ t(`authAdmin.${labels[group]}`) }}</dt>
-        <dd class="mt-1 break-words">{{ impact[group]?.join(', ') || t('authAdmin.none') }}</dd>
+        <dd class="mt-1 break-words">
+          {{
+            Array.isArray(impact[group])
+              ? impact[group]?.join(', ') || t('authAdmin.none')
+              : t('authAdmin.unknown')
+          }}
+        </dd>
       </div>
       <div>
         <dt class="text-sm text-lf-text-muted">{{ t('authAdmin.affectedSessions') }}</dt>

@@ -14,13 +14,18 @@ import {
   NTag,
   useMessage,
 } from 'naive-ui'
+import { apiClient } from '@/api/client-core'
 import { fetchAuthConnections, type AuthConnection } from '@/api/auth-connections'
+import { fetchLocalAccount, type LocalAccount } from '@/api/local-account'
 import { ApiError } from '@/api/utils'
+import { buildRequestFailureError } from '@/api/utils'
+import { extractErrorMessage } from '@/utils/errors'
 import { captureSession, isSessionCurrent, sessionGeneration } from '@/api/session-context'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 import AuthConnectionCreate from '@/components/admin/authentication/AuthConnectionCreate.vue'
 import AuthConnectionEditor from '@/components/admin/authentication/AuthConnectionEditor.vue'
+import LocalAccountPolicyEditor from '@/components/admin/authentication/LocalAccountPolicyEditor.vue'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -28,20 +33,31 @@ const auth = useAuthStore()
 const service = useServiceStore()
 /** The editor owns dirty-close confirmation; the drawer only forwards its close gesture. */
 const editorRef = shallowRef<InstanceType<typeof AuthConnectionEditor> | null>(null)
+const localEditorRef = shallowRef<InstanceType<typeof LocalAccountPolicyEditor> | null>(null)
 const allowed = computed(() => !service.isLocal && auth.user?.role === 'admin')
 const connections = shallowRef<AuthConnection[]>([])
 const selected = shallowRef<AuthConnection | null>(null)
+const localRecord = shallowRef<LocalAccount | null>(null)
+const localEditing = ref(false)
+const localLoading = ref(false)
+const localError = ref('')
+const registrationEnabled = shallowRef<boolean | null>(null)
+const registrationLoading = ref(false)
+const registrationError = ref('')
 const drawerTitle = computed(() => {
   const target = selected.value
   if (!target) return ''
-  const action = t(target.kind === 'password' ? 'authAdmin.viewPolicy' : 'authAdmin.edit')
+  const action = t('authAdmin.edit')
   const name = target.configuration.display_name.trim() || target.id
   return `${action} · ${name}`
 })
+const localDrawerTitle = computed(() => t('localAccount.editorTitle'))
 const creating = ref(false)
 const loading = ref(false)
 const error = ref('')
 let sequence = 0
+let localSequence = 0
+let registrationSequence = 0
 let alive = true
 onScopeDispose(() => {
   alive = false
@@ -77,6 +93,23 @@ function hasEffectiveUse(connection: AuthConnection) {
     connection.capabilities.can_link
   )
 }
+const localSummary = computed(() => {
+  const record = localRecord.value
+  if (!record) return ''
+  const policy = record.policy
+  const capability = record.capabilities
+  const email =
+    capability.signup.email_requirement === 'required'
+      ? t('localAccount.required')
+      : t('localAccount.optional')
+  return [
+    `${t('localAccount.passwordLogin')}: ${policy.password_login_enabled ? t('localAccount.enabled') : t('localAccount.disabled')}`,
+    `${t('localAccount.usernameLogin')}: ${policy.username_login_enabled ? t('localAccount.enabled') : t('localAccount.disabled')}`,
+    `${t('localAccount.enrollment')}: ${policy.password_enrollment_enabled ? t('localAccount.enabled') : t('localAccount.disabled')}`,
+    `${t('localAccount.signup')}: ${policy.signup.enabled ? t('localAccount.enabled') : t('localAccount.disabled')}`,
+    `${t('localAccount.emailRequirementLabel')}: ${email}`,
+  ].join(' · ')
+})
 
 async function load() {
   if (!allowed.value) return
@@ -93,10 +126,69 @@ async function load() {
       connections.value = []
       selected.value = null
     }
-    error.value = cause instanceof Error ? cause.message : t('authAdmin.requestFailed')
+    error.value = extractErrorMessage(cause, t('authAdmin.requestFailed'))
   } finally {
     if (alive && isSessionCurrent(context) && current === sequence) loading.value = false
   }
+}
+
+async function loadLocalAccount() {
+  if (!allowed.value) return
+  const context = captureSession()
+  const current = ++localSequence
+  localLoading.value = true
+  localError.value = ''
+  try {
+    const record = await fetchLocalAccount()
+    if (alive && isSessionCurrent(context) && current === localSequence) localRecord.value = record
+  } catch (cause) {
+    if (!alive || !isSessionCurrent(context) || current !== localSequence) return
+    if (cause instanceof ApiError && [403, 404].includes(cause.status ?? 0)) {
+      localRecord.value = null
+      localEditing.value = false
+    }
+    localError.value = extractErrorMessage(cause, t('localAccount.requestFailed'))
+  } finally {
+    if (alive && isSessionCurrent(context) && current === localSequence) localLoading.value = false
+  }
+}
+
+async function loadRegistrationSummary() {
+  if (!allowed.value) return
+  const context = captureSession()
+  const current = ++registrationSequence
+  registrationLoading.value = true
+  registrationError.value = ''
+  try {
+    const { data, error, response } = await apiClient.GET('/admin/settings')
+    if (!alive || !isSessionCurrent(context) || current !== registrationSequence) return
+    if (error || !data || !response.ok)
+      throw buildRequestFailureError(t('localAccount.publicError'), error, response)
+    if (typeof data.settings?.registration_enabled !== 'boolean')
+      throw new ApiError(t('localAccount.publicError'), response.status)
+    registrationEnabled.value = data.settings.registration_enabled
+  } catch (cause) {
+    if (!alive || !isSessionCurrent(context) || current !== registrationSequence) return
+    registrationError.value = extractErrorMessage(cause, t('localAccount.requestFailed'))
+  } finally {
+    if (alive && isSessionCurrent(context) && current === registrationSequence)
+      registrationLoading.value = false
+  }
+}
+
+function localRecordChanged(record: LocalAccount) {
+  localRecord.value = record
+}
+
+function localDenied(detail: string) {
+  localRecord.value = null
+  localEditing.value = false
+  localError.value = detail
+}
+
+function requestLocalDrawerClose(show: boolean) {
+  if (show) return
+  localEditorRef.value?.requestClose()
 }
 function changed(record: AuthConnection) {
   connections.value = [...connections.value.filter((item) => item.id !== record.id), record]
@@ -130,7 +222,18 @@ watch(
     creating.value = false
     error.value = ''
     loading.value = false
-    if (allowed.value) void load()
+    localRecord.value = null
+    localEditing.value = false
+    localError.value = ''
+    localLoading.value = false
+    registrationEnabled.value = null
+    registrationError.value = ''
+    registrationLoading.value = false
+    if (allowed.value) {
+      void load()
+      void loadLocalAccount()
+      void loadRegistrationSummary()
+    }
   },
   { immediate: true, flush: 'sync' },
 )
@@ -140,119 +243,227 @@ watch(
   <main class="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
     <header class="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-semibold text-lf-text">{{ t('authAdmin.title') }}</h1>
-        <p class="mt-2 max-w-3xl text-sm text-lf-text-muted">{{ t('authAdmin.subtitle') }}</p>
+        <h1 class="text-2xl font-semibold text-lf-text">{{ t('authentication.adminTitle') }}</h1>
+        <p class="mt-2 max-w-3xl text-sm text-lf-text-muted">{{ t('localAccount.subtitle') }}</p>
       </div>
-      <n-space v-if="allowed">
-        <n-button :disabled="loading" data-testid="auth-connections-refresh" @click="load">{{
-          t('authAdmin.refresh')
-        }}</n-button>
-        <n-button
-          type="primary"
-          :disabled="loading"
-          data-testid="auth-connections-create"
-          @click="creating = true"
-        >
-          {{ t('authAdmin.create') }}
-        </n-button>
-      </n-space>
     </header>
     <n-alert v-if="!allowed" type="info">{{ t('authAdmin.serverOnly') }}</n-alert>
     <template v-else>
-      <n-alert v-if="error" type="error" role="alert">
-        <div class="space-y-3">
-          <p>{{ error }}</p>
-          <n-button :disabled="loading" data-testid="auth-connections-retry" @click="load">{{
-            t('authAdmin.retry')
-          }}</n-button>
-        </div>
-      </n-alert>
-      <n-spin :show="loading">
-        <div class="min-h-24 space-y-4">
-          <n-empty
-            v-if="!loading && !error && !connections.length"
-            :description="t('authAdmin.empty')"
-            class="py-12"
-          />
-          <n-card
-            v-for="connection in sorted"
-            :key="connection.id"
-            :data-testid="'auth-connection-' + connection.id"
-            size="small"
+      <section class="grid gap-4 lg:grid-cols-2" data-testid="auth-resource-summaries">
+        <n-card size="small" data-testid="auth-public-registration">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold">{{ t('localAccount.publicRegistration') }}</h2>
+              <p class="mt-1 text-sm text-lf-text-muted">
+                {{ t('localAccount.registrationHint') }}
+              </p>
+            </div>
+            <n-tag v-if="registrationLoading" size="small">{{ t('localAccount.loading') }}</n-tag>
+            <n-tag
+              v-else-if="registrationEnabled === null"
+              size="small"
+              type="warning"
+              data-testid="auth-public-registration-state"
+            >
+              {{ t('localAccount.registrationUnknown') }}
+            </n-tag>
+            <n-tag
+              v-else
+              size="small"
+              :type="registrationEnabled ? 'success' : 'default'"
+              data-testid="auth-public-registration-state"
+            >
+              {{
+                t(
+                  registrationEnabled
+                    ? 'localAccount.registrationEnabled'
+                    : 'localAccount.registrationClosed',
+                )
+              }}
+            </n-tag>
+          </div>
+          <n-alert
+            v-if="registrationError"
+            type="error"
+            class="mt-3"
+            role="alert"
+            data-testid="auth-public-registration-error"
           >
-            <div class="flex flex-wrap items-start justify-between gap-4">
-              <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="break-words text-base font-semibold">
-                    {{ connection.configuration.display_name || connection.id }}
-                  </h2>
-                  <n-tag size="small" :bordered="false">{{
-                    t(`authAdmin.${connection.kind}`)
-                  }}</n-tag>
-                  <n-tag v-if="connection.archived" size="small" type="warning">{{
-                    t('authAdmin.archived')
-                  }}</n-tag>
-                  <n-tag
-                    v-else-if="connection.kind !== 'password'"
-                    size="small"
-                    :type="connection.state === 'enabled' ? 'success' : 'default'"
-                    >{{ t(`authAdmin.${connection.state ?? 'configuring'}`) }}</n-tag
-                  >
-                  <n-tag
-                    size="small"
-                    :type="connection.configuration_complete ? 'success' : 'warning'"
-                  >
-                    {{
-                      t(
-                        connection.configuration_complete
-                          ? 'authAdmin.complete'
-                          : 'authAdmin.incomplete',
-                      )
-                    }}
-                  </n-tag>
-                </div>
-                <p class="mt-2 break-words text-sm text-lf-text-muted">
-                  {{ connection.configuration.description }}
-                </p>
-                <div class="mt-2 flex flex-wrap items-center gap-2">
-                  <span class="text-xs text-lf-text-muted">{{ t('authAdmin.capabilities') }}</span>
-                  <n-tag
-                    v-if="connection.capabilities.can_login"
-                    size="small"
-                    :bordered="false"
-                    type="success"
-                    >{{ t('authAdmin.login') }}</n-tag
-                  >
-                  <n-tag
-                    v-if="connection.capabilities.can_signup"
-                    size="small"
-                    :bordered="false"
-                    type="success"
-                    >{{ t('authAdmin.signup') }}</n-tag
-                  >
-                  <n-tag
-                    v-if="connection.capabilities.can_link"
-                    size="small"
-                    :bordered="false"
-                    type="success"
-                    >{{ t('authAdmin.link') }}</n-tag
-                  >
-                  <n-tag v-if="!hasEffectiveUse(connection)" size="small" :bordered="false">{{
-                    t('authAdmin.none')
-                  }}</n-tag>
-                </div>
-                <p class="mt-2 text-xs text-lf-text-muted">{{ testSummary(connection) }}</p>
-              </div>
+            <div class="space-y-2">
+              <p>{{ registrationError }}</p>
               <n-button
-                :data-testid="'auth-connection-open-' + connection.id"
-                @click="selected = connection"
+                :disabled="registrationLoading"
+                data-testid="auth-public-registration-retry"
+                @click="loadRegistrationSummary"
               >
-                {{ t(connection.kind === 'password' ? 'authAdmin.viewPolicy' : 'authAdmin.edit') }}
+                {{ t('localAccount.retry') }}
               </n-button>
             </div>
-          </n-card>
+          </n-alert>
+          <RouterLink class="mt-3 inline-block text-sm text-lf-accent-sky" to="/admin/settings">
+            {{ t('localAccount.systemSettings') }}
+          </RouterLink>
+        </n-card>
+        <n-card size="small" data-testid="auth-local-account-card">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold">{{ t('localAccount.localAccount') }}</h2>
+              <p class="mt-1 text-sm text-lf-text-muted" data-testid="auth-local-account-summary">
+                {{ localSummary }}
+              </p>
+            </div>
+            <n-tag v-if="localRecord" size="small">
+              {{ t('localAccount.revision', { revision: localRecord.revision }) }}
+            </n-tag>
+          </div>
+          <n-alert
+            v-if="localError"
+            type="error"
+            class="mt-3"
+            role="alert"
+            data-testid="auth-local-account-error"
+          >
+            <div class="space-y-2">
+              <p>{{ localError }}</p>
+              <n-button
+                :disabled="localLoading"
+                data-testid="auth-local-account-retry"
+                @click="loadLocalAccount"
+              >
+                {{ t('localAccount.retry') }}
+              </n-button>
+            </div>
+          </n-alert>
+          <n-button
+            class="mt-3"
+            type="primary"
+            :disabled="localLoading || !localRecord"
+            data-testid="auth-local-account-edit"
+            @click="localEditing = true"
+          >
+            {{ t('localAccount.edit') }}
+          </n-button>
+        </n-card>
+      </section>
+      <section class="space-y-4" data-testid="auth-external-connections">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold">{{ t('authAdmin.connectionsTitle') }}</h2>
+            <p class="mt-1 max-w-2xl text-sm text-lf-text-muted">
+              {{ t('authAdmin.connectionsHint') }}
+            </p>
+          </div>
+          <n-space>
+            <n-button :disabled="loading" data-testid="auth-connections-refresh" @click="load">{{
+              t('authAdmin.refresh')
+            }}</n-button>
+            <n-button
+              type="primary"
+              :disabled="loading"
+              data-testid="auth-connections-create"
+              @click="creating = true"
+            >
+              {{ t('authAdmin.create') }}
+            </n-button>
+          </n-space>
         </div>
-      </n-spin>
+        <n-alert v-if="error" type="error" role="alert">
+          <div class="space-y-3">
+            <p>{{ error }}</p>
+            <n-button :disabled="loading" data-testid="auth-connections-retry" @click="load">{{
+              t('authAdmin.retry')
+            }}</n-button>
+          </div>
+        </n-alert>
+        <n-spin :show="loading">
+          <div class="min-h-24 space-y-4">
+            <n-empty
+              v-if="!loading && !error && !connections.length"
+              :description="t('authAdmin.empty')"
+              class="py-12"
+            />
+            <n-card
+              v-for="connection in sorted"
+              :key="connection.id"
+              :data-testid="'auth-connection-' + connection.id"
+              size="small"
+            >
+              <div class="flex flex-wrap items-start justify-between gap-4">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="break-words text-base font-semibold">
+                      {{ connection.configuration.display_name || connection.id }}
+                    </h3>
+                    <n-tag size="small" :bordered="false">{{
+                      t(`authAdmin.${connection.kind}`)
+                    }}</n-tag>
+                    <n-tag v-if="connection.archived" size="small" type="warning">{{
+                      t('authAdmin.archived')
+                    }}</n-tag>
+                    <n-tag
+                      v-else-if="!connection.archived"
+                      size="small"
+                      :type="connection.state === 'enabled' ? 'success' : 'default'"
+                      >{{ t(`authAdmin.${connection.state ?? 'configuring'}`) }}</n-tag
+                    >
+                    <n-tag
+                      size="small"
+                      :type="connection.configuration_complete ? 'success' : 'warning'"
+                    >
+                      {{
+                        t(
+                          connection.configuration_complete
+                            ? 'authAdmin.complete'
+                            : 'authAdmin.incomplete',
+                        )
+                      }}
+                    </n-tag>
+                  </div>
+                  <p class="mt-2 break-words text-sm text-lf-text-muted">
+                    {{ connection.configuration.description }}
+                  </p>
+                  <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <span class="text-xs text-lf-text-muted">{{
+                      t('authAdmin.capabilities')
+                    }}</span>
+                    <n-tag
+                      v-if="connection.capabilities.can_login"
+                      size="small"
+                      :bordered="false"
+                      type="success"
+                      >{{ t('authAdmin.login') }}</n-tag
+                    >
+                    <n-tag
+                      v-if="connection.capabilities.can_signup"
+                      size="small"
+                      :bordered="false"
+                      type="success"
+                      >{{ t('authAdmin.signup') }}</n-tag
+                    >
+                    <n-tag
+                      v-if="connection.capabilities.can_link"
+                      size="small"
+                      :bordered="false"
+                      type="success"
+                      >{{ t('authAdmin.link') }}</n-tag
+                    >
+                    <n-tag v-if="!hasEffectiveUse(connection)" size="small" :bordered="false">{{
+                      t('authAdmin.none')
+                    }}</n-tag>
+                  </div>
+                  <p class="mt-2 text-xs text-lf-text-muted">{{ testSummary(connection) }}</p>
+                </div>
+                <n-button
+                  :data-testid="'auth-connection-open-' + connection.id"
+                  @click="selected = connection"
+                >
+                  {{ t('authAdmin.edit') }}
+                </n-button>
+              </div>
+            </n-card>
+          </div>
+        </n-spin>
+      </section>
       <n-modal
         :show="creating"
         preset="card"
@@ -286,6 +497,26 @@ watch(
             @changed="changed"
             @denied="denied"
             @close="selected = null"
+          />
+        </n-drawer-content>
+      </n-drawer>
+      <n-drawer
+        :show="localEditing"
+        :width="760"
+        :mask-closable="false"
+        :close-on-esc="false"
+        style="max-width: 100vw"
+        @update:show="requestLocalDrawerClose"
+      >
+        <n-drawer-content :title="localDrawerTitle" :body-content-style="{ padding: '0' }" closable>
+          <LocalAccountPolicyEditor
+            v-if="localRecord && localEditing"
+            ref="localEditorRef"
+            :key="`local:${sessionGeneration}`"
+            :record="localRecord"
+            @changed="localRecordChanged"
+            @denied="localDenied"
+            @close="localEditing = false"
           />
         </n-drawer-content>
       </n-drawer>

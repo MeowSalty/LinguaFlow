@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, h, ref, watch } from 'vue'
 import type { VNodeChild } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -12,26 +12,30 @@ import {
   NRadioGroup,
   NSelect,
   NTag,
+  useDialog,
 } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import type { ApiSchemas } from '@/api/client-core'
 import {
   AUTH_RULE_MAX_CONDITIONS,
   AUTH_RULE_MIN_CONDITIONS,
+  authDomainRuleTemplate,
   authRuleConditionProblem,
   authRuleDraftsFromSet,
-  authRuleOperatorsForType,
+  authRuleOperatorsForField,
   authRuleSetFromDrafts,
   authRuleSetsEqual,
-  authRuleValueShape,
+  authRuleValueShapeFor,
   checkAuthRuleValue,
   createAuthRuleConditionDraft,
   defaultAuthRuleValue,
   findAuthAttributeField,
-  isOperatorAllowedForType,
+  isDnsDomainAttributeField,
+  isOperatorAllowedForField,
   parseAuthRuleText,
   retargetAuthRuleConditionDraft,
   validateAuthRuleDraftState,
+  type AuthAttributeField,
   type AuthAttributeType,
   type AuthRuleConditionDraft,
   type AuthRuleConditionProblem,
@@ -41,9 +45,10 @@ import {
 } from './auth-rule-model'
 
 const props = defineProps<{
-  fields: ApiSchemas['AuthAttributeField'][]
+  fields: AuthAttributeField[]
   disabled?: boolean
   fieldsLoading?: boolean
+  emailRequirement?: 'optional' | 'required'
 }>()
 
 const value = defineModel<ApiSchemas['AuthRuleSet']>('value', { required: true })
@@ -51,6 +56,7 @@ const value = defineModel<ApiSchemas['AuthRuleSet']>('value', { required: true }
 const valid = defineModel<boolean>('valid', { default: true })
 
 const { t } = useI18n()
+const dialog = useDialog()
 
 const state = ref<AuthRuleDraftState>(authRuleDraftsFromSet(value.value))
 
@@ -58,12 +64,17 @@ const operatorLabels: Record<AuthRuleOperator, string> = {
   eq: 'authRules.operators.eq',
   ne: 'authRules.operators.ne',
   in: 'authRules.operators.in',
+  not_in: 'authRules.operators.not_in',
   gt: 'authRules.operators.gt',
   gte: 'authRules.operators.gte',
   lt: 'authRules.operators.lt',
   lte: 'authRules.operators.lte',
   contains: 'authRules.operators.contains',
   not_contains: 'authRules.operators.not_contains',
+  starts_with: 'authRules.operators.starts_with',
+  not_starts_with: 'authRules.operators.not_starts_with',
+  ends_with: 'authRules.operators.ends_with',
+  not_ends_with: 'authRules.operators.not_ends_with',
   contains_any: 'authRules.operators.contains_any',
   contains_all: 'authRules.operators.contains_all',
 }
@@ -77,6 +88,14 @@ const fieldTypeLabels: Record<AuthAttributeType, string> = {
   string_list: 'authRules.fieldTypes.string_list',
 }
 
+const fieldSourceLabels: Record<AuthAttributeField['source'], string> = {
+  oidc_id_token: 'authRules.fieldSources.oidc_id_token',
+  oidc_userinfo: 'authRules.fieldSources.oidc_userinfo',
+  oauth2_profile: 'authRules.fieldSources.oauth2_profile',
+  derived: 'authRules.fieldSources.derived',
+  registration: 'authRules.fieldSources.registration',
+}
+
 const valueErrorLabels: Record<AuthRuleValueError, string> = {
   invalidPrecision: 'authRules.invalidPrecision',
   invalidNumberFormat: 'authRules.invalidNumberFormat',
@@ -87,20 +106,31 @@ const valueErrorLabels: Record<AuthRuleValueError, string> = {
   invalidListEmpty: 'authRules.invalidListEmpty',
   invalidListEntry: 'authRules.invalidListEntry',
   invalidValueShape: 'authRules.invalidValueShape',
+  invalidEmptyText: 'authRules.invalidEmptyText',
 }
 
-const operatorLabel = (operator: AuthRuleOperator): string => t(operatorLabels[operator])
-
+const operatorLabel = (operator: AuthRuleOperator): string =>
+  operatorLabels[operator] ? t(operatorLabels[operator]) : String(operator)
 const fieldTypeLabel = (type: AuthAttributeType): string => t(fieldTypeLabels[type])
+const fieldSourceLabel = (field: AuthAttributeField): string =>
+  field.source in fieldSourceLabels ? t(fieldSourceLabels[field.source]) : field.source
 
 const problemMessage = (
   problem: AuthRuleConditionProblem,
-  field: ApiSchemas['AuthAttributeField'] | undefined,
+  field: AuthAttributeField | undefined,
   operator: AuthRuleOperator,
 ): string => {
   switch (problem) {
     case 'unknownField':
       return t('authRules.unknownFieldHint')
+    case 'unknownOperator':
+      return t('authRules.unknownOperatorHint', { operator })
+    case 'domainOperator':
+      return t('authRules.domainOperatorHint')
+    case 'invalidDomainValue':
+      return t('authRules.invalidDomainValueHint')
+    case 'domainLimitReached':
+      return t('authRules.domainLimitReachedHint')
     case 'operatorNotAllowed':
       return field
         ? t('authRules.operatorNotAllowed', {
@@ -108,7 +138,7 @@ const problemMessage = (
             type: fieldTypeLabel(field.type),
           })
         : t('authRules.operatorNotAllowed', {
-            operator: '',
+            operator: operatorLabel(operator),
             type: fieldTypeLabel('string'),
           })
     default:
@@ -123,19 +153,20 @@ const fieldOptions = computed(() =>
   })),
 )
 
-/** Menu rows show label + machine identity on separate lines; the trigger stays label-only. */
+/** Menu rows show label, machine identity, type and source; the trigger stays label-only. */
 const renderFieldOption = (option: SelectOption, selected: boolean): VNodeChild => {
   const label = String(option.label ?? '')
   if (selected) return label
   const field = findAuthAttributeField(props.fields, String(option.value ?? ''))
   const meta = field
-    ? `${field.field_id} · ${fieldTypeLabel(field.type)}`
+    ? `${field.field_id} · ${fieldTypeLabel(field.type)} · ${fieldSourceLabel(field)}`
     : String(option.value ?? '')
   return h('div', { class: 'py-0.5' }, [
     h('div', { class: 'text-sm' }, label),
     h('div', { class: 'font-mono text-xs text-lf-text-muted' }, meta),
   ])
 }
+
 /** Keep field_id searchable even though the option label now shows only the human name. */
 const filterFieldOption = (pattern: string, option: SelectOption): boolean =>
   `${String(option.label ?? '')} ${String(option.value ?? '')}`
@@ -161,13 +192,64 @@ const conditionProblems = computed(() =>
   state.value.conditions.map((draft) => authRuleConditionProblem(draft, props.fields)),
 )
 
-const allProblems = computed(() => validateAuthRuleDraftState(state.value, props.fields))
+const allProblems = computed(() =>
+  validateAuthRuleDraftState(state.value, props.fields, {
+    emailRequirement: props.emailRequirement,
+  }),
+)
+
+const emailDomainRequired = computed(() =>
+  allProblems.value.some((problem) => problem.code === 'emailDomainRequired'),
+)
+
 const canAddCondition = computed(
   () =>
     !props.disabled &&
-    props.fields.length > 0 &&
+    props.fields.some((field) => authRuleOperatorsForField(field).length > 0) &&
     state.value.conditions.length < AUTH_RULE_MAX_CONDITIONS,
 )
+const domainFields = computed(() => props.fields.filter(isDnsDomainAttributeField))
+const templateFieldId = ref<string | null>(null)
+const templateField = computed(
+  () =>
+    domainFields.value.find((field) => field.field_id === templateFieldId.value) ??
+    domainFields.value[0],
+)
+const domainFieldOptions = computed(() =>
+  domainFields.value.map((field) => ({ label: field.label, value: field.field_id })),
+)
+const canInsertDomainTemplate = (kind: 'allow' | 'block') =>
+  !props.disabled &&
+  !props.fieldsLoading &&
+  templateField.value &&
+  isOperatorAllowedForField(templateField.value, kind === 'allow' ? 'in' : 'not_in') &&
+  (state.value.mode === 'unrestricted' || state.value.conditions.length < AUTH_RULE_MAX_CONDITIONS)
+
+function insertDomainTemplate(kind: 'allow' | 'block') {
+  if (!canInsertDomainTemplate(kind) || !templateField.value) return
+  const condition = authRuleDraftsFromSet(authDomainRuleTemplate(kind, [], templateField.value))
+    .conditions[0]
+  if (!condition) return
+  const insert = (match: 'all' | 'any') => {
+    state.value = {
+      mode: 'conditions',
+      match,
+      conditions:
+        state.value.mode === 'conditions' ? [...state.value.conditions, condition] : [condition],
+    }
+  }
+  if (state.value.mode === 'conditions' && state.value.match === 'any') {
+    dialog.warning({
+      title: t('authRules.domainTemplateAnyTitle'),
+      content: t('authRules.domainTemplateAnyHint'),
+      positiveText: t('authRules.domainTemplateConvertAll'),
+      negativeText: t('authRules.domainTemplateKeepAny'),
+      onPositiveClick: () => insert('all'),
+      onNegativeClick: () => insert('any'),
+    })
+  } else insert('all')
+}
+
 const canRemoveCondition = computed(
   () =>
     !props.disabled &&
@@ -181,23 +263,22 @@ const conditionGridClass = (draft: AuthRuleConditionDraft): string =>
     ? 'grid gap-2 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]'
     : 'grid gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.3fr)]'
 
-const fieldOf = (draft: AuthRuleConditionDraft): ApiSchemas['AuthAttributeField'] | undefined =>
+const fieldOf = (draft: AuthRuleConditionDraft): AuthAttributeField | undefined =>
   findAuthAttributeField(props.fields, draft.field_id)
 
 const shapeOf = (draft: AuthRuleConditionDraft) => {
   const field = fieldOf(draft)
-  if (!field || !isOperatorAllowedForType(field.type, draft.operator)) return null
-  return authRuleValueShape(field.type, draft.operator)
+  return field ? authRuleValueShapeFor(field, draft.operator) : null
 }
 
 const operatorOptions = (draft: AuthRuleConditionDraft) => {
   const field = fieldOf(draft)
-  const operators = field ? authRuleOperatorsForType(field.type) : []
-  const options = operators.map((operator) => ({
+  const options = (field ? authRuleOperatorsForField(field) : []).map((operator) => ({
     label: operatorLabel(operator),
     value: operator,
   }))
-  if (!field) options.push({ label: operatorLabel(draft.operator), value: draft.operator })
+  if (!field || !isOperatorAllowedForField(field, draft.operator))
+    options.push({ label: operatorLabel(draft.operator), value: draft.operator })
   return options
 }
 
@@ -219,12 +300,15 @@ const textPlaceholder = (draft: AuthRuleConditionDraft): string => {
 
 const booleanValue = (draft: AuthRuleConditionDraft): string | null =>
   typeof draft.value === 'boolean' ? String(draft.value) : null
+
 const setBooleanValue = (draft: AuthRuleConditionDraft, next: string): void => {
   draft.value = next === 'true'
   draft.typedValue = true
 }
+
 const listValue = (draft: AuthRuleConditionDraft): string[] =>
   Array.isArray(draft.value) ? [...draft.value] : []
+
 const setListValue = (draft: AuthRuleConditionDraft, next: string[]): void => {
   draft.value = [...next]
   draft.typedValue = true
@@ -257,7 +341,8 @@ const onOperatorChange = (index: number, operator: AuthRuleOperator): void => {
   draft.operator = operator
   const field = fieldOf(draft)
   if (!field) return
-  const shape = authRuleValueShape(field.type, operator)
+  const shape = authRuleValueShapeFor(field, operator)
+  if (!shape) return
   const typed = shape === 'boolean' || shape === 'list'
   if (typed !== draft.typedValue) {
     const reset = defaultAuthRuleValue(shape)
@@ -277,9 +362,10 @@ const onOperatorChange = (index: number, operator: AuthRuleOperator): void => {
 
 const addCondition = (): void => {
   if (!canAddCondition.value) return
-  const field = props.fields[0]
+  const field = props.fields.find((field) => authRuleOperatorsForField(field).length > 0)
   if (!field) return
-  state.value.conditions.push(createAuthRuleConditionDraft(field))
+  const draft = createAuthRuleConditionDraft(field)
+  if (draft) state.value.conditions.push(draft)
 }
 
 const removeCondition = (index: number): void => {
@@ -292,8 +378,11 @@ watch(
   () => state.value.mode,
   (mode) => {
     if (mode !== 'conditions' || state.value.conditions.length > 0) return
-    const field = props.fields[0]
-    if (field) state.value.conditions.push(createAuthRuleConditionDraft(field))
+    const field = props.fields.find((field) => authRuleOperatorsForField(field).length > 0)
+    if (field) {
+      const draft = createAuthRuleConditionDraft(field)
+      if (draft) state.value.conditions.push(draft)
+    }
   },
   { flush: 'sync' },
 )
@@ -361,6 +450,34 @@ defineExpose({ validate })
       </div>
     </NFormItem>
 
+    <div v-if="domainFields.length" class="rounded-lg border border-lf-border p-3 space-y-2">
+      <p class="text-sm font-medium">{{ t('authRules.domainTemplates') }}</p>
+      <NSelect
+        :value="templateField?.field_id"
+        :options="domainFieldOptions"
+        :disabled="disabled || fieldsLoading"
+        :aria-label="t('authRules.domainTemplateField')"
+        @update:value="(id: string) => (templateFieldId = id)"
+      />
+      <div class="flex flex-wrap gap-2">
+        <NButton
+          size="small"
+          :disabled="!canInsertDomainTemplate('allow')"
+          @click="insertDomainTemplate('allow')"
+        >
+          {{ t('authRules.domainTemplateAllow') }}
+        </NButton>
+        <NButton
+          size="small"
+          :disabled="!canInsertDomainTemplate('block')"
+          @click="insertDomainTemplate('block')"
+        >
+          {{ t('authRules.domainTemplateBlock') }}
+        </NButton>
+      </div>
+      <p class="text-xs text-lf-text-muted">{{ t('authRules.domainTemplateHint') }}</p>
+    </div>
+
     <template v-if="state.mode === 'conditions'">
       <NFormItem :label="t('authRules.matchLabel')" :show-feedback="false">
         <NRadioGroup
@@ -398,6 +515,10 @@ defineExpose({ validate })
             {{ t('authRules.addCondition') }}
           </NButton>
         </div>
+
+        <NAlert v-if="emailDomainRequired" type="warning" :bordered="false" size="small">
+          {{ t('authRules.emailDomainRequiredHint') }}
+        </NAlert>
 
         <NAlert v-if="allProblems.length > 0" type="warning" :bordered="false" size="small">
           {{ t('authRules.invalidDurationHint') }}
@@ -487,6 +608,12 @@ defineExpose({ validate })
             />
           </div>
 
+          <p
+            v-if="fieldOf(draft) && isDnsDomainAttributeField(fieldOf(draft)!)"
+            class="text-xs leading-5 text-lf-text-subtle"
+          >
+            {{ t('authRules.domainHint') }}
+          </p>
           <p v-if="shapeOf(draft) === 'datetime'" class="text-xs leading-5 text-lf-text-subtle">
             {{ t('authRules.datetimeHint') }}
           </p>

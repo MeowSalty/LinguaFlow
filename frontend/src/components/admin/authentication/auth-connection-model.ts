@@ -1,9 +1,6 @@
 import type { ApiSchemas } from '@/api/client-core'
-import type {
-  AuthConnection,
-  AuthConnectionSnapshot,
-  AuthAttributeField,
-} from '@/api/auth-connections'
+import type { AuthConnectionPolicy } from '@/api/auth-connections'
+import type { AuthConnection, AuthConnectionSnapshot } from '@/api/auth-connections'
 
 export type SecretMode = 'keep' | 'replace' | 'clear'
 export const clone = <T>(value: T): T =>
@@ -30,6 +27,8 @@ export function newConnectionSnapshot(): AuthConnectionSnapshot {
     description: '',
     display_order: 0,
     login_policy_revision: 1,
+    signup_policy_revision: 1,
+    link_policy_revision: 1,
     has_client_secret: false,
     policy: {
       login_enabled: false,
@@ -38,6 +37,7 @@ export function newConnectionSnapshot(): AuthConnectionSnapshot {
       login_rules: { mode: 'unrestricted' },
       signup_rules: { mode: 'unrestricted' },
       link_rules: { mode: 'unrestricted' },
+      signup: { email_requirement: 'optional', password_requirement: 'none' },
     },
     oidc: {
       issuer: '',
@@ -84,6 +84,22 @@ export function connectionForm(record: AuthConnection): AuthConnectionSnapshot {
   }
 }
 
+/** B5 protocol policies require explicit registration requirements in every readable record. */
+export function connectionSignupPolicyValid(policy: AuthConnectionPolicy): boolean {
+  const signup = policy.signup as
+    | { email_requirement?: unknown; password_requirement?: unknown }
+    | undefined
+  return Boolean(
+    signup &&
+    ['optional', 'required'].includes(String(signup.email_requirement)) &&
+    ['none', 'optional', 'required'].includes(String(signup.password_requirement)),
+  )
+}
+
+/** A legacy/missing signup object is never silently defaulted for an existing record. */
+export const connectionSignupRequired = (policy: AuthConnectionPolicy): boolean =>
+  !connectionSignupPolicyValid(policy)
+
 export type ConnectionSaveGroup = 'presentation' | 'configuration' | 'all'
 /** Compare JSON content independently of object property insertion order. */
 export function stableJson(value: unknown): string {
@@ -120,15 +136,7 @@ export function connectionChanges(
   if (group === 'presentation') return body
   if (hasUnsafeRuleNumbers(record.configuration) || hasUnsafeRuleNumbers(form))
     throw new Error('Unsafe rule number')
-  if (record.kind === 'password') {
-    if (
-      [form.policy.login_rules, form.policy.signup_rules, form.policy.link_rules].some(
-        (rules) => rules.mode !== 'unrestricted',
-      )
-    )
-      throw new Error('Password rules must be unrestricted')
-    return body
-  }
+  if (connectionSignupRequired(form.policy)) throw new Error('Missing signup policy')
   if (!same(form.policy, saved.policy)) body.policy = clone(form.policy)
   if (!same(form.attribute_mappings, saved.attribute_mappings))
     body.attribute_mappings = clone(form.attribute_mappings)
@@ -148,6 +156,14 @@ export function connectionChanges(
 export const connectionProtocolChanged = (changes: ApiSchemas['AuthConnectionChanges']): boolean =>
   changes.oidc !== undefined || changes.oauth2 !== undefined || 'client_secret' in changes
 
+/** Shared candidate identity for diagnostics, evidence and purpose-scoped catalogs. */
+export function connectionCandidateFingerprint(
+  record: AuthConnection,
+  changes: ApiSchemas['AuthConnectionChanges'],
+): string {
+  return stableJson(connectionTestCandidate(record, changes))
+}
+
 /** The candidate diagnostic identity excludes presentation and lifecycle fields. Memory only. */
 export function connectionTestCandidate(
   record: AuthConnection,
@@ -158,14 +174,7 @@ export function connectionTestCandidate(
     protocol: record.kind === 'oidc' ? effective.oidc : effective.oauth2,
     mappings: effective.attribute_mappings,
     evidence_max_age_seconds: effective.evidence_max_age_seconds,
-    policy: {
-      login_enabled: effective.policy.login_enabled,
-      signup_enabled: effective.policy.signup_enabled,
-      link_enabled: effective.policy.link_enabled,
-      login_rules: effective.policy.login_rules,
-      signup_rules: effective.policy.signup_rules,
-      link_rules: effective.policy.link_rules,
-    },
+    policy: effective.policy,
     secret:
       'client_secret' in changes ? changes.client_secret : { current: effective.has_client_secret },
   }
@@ -198,10 +207,6 @@ export function connectionFormValid(
     }
   }
   if (!draft.display_name.trim() || !Number.isSafeInteger(draft.display_order)) return false
-  if (kind === 'password')
-    return [draft.policy.login_rules, draft.policy.signup_rules, draft.policy.link_rules].every(
-      (rules) => rules.mode === 'unrestricted',
-    )
   if (kind === 'oidc')
     return Boolean((!complete || draft.oidc?.client_id?.trim()) && url(draft.oidc?.issuer))
   const cfg = draft.oauth2
@@ -212,23 +217,6 @@ export function connectionFormValid(
     ((!complete && !cfg.subject_mapping?.pointer) ||
       /^\/(?:[^~]|~[01])*$/.test(cfg.subject_mapping?.pointer ?? '')),
   )
-}
-
-/** Preserve built-in fields but remove deleted custom mappings from the live rule catalogue. */
-export function mergeDraftAttributes(
-  catalog: AuthAttributeField[],
-  saved: AuthAttributeField[],
-  draft: AuthAttributeField[],
-) {
-  const savedIds = new Set(saved.map((field) => field.field_id))
-  const merged = new Map(
-    catalog
-      .filter((field) => !savedIds.has(field.field_id) || field.source === 'derived')
-      .map((field) => [field.field_id, field]),
-  )
-  for (const field of draft)
-    if (field.field_id && field.source !== 'derived') merged.set(field.field_id, field)
-  return [...merged.values()]
 }
 
 export function parsePreviewSources(

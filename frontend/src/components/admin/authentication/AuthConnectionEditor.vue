@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   computed,
+  nextTick,
   onMounted,
   onScopeDispose,
   ref,
@@ -46,13 +47,15 @@ import {
   restoreAuthConnection,
   updateAuthConnection,
   uploadAuthConnectionLogo,
-  type AuthAttributeField,
   type AuthConnection,
   type AuthConnectionCheck,
+  type AuthAttributeCatalog,
   type AuthConnectionImpact,
   type AuthConnectionChanges,
 } from '@/api/auth-connections'
 import { captureSession, isSessionCurrent, type SessionSnapshot } from '@/api/session-context'
+import { normalizeEmail, validateEmail } from '@/utils/email'
+import { extractErrorMessage } from '@/utils/errors'
 import {
   applyConnectionTestEvidence,
   matchConnectionTest,
@@ -69,17 +72,23 @@ import AuthRuleEditor from './AuthRuleEditor.vue'
 import {
   clone,
   connectionChanges,
+  connectionCandidateFingerprint,
   connectionForm,
   connectionFormValid,
   connectionProtocolChanged,
+  connectionSignupRequired,
   connectionTestCandidate,
   hasUnsafeRuleNumbers,
-  mergeDraftAttributes,
   parsePreviewSources,
   stableJson,
   type SecretMode,
 } from './auth-connection-model'
-import { validateAuthAttributeMappings, type AuthConnectionKind } from './auth-attribute-catalog'
+import {
+  AuthAttributeCatalogCache,
+  validateAuthAttributeMappings,
+  type AuthConnectionKind,
+  type AuthRulePurpose,
+} from './auth-attribute-catalog'
 
 const props = defineProps<{ connection: AuthConnection }>()
 const emit = defineEmits<{
@@ -104,27 +113,32 @@ const check = shallowRef<AuthConnectionCheck | null>(null)
 const checkDialog = ref(false)
 const impact = shallowRef<AuthConnectionImpact | null>(null)
 const impactDialog = ref(false)
+const reapplying = ref(false)
+let reapplySequence = 0
 const preview = shallowRef<ApiSchemas['AuthRulesPreview'] | null>(null)
-const catalog = shallowRef<AuthAttributeField[]>([])
-const catalogLoading = ref(false)
-const catalogError = ref('')
+const catalogs = shallowRef<Partial<Record<AuthRulePurpose, AuthAttributeCatalog>>>({})
+const catalogFingerprints = ref<Partial<Record<AuthRulePurpose, string>>>({})
+const catalogPurpose = ref<AuthRulePurpose>('login')
+const catalogLoading = ref<Partial<Record<AuthRulePurpose, boolean>>>({})
+const catalogErrors = ref<Partial<Record<AuthRulePurpose, string>>>({})
 const mappingsValid = ref(true)
 const ruleValid = ref({ login: true, signup: true, link: true })
 const sources = ref(`{
   "oidc_id_token": {},
   "oidc_userinfo": {}
 }`)
+const previewEmail = ref('')
 const logoInput = ref<HTMLInputElement | null>(null)
 const logoPreview = ref('')
 let logoRequest = 0
-let catalogRequest = 0
+const catalogRequests: Record<AuthRulePurpose, number> = { login: 0, signup: 0, link: 0 }
+const catalogCache = new AuthAttributeCatalogCache()
 let testHandle: ConnectionTestHandle | null = null
 let testSequence = 0
 let sentTestId = ''
 let alive = true
 let applyingRecord = false
 
-const external = computed(() => record.value.kind !== 'password')
 const archived = computed(() => record.value.archived)
 const state = computed(() => record.value.state)
 const revision = computed(() => record.value.aggregate_revision)
@@ -160,15 +174,8 @@ const dirty = computed(
   () => presentationDirty.value || configurationDirty.value || secretDirty.value,
 )
 /** Presentation stays editable while unsafe rule numbers only block protocol groups. */
-const locked = computed(() => busy.value || archived.value || !external.value)
+const locked = computed(() => busy.value || reapplying.value || archived.value)
 const protocolLocked = computed(() => locked.value || unsafeNumbers.value)
-const fields = computed(() =>
-  mergeDraftAttributes(
-    catalog.value,
-    savedForm.value.attribute_mappings ?? [],
-    form.value.attribute_mappings ?? [],
-  ),
-)
 const purposes = ['login', 'signup', 'link'] as const
 const secretOptions = computed(() => [
   { label: t('authAdmin.secretKeep'), value: 'keep' },
@@ -196,14 +203,80 @@ const candidateValid = computed(() => {
     return false
   }
 })
+const candidateFingerprint = computed(() =>
+  candidateValid.value ? connectionCandidateFingerprint(record.value, candidateChanges.value) : '',
+)
 const mappingCheck = computed(() =>
   validateAuthAttributeMappings(form.value.attribute_mappings ?? [], externalKind.value),
 )
 const rulesValid = computed(() => Object.values(ruleValid.value).every(Boolean))
-/** Password renders read-only; externalKind narrows the union for protocol-only components. */
-const externalKind = computed<AuthConnectionKind>(() =>
-  record.value.kind === 'password' ? 'oidc' : record.value.kind,
+const externalKind = computed<AuthConnectionKind>(() => record.value.kind)
+const catalogFieldsFor = (purpose: AuthRulePurpose) => catalogs.value[purpose]?.fields ?? []
+const catalogErrorFor = (purpose: AuthRulePurpose) => catalogErrors.value[purpose] ?? ''
+const catalogPurposeLoading = computed(() => catalogLoading.value[catalogPurpose.value] ?? false)
+const activeCatalogFingerprint = computed(
+  () => candidateFingerprint.value || connectionCandidateFingerprint(record.value, {}),
 )
+const catalogReady = computed(() =>
+  purposes.every(
+    (purpose) =>
+      catalogs.value[purpose] &&
+      !catalogLoading.value[purpose] &&
+      !catalogErrors.value[purpose] &&
+      catalogFingerprints.value[purpose] === activeCatalogFingerprint.value,
+  ),
+)
+function catalogSourceKey(
+  purpose: AuthRulePurpose,
+  fingerprint = '',
+): Parameters<AuthAttributeCatalogCache['get']>[0] {
+  const context = captureSession()
+  return {
+    instance: context.baseUrl,
+    administratorSession: `${context.userId ?? 'anonymous'}|${context.authGeneration}`,
+    resource: { kind: 'external', id: record.value.id },
+    revision: revision.value,
+    purpose,
+    candidateFingerprint: fingerprint,
+  }
+}
+const signupEmailRequirement = computed(() => form.value.policy.signup?.email_requirement ?? null)
+const signupPasswordRequirement = computed(
+  () => form.value.policy.signup?.password_requirement ?? null,
+)
+function updateSignupEmailRequirement(value: 'optional' | 'required' | null) {
+  if (!value || !form.value.policy.signup || connectionSignupRequired(form.value.policy)) return
+  form.value.policy.signup = {
+    ...form.value.policy.signup,
+    email_requirement: value,
+  }
+}
+function updateSignupPasswordRequirement(value: 'none' | 'optional' | 'required' | null) {
+  if (!value || !form.value.policy.signup || connectionSignupRequired(form.value.policy)) return
+  form.value.policy.signup = {
+    ...form.value.policy.signup,
+    password_requirement: value,
+  }
+}
+function switchCatalogPurpose(purpose: AuthRulePurpose) {
+  catalogPurpose.value = purpose
+  void loadCatalog(purpose)
+}
+const catalogPurposeOptions = computed(() =>
+  purposes.map((purpose) => ({
+    label: t(`authAdmin.catalogPurpose.${purpose}`),
+    value: purpose,
+  })),
+)
+const signupEmailOptions = computed(() => [
+  { label: t('authAdmin.emailOptional'), value: 'optional' },
+  { label: t('authAdmin.emailRequired'), value: 'required' },
+])
+const signupPasswordOptions = computed(() => [
+  { label: t('authAdmin.passwordNone'), value: 'none' },
+  { label: t('authAdmin.passwordOptional'), value: 'optional' },
+  { label: t('authAdmin.passwordRequired'), value: 'required' },
+])
 /** Effective purposes render only when at least one is enabled; an empty row is dead weight. */
 const hasCapabilities = computed(
   () =>
@@ -386,26 +459,19 @@ const canSavePresentation = computed(
 )
 const canSaveConfiguration = computed(() => {
   if (
-    !external.value ||
     locked.value ||
     unsafeNumbers.value ||
     conflict.value ||
     !configurationDirty.value ||
-    !candidateValid.value
+    !candidateValid.value ||
+    impact.value?.can_save === false
   )
     return false
-  if (
-    catalogLoading.value ||
-    Boolean(catalogError.value) ||
-    !mappingCheck.value.valid ||
-    !rulesValid.value
-  )
-    return false
+  if (!catalogReady.value || !mappingCheck.value.valid || !rulesValid.value) return false
   return state.value === 'enabled' ? completeValid.value : partialValid.value
 })
 const canCheck = computed(
   () =>
-    external.value &&
     !archived.value &&
     !busy.value &&
     !conflict.value &&
@@ -414,7 +480,6 @@ const canCheck = computed(
 )
 const canStartTest = computed(
   () =>
-    external.value &&
     !archived.value &&
     !testing.value &&
     !busy.value &&
@@ -470,7 +535,8 @@ onScopeDispose(() => {
   alive = false
   secret.value = ''
   sources.value = ''
-  catalogRequest++
+  previewEmail.value = ''
+  for (const purpose of purposes) catalogRequests[purpose]++
   logoRequest++
   testSequence++
   releaseLogo()
@@ -492,23 +558,65 @@ watch(
 watch(secretMode, (mode) => {
   if (mode !== 'replace') secret.value = ''
 })
+watch([sources, previewEmail], () => {
+  preview.value = null
+})
+watch(candidateFingerprint, () => {
+  if (!alive || !candidateValid.value) return
+  for (const purpose of purposes) void loadCatalog(purpose)
+})
 
-async function loadCatalog() {
-  if (!external.value) return
+function setCatalog(purpose: AuthRulePurpose, catalog: AuthAttributeCatalog) {
+  catalogs.value = { ...catalogs.value, [purpose]: catalog }
+}
+async function loadCatalog(purpose: AuthRulePurpose) {
+  if (!candidateValid.value) return
   const context = captureSession()
-  const current = ++catalogRequest
-  catalogLoading.value = true
-  catalogError.value = ''
+  const id = record.value.id
+  const expectedRevision = revision.value
+  const changes = clone(candidateChanges.value)
+  const fingerprint = activeCatalogFingerprint.value
+  const key = catalogSourceKey(purpose, fingerprint)
+  const current = ++catalogRequests[purpose]
+  const cached = catalogCache.get(key)
+  if (cached) {
+    setCatalog(purpose, cached)
+    catalogFingerprints.value = { ...catalogFingerprints.value, [purpose]: fingerprint }
+    catalogLoading.value = { ...catalogLoading.value, [purpose]: false }
+    catalogErrors.value = { ...catalogErrors.value, [purpose]: '' }
+    return
+  }
+  catalogLoading.value = { ...catalogLoading.value, [purpose]: true }
+  catalogErrors.value = { ...catalogErrors.value, [purpose]: '' }
   try {
-    const data = await fetchAuthConnectionAttributes(record.value.id, revision.value)
-    if (!alive || !isSessionCurrent(context) || current !== catalogRequest) return
-    catalog.value = data.fields
+    const data = Object.keys(changes).length
+      ? await previewAuthConnectionAttributes(id, {
+          expected_revision: expectedRevision,
+          purpose,
+          changes,
+        })
+      : await fetchAuthConnectionAttributes(id, expectedRevision, purpose)
+    if (
+      !alive ||
+      !isSessionCurrent(context) ||
+      current !== catalogRequests[purpose] ||
+      id !== record.value.id ||
+      expectedRevision !== revision.value ||
+      fingerprint !== activeCatalogFingerprint.value
+    )
+      return
+    catalogCache.set(key, data)
+    setCatalog(purpose, data)
+    catalogFingerprints.value = { ...catalogFingerprints.value, [purpose]: fingerprint }
   } catch (cause) {
-    if (alive && isSessionCurrent(context) && current === catalogRequest)
-      catalogError.value = cause instanceof Error ? cause.message : t('authAdmin.catalogFailed')
+    if (alive && isSessionCurrent(context) && current === catalogRequests[purpose])
+      catalogErrors.value = {
+        ...catalogErrors.value,
+        [purpose]: extractErrorMessage(cause, t('authAdmin.catalogFailed')),
+      }
   } finally {
-    if (alive && isSessionCurrent(context) && current === catalogRequest)
-      catalogLoading.value = false
+    if (alive && isSessionCurrent(context) && current === catalogRequests[purpose])
+      catalogLoading.value = { ...catalogLoading.value, [purpose]: false }
   }
 }
 
@@ -516,7 +624,7 @@ async function loadLogo() {
   const current = ++logoRequest
   const context = captureSession()
   releaseLogo()
-  if (!external.value || !record.value.configuration.logo_url) return
+  if (!record.value.configuration.logo_url) return
   try {
     const image = await fetchAuthConnectionLogo(record.value.id)
     if (alive && current === logoRequest && isSessionCurrent(context))
@@ -556,6 +664,8 @@ function applyRecord(
   conflictChanges.value = null
   sentTestId = ''
   clearDiagnostics()
+  reapplySequence++
+  reapplying.value = false
   if (next.archived || next.state === 'disabled') {
     if (testHandle) void testHandle.cancel()
     evidence.value = null
@@ -571,7 +681,10 @@ function applyRecord(
   }
   applyingRecord = false
   emit('changed', next)
-  void loadCatalog()
+  for (const purpose of purposes) catalogCache.invalidate(catalogSourceKey(purpose))
+  void loadCatalog('login')
+  void loadCatalog('signup')
+  void loadCatalog('link')
   void loadLogo()
 }
 
@@ -733,7 +846,7 @@ async function handleError(cause: unknown, context: SessionSnapshot, guard?: Run
     )
     return
   }
-  message.error(cause instanceof Error ? cause.message : t('authAdmin.requestFailed'))
+  message.error(extractErrorMessage(cause, t('authAdmin.requestFailed')))
   if (guard?.write) await resolveWriteAmbiguity(context, guard)
 }
 
@@ -768,7 +881,7 @@ function proofFor(
   try {
     return testEvidenceFields(matched)
   } catch (cause) {
-    message.error(cause instanceof Error ? cause.message : t('authAdmin.testExpired'))
+    message.error(extractErrorMessage(cause, t('authAdmin.testExpired')))
     return undefined
   }
 }
@@ -826,30 +939,29 @@ function assess() {
 }
 
 function loadCandidateAttributes() {
-  if (!canCheck.value) return
-  void run(
-    () =>
-      previewAuthConnectionAttributes(record.value.id, {
-        expected_revision: revision.value,
-        changes: candidateChanges.value,
-      }),
-    (next) => {
-      catalog.value = next.fields
-      message.success(t('authAdmin.candidateAttributes'))
-    },
-  )
+  if (!candidateValid.value || busy.value || archived.value) return
+  for (const purpose of purposes) {
+    catalogCache.invalidate(catalogSourceKey(purpose, activeCatalogFingerprint.value))
+    void loadCatalog(purpose)
+  }
 }
 
 function simulate() {
   if (!canCheck.value || record.value.kind !== 'oidc') return
   try {
     const parsed = parsePreviewSources(sources.value)
+    const email = normalizeEmail(previewEmail.value)
+    if (validateEmail(previewEmail.value, signupEmailRequirement.value === 'required')) {
+      message.error(t('authAdmin.previewEmailInvalid'))
+      return
+    }
     void run(
       () =>
         previewAuthConnection(record.value.id, {
           expected_revision: revision.value,
           changes: candidateChanges.value,
           sources: parsed,
+          ...(email ? { registration: { email } } : {}),
         }),
       (next) => {
         preview.value = next
@@ -873,7 +985,7 @@ function startTest() {
   try {
     handle = startConnectionTest(record.value, candidateChanges.value)
   } catch (cause) {
-    message.error(cause instanceof Error ? cause.message : t('authAdmin.testUnavailable'))
+    message.error(extractErrorMessage(cause, t('authAdmin.testUnavailable')))
     return
   }
   testHandle = handle
@@ -886,7 +998,7 @@ function startTest() {
     })
     .catch((cause: unknown) => {
       if (!alive || sequence !== testSequence) return
-      message.error(cause instanceof Error ? cause.message : t('authAdmin.testInvalid'))
+      message.error(extractErrorMessage(cause, t('authAdmin.testInvalid')))
       if (evidence.value?.cancelled) evidence.value = null
     })
     .finally(() => {
@@ -901,7 +1013,7 @@ function cancelTest() {
 }
 
 function stateAction(action: 'configure' | 'enable' | 'disable') {
-  if (busy.value || archived.value || dirty.value || !external.value) {
+  if (busy.value || archived.value || dirty.value) {
     if (dirty.value) message.error(t('authAdmin.saveBeforeAction'))
     return
   }
@@ -935,7 +1047,7 @@ function stateAction(action: 'configure' | 'enable' | 'disable') {
 }
 
 function archiveOrRestore() {
-  if (busy.value || dirty.value || !external.value) {
+  if (busy.value || dirty.value) {
     if (dirty.value) message.error(t('authAdmin.saveBeforeAction'))
     return
   }
@@ -957,8 +1069,11 @@ function reloadLatest() {
   applyRecord(latest.value)
 }
 
-function reapplyChanges() {
-  if (!latest.value || !conflictChanges.value || busy.value) return
+async function reapplyChanges() {
+  if (!latest.value || !conflictChanges.value || locked.value) return
+  const context = captureSession()
+  const sequence = ++reapplySequence
+  reapplying.value = true
   const target = latest.value
   const changes = conflictChanges.value
   const next = connectionForm(target)
@@ -1002,15 +1117,39 @@ function reapplyChanges() {
   clearDiagnostics()
   evidence.value = null
   emit('changed', target)
-  void loadCatalog()
   void loadLogo()
+  try {
+    await nextTick()
+    if (!alive || !isSessionCurrent(context) || sequence !== reapplySequence) return
+    await Promise.all(purposes.map((purpose) => loadCatalog(purpose)))
+    if (!alive || !isSessionCurrent(context) || sequence !== reapplySequence || !catalogReady.value)
+      return
+    const fingerprint = candidateFingerprint.value
+    const checkedImpact = await fetchAuthConnectionImpact(target.id, {
+      expected_revision: target.aggregate_revision,
+      changes: clone(candidateChanges.value),
+    })
+    if (
+      alive &&
+      isSessionCurrent(context) &&
+      sequence === reapplySequence &&
+      fingerprint === candidateFingerprint.value
+    ) {
+      impact.value = checkedImpact
+      if (!checkedImpact.can_save) impactDialog.value = true
+    }
+  } catch (cause) {
+    if (sequence === reapplySequence) await handleError(cause, context)
+  } finally {
+    if (alive && isSessionCurrent(context) && sequence === reapplySequence) reapplying.value = false
+  }
 }
 
 function uploadLogo(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file || busy.value || archived.value || !external.value) return
+  if (!file || busy.value || archived.value) return
   sentTestId = ''
   void run(
     () => uploadAuthConnectionLogo(record.value.id, revision.value, file),
@@ -1104,7 +1243,9 @@ function conflictValue(field: keyof AuthConnectionChanges, mine: boolean) {
 }
 
 onMounted(() => {
-  void loadCatalog()
+  void loadCatalog('login')
+  void loadCatalog('signup')
+  void loadCatalog('link')
   void loadLogo()
 })
 </script>
@@ -1175,23 +1316,17 @@ onMounted(() => {
           </div>
           <n-space>
             <n-tag v-if="record.archived" type="warning">{{ t('authAdmin.archived') }}</n-tag>
-            <n-tag
-              v-else-if="record.kind !== 'password' && !record.configuration_complete"
-              type="warning"
-            >
+            <n-tag v-else-if="!record.configuration_complete" type="warning">
               {{
                 record.setup.issues.length
                   ? t('authAdmin.incompleteCount', { count: record.setup.issues.length })
                   : t('authAdmin.configuring')
               }}
             </n-tag>
-            <n-tag v-else-if="record.kind !== 'password' && state === 'enabled'" type="success">{{
+            <n-tag v-else-if="state === 'enabled'" type="success">{{
               t('authAdmin.enabled')
             }}</n-tag>
-            <n-tag
-              v-else-if="record.kind !== 'password'"
-              :type="state === 'disabled' ? 'default' : 'warning'"
-            >
+            <n-tag v-else :type="state === 'disabled' ? 'default' : 'warning'">
               {{ state === 'disabled' ? t('authAdmin.disabled') : t('authAdmin.configuring') }}
             </n-tag>
           </n-space>
@@ -1220,10 +1355,7 @@ onMounted(() => {
             >{{ t('authAdmin.link') }}</n-tag
           >
         </div>
-        <p
-          v-if="!record.setup.callback_url && record.kind !== 'password'"
-          class="text-sm text-lf-text-muted"
-        >
+        <p v-if="!record.setup.callback_url" class="text-sm text-lf-text-muted">
           {{ t('authAdmin.noCallback') }}
         </p>
         <div
@@ -1294,38 +1426,9 @@ onMounted(() => {
         <p v-else class="text-sm text-lf-text-muted">{{ t('authAdmin.noIssues') }}</p>
       </section>
 
-      <n-alert v-if="record.kind === 'password'" type="info">
-        {{ t('authAdmin.passwordReadOnly') }}
-        <div class="mt-2">
-          <RouterLink to="/admin/settings">{{ t('authAdmin.systemSettings') }}</RouterLink>
-        </div>
-      </n-alert>
-      <section
-        v-if="record.kind === 'password'"
-        class="space-y-3 rounded-xl border border-lf-border p-4"
-      >
-        <h2 class="text-base font-semibold">{{ t('authAdmin.policy') }}</h2>
-        <p class="text-sm text-lf-text-muted">{{ t('authAdmin.passwordRules') }}</p>
-        <dl class="grid gap-3 sm:grid-cols-3">
-          <div v-for="purpose in purposes" :key="purpose">
-            <dt class="text-sm text-lf-text-muted">{{ t(`authAdmin.${purpose}Enabled`) }}</dt>
-            <dd class="mt-2">
-              <n-tag
-                :bordered="false"
-                :type="form.policy[`${purpose}_enabled`] ? 'success' : 'default'"
-              >
-                {{
-                  t(form.policy[`${purpose}_enabled`] ? 'authAdmin.enabled' : 'authAdmin.disabled')
-                }}
-              </n-tag>
-            </dd>
-          </div>
-        </dl>
-      </section>
-
       <n-form v-if="form" :disabled="locked" label-placement="top">
         <n-card size="small" class="mb-4 scroll-mt-5" data-anchor="presentation">
-          <template #header>{{ t('authAdmin.name') }}</template>
+          <template #header>{{ t('authAdmin.presentationTitle') }}</template>
           <div class="grid gap-3 md:grid-cols-2">
             <n-form-item :label="t('authAdmin.name')">
               <n-input
@@ -1370,7 +1473,7 @@ onMounted(() => {
               />
               <span class="text-sm text-lf-text-muted">{{ t('authAdmin.logo') }}</span>
             </div>
-            <div v-if="external" class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-center gap-3">
               <input
                 ref="logoInput"
                 type="file"
@@ -1398,7 +1501,7 @@ onMounted(() => {
             >{{ t('authAdmin.savePresentation') }}</n-button
           >
         </n-card>
-        <template v-if="external">
+        <template v-if="form">
           <n-card size="small" class="mb-4 scroll-mt-5" data-anchor="protocol">
             <template #header>{{ t('authAdmin.protocolTitle') }}</template>
             <div
@@ -1419,16 +1522,16 @@ onMounted(() => {
                 {{ record.setup.protocol.scope_guidance }}
               </p>
             </div>
-            <n-alert v-if="catalogError" type="warning" class="mb-3">
-              {{ catalogError }}
+            <n-alert v-if="catalogErrorFor(catalogPurpose)" type="warning" class="mb-3">
+              {{ catalogErrorFor(catalogPurpose) }}
               <n-button
                 size="small"
                 data-testid="auth-connection-retry-catalog"
-                @click="loadCatalog"
+                @click="loadCatalog(catalogPurpose)"
                 >{{ t('authAdmin.retry') }}</n-button
               >
             </n-alert>
-            <n-spin :show="catalogLoading">
+            <n-spin :show="catalogPurposeLoading">
               <AuthProtocolFields
                 v-model:value="form"
                 :kind="externalKind"
@@ -1501,38 +1604,109 @@ onMounted(() => {
                 :kind="externalKind"
                 :disabled="protocolLocked"
               />
+              <n-form-item :label="t('authAdmin.catalogPurpose.label')" class="mt-3">
+                <n-select
+                  :value="catalogPurpose"
+                  :options="catalogPurposeOptions"
+                  :aria-label="t('authAdmin.catalogPurpose.label')"
+                  :data-testid="'auth-connection-catalog-purpose'"
+                  @update:value="(purpose: AuthRulePurpose) => switchCatalogPurpose(purpose)"
+                />
+              </n-form-item>
             </n-collapse-item>
           </n-collapse>
 
           <n-card size="small" class="mb-4 scroll-mt-5" data-anchor="policy">
             <template #header>{{ t('authAdmin.policy') }}</template>
-            <n-alert v-if="catalogError" type="warning" class="mb-3">{{ catalogError }}</n-alert>
-            <n-spin :show="catalogLoading">
-              <section
-                v-for="purpose in purposes"
-                :key="purpose"
-                class="border-b border-lf-border py-4 first:pt-0 last:border-b-0 last:pb-0"
+            <section
+              v-for="purpose in purposes"
+              :key="purpose"
+              class="border-b border-lf-border py-4 first:pt-0 last:border-b-0 last:pb-0"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-sm font-medium">{{ t(`authAdmin.${purpose}Enabled`) }}</span>
+                <n-switch
+                  v-model:value="form.policy[`${purpose}_enabled`]"
+                  :disabled="protocolLocked"
+                  :aria-label="t(`authAdmin.${purpose}Enabled`)"
+                  :data-testid="'auth-connection-purpose-' + purpose"
+                />
+              </div>
+              <n-alert
+                v-if="catalogErrorFor(purpose)"
+                type="warning"
+                class="mt-3"
+                :data-testid="`auth-connection-catalog-error-${purpose}`"
               >
-                <div class="flex items-center justify-between gap-3">
-                  <span class="text-sm font-medium">{{ t(`authAdmin.${purpose}Enabled`) }}</span>
-                  <n-switch
-                    v-model:value="form.policy[`${purpose}_enabled`]"
-                    :disabled="protocolLocked"
-                    :aria-label="t(`authAdmin.${purpose}Enabled`)"
-                    :data-testid="'auth-connection-purpose-' + purpose"
-                  />
+                {{ catalogErrorFor(purpose) }}
+                <n-button
+                  size="small"
+                  :data-testid="`auth-connection-catalog-retry-${purpose}`"
+                  @click="loadCatalog(purpose)"
+                  >{{ t('authAdmin.retry') }}</n-button
+                >
+              </n-alert>
+              <n-spin :show="Boolean(catalogLoading[purpose])">
+                <div v-if="purpose === 'signup'" class="mt-3 space-y-3">
+                  <n-alert v-if="connectionSignupRequired(form.policy)" type="warning">
+                    {{ t('authAdmin.signupPolicyMissing') }}
+                  </n-alert>
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <n-form-item :label="t('authAdmin.signupEmailRequirement')">
+                      <n-select
+                        :value="signupEmailRequirement"
+                        :options="signupEmailOptions"
+                        :aria-label="t('authAdmin.signupEmailRequirement')"
+                        :data-testid="'auth-connection-signup-email-requirement'"
+                        @update:value="
+                          (value: 'optional' | 'required' | null) =>
+                            updateSignupEmailRequirement(value)
+                        "
+                      />
+                    </n-form-item>
+                    <n-form-item :label="t('authAdmin.signupPasswordRequirement')">
+                      <n-select
+                        :value="signupPasswordRequirement"
+                        :options="signupPasswordOptions"
+                        :aria-label="t('authAdmin.signupPasswordRequirement')"
+                        :data-testid="'auth-connection-signup-password-requirement'"
+                        @update:value="
+                          (value: 'none' | 'optional' | 'required' | null) =>
+                            updateSignupPasswordRequirement(value)
+                        "
+                      />
+                    </n-form-item>
+                  </div>
                 </div>
                 <div class="mt-3">
                   <AuthRuleEditor
-                    :fields-loading="catalogLoading"
+                    v-if="purpose !== 'signup'"
+                    :fields-loading="Boolean(catalogLoading[purpose])"
                     v-model:value="form.policy[`${purpose}_rules`]"
                     v-model:valid="ruleValid[purpose]"
-                    :fields="fields"
-                    :disabled="protocolLocked || catalogLoading || Boolean(catalogError)"
+                    :fields="catalogFieldsFor(purpose)"
+                    :disabled="
+                      protocolLocked ||
+                      Boolean(catalogLoading[purpose]) ||
+                      Boolean(catalogErrorFor(purpose))
+                    "
+                  />
+                  <AuthRuleEditor
+                    v-else
+                    :fields-loading="Boolean(catalogLoading[purpose])"
+                    v-model:value="form.policy.signup_rules"
+                    v-model:valid="ruleValid.signup"
+                    :fields="catalogFieldsFor(purpose)"
+                    :email-requirement="form.policy.signup?.email_requirement"
+                    :disabled="
+                      protocolLocked ||
+                      Boolean(catalogLoading[purpose]) ||
+                      Boolean(catalogErrorFor(purpose))
+                    "
                   />
                 </div>
-              </section>
-            </n-spin>
+              </n-spin>
+            </section>
           </n-card>
 
           <n-modal
@@ -1596,9 +1770,12 @@ onMounted(() => {
             <template #footer>
               <div class="flex items-center justify-between gap-3">
                 <span class="text-xs text-lf-text-muted">{{ t('authAdmin.checkEphemeral') }}</span>
-                <n-button :disabled="busy" @click="checkDialog = false">{{
-                  t('authAdmin.close')
-                }}</n-button>
+                <n-button
+                  :disabled="busy"
+                  data-testid="auth-connection-close-check"
+                  @click="checkDialog = false"
+                  >{{ t('authAdmin.close') }}</n-button
+                >
               </div>
             </template>
           </n-modal>
@@ -1665,6 +1842,15 @@ onMounted(() => {
             <n-collapse-item :title="t('authAdmin.preview')" name="preview">
               <div class="space-y-3">
                 <n-alert type="info">{{ t('authAdmin.previewHint') }}</n-alert>
+                <n-form-item :label="t('authAdmin.previewRegistrationEmail')">
+                  <n-input
+                    v-model:value="previewEmail"
+                    :disabled="busy"
+                    :input-props="
+                      inputProps('auth-connection-preview-email', { autocomplete: 'email' })
+                    "
+                  />
+                </n-form-item>
                 <n-input
                   v-model:value="sources"
                   type="textarea"
@@ -1690,14 +1876,8 @@ onMounted(() => {
           </n-collapse>
         </template>
       </n-form>
-      <div v-if="!external" class="flex justify-end border-t border-lf-border pt-4">
-        <n-button :disabled="busy" data-testid="auth-connection-close" @click="requestClose">{{
-          t('authAdmin.close')
-        }}</n-button>
-      </div>
     </div>
     <nav
-      v-if="external"
       class="col-start-2 row-start-1 hidden w-[200px] border-l border-lf-border lg:block"
       aria-hidden="true"
     >
@@ -1719,7 +1899,6 @@ onMounted(() => {
       </div>
     </nav>
     <n-card
-      v-if="external"
       size="small"
       :bordered="false"
       class="col-start-1 col-end-3 row-start-2 sticky bottom-0 z-10 -mx-6 -mb-5 border-t border-lf-border"
