@@ -11,7 +11,6 @@ export function useAuthCapabilities() {
   const error = shallowRef('')
   let alive = true
   let sequence = 0
-  let base = captureSession().baseUrl
   async function reload() {
     const id = ++sequence
     const context = captureSession()
@@ -28,12 +27,7 @@ export function useAuthCapabilities() {
       if (alive && id === sequence) loading.value = false
     }
   }
-  const stop = onSessionChange(() => {
-    if (base !== captureSession().baseUrl) {
-      base = captureSession().baseUrl
-      void reload()
-    }
-  })
+  const stop = onSessionChange(() => void reload())
   onScopeDispose(() => {
     alive = false
     sequence++
@@ -41,15 +35,27 @@ export function useAuthCapabilities() {
   })
   void reload()
   const connections = computed(() =>
-    [...(capabilities.value?.connections ?? [])]
-      .filter((connection) => connection.can_login)
-      .sort((a, b) => a.display_order - b.display_order),
+    [...(capabilities.value?.connections ?? [])].sort((a, b) => a.display_order - b.display_order),
+  )
+  const loginConnections = computed(() =>
+    connections.value.filter((connection) => connection.can_login),
+  )
+  const signupConnections = computed(() =>
+    connections.value.filter((connection) => connection.can_signup),
   )
   const canSignup = computed(
     () =>
       capabilities.value?.mode === 'server' &&
-      (capabilities.value.password.can_signup ||
-        connections.value.some((connection) => connection.can_signup)),
+      (capabilities.value.local_account.can_signup || signupConnections.value.length > 0),
   )
-  return { capabilities, connections, canSignup, loading, error, reload }
+  return {
+    capabilities,
+    connections,
+    loginConnections,
+    signupConnections,
+    canSignup,
+    loading,
+    error,
+    reload,
+  }
 }

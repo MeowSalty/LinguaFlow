@@ -15,7 +15,7 @@ export const loginWithPassword = async (
     body: credentials,
   })
 
-  if (!data) {
+  if (!response.ok || error || !data) {
     throw buildRequestFailureError(t('api.errors.loginFailed'), error, response)
   }
 
@@ -34,7 +34,7 @@ export const registerAndLogin = async (
     body: payload,
   })
 
-  if (!data) {
+  if (!response.ok || error || !data) {
     throw buildRequestFailureError(t('api.errors.registerFailed'), error, response)
   }
 

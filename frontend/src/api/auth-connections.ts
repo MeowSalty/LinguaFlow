@@ -1,16 +1,22 @@
 import { t } from '@/i18n'
-import { apiClient, type ApiClient, type ApiSchemas } from './client-core'
+import { apiClient, type ApiClient, type ApiPaths, type ApiSchemas } from './client-core'
 import { ApiError } from './utils'
+import { isAuthAttributeCatalog } from './auth-contract'
 
 export type AuthConnection = ApiSchemas['AuthConnectionRecord']
 export type AuthConnectionSnapshot = ApiSchemas['AuthConnectionSnapshot']
 export type AuthConnectionPolicy = ApiSchemas['AuthConnectionPolicy']
-export type AuthConnectionImpact = ApiSchemas['AuthConnectionImpact']
+export type AuthConnectionImpact = ApiSchemas['AuthConnectionImpactResult']
 export type AuthConnectionCheck = ApiSchemas['AuthConnectionCheck']
 export type AuthAttributeField = ApiSchemas['AuthAttributeField']
+export type AuthAttributeCatalog = ApiSchemas['AuthAttributeCatalog']
+export type AuthAttributeMapping = ApiSchemas['AuthAttributeMapping']
+export type AuthRulePurpose = ApiSchemas['AuthAttributeCatalog']['purpose']
 export type AuthRuleSet = ApiSchemas['AuthRuleSet']
 export type AuthConnectionChanges = ApiSchemas['AuthConnectionChanges']
 export type AuthConnectionCandidate = ApiSchemas['AuthConnectionCandidateRequest']
+export type AuthAttributeCandidate =
+  ApiPaths['/admin/auth-connections/{connectionId}/attributes']['post']['requestBody']['content']['application/json']
 export type AuthConnectionAction = ApiSchemas['AuthConnectionActionRequest']
 export type AuthConnectionProblem = Omit<
   Partial<ApiSchemas['AuthConnectionErrorProblem']>,
@@ -27,15 +33,19 @@ export class AuthConnectionError extends ApiError {
     super(problem?.detail || problem?.title || t('authAdmin.requestFailed'), status, problem)
     this.name = 'AuthConnectionError'
   }
-  get code(): ApiSchemas['AuthConnectionErrorCode'] | undefined {
+  get code(): string | undefined {
     const prefix = 'urn:linguaflow:auth-connection-'
     return this.problem?.type?.startsWith(prefix)
-      ? (this.problem.type.slice(prefix.length) as ApiSchemas['AuthConnectionErrorCode'])
+      ? this.problem.type.slice(prefix.length)
       : undefined
   }
 }
 
-function result<T>(data: T | undefined, error: unknown, response: Response): T {
+export function authConfigurationResult<T>(
+  data: T | undefined,
+  error: unknown,
+  response: Response,
+): T {
   if (error || data === undefined || !response.ok) {
     throw new AuthConnectionError(
       error && typeof error === 'object' ? (error as AuthConnectionProblem) : undefined,
@@ -44,6 +54,7 @@ function result<T>(data: T | undefined, error: unknown, response: Response): T {
   }
   return data
 }
+const result = authConfigurationResult
 
 export async function fetchAuthConnections(client: ApiClient = apiClient) {
   const { data, error, response } = await client.GET('/admin/auth-connections')
@@ -115,15 +126,19 @@ export async function updateAuthConnection(
 export async function fetchAuthConnectionAttributes(
   connectionId: string,
   revision: number,
+  purpose: AuthRulePurpose,
   client: ApiClient = apiClient,
 ) {
   const { data, error, response } = await client.GET(
     '/admin/auth-connections/{connectionId}/attributes',
     {
-      params: { path: { connectionId }, query: { expected_revision: revision } },
+      params: { path: { connectionId }, query: { expected_revision: revision, purpose } },
     },
   )
-  return result(data, error, response)
+  const catalog = result(data, error, response)
+  if (!isAuthAttributeCatalog(catalog, purpose, revision))
+    throw new AuthConnectionError({ detail: t('authAdmin.catalogFailed') }, response.status)
+  return catalog
 }
 
 export async function previewAuthConnection(
@@ -143,14 +158,17 @@ export async function previewAuthConnection(
 
 export async function previewAuthConnectionAttributes(
   connectionId: string,
-  body: AuthConnectionCandidate,
+  body: AuthAttributeCandidate,
   client: ApiClient = apiClient,
 ) {
   const { data, error, response } = await client.POST(
     '/admin/auth-connections/{connectionId}/attributes',
     { params: { path: { connectionId } }, body },
   )
-  return result(data, error, response)
+  const catalog = result(data, error, response)
+  if (!isAuthAttributeCatalog(catalog, body.purpose, body.expected_revision))
+    throw new AuthConnectionError({ detail: t('authAdmin.catalogFailed') }, response.status)
+  return catalog
 }
 
 export async function checkAuthConnection(

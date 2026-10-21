@@ -505,6 +505,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/local-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取本地账号固定政策 */
+        get: operations["GetLocalAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 保存完整本地账号政策
+         * @description Uses expected_revision and requires all policy fields; identical effective input does not allocate a new revision.
+         */
+        patch: operations["UpdateLocalAccount"];
+        trace?: never;
+    };
+    "/admin/local-account/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取本地注册属性目录
+         * @description Signup-purpose registration fields only; fixed purpose is returned in the payload.
+         */
+        get: operations["GetLocalAccountAttributes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/local-account/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 模拟本地注册规则结果
+         * @description Read-only preview; registration input is not authentication evidence.
+         */
+        post: operations["PreviewLocalAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/local-account/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 评估本地政策对现有用户的登录与维护影响
+         * @description Read-only impact evaluation; saving still performs final dependency checks.
+         */
+        post: operations["GetLocalAccountImpact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/task-retention/preview": {
         parameters: {
             query?: never;
@@ -3503,6 +3584,7 @@ export interface components {
             login_rules: components["schemas"]["AuthRuleSet"];
             signup_rules: components["schemas"]["AuthRuleSet"];
             link_rules: components["schemas"]["AuthRuleSet"];
+            signup?: components["schemas"]["SignupPolicyRequirements"];
         };
         ExternalBrowserInput: {
             /** @description SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE. */
@@ -3547,6 +3629,8 @@ export interface components {
             initial_password?: string;
             username?: components["schemas"]["UsernameInput"];
             display_name?: string;
+            /** @description Signup-only platform email; omitted, null, and after trimming an empty value are missing when signup.email_requirement is required. */
+            email?: string | null;
         };
         ExternalCancelRequest: {
             transaction_id: string;
@@ -3591,8 +3675,13 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             /** @description Empty for linking and signup with fresh authentication support. */
-            signup_requirements: "local_password"[];
+            signup_requirements: ("email" | "local_password")[];
             profile: components["schemas"]["ExternalProfile"];
+            /** @description Normalized candidate username proposed for signup confirmation; empty for link confirmation. */
+            readonly username_candidate?: string;
+            /** @description Normalized external email proposal only; never grants ownership or a verified email key. */
+            readonly email?: string | null;
+            readonly signup?: components["schemas"]["SignupPolicyRequirements"];
         };
         ExternalSessionResponse: {
             /**
@@ -3658,7 +3747,8 @@ export interface components {
             logo_url?: string | null;
             can_login: boolean;
             can_signup: boolean;
-            signup_requirements: "local_password"[];
+            signup_requirements: ("email" | "local_password")[];
+            signup: components["schemas"]["SignupPolicyRequirements"];
         };
         CreateAuthConnectionRequest: {
             /** @enum {string} */
@@ -3677,7 +3767,7 @@ export interface components {
             test_id?: string;
             /** @description Browser-held verifier bound to the referenced test. */
             verifier?: string;
-            attribute_mappings?: components["schemas"]["AuthAttributeField"][];
+            attribute_mappings?: components["schemas"]["AuthAttributeMapping"][];
             /**
              * @description Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
              * @default 3600
@@ -3718,7 +3808,7 @@ export interface components {
             return_to?: string;
         };
         AuthConnectionChanges: {
-            attribute_mappings?: components["schemas"]["AuthAttributeField"][];
+            attribute_mappings?: components["schemas"]["AuthAttributeMapping"][];
             /** @default 3600 */
             evidence_max_age_seconds?: number;
             display_name?: string;
@@ -3733,7 +3823,11 @@ export interface components {
         AuthConnectionSnapshot: {
             /** Format: int64 */
             login_policy_revision: number;
-            attribute_mappings: components["schemas"]["AuthAttributeField"][];
+            /** Format: int64 */
+            signup_policy_revision: number;
+            /** Format: int64 */
+            link_policy_revision: number;
+            attribute_mappings: components["schemas"]["AuthAttributeMapping"][];
             /**
              * @description Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
              * @default 3600
@@ -3760,7 +3854,7 @@ export interface components {
             readonly identity_authority_id?: string;
             id: string;
             /** @enum {string} */
-            kind: "password" | "oidc" | "generic_oauth2";
+            kind: "oidc" | "generic_oauth2";
             /**
              * Format: int64
              * @description Change-detection revision for optimistic concurrency; distinct from the login policy revision.
@@ -3770,7 +3864,7 @@ export interface components {
              * @description Lifecycle state; omitted only for the built-in password connection, which never enters configuring.
              * @enum {string}
              */
-            state?: "configuring" | "enabled" | "disabled";
+            state: "configuring" | "enabled" | "disabled";
             archived: boolean;
             configuration: components["schemas"]["AuthConnectionSnapshot"];
             configuration_complete: boolean;
@@ -3813,7 +3907,7 @@ export interface components {
             status: 409;
             detail?: string;
             issues: components["schemas"]["AuthConfigurationIssue"][];
-            impact?: components["schemas"]["AuthConnectionImpact"];
+            impact?: components["schemas"]["AuthConnectionImpactResult"];
         };
         /** @enum {string} */
         AuthConnectionErrorCode: "configuration-incomplete" | "deployment-incomplete" | "test-required" | "test-expired" | "test-mismatch" | "state-conflict" | "revision-conflict" | "fallback-required";
@@ -3828,7 +3922,7 @@ export interface components {
             fresh_supported: boolean;
             issues: components["schemas"]["AuthConfigurationIssue"][];
         };
-        AuthConnectionImpact: {
+        AuthConnectionImpactResult: {
             /** Format: int64 */
             revision?: number;
             /** Format: date-time */
@@ -3842,6 +3936,7 @@ export interface components {
             blocked_users: number[];
             affected_sessions: number;
             can_save: boolean;
+            affects_signup?: boolean;
         };
         LoginMethod: {
             /** @enum {string} */
@@ -3956,13 +4051,7 @@ export interface components {
         AuthCapabilities: {
             /** @enum {string} */
             mode: "local" | "server";
-            password: {
-                can_login: boolean;
-                /** @description 同时满足已发布密码渠道政策及全局公开注册政策。 */
-                can_signup: boolean;
-                username_login_enabled: boolean;
-                email_login_enabled: boolean;
-            };
+            local_account: components["schemas"]["LocalAccountCapabilities"];
             /** @description 已发布且具备有效用途的 OIDC 连接；不暴露绑定、私有规则或配置。local 始终为空。 */
             connections: components["schemas"]["PublicAuthConnection"][];
             /** @enum {boolean} */
@@ -4009,6 +4098,46 @@ export interface components {
             /** Format: date-time */
             refresh_expires_at: string;
             user: components["schemas"]["User"];
+        };
+        LocalAccountPolicyInput: {
+            password_login_enabled: boolean;
+            username_login_enabled: boolean;
+            email_login_enabled: boolean;
+            password_enrollment_enabled: boolean;
+            signup: {
+                enabled: boolean;
+                email_requirement: components["schemas"]["SignupEmailRequirement"];
+                rules: components["schemas"]["AuthRuleSet"];
+            };
+        };
+        LocalAccountCapabilities: {
+            /** @description Effective local password login, including the required stable and currently active locator policy. */
+            can_login: boolean;
+            /** @description Effective signup only; global registration and local signup prerequisites still apply. */
+            can_signup: boolean;
+            can_enroll_password: boolean;
+            password_login_enabled: boolean;
+            username_login_enabled: boolean;
+            email_login_enabled: boolean;
+            password_enrollment_enabled: boolean;
+            signup: components["schemas"]["SignupPolicyRequirements"];
+            signup_requirements: ("email" | "local_password")[];
+        };
+        LocalAccountPreviewRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            policy?: components["schemas"]["LocalAccountPolicyInput"];
+            registration?: {
+                email?: string | null;
+            };
+        };
+        SignupPolicyRequirements: {
+            email_requirement: components["schemas"]["SignupEmailRequirement"];
+            password_requirement: components["schemas"]["SignupPasswordRequirement"];
+        };
+        AuthSignupRequirements: {
+            signup: components["schemas"]["SignupPolicyRequirements"];
+            signup_requirements: ("email" | "local_password")[];
         };
         /**
          * @description 仅更新提供的字段，省略字段保持原值；空对象返回当前资料且不修改更新时间。
@@ -5444,6 +5573,10 @@ export interface components {
             /** @description 占用该资源的未完成任务 ID */
             active_job_id: number;
         };
+        /** @enum {string} */
+        SignupEmailRequirement: "optional" | "required";
+        /** @enum {string} */
+        SignupPasswordRequirement: "none" | "optional" | "required";
         AuthAttributeValue: {
             value?: unknown;
             /** @enum {string} */
@@ -5474,13 +5607,14 @@ export interface components {
             can_link: boolean;
             logo_url?: string | null;
         };
-        AuthAttributeField: {
+        /** @description Client-provided attribute mapping input. Server-owned field metadata is not accepted here. */
+        AuthAttributeMapping: {
             field_id: string;
             label: string;
             /** @enum {string} */
             type: "string" | "boolean" | "integer" | "number" | "datetime" | "string_list";
             /** @enum {string} */
-            source: "oidc_id_token" | "oidc_userinfo" | "oauth2_profile" | "derived";
+            source: "oidc_id_token" | "oidc_userinfo" | "oauth2_profile";
             pointer: string;
             required_scopes?: string[];
             optional?: boolean;
@@ -5489,8 +5623,6 @@ export interface components {
              * @default false
              */
             user_editable?: boolean;
-            /** @description Server-defined dependencies of a derived field. */
-            readonly derived_from?: string[];
         };
         /** @description Saved or candidate OAuth configuration; fields may be missing or empty while configuring or disabled. Test and enable require all protocol inputs. */
         OAuth2ConnectionConfig: {
@@ -5517,7 +5649,7 @@ export interface components {
         AuthRuleCondition: {
             field_id: string;
             /** @enum {string} */
-            operator: "eq" | "ne" | "in" | "gt" | "gte" | "lt" | "lte" | "contains" | "not_contains" | "contains_any" | "contains_all";
+            operator: "eq" | "ne" | "in" | "not_in" | "gt" | "gte" | "lt" | "lte" | "contains" | "not_contains" | "starts_with" | "not_starts_with" | "ends_with" | "not_ends_with" | "contains_any" | "contains_all";
             /** @description Strictly typed against the referenced field. Strings are case-sensitive; integers retain precision; datetimes require RFC3339 with timezone. No coercion or null values. */
             value: string | boolean | number | string[];
         };
@@ -5531,9 +5663,33 @@ export interface components {
             match: "all" | "any";
             conditions: components["schemas"]["AuthRuleCondition"][];
         };
+        AuthFieldTrustPair: {
+            peer_field_id?: string;
+            peer_source?: string;
+        };
+        AuthAttributeField: {
+            field_id: string;
+            label: string;
+            /** @enum {string} */
+            type: "string" | "boolean" | "integer" | "number" | "datetime" | "string_list";
+            /** @enum {string} */
+            source: "oidc_id_token" | "oidc_userinfo" | "oauth2_profile" | "derived" | "registration";
+            pointer: string;
+            required_scopes?: string[];
+            optional?: boolean;
+            user_editable: boolean;
+            readonly derived_from?: string[];
+            readonly allowed_operators: string[];
+            readonly semantic_format?: string;
+            readonly normalization_version?: string;
+            trust_pair?: components["schemas"]["AuthFieldTrustPair"];
+            readonly dependency_fingerprint?: string;
+        };
         AuthAttributeCatalog: {
             /** Format: int64 */
             revision: number;
+            /** @enum {string} */
+            purpose: "login" | "signup" | "link";
             fields: components["schemas"]["AuthAttributeField"][];
             operators: {
                 [key: string]: string[];
@@ -5542,8 +5698,10 @@ export interface components {
         AuthRulesPreviewRequest: {
             /** Format: int64 */
             expected_revision: number;
-            /** @description Optional candidate policy changes evaluated together with the simulated sources; falls back to the saved configuration when omitted. */
             changes?: components["schemas"]["AuthConnectionChanges"];
+            registration?: {
+                email?: string | null;
+            };
             sources: {
                 oidc_id_token?: {
                     [key: string]: unknown;
@@ -7799,6 +7957,7 @@ export interface operations {
         parameters: {
             query: {
                 expected_revision: number;
+                purpose: "login" | "signup" | "link";
             };
             header?: never;
             path: {
@@ -7835,7 +7994,13 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AuthConnectionCandidateRequest"];
+                "application/json": {
+                    /** Format: int64 */
+                    expected_revision: number;
+                    /** @enum {string} */
+                    purpose: "login" | "signup" | "link";
+                    changes?: components["schemas"]["AuthConnectionChanges"];
+                };
             };
         };
         responses: {
@@ -7975,7 +8140,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthConnectionImpact"];
+                    "application/json": components["schemas"]["AuthConnectionImpactResult"];
                 };
             };
             400: components["responses"]["Problem"];
@@ -8229,6 +8394,175 @@ export interface operations {
             409: components["responses"]["Problem"];
             429: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetLocalAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Local account policy, capabilities and diagnostic issues */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        policy: components["schemas"]["LocalAccountPolicyInput"];
+                        /** Format: int64 */
+                        revision: number;
+                        capabilities: components["schemas"]["LocalAccountCapabilities"];
+                        issues: components["schemas"]["AuthConfigurationIssue"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateLocalAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    expected_revision: number;
+                    policy: components["schemas"]["LocalAccountPolicyInput"];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved local account policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        policy: components["schemas"]["LocalAccountPolicyInput"];
+                        /** Format: int64 */
+                        revision: number;
+                        capabilities: components["schemas"]["LocalAccountCapabilities"];
+                        issues: components["schemas"]["AuthConfigurationIssue"][];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetLocalAccountAttributes: {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Local signup attribute catalogue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthAttributeCatalog"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    PreviewLocalAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalAccountPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Simulated local signup result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        revision: number;
+                        /** @enum {boolean} */
+                        simulated: true;
+                        attributes: {
+                            [key: string]: components["schemas"]["AuthAttributeValue"];
+                        };
+                        signup: components["schemas"]["AuthRuleResult"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetLocalAccountImpact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    expected_revision: number;
+                    policy?: components["schemas"]["LocalAccountPolicyInput"];
+                };
+            };
+        };
+        responses: {
+            /** @description Local account impact */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConnectionImpactResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 import type { ApiClient, ApiSchemas } from './client-core'
 import { apiClient } from './client-core'
 import { buildRequestFailureError } from './utils'
+import { isLoginMethods, isReauthenticationProof } from './auth-contract'
 
 export type LoginMethods = ApiSchemas['LoginMethodsResponse']
 export type LoginMethod = ApiSchemas['LoginMethod']
@@ -17,7 +18,7 @@ export type ReauthenticationAction = ApiSchemas['ReauthenticationRequest']['acti
 export const fetchLoginMethods = async (client: ApiClient = apiClient): Promise<LoginMethods> => {
   const { data, error, response } = await client.GET('/users/me/login-methods')
 
-  if (!response.ok || !data) {
+  if (!response.ok || error || !isLoginMethods(data)) {
     throw buildRequestFailureError(t('accountAuth.security.loadFailed'), error, response)
   }
 
@@ -91,7 +92,7 @@ export const reauthenticateWithPassword = async (
     },
   })
 
-  if (!response.ok || !data || !('reauthentication_proof' in data)) {
+  if (!response.ok || error || !isReauthenticationProof(data)) {
     throw buildRequestFailureError(t('accountAuth.security.reauth.failed'), error, response)
   }
 
