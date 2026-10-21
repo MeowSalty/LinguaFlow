@@ -2,5 +2,5 @@
   "name": "linguaflow-authentication-acceptance",
   "private": true,
   "type": "module",
-  "devDependencies": { "@playwright/test": "1.63.0" }
+  "devDependencies": { "@playwright/test": "1.64.0" }
 }
