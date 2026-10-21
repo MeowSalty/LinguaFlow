@@ -52,6 +52,12 @@ const drawerTitle = computed(() => {
   return `${action} · ${name}`
 })
 const localDrawerTitle = computed(() => t('localAccount.editorTitle'))
+const registrationHint = computed(() => {
+  if (registrationLoading.value) return t('localAccount.registrationHintLoading')
+  if (registrationEnabled.value === true) return t('localAccount.registrationHintEnabled')
+  if (registrationEnabled.value === false) return t('localAccount.registrationHintClosed')
+  return t('localAccount.registrationHintUnknown')
+})
 const creating = ref(false)
 const loading = ref(false)
 const error = ref('')
@@ -93,23 +99,65 @@ function hasEffectiveUse(connection: AuthConnection) {
     connection.capabilities.can_link
   )
 }
-const localSummary = computed(() => {
+type LocalSummaryTone = 'enabled' | 'disabled' | 'optional' | 'required'
+type LocalSummaryItem = {
+  key: string
+  label: string
+  value: string
+  tone: LocalSummaryTone
+}
+const localSwitchSummary = (key: string, label: string, enabled: boolean): LocalSummaryItem => ({
+  key,
+  label,
+  value: t(enabled ? 'localAccount.enabled' : 'localAccount.disabled'),
+  tone: enabled ? 'enabled' : 'disabled',
+})
+const localSummaryGroups = computed<Array<{ label: string; items: LocalSummaryItem[] }>>(() => {
   const record = localRecord.value
-  if (!record) return ''
+  if (!record) return []
   const policy = record.policy
   const capability = record.capabilities
-  const email =
-    capability.signup.email_requirement === 'required'
-      ? t('localAccount.required')
-      : t('localAccount.optional')
+  const emailRequired = capability.signup.email_requirement === 'required'
   return [
-    `${t('localAccount.passwordLogin')}: ${policy.password_login_enabled ? t('localAccount.enabled') : t('localAccount.disabled')}`,
-    `${t('localAccount.usernameLogin')}: ${policy.username_login_enabled ? t('localAccount.enabled') : t('localAccount.disabled')}`,
-    `${t('localAccount.enrollment')}: ${policy.password_enrollment_enabled ? t('localAccount.enabled') : t('localAccount.disabled')}`,
-    `${t('localAccount.signup')}: ${policy.signup.enabled ? t('localAccount.enabled') : t('localAccount.disabled')}`,
-    `${t('localAccount.emailRequirementLabel')}: ${email}`,
-  ].join(' · ')
+    {
+      label: t('localAccount.loginGroup'),
+      items: [
+        localSwitchSummary(
+          'password-login',
+          t('localAccount.passwordLogin'),
+          policy.password_login_enabled,
+        ),
+        localSwitchSummary(
+          'username-login',
+          t('localAccount.usernameLogin'),
+          policy.username_login_enabled,
+        ),
+      ],
+    },
+    {
+      label: t('localAccount.registrationGroup'),
+      items: [
+        localSwitchSummary(
+          'enrollment',
+          t('localAccount.enrollment'),
+          policy.password_enrollment_enabled,
+        ),
+        localSwitchSummary('signup', t('localAccount.signup'), policy.signup.enabled),
+        {
+          key: 'email-requirement',
+          label: t('localAccount.emailRequirementLabel'),
+          value: t(emailRequired ? 'localAccount.required' : 'localAccount.optional'),
+          tone: emailRequired ? 'required' : 'optional',
+        },
+      ],
+    },
+  ]
 })
+const localSummaryTagType = (tone: LocalSummaryTone) => {
+  if (tone === 'enabled') return 'success'
+  if (tone === 'required') return 'info'
+  return 'default'
+}
 
 async function load() {
   if (!allowed.value) return
@@ -249,38 +297,53 @@ watch(
     </header>
     <n-alert v-if="!allowed" type="info">{{ t('authAdmin.serverOnly') }}</n-alert>
     <template v-else>
-      <section class="grid gap-4 lg:grid-cols-2" data-testid="auth-resource-summaries">
+      <section class="space-y-4" data-testid="auth-resource-summaries">
         <n-card size="small" data-testid="auth-public-registration">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="min-w-0">
-              <h2 class="text-base font-semibold">{{ t('localAccount.publicRegistration') }}</h2>
-              <p class="mt-1 text-sm text-lf-text-muted">
-                {{ t('localAccount.registrationHint') }}
-              </p>
+          <div class="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-6">
+            <div class="flex min-w-0 flex-wrap items-center gap-2">
+              <h2 class="text-base font-semibold">
+                {{ t('localAccount.publicRegistration') }}
+              </h2>
+              <n-tag v-if="registrationLoading" class="shrink-0" size="small">{{
+                t('localAccount.loading')
+              }}</n-tag>
+              <n-tag
+                v-else-if="registrationEnabled === null"
+                class="shrink-0"
+                size="small"
+                type="warning"
+                data-testid="auth-public-registration-state"
+              >
+                {{ t('localAccount.registrationUnknown') }}
+              </n-tag>
+              <n-tag
+                v-else
+                class="shrink-0"
+                size="small"
+                :type="registrationEnabled ? 'success' : 'default'"
+                data-testid="auth-public-registration-state"
+              >
+                {{
+                  t(
+                    registrationEnabled
+                      ? 'localAccount.registrationEnabled'
+                      : 'localAccount.registrationClosed',
+                  )
+                }}
+              </n-tag>
             </div>
-            <n-tag v-if="registrationLoading" size="small">{{ t('localAccount.loading') }}</n-tag>
-            <n-tag
-              v-else-if="registrationEnabled === null"
-              size="small"
-              type="warning"
-              data-testid="auth-public-registration-state"
+            <p
+              class="min-w-0 text-sm text-lf-text-muted"
+              data-testid="auth-public-registration-hint"
             >
-              {{ t('localAccount.registrationUnknown') }}
-            </n-tag>
-            <n-tag
-              v-else
-              size="small"
-              :type="registrationEnabled ? 'success' : 'default'"
-              data-testid="auth-public-registration-state"
+              {{ registrationHint }}
+            </p>
+            <RouterLink
+              class="text-sm font-medium text-lf-accent-sky lg:justify-self-end"
+              to="/admin/settings"
             >
-              {{
-                t(
-                  registrationEnabled
-                    ? 'localAccount.registrationEnabled'
-                    : 'localAccount.registrationClosed',
-                )
-              }}
-            </n-tag>
+              {{ t('localAccount.systemSettings') }}
+            </RouterLink>
           </div>
           <n-alert
             v-if="registrationError"
@@ -300,21 +363,18 @@ watch(
               </n-button>
             </div>
           </n-alert>
-          <RouterLink class="mt-3 inline-block text-sm text-lf-accent-sky" to="/admin/settings">
-            {{ t('localAccount.systemSettings') }}
-          </RouterLink>
         </n-card>
         <n-card size="small" data-testid="auth-local-account-card">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="min-w-0">
-              <h2 class="text-base font-semibold">{{ t('localAccount.localAccount') }}</h2>
-              <p class="mt-1 text-sm text-lf-text-muted" data-testid="auth-local-account-summary">
-                {{ localSummary }}
-              </p>
-            </div>
-            <n-tag v-if="localRecord" size="small">
-              {{ t('localAccount.revision', { revision: localRecord.revision }) }}
-            </n-tag>
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <h2 class="text-base font-semibold">{{ t('localAccount.policyTitle') }}</h2>
+            <n-button
+              type="primary"
+              :disabled="localLoading || !localRecord"
+              data-testid="auth-local-account-edit"
+              @click="localEditing = true"
+            >
+              {{ t('localAccount.edit') }}
+            </n-button>
           </div>
           <n-alert
             v-if="localError"
@@ -334,15 +394,33 @@ watch(
               </n-button>
             </div>
           </n-alert>
-          <n-button
-            class="mt-3"
-            type="primary"
-            :disabled="localLoading || !localRecord"
-            data-testid="auth-local-account-edit"
-            @click="localEditing = true"
+          <div
+            v-if="localSummaryGroups.length"
+            class="mt-4 grid gap-5 lg:grid-cols-2"
+            data-testid="auth-local-account-summary"
           >
-            {{ t('localAccount.edit') }}
-          </n-button>
+            <section v-for="group in localSummaryGroups" :key="group.label" class="space-y-2">
+              <h3 class="text-xs font-medium tracking-wide text-lf-text-subtle">
+                {{ group.label }}
+              </h3>
+              <dl class="grid gap-x-5 gap-y-2 sm:grid-cols-2">
+                <div
+                  v-for="item in group.items"
+                  :key="item.key"
+                  class="flex items-center justify-between gap-3 border-b border-lf-border/70 py-1.5"
+                  :class="{ 'sm:col-span-2': item.key === 'email-requirement' }"
+                  :data-testid="`auth-local-account-summary-${item.key}`"
+                >
+                  <dt class="min-w-0 text-sm text-lf-text-muted">{{ item.label }}</dt>
+                  <dd class="shrink-0">
+                    <n-tag size="small" :type="localSummaryTagType(item.tone)" :bordered="false">
+                      {{ item.value }}
+                    </n-tag>
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          </div>
         </n-card>
       </section>
       <section class="space-y-4" data-testid="auth-external-connections">
