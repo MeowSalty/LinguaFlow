@@ -16,9 +16,46 @@ test('keeps public registration, local account and external connections independ
   await mockApp(page)
   await page.goto('/admin/authentication')
   await expect(page.getByTestId('auth-public-registration-state')).toHaveText('已开启')
-  await expect(page.getByTestId('auth-local-account-summary')).toContainText('首次设密: 开启')
-  await expect(page.getByTestId('auth-local-account-summary')).toContainText('注册邮箱: 可选')
+  await expect(page.getByTestId('auth-public-registration-hint')).toHaveText(
+    '全站允许新账号注册；各渠道仍会按自己的政策和准入规则判断是否接受。',
+  )
+  await expect(page.getByRole('heading', { name: '本地账号政策', exact: true })).toBeVisible()
+  const localSummary = page.getByTestId('auth-local-account-summary')
+  await expect(localSummary.getByText('登录', { exact: true })).toBeVisible()
+  await expect(localSummary.getByText('注册与设密', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('auth-local-account-summary-password-login')).toContainText(
+    '密码登录',
+  )
+  await expect(page.getByTestId('auth-local-account-summary-enrollment')).toContainText('开启')
+  await expect(page.getByTestId('auth-local-account-summary-email-requirement')).toContainText(
+    '可选',
+  )
+  await expect(page.getByText('修订 1', { exact: true })).toHaveCount(0)
+  const publicBox = await page.getByTestId('auth-public-registration').boundingBox()
+  const localBox = await page.getByTestId('auth-local-account-card').boundingBox()
+  expect(publicBox).not.toBeNull()
+  expect(localBox).not.toBeNull()
+  expect(Math.abs(publicBox!.x - localBox!.x)).toBeLessThanOrEqual(1)
+  expect(Math.abs(publicBox!.width - localBox!.width)).toBeLessThanOrEqual(1)
+  expect(publicBox!.height).toBeLessThan(localBox!.height)
   await expect(page.getByTestId('auth-connections-refresh')).toBeVisible()
+})
+
+test('explains that closing public registration blocks every signup channel', async ({ page }) => {
+  await mockApp(page)
+  await page.route('**/api/v1/admin/settings', (route) =>
+    json(route, {
+      settings: {
+        registration_enabled: false,
+        task_retention: { enabled: false, retention_days: 30, revision: 1 },
+      },
+    }),
+  )
+  await page.goto('/admin/authentication')
+  await expect(page.getByTestId('auth-public-registration-state')).toHaveText('已关闭')
+  await expect(page.getByTestId('auth-public-registration-hint')).toHaveText(
+    '全站暂停创建新账号，本地账号和第三方连接都不能注册；已有账号的登录与绑定不受影响。',
+  )
 })
 
 test('keeps public registration and local policy above the third-party connections', async ({

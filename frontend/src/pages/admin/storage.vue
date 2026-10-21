@@ -143,7 +143,7 @@ function describeQuota(value: number | null | undefined) {
       : formatted
 }
 function describePolicy(value: ApiSchemas['StoragePolicyRequest']) {
-  return `${t('storage.policyMode')}：${t(`storage.modes.${value.mode}`)}；${t('storage.policyDefault')}：${t(`storage.choices.${value.default_choice}`)}；${t('storageAdmin.logicalLimit')}：${describeQuota(value.logical_limit_bytes)}；${t('storageAdmin.defaultSpaceCapacity')}：${describeQuota(value.default_space_capacity_bytes)}；${t('storageAdmin.policyGeneration', { value: value.generation })}`
+  return `${t('storage.policyMode')}：${t(`storage.modes.${value.mode}`)}；${t('storage.policyDefault')}：${t(`storage.choices.${value.default_choice}`)}；${t('storageAdmin.logicalLimit')}：${describeQuota(value.logical_limit_bytes)}；${t('storageAdmin.defaultSpaceCapacity')}：${describeQuota(value.default_space_capacity_bytes)}`
 }
 function describeQuotaDraft(value: QuotaDraft) {
   const result = resolveQuota(value)

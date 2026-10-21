@@ -248,14 +248,10 @@ onUnmounted(
       <NAlert v-if="error" type="warning">{{ error }}</NAlert>
       <NSkeleton v-if="loading && !space" height="130px" />
       <template v-if="space">
-        <dl class="grid grid-cols-2 gap-3 text-sm">
+        <dl class="space-y-3 text-sm">
           <div>
             <dt class="text-lf-text-subtle">{{ t('storage.binding') }}</dt>
             <dd>{{ space.binding?.name ?? t('storageProject.unbound') }}</dd>
-          </div>
-          <div>
-            <dt class="text-lf-text-subtle">{{ t('storage.generation') }}</dt>
-            <dd>{{ space.storage_generation }}</dd>
           </div>
         </dl>
         <NAlert v-if="space.binding?.historical" type="info">{{
