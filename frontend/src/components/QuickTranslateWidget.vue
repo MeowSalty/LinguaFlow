@@ -12,6 +12,7 @@ import { useProjectsStore } from '@/stores/projects'
 import { useLanguageOptions } from '@/composables/useLanguageOptions'
 import { renderQualityHighlightedText, getQualityCodeLabel } from '@/composables/useQualityIssues'
 import { formatTokens, batchStatusTimelineType } from '@/composables/useWorkspaceUtils'
+import { extractErrorMessage } from '@/utils/errors'
 import SegmentTranslationPreviewDiagnostic from '@/components/workspace/SegmentTranslationPreviewDiagnostic.vue'
 
 const { t } = useI18n()
@@ -209,7 +210,7 @@ const onSubmit = async (): Promise<void> => {
     else message.error(t('quickTranslate.messages.failed'))
   } catch (err) {
     if (!current()) return
-    message.error(err instanceof Error ? err.message : t('quickTranslate.messages.failed'))
+    message.error(extractErrorMessage(err, t('quickTranslate.messages.failed')))
   } finally {
     if (current()) submitting.value = false
   }

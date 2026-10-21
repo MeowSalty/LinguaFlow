@@ -19,6 +19,8 @@ import {
 } from '@/api/client'
 import type { ServiceMode } from '@/stores/service'
 import { useServiceStore } from '@/stores/service'
+import { extractErrorMessage } from '@/utils/errors'
+import { t } from '@/i18n'
 import {
   assertSessionCurrent,
   captureSession,
@@ -100,7 +102,10 @@ export const useAuthStore = defineStore('auth', () => {
       return fresh
     } catch (error) {
       if (isSessionCurrent(context))
-        initializationError.value = error instanceof Error ? error.message : String(error)
+        initializationError.value = extractErrorMessage(
+          error,
+          t('api.errors.fetchCurrentUserFailed'),
+        )
       throw error
     }
   }

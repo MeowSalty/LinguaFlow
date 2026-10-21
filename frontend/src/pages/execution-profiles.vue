@@ -32,6 +32,7 @@ import { useEntityCrud } from '@/composables/useEntityCrud'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useExecutionProfilesStore } from '@/stores/executionProfiles'
 import { formatDateTime } from '@/utils/datetime'
+import { extractErrorMessage } from '@/utils/errors'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 
 type ExecutionProfile = ApiSchemas['ExecutionProfile']
@@ -229,7 +230,7 @@ const onSubmit = async (): Promise<void> => {
     // A closed/replaced draft must not receive the old write's failure toast.
     if (isSessionCurrent(session) && organization === store.orgId) store.error = null
     if (current()) {
-      message.error(cause instanceof Error ? cause.message : t('team.errors.saveResource'), {
+      message.error(extractErrorMessage(cause, t('team.errors.saveResource')), {
         duration: 0,
         closable: true,
       })

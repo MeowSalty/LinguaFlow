@@ -27,6 +27,7 @@ import {
   type OperationLocator,
 } from '@/utils/operationQuery'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 import { jobObservationTime } from '@/utils/jobStages'
 import {
   taskHistoryKey,
@@ -356,7 +357,7 @@ export const useOperationsStore = defineStore('operations', () => {
       return data
     } catch (error) {
       if (isCurrent(context)) {
-        summaryError.value = error instanceof Error ? error.message : t('operations.loadFailed')
+        summaryError.value = extractErrorMessage(error, t('operations.loadFailed'))
         if (isAccessDenied(error)) summary.value = null
       }
       return null
@@ -671,7 +672,7 @@ export const useOperationsStore = defineStore('operations', () => {
       } catch (error) {
         if (!isCurrent(context)) return
         failures++
-        discoveryError.value = error instanceof Error ? error.message : t('operations.loadFailed')
+        discoveryError.value = extractErrorMessage(error, t('operations.loadFailed'))
         if (isAccessDenied(error)) {
           active.value = []
           terminal.value = []
@@ -714,8 +715,7 @@ export const useOperationsStore = defineStore('operations', () => {
       filteredSummaryError.value = null
     } catch (error) {
       if (version !== listVersion || !isCurrent(context)) return
-      filteredSummaryError.value =
-        error instanceof Error ? error.message : t('operations.loadFailed')
+      filteredSummaryError.value = extractErrorMessage(error, t('operations.loadFailed'))
       if (isAccessDenied(error)) filteredSummary.value = null
     }
   }
@@ -742,7 +742,7 @@ export const useOperationsStore = defineStore('operations', () => {
       listUpdatedAt.value = Date.now()
     } catch (error) {
       if (version !== listVersion || !isCurrent(context)) return
-      listError.value = error instanceof Error ? error.message : t('operations.loadFailed')
+      listError.value = extractErrorMessage(error, t('operations.loadFailed'))
       if (isAccessDenied(error)) items.value = []
     } finally {
       if (version === listVersion && isCurrent(context)) listLoading.value = false

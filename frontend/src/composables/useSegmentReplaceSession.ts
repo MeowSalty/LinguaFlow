@@ -10,6 +10,7 @@ import {
   type SegmentMatchMode,
 } from '@/api/projects'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 import {
   collectSegmentSearchMatches,
   MAX_SEGMENT_SEARCH_MATCHES,
@@ -202,7 +203,7 @@ export function useSegmentReplaceSession(options: ReplaceSessionOptions) {
           : t('api.errors.segmentSearchCollectionPaginationStalled')
       return
     }
-    errorMessage.value = error instanceof Error ? error.message : fallback
+    errorMessage.value = extractErrorMessage(error, fallback)
   }
 
   const canApply = computed(() =>

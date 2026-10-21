@@ -14,6 +14,7 @@ import {
   updateAdminSettings,
 } from '@/api/admin'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
 import { ApiError } from '@/api/utils'
 import {
@@ -125,8 +126,7 @@ export const useAdminStore = defineStore('admin', () => {
     try {
       stats.value = await fetchAdminStats()
     } catch (error) {
-      statsError.value =
-        error instanceof Error ? error.message : t('api.errors.fetchAdminStatsFailed')
+      statsError.value = extractErrorMessage(error, t('api.errors.fetchAdminStatsFailed'))
     } finally {
       statsLoading.value = false
     }
@@ -151,8 +151,7 @@ export const useAdminStore = defineStore('admin', () => {
       users.value = response.items
       usersTotal.value = response.total
     } catch (error) {
-      usersError.value =
-        error instanceof Error ? error.message : t('api.errors.fetchAdminUsersFailed')
+      usersError.value = extractErrorMessage(error, t('api.errors.fetchAdminUsersFailed'))
     } finally {
       usersLoading.value = false
     }
@@ -233,8 +232,7 @@ export const useAdminStore = defineStore('admin', () => {
       }
       auditLogsTotal.value = response.total
     } catch (error) {
-      auditLogsError.value =
-        error instanceof Error ? error.message : t('api.errors.fetchAdminAuditLogsFailed')
+      auditLogsError.value = extractErrorMessage(error, t('api.errors.fetchAdminAuditLogsFailed'))
     } finally {
       auditLogsLoading.value = false
     }

@@ -4,6 +4,7 @@ import { fetchRuntimeSummary, type RuntimeSummary } from '@/api/runtime'
 import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
 import { ApiError } from '@/api/utils'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 import { useAuthStore } from './auth'
 
 export const RUNTIME_POLL_INTERVAL = 5_000
@@ -74,7 +75,7 @@ export const useRuntimeStore = defineStore('runtime', () => {
           forbidden.value = true
           error.value = t('runtime.forbidden')
         } else {
-          error.value = failure instanceof Error ? failure.message : t('runtime.fetchFailed')
+          error.value = extractErrorMessage(failure, t('runtime.fetchFailed'))
         }
       } finally {
         if (current()) {

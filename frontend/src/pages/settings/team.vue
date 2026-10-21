@@ -31,6 +31,7 @@ import {
 } from '@/utils/organization-scope'
 import { formatDateTime } from '@/utils/datetime'
 import { normalizeUsername, validateUsername } from '@/utils/username'
+import { extractErrorMessage } from '@/utils/errors'
 import StorageManager from '@/components/storage/StorageManager.vue'
 
 const { t } = useI18n()
@@ -130,13 +131,12 @@ async function refreshDetails() {
           store.remove(id)
           preferences.setSelectedOrg(null)
           await select(null)
-        } else
-          activityError.value = cause instanceof Error ? cause.message : t('team.errors.activity')
+        } else activityError.value = extractErrorMessage(cause, t('team.errors.activity'))
       }
     }
   } catch (cause) {
     if (!current()) return
-    error.value = cause instanceof Error ? cause.message : t('team.errors.load')
+    error.value = extractErrorMessage(cause, t('team.errors.load'))
     if (isAccessDenied(cause)) {
       members.value = []
       activities.value = []
@@ -193,7 +193,7 @@ async function save() {
     await select(org.id)
   } catch (cause) {
     if (isSessionCurrent(session) && request === generation)
-      message.error(cause instanceof Error ? cause.message : t('team.errors.save'))
+      message.error(extractErrorMessage(cause, t('team.errors.save')))
   } finally {
     if (isSessionCurrent(session) && request === generation) busy.value = false
   }
@@ -218,7 +218,7 @@ async function memberAction(action: (id: number) => Promise<unknown>, leaving = 
     await refresh()
   } catch (cause) {
     if (!isSessionCurrent(session) || request !== generation) return
-    const detail = cause instanceof Error ? cause.message : t('team.errors.memberSave')
+    const detail = extractErrorMessage(cause, t('team.errors.memberSave'))
     await refresh()
     if (isSessionCurrent(session) && orgId.value === id) message.error(detail)
   } finally {
