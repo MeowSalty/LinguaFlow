@@ -15,7 +15,6 @@ import {
   uploadAuthConnectionLogo,
   type AuthConnection,
   type AuthConnectionSnapshot,
-  type AuthAttributeField,
 } from '../../src/api/auth-connections'
 import {
   clone,
@@ -24,7 +23,6 @@ import {
   connectionTestCandidate,
   connectionUpdate,
   hasUnsafeRuleNumbers,
-  mergeDraftAttributes,
   newConnectionSnapshot,
   parsePreviewSources,
 } from '../../src/components/admin/authentication/auth-connection-model'
@@ -53,6 +51,7 @@ const record = (overrides: Partial<AuthConnection> = {}): AuthConnection => {
       login_rules: rules,
       signup_rules: rules,
       link_rules: rules,
+      signup: { email_requirement: 'optional', password_requirement: 'none' },
     },
     has_client_secret: true,
   }
@@ -111,14 +110,16 @@ describe('authentication connection API contract', () => {
   })
 
   it('uses aggregate revision for attribute reads and logo writes', async () => {
-    const GET = vi.fn().mockResolvedValue(ok({ revision: 4, fields: [], operators: {} }))
+    const GET = vi
+      .fn()
+      .mockResolvedValue(ok({ revision: 9, purpose: 'login', fields: [], operators: {} }))
     const POST = vi.fn().mockResolvedValue(ok(record()))
     const client = { GET, POST } as unknown as ApiClient
-    await fetchAuthConnectionAttributes('company', 9, client)
+    await fetchAuthConnectionAttributes('company', 9, 'login', client)
     const file = new File([new Uint8Array([137, 80, 78, 71])], 'logo.png', { type: 'image/png' })
     await uploadAuthConnectionLogo('company', 9, file, client)
 
-    expect(GET.mock.calls[0]?.[1].params.query).toEqual({ expected_revision: 9 })
+    expect(GET.mock.calls[0]?.[1].params.query).toEqual({ expected_revision: 9, purpose: 'login' })
     expect(POST.mock.calls[0]?.[1].params.query).toEqual({ expected_revision: 9 })
     expect(POST.mock.calls[0]?.[1].bodySerializer()).toBe(file)
   })
@@ -173,9 +174,12 @@ describe('authentication connection API contract', () => {
       expected_revision: 9,
       changes: { oidc: { issuer: 'https://candidate.example' } },
     }
-    const POST = vi.fn().mockResolvedValue(ok({ revision: 9, fields: [], operators: {} }))
+    const attributesBody = { ...body, purpose: 'signup' as const }
+    const POST = vi
+      .fn()
+      .mockResolvedValue(ok({ revision: 9, purpose: 'signup', fields: [], operators: {} }))
     const client = { POST } as unknown as ApiClient
-    await previewAuthConnectionAttributes('company', body, client)
+    await previewAuthConnectionAttributes('company', attributesBody, client)
     POST.mockResolvedValueOnce(
       ok({
         revision: 9,
@@ -199,7 +203,11 @@ describe('authentication connection API contract', () => {
     expect(
       POST.mock.calls.map(([path, options]) => [path, options.params.path, options.body]),
     ).toEqual([
-      ['/admin/auth-connections/{connectionId}/attributes', { connectionId: 'company' }, body],
+      [
+        '/admin/auth-connections/{connectionId}/attributes',
+        { connectionId: 'company' },
+        attributesBody,
+      ],
       ['/admin/auth-connections/{connectionId}/check', { connectionId: 'company' }, body],
       ['/admin/auth-connections/{connectionId}/impact', { connectionId: 'company' }, body],
     ])
@@ -275,7 +283,9 @@ describe('authentication connection model', () => {
     expect(defaults.policy).not.toHaveProperty('enabled')
     expect(defaults.attribute_mappings).toEqual([])
     expect(connectionForm(record()).display_name).toBe('Company SSO')
-    expect(connectionForm(record({ kind: 'password' })).oauth2).toBeUndefined()
+    expect(defaults.signup_policy_revision).toBe(1)
+    expect(defaults.link_policy_revision).toBe(1)
+    expect(connectionForm(record({ kind: 'generic_oauth2' })).oidc).toBeUndefined()
   })
 
   it('preserves safe rule integers and refuses lossy JSON numbers', () => {
@@ -306,23 +316,6 @@ describe('authentication connection model', () => {
       'secret',
     )
     expect(() => connectionUpdate(saved, form, 'replace', '')).toThrow('Empty replacement secret')
-  })
-
-  it('merges unsaved attribute mappings while preserving derived catalogue entries', () => {
-    const field = (
-      field_id: string,
-      source: AuthAttributeField['source'] = 'oidc_id_token',
-    ): AuthAttributeField => ({
-      field_id,
-      label: field_id,
-      type: 'string',
-      source,
-      pointer: `/${field_id}`,
-    })
-    const builtin = field('subject', 'derived')
-    const saved = field('team')
-    const added = field('department')
-    expect(mergeDraftAttributes([builtin, saved], [saved], [added])).toEqual([builtin, added])
   })
 
   it('accepts only supported rule preview sources', () => {

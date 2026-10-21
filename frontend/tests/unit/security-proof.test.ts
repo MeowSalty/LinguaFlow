@@ -102,8 +102,24 @@ describe('security action proofs', () => {
     state.available_connections[0]!.can_link = false
     expect(actionAllowed(state, 'link', 'new')).toBe(false)
   })
-  it('treats 403 as rejected proof, not an expired login session', () => {
-    expect(isProofRejection(new ApiError('proof', 403))).toBe(true)
+  it('treats only stable reauthentication-required as rejected proof', () => {
+    expect(
+      isProofRejection(
+        new ApiError('proof', 403, {
+          type: 'urn:linguaflow:reauthentication-required',
+          title: 'reauthentication_required',
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      isProofRejection(
+        new ApiError('forbidden', 403, {
+          type: 'urn:linguaflow:forbidden',
+          title: 'forbidden',
+        }),
+      ),
+    ).toBe(false)
+    expect(isProofRejection(new ApiError('plain forbidden', 403))).toBe(false)
     expect(isProofRejection(new ApiError('unauthorized', 401))).toBe(false)
     expect(isProofRejection(new Error('network'))).toBe(false)
   })

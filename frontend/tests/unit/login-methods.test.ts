@@ -11,6 +11,28 @@ vi.mock('@/i18n', () => ({ t: (key: string) => key }))
 vi.mock('@/api/client-core', () => ({ apiClient: {} }))
 
 describe('login methods API', () => {
+  it('keeps fetchLoginMethods contract-guarded on successful responses', async () => {
+    const methods = {
+      password: {
+        is_set: false,
+        can_login: false,
+        can_set: true,
+        can_delete: false,
+        verified: false,
+      },
+      email: { address: null, verified: false, can_recover: false },
+      bindings: [],
+      available_connections: [],
+    }
+    const GET = vi.fn().mockResolvedValue({
+      data: { ...methods, password: { is_set: true } },
+      response: new Response(null, { status: 200 }),
+    })
+    await expect(fetchLoginMethods({ GET } as unknown as ApiClient)).rejects.toThrow()
+    GET.mockResolvedValue({ data: methods, response: new Response(null, { status: 200 }) })
+    await expect(fetchLoginMethods({ GET } as unknown as ApiClient)).resolves.toEqual(methods)
+  })
+
   const writes = [
     [
       'set',

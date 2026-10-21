@@ -49,6 +49,7 @@ const confirmation = () => ({
   confirmation_token: 'confirmation-one',
   expires_at: new Date(Date.now() + 40_000).toISOString(),
   signup_requirements: ['local_password' as const],
+  signup: { email_requirement: 'optional' as const, password_requirement: 'required' as const },
   profile: {
     connection_id: 'oidc-one',
     connection_name: 'Company',
@@ -103,14 +104,14 @@ describe('external browser transactions', () => {
     expect(readExternalFlow()?.transactionId).toBe('new-transaction')
   })
 
-  it('does not reenable a confirmation after the server marks its transaction invalid', async () => {
+  it('clears an invalidated confirmation so it cannot be reenabled or replayed', async () => {
     seed(flow({ stage: 'confirming', confirmation: confirmation() }))
     mocks.post.mockResolvedValue({
       error: { type: 'urn:linguaflow:external-flow-invalid', title: 'external_flow_invalid' },
       response: new Response(null, { status: 400 }),
     })
     await expect(completeExternalConfirmation({ username: 'tester' })).rejects.toThrow()
-    expect(readExternalFlow()?.stage).toBe('completing')
+    expect(readExternalFlow()).toBeNull()
     await expect(completeExternalConfirmation({ username: 'tester' })).rejects.toThrow()
     expect(mocks.post).toHaveBeenCalledTimes(1)
   })
@@ -196,7 +197,7 @@ describe('external browser transactions', () => {
   it('permits editing after a definite username conflict, but does not persist the password', async () => {
     seed(flow({ stage: 'confirming', confirmation: confirmation() }))
     mocks.post.mockResolvedValue({
-      error: { title: 'Username unavailable' },
+      error: { type: 'urn:linguaflow:conflict', title: 'conflict' },
       response: new Response(null, { status: 409 }),
     })
     await expect(
