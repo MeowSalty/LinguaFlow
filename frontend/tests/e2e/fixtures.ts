@@ -88,11 +88,16 @@ export const json = (route: Route, body: unknown, status = 200) =>
 
 export const authCapabilities: ApiSchemas['AuthCapabilities'] = {
   mode: 'server',
-  password: {
+  local_account: {
     can_login: true,
     can_signup: true,
+    can_enroll_password: true,
+    password_login_enabled: true,
     username_login_enabled: true,
     email_login_enabled: false,
+    password_enrollment_enabled: true,
+    signup: { email_requirement: 'optional', password_requirement: 'required' },
+    signup_requirements: ['local_password'],
   },
   connections: [],
   email_verification_enabled: false,
@@ -103,6 +108,14 @@ export const loginMethods: ApiSchemas['LoginMethodsResponse'] = {
   email: { address: 'tester-1@example.com', verified: false, can_recover: false },
   bindings: [],
   available_connections: [],
+}
+
+export const localAccountPolicy: ApiSchemas['LocalAccountPolicyInput'] = {
+  password_login_enabled: true,
+  username_login_enabled: true,
+  email_login_enabled: false,
+  password_enrollment_enabled: true,
+  signup: { enabled: true, email_requirement: 'optional', rules: { mode: 'unrestricted' } },
 }
 
 /** Stable API baseline; later page.route registrations override individual endpoints. */
@@ -140,6 +153,22 @@ export async function mockApp(
         return json(route, { ...authCapabilities, mode: options.mode ?? 'server' })
       case '/users/me/login-methods':
         return json(route, loginMethods)
+      case '/admin/local-account':
+        return json(route, {
+          revision: 1,
+          policy: localAccountPolicy,
+          capabilities: authCapabilities.local_account,
+          issues: [],
+        })
+      case '/admin/local-account/attributes':
+        return json(route, { revision: 1, purpose: 'signup', fields: [], operators: {} })
+      case '/admin/settings':
+        return json(route, {
+          settings: {
+            registration_enabled: true,
+            task_retention: { enabled: false, retention_days: 30, revision: 1 },
+          },
+        })
       case '/operations/summary':
         return json(route, summaryFixture)
       case '/admin/runtime/summary':

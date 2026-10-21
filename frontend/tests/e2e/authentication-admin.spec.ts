@@ -29,6 +29,34 @@ test('create, copy callback, save conflicting candidate, reconnect, then enable'
   let saveConflict = true
   let saved: Record<string, unknown> | undefined
   const calls = b4ConnectionCalls()
+  const catalogs: Array<{ revision: number; purpose: string }> = []
+  const impacts: Record<string, unknown>[] = []
+  await page.route('**/api/v1/admin/auth-connections/company/attributes**', (route) => {
+    const url = new URL(route.request().url())
+    const candidate = route.request().method() === 'POST' ? route.request().postDataJSON() : null
+    const revision =
+      candidate?.expected_revision ?? Number(url.searchParams.get('expected_revision'))
+    const purpose = candidate?.purpose ?? url.searchParams.get('purpose')
+    catalogs.push({ revision, purpose })
+    return json(route, {
+      revision,
+      purpose,
+      fields: [],
+      operators: {},
+    })
+  })
+  await page.route('**/api/v1/admin/auth-connections/company/impact', (route) => {
+    const body = route.request().postDataJSON()
+    impacts.push(body)
+    for (const purpose of ['login', 'signup', 'link'])
+      expect(catalogs).toContainEqual({ revision: 8, purpose })
+    return json(route, {
+      affected_users: [],
+      blocked_users: [],
+      affected_sessions: 0,
+      can_save: true,
+    })
+  })
   await page.route('**/api/v1/admin/auth-connections?*', (route) =>
     json(route, { items: created ? [record] : [] }),
   )
@@ -116,6 +144,12 @@ test('create, copy callback, save conflicting candidate, reconnect, then enable'
   await expect(drawer.getByRole('heading', { name: '最新设置' })).toBeVisible()
   await expect(drawer.getByRole('heading', { name: '我的修改' })).toBeVisible()
   await drawer.getByTestId('auth-connection-conflict-reapply').click()
+  await expect.poll(() => impacts.length).toBe(1)
+  expect(impacts[0]).toMatchObject({
+    expected_revision: 8,
+    changes: { oidc: { issuer: 'https://candidate.example', client_id: 'candidate-client' } },
+  })
+  expect(calls.save).toBe(1)
   await drawer.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect.poll(() => calls.save).toBe(2)
   expect(saved).toMatchObject({
@@ -164,7 +198,8 @@ test('candidate check and enable action require a revision-bound test proof', as
   await drawer.getByLabel('Issuer 地址').fill('https://candidate.example')
   await drawer.getByLabel('Client ID').fill('candidate-client')
   await drawer.getByRole('button', { name: '检查配置', exact: true }).click()
-  await expect(drawer.getByText('配置检查通过', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('auth-connection-check-result')).toContainText('配置检查通过')
+  await page.getByTestId('auth-connection-close-check').click()
   await page.route('**/api/v1/admin/auth-connections/company', (route) => {
     if (route.request().method() !== 'PATCH') return json(route, record)
     record = oidcConnection({
@@ -213,27 +248,19 @@ test('a non-administrator never fetches authentication configuration', async ({ 
   expect(reads).toBe(0)
 })
 
-test('the built-in password policy is read-only and uses connection actions only', async ({
+test('the fixed local policy uses its independent editor and never starts an external connection test', async ({
   page,
 }) => {
   const calls = b4ConnectionCalls()
-  const connection = oidcConnection()
-  const record = {
-    ...connection,
-    id: 'password',
-    kind: 'password' as const,
-    configuration: { ...connection.configuration, display_name: 'Password', oidc: undefined },
-  }
-  await mockB4Connection(page, () => record, calls)
+  await mockB4Connection(page, oidcConnection(), calls)
   await page.goto('/admin/authentication')
-  await page
-    .getByTestId('auth-connection-password')
-    .getByRole('button', { name: '查看政策' })
-    .click()
-  await expect(page.getByText('内置密码连接只读，认证政策由系统设置管理。')).toBeVisible()
-  await expect(page.getByRole('button', { name: '启用', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '停用', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '保存配置', exact: true })).toHaveCount(0)
+  await page.getByTestId('auth-local-account-edit').click()
+  const editor = page.getByTestId('auth-local-account-editor')
+  await expect(editor.getByTestId('auth-local-account-email-login')).toBeDisabled()
+  await expect(editor.getByTestId('auth-local-account-save')).toBeDisabled()
+  await expect(editor.getByRole('button', { name: '启用', exact: true })).toHaveCount(0)
+  await expect(editor.getByRole('button', { name: '停用', exact: true })).toHaveCount(0)
+  await expect(editor.getByRole('button', { name: '真实测试', exact: true })).toHaveCount(0)
   expect(calls.start).toBe(0)
   expect(calls.exchange).toBe(0)
 

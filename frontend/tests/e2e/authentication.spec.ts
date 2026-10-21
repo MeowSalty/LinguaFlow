@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Route } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { authCapabilities, json, mockApp, testUser } from './fixtures'
 
@@ -16,6 +16,7 @@ const externalConnection = {
   display_order: 0,
   can_login: true,
   can_signup: true,
+  signup: { email_requirement: 'optional', password_requirement: 'required' },
   signup_requirements: ['local_password'],
 }
 const session = {
@@ -106,6 +107,7 @@ test('OAuth signup uses a browser challenge, requires explicit first password an
       confirmation_token: 'confirmation-one',
       transaction_id: 'tx-one',
       expires_at: '2099-01-01T00:00:00Z',
+      signup: { email_requirement: 'optional', password_requirement: 'required' },
       signup_requirements: ['local_password'],
       profile: {
         connection_id: 'company',
@@ -117,7 +119,7 @@ test('OAuth signup uses a browser challenge, requires explicit first password an
   await page.route('**/api/v1/auth/external/complete', (route) => {
     completed.push(route.request().postDataJSON())
     return completed.length === 1
-      ? json(route, { title: '用户名不可用' }, 409)
+      ? json(route, { type: 'urn:linguaflow:conflict', title: 'conflict' }, 409)
       : json(route, { kind: 'session', session })
   })
   await page.goto('/login')
@@ -136,7 +138,8 @@ test('OAuth signup uses a browser challenge, requires explicit first password an
     await page.locator('input[autocomplete="new-password"]').nth(0).fill(' first-password ')
     await page.locator('input[autocomplete="new-password"]').nth(1).fill(' first-password ')
     await page.getByRole('button', { name: '创建账号并登录' }).click()
-    if (username === 'taken-owner') await expect(page.getByText('用户名不可用')).toBeVisible()
+    if (username === 'taken-owner')
+      await expect(page.getByText('此用户名已被使用，请更换用户名。')).toBeVisible()
   }
   await expect(page).toHaveURL(/\/$/)
   expect(exchanges).toBe(1)
@@ -145,6 +148,7 @@ test('OAuth signup uses a browser challenge, requires explicit first password an
     initial_password: ' first-password ',
     confirmation_token: 'confirmation-one',
   })
+  expect(completed[1]).not.toHaveProperty('email')
   expect(
     await page.evaluate(() => sessionStorage.getItem('linguaflow.external-flow.v1')),
   ).toBeNull()
@@ -220,4 +224,283 @@ test('binding requires explicit confirmation and keeps the current account sessi
   expect(await page.evaluate(() => localStorage.getItem('linguaflow.access_token'))).toBe(
     'test-access',
   )
+})
+
+const b5SignupRoute = (
+  page: Page,
+  emailRequirement: 'optional' | 'required',
+  passwordRequirement: 'none' | 'optional' | 'required',
+  complete: (route: Route, call: number) => ReturnType<typeof json>,
+) => {
+  const signupRequirements = [
+    ...(emailRequirement === 'required' ? (['email'] as const) : []),
+    ...(passwordRequirement === 'required' ? (['local_password'] as const) : []),
+  ]
+  const completed: Record<string, unknown>[] = []
+  void page.route('**/api/v1/auth/external/company/start', (route) => {
+    const body = route.request().postDataJSON()
+    return json(route, {
+      transaction_id: 'tx-b5',
+      authorization_url: `${body.completion_url}?ticket=b5-ticket`,
+      expires_at: '2099-01-01T00:00:00Z',
+    })
+  })
+  void page.route('**/api/v1/auth/external/exchange', (route) =>
+    json(route, {
+      kind: 'signup_confirmation',
+      confirmation_token: 'confirmation-b5',
+      transaction_id: 'tx-b5',
+      expires_at: '2099-01-01T00:00:00Z',
+      signup: { email_requirement: emailRequirement, password_requirement: passwordRequirement },
+      signup_requirements: signupRequirements,
+      email: emailRequirement === 'required' ? 'b5@example.com' : 'suggested@example.com',
+      profile: {
+        connection_id: 'company',
+        connection_name: 'Company SSO',
+        external_display: 'B5 identity',
+      },
+    }),
+  )
+  void page.route('**/api/v1/auth/external/complete', (route) => {
+    completed.push(route.request().postDataJSON())
+    return complete(route, completed.length)
+  })
+  return completed
+}
+
+const openB5Signup = async (page: Page) => {
+  await page.goto('/login')
+  await page.getByRole('button', { name: '使用 Company SSO 继续' }).click()
+  await expect(page.getByText('B5 identity')).toBeVisible()
+}
+
+test('external signup omits an empty optional email and never sends a password when none is allowed', async ({
+  page,
+}) => {
+  await anonymous(page)
+  await page.route('**/api/v1/auth/capabilities', (route) =>
+    json(route, {
+      ...authCapabilities,
+      connections: [
+        {
+          connection_id: 'company',
+          display_name: 'Company SSO',
+          description: '',
+          display_order: 0,
+          can_login: true,
+          can_signup: true,
+          signup: { email_requirement: 'optional', password_requirement: 'none' },
+          signup_requirements: [],
+        },
+      ],
+    }),
+  )
+  const completed = b5SignupRoute(page, 'optional', 'none', (route) =>
+    json(route, { kind: 'session', session }),
+  )
+  await openB5Signup(page)
+  await expect(page.locator('input[autocomplete="new-password"]')).toHaveCount(0)
+  await expect(page.getByRole('switch')).toHaveCount(0)
+  await page.locator('input[autocomplete="email"]').fill('')
+  await page.locator('input[autocomplete="username"]').fill('b5-owner')
+  await page.getByRole('button', { name: '创建账号并登录' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  expect(completed).toEqual([
+    {
+      username: 'b5-owner',
+      confirmation_token: 'confirmation-b5',
+      verifier: expect.any(String),
+    },
+  ])
+})
+
+test('external signup with a required email blocks an empty submit and sends the normalized address', async ({
+  page,
+}) => {
+  await anonymous(page)
+  await page.route('**/api/v1/auth/capabilities', (route) =>
+    json(route, {
+      ...authCapabilities,
+      connections: [
+        {
+          connection_id: 'company',
+          display_name: 'Company SSO',
+          description: '',
+          display_order: 0,
+          can_login: true,
+          can_signup: true,
+          signup: { email_requirement: 'required', password_requirement: 'none' },
+          signup_requirements: ['email'],
+        },
+      ],
+    }),
+  )
+  const completed = b5SignupRoute(page, 'required', 'none', (route) =>
+    json(route, { kind: 'session', session }),
+  )
+  await openB5Signup(page)
+  await expect(page.locator('input[autocomplete="email"]')).toHaveValue('b5@example.com')
+  await page.locator('input[autocomplete="email"]').fill('')
+  await page.locator('input[autocomplete="username"]').fill('b5-owner')
+  await page.getByRole('button', { name: '创建账号并登录' }).click()
+  await expect(page.getByText('请输入注册邮箱。')).toBeVisible()
+  expect(completed).toHaveLength(0)
+  await page.locator('input[autocomplete="email"]').fill('  B5@Example.COM  ')
+  await page.getByRole('button', { name: '创建账号并登录' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  expect(completed[0]).toMatchObject({ email: 'b5@example.com', username: 'b5-owner' })
+  expect(completed[0]).not.toHaveProperty('initial_password')
+})
+
+test('optional external password defaults to skipped and omits initial_password', async ({
+  page,
+}) => {
+  await anonymous(page)
+  await page.route('**/api/v1/auth/capabilities', (route) =>
+    json(route, {
+      ...authCapabilities,
+      connections: [
+        {
+          connection_id: 'company',
+          display_name: 'Company SSO',
+          description: '',
+          display_order: 0,
+          can_login: true,
+          can_signup: true,
+          signup: { email_requirement: 'optional', password_requirement: 'optional' },
+          signup_requirements: [],
+        },
+      ],
+    }),
+  )
+  const completed = b5SignupRoute(page, 'optional', 'optional', (route) =>
+    json(route, { kind: 'session', session }),
+  )
+  await openB5Signup(page)
+  await expect(page.getByRole('switch')).toBeVisible()
+  await expect(page.locator('input[autocomplete="new-password"]')).toHaveCount(0)
+  await page.locator('input[autocomplete="username"]').fill('b5-owner')
+  await page.getByRole('button', { name: '创建账号并登录' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  expect(completed[0]).toMatchObject({ email: 'suggested@example.com' })
+  expect(completed[0]).not.toHaveProperty('initial_password')
+})
+
+test('optional external password submits raw input only after the switch is enabled', async ({
+  page,
+}) => {
+  await anonymous(page)
+  await page.route('**/api/v1/auth/capabilities', (route) =>
+    json(route, {
+      ...authCapabilities,
+      connections: [
+        {
+          connection_id: 'company',
+          display_name: 'Company SSO',
+          description: '',
+          display_order: 0,
+          can_login: true,
+          can_signup: true,
+          signup: { email_requirement: 'optional', password_requirement: 'optional' },
+          signup_requirements: [],
+        },
+      ],
+    }),
+  )
+  const completed = b5SignupRoute(page, 'optional', 'optional', (route) =>
+    json(route, { kind: 'session', session }),
+  )
+  await openB5Signup(page)
+  await page.getByRole('switch').click()
+  await expect(page.locator('input[autocomplete="new-password"]')).toHaveCount(2)
+  await page.locator('input[autocomplete="username"]').fill('b5-owner')
+  await page.getByRole('button', { name: '创建账号并登录' }).click()
+  await expect(page.getByText('新密码至少需要 8 个 Unicode 字符')).toBeVisible()
+  expect(completed).toHaveLength(0)
+  await page.locator('input[autocomplete="new-password"]').nth(0).fill(' first-password ')
+  await page.locator('input[autocomplete="new-password"]').nth(1).fill(' first-password ')
+  await page.getByRole('button', { name: '创建账号并登录' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  expect(completed[0]).toMatchObject({ initial_password: ' first-password ' })
+  expect(
+    await page.evaluate(() => sessionStorage.getItem('linguaflow.external-flow.v1')),
+  ).toBeNull()
+})
+
+test('a user-modified signup email is sent but never written into the stored confirmation', async ({
+  page,
+}) => {
+  await anonymous(page)
+  await page.route('**/api/v1/auth/capabilities', (route) =>
+    json(route, {
+      ...authCapabilities,
+      connections: [
+        {
+          connection_id: 'company',
+          display_name: 'Company SSO',
+          description: '',
+          display_order: 0,
+          can_login: true,
+          can_signup: true,
+          signup: { email_requirement: 'optional', password_requirement: 'none' },
+          signup_requirements: [],
+        },
+      ],
+    }),
+  )
+  const completed = b5SignupRoute(page, 'optional', 'none', (route, call) =>
+    call === 1
+      ? json(route, { type: 'urn:linguaflow:conflict', title: 'conflict' }, 409)
+      : json(route, { kind: 'session', session }),
+  )
+  await openB5Signup(page)
+  await expect(page.locator('input[autocomplete="email"]')).toHaveValue('suggested@example.com')
+  await page.locator('input[autocomplete="email"]').fill('mine@example.com')
+  await page.locator('input[autocomplete="username"]').fill('taken-owner')
+  await page.getByRole('button', { name: '创建账号并登录' }).click()
+  await expect(page.getByText('此用户名已被使用，请更换用户名。')).toBeVisible()
+  expect(completed[0]).toMatchObject({ email: 'mine@example.com', username: 'taken-owner' })
+  const stored = await page.evaluate(() => sessionStorage.getItem('linguaflow.external-flow.v1'))
+  expect(stored).toContain('suggested@example.com')
+  expect(stored).not.toContain('mine@example.com')
+  await page.locator('input[autocomplete="username"]').fill('b5-owner')
+  await page.getByRole('button', { name: '创建账号并登录' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  expect(completed[1]).toMatchObject({ email: 'mine@example.com', username: 'b5-owner' })
+})
+
+test('security hides password maintenance and rejects stale inputs when password login is disabled', async ({
+  page,
+}) => {
+  await mockApp(page)
+  await page.route('**/api/v1/users/me/login-methods', (route) =>
+    json(route, {
+      password: {
+        is_set: true,
+        can_login: false,
+        can_set: false,
+        can_delete: true,
+        verified: true,
+      },
+      email: { address: 'tester-1@example.com', verified: false, can_recover: false },
+      bindings: [
+        {
+          binding_id: 7,
+          connection_id: 'oidc',
+          display_name: 'OIDC',
+          can_login: true,
+          can_reauthenticate: true,
+          can_unlink: true,
+          verified: true,
+          archived: false,
+        },
+      ],
+      available_connections: [],
+    }),
+  )
+  await page.goto('/settings/security')
+  await expect(page.locator('input[autocomplete="current-password"]')).toHaveCount(0)
+  await expect(page.locator('input[autocomplete="new-password"]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '删除密码' })).toBeVisible()
+  await expect(page.getByText('当前不可用于登录')).toBeVisible()
 })

@@ -28,6 +28,8 @@ export function oidcConnection(patch: Partial<AuthConnection> = {}): AuthConnect
     description: 'Production identity provider',
     display_order: 0,
     login_policy_revision: 1,
+    signup_policy_revision: 1,
+    link_policy_revision: 1,
     has_client_secret: true,
     policy: {
       login_enabled: true,
@@ -36,6 +38,7 @@ export function oidcConnection(patch: Partial<AuthConnection> = {}): AuthConnect
       login_rules: { mode: 'unrestricted' as const },
       signup_rules: { mode: 'unrestricted' as const },
       link_rules: { mode: 'unrestricted' as const },
+      signup: { email_requirement: 'optional' as const, password_requirement: 'none' as const },
     },
     oidc: {
       issuer: 'https://identity.example.com',
@@ -92,8 +95,28 @@ export async function mockB4Connection(
     json(route, { items: [getRecord()] }),
   )
   await page.route('**/api/v1/admin/auth-connections/company', (route) => json(route, getRecord()))
-  await page.route('**/api/v1/admin/auth-connections/company/attributes', (route) =>
-    json(route, { revision: getRecord().aggregate_revision, fields: [], operators: {} }),
+  await page.route('**/api/v1/admin/auth-connections/company/attributes**', (route) => {
+    const request = route.request()
+    const purpose =
+      request.method() === 'POST'
+        ? request.postDataJSON().purpose
+        : new URL(request.url()).searchParams.get('purpose')
+    expect(['login', 'signup', 'link']).toContain(purpose)
+    return json(route, {
+      revision: getRecord().aggregate_revision,
+      purpose,
+      fields: [],
+      operators: {},
+    })
+  })
+  await page.route('**/api/v1/admin/auth-connections/company/impact', (route) =>
+    json(route, {
+      revision: getRecord().aggregate_revision,
+      affected_users: [],
+      blocked_users: [],
+      affected_sessions: 0,
+      can_save: true,
+    }),
   )
   await page.route('**/api/v1/admin/auth-connections/company/check', (route) =>
     json(route, {
