@@ -15,6 +15,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 )
 
@@ -251,9 +252,22 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 		return nil, err
 	}
 	if r.Bootstrap.Admin != nil {
-		if strings.TrimSpace(r.Bootstrap.Admin.Username) == "" || strings.TrimSpace(r.Bootstrap.Admin.Email) == "" || r.Bootstrap.Admin.Password == "" {
-			return nil, fmt.Errorf("bootstrap.admin requires username, email and password")
+		admin := r.Bootstrap.Admin
+		if admin.Password == "" {
+			return nil, fmt.Errorf("bootstrap.admin requires username and password")
 		}
+		username, err := accountidentity.NormalizeUsername(admin.Username)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap.admin.username: %w", err)
+		}
+		if err := accountidentity.ValidateAllocation(username, accountidentity.Administrator); err != nil {
+			return nil, fmt.Errorf("bootstrap.admin.username: %w", err)
+		}
+		email, err := accountidentity.NormalizeEmail(admin.Email)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap.admin.email: %w", err)
+		}
+		admin.Username, admin.Email = username, email
 	}
 	r.describe(values, in.Mode)
 	r.masterKey = ""

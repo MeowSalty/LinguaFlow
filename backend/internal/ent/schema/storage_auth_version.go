@@ -20,10 +20,14 @@ func (StorageAuthVersion) Fields() []ent.Field {
 		field.Int("payload_version").Default(1),
 		field.Int("aad_version").Default(1),
 		field.String("key_id").NotEmpty(),
-		field.Bytes("nonce").Sensitive(),
-		field.Bytes("ciphertext").Sensitive(),
+		// 密文与非秘密代次审计分离：退出完成后可清空 nonce/ciphertext，仅保留 generation 等审计事实。
+		field.Bytes("nonce").Optional().Sensitive(),
+		field.Bytes("ciphertext").Optional().Sensitive(),
 		field.Enum("status").Values("candidate", "active", "retired", "revoked").Default("candidate"),
+		field.Enum("purpose").Values("business", "retirement").Default("business"),
+		field.Int("retirement_id").Optional().Nillable().Positive(),
 		field.Time("expires_at").Optional().Nillable(),
+		field.Time("purged_at").Optional().Nillable(),
 	}
 }
 func (StorageAuthVersion) Edges() []ent.Edge {
@@ -35,5 +39,5 @@ func (StorageAuthVersion) Indexes() []ent.Index {
 
 // Database checks also cover atomic Add mutations, which skip field validators.
 func (StorageAuthVersion) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"storage_auth_version_generation_safe": "generation >= 0 AND generation <= 9007199254740991"}}}
+	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"storage_auth_version_generation_safe": "generation >= 0 AND generation <= 9007199254740991", "storage_auth_version_retirement_purpose_safe": "((purpose = 'business' AND retirement_id IS NULL) OR (purpose = 'retirement' AND retirement_id IS NOT NULL))", "storage_auth_version_purge_ciphertext_safe": "((purged_at IS NULL AND nonce IS NOT NULL AND ciphertext IS NOT NULL) OR (purged_at IS NOT NULL AND nonce IS NULL AND ciphertext IS NULL))"}}}
 }

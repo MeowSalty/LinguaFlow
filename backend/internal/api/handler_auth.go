@@ -1,39 +1,20 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
-type authRequestRegister struct {
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-}
-
-type authRequestLogin struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type authRequestRefresh struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
-type authRequestLogout struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
 type authUserResponse struct {
-	ID          int    `json:"id"`
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name,omitempty"`
-	Role        string `json:"role"`
-	Active      bool   `json:"active"`
+	ID          int     `json:"id"`
+	Username    string  `json:"username"`
+	Email       *string `json:"email"`
+	DisplayName string  `json:"display_name,omitempty"`
+	Role        string  `json:"role"`
+	Active      bool    `json:"active"`
 }
 
 type authSessionResponse struct {
@@ -46,15 +27,20 @@ type authSessionResponse struct {
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	var req authRequestRegister
-	if !s.decodeJSON(w, r, &req) {
+	w.Header().Set("Cache-Control", "no-store")
+	fields, ok := s.decodeAccountFields(w, r, "username", "password", "email", "display_name")
+	if !ok {
+		return
+	}
+	if fields["username"] == nil || fields["password"] == nil {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
 		return
 	}
 	session, err := s.authService.Register(r.Context(), service.RegisterInput{
-		Username:    req.Username,
-		Password:    req.Password,
-		Email:       req.Email,
-		DisplayName: req.DisplayName,
+		Username:    *fields["username"],
+		Password:    *fields["password"],
+		Email:       organizationStringField(fields["email"]),
+		DisplayName: organizationStringField(fields["display_name"]),
 	})
 	if err != nil {
 		s.writeServiceError(w, r, err)
@@ -64,15 +50,26 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req authRequestLogin
-	if !s.decodeJSON(w, r, &req) {
+	w.Header().Set("Cache-Control", "no-store")
+	fields, ok := s.decodeAccountFields(w, r, "identifier", "password")
+	if !ok {
+		return
+	}
+	if fields["identifier"] == nil || fields["password"] == nil {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
+		return
+	}
+	if !s.passwordAttemptAllowed(w, r, *fields["identifier"]) {
 		return
 	}
 	session, err := s.authService.Login(r.Context(), service.LoginInput{
-		Username: req.Username,
-		Password: req.Password,
+		Identifier: *fields["identifier"],
+		Password:   *fields["password"],
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidInput) || errors.Is(err, service.ErrInvalidCredentials) || errors.Is(err, service.ErrUserInactive) {
+			err = service.ErrInvalidCredentials
+		}
 		s.writeServiceError(w, r, err)
 		return
 	}
@@ -80,11 +77,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	var req authRequestRefresh
-	if !s.decodeJSON(w, r, &req) {
+	w.Header().Set("Cache-Control", "no-store")
+	fields, ok := s.decodeAccountFields(w, r, "refresh_token")
+	if !ok {
 		return
 	}
-	session, err := s.authService.Refresh(r.Context(), req.RefreshToken)
+	if fields["refresh_token"] == nil {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
+		return
+	}
+	session, err := s.authService.Refresh(r.Context(), *fields["refresh_token"])
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -93,8 +95,12 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	var req authRequestLogout
-	if !s.decodeJSON(w, r, &req) {
+	fields, ok := s.decodeAccountFields(w, r, "refresh_token")
+	if !ok {
+		return
+	}
+	if fields["refresh_token"] == nil {
+		s.writeServiceError(w, r, service.ErrInvalidInput)
 		return
 	}
 	authUser, ok := authUserFromContext(r.Context())
@@ -102,7 +108,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	if err := s.authService.Logout(r.Context(), authUser.User.ID, req.RefreshToken); err != nil {
+	if err := s.authService.Logout(r.Context(), authUser.User.ID, *fields["refresh_token"]); err != nil {
 		s.writeServiceError(w, r, err)
 		return
 	}
@@ -119,10 +125,24 @@ func newAuthSessionResponse(session *service.Session) authSessionResponse {
 		User: authUserResponse{
 			ID:          session.User.ID,
 			Username:    session.User.Username,
-			Email:       session.User.Email,
+			Email:       nullableAccountEmail(session.User.Email),
 			DisplayName: session.User.DisplayName,
 			Role:        session.User.Role,
 			Active:      session.User.Active,
 		},
 	}
+}
+
+func (s *Server) handleAuthCapabilities(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if s.isLocal() {
+		writeJSON(w, http.StatusOK, service.AuthCapabilities{Mode: "local", Connections: []service.PublicAuthConnectionCapability{}, LocalAccount: service.LocalAccountCapabilities{Signup: service.SignupPolicyRequirements{EmailRequirement: "optional", PasswordRequirement: "required"}, SignupRequirements: []string{"local_password"}}})
+		return
+	}
+	capabilities, err := s.authService.Capabilities(r.Context())
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, capabilities)
 }

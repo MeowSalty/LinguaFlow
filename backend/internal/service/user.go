@@ -2,10 +2,9 @@ package service
 
 import (
 	"context"
-	"net/mail"
 	"strings"
-	"unicode"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 )
 
@@ -34,28 +33,46 @@ func (s *UserService) UpdateMe(ctx context.Context, userID int, input UpdateProf
 
 	var email string
 	if input.Email != nil {
-		email = normalizeIdentity(*input.Email)
-		address, err := mail.ParseAddress(email)
-		if err != nil || address.Name != "" || address.Address != email || strings.ContainsFunc(email, unicode.IsSpace) {
+		var err error
+		email, err = accountidentity.NormalizeEmail(*input.Email)
+		if err != nil {
 			return nil, ErrInvalidInput
 		}
 	}
 
-	update := s.client.User.UpdateOneID(userID)
-	if input.DisplayName != nil {
-		update.SetDisplayName(strings.TrimSpace(*input.DisplayName))
-	}
-	if input.Email != nil {
-		update.SetEmail(email)
-	}
-	updated, err := update.Save(ctx)
+	var updated *ent.User
+	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		if err := lockAuthUser(ctx, tx, userID); err != nil {
+			return err
+		}
+		target, err := tx.User.Get(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if input.Email != nil && (target.EmailVerifiedAt != nil || target.EmailVerificationSource != "" || target.VerifiedEmailKey != "") {
+			return ErrAccountConflict
+		}
+		update := tx.User.UpdateOneID(userID)
+		if input.DisplayName != nil {
+			update.SetDisplayName(strings.TrimSpace(*input.DisplayName))
+		}
+		if input.Email != nil {
+			if email == "" {
+				update.ClearEmail()
+			} else {
+				update.SetEmail(email)
+			}
+		}
+		updated, err = update.Save(ctx)
+		return err
+	})
 	if err != nil {
 		if ent.IsConstraintError(err) {
 			return nil, ErrUserExists
 		}
 		return nil, err
 	}
-	return updated, nil
+	return updated.Unwrap(), nil
 }
 
 func (s *UserService) ChangeMyPassword(ctx context.Context, userID int, currentPassword, newPassword string) error {

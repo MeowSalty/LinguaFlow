@@ -11,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageguard"
 )
 
 type StorageCheckSpaceResult struct {
@@ -60,35 +61,56 @@ func (s *StorageConnectionService) CheckWithResult(ctx context.Context, actor, i
 func (s *StorageConnectionService) runCheck(ctx context.Context, actor, id int, write bool, generation int64, authorize bool, run func(context.Context) (*StorageConnectionRecord, error)) (*StorageConnectionRecord, *StorageCheckResult, error) {
 	ctx, cancelCheck := context.WithTimeout(ctx, s.cfg.TransferTimeout)
 	defer cancelCheck()
-	connection, err := s.authorized(ctx, s.client, actor, id)
-	if err != nil {
-		return nil, nil, err
-	}
-	if connection.ManagementGeneration != generation {
-		return nil, nil, ErrStorageConflict
-	}
-	spaces, err := s.client.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(id)).Order(ent.Asc(storagespace.FieldID)).Limit(101).All(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	results := make([]StorageCheckSpaceResult, 0, len(spaces))
-	for _, space := range spaces {
-		status := "not_checked"
-		if space.Status == storagespace.StatusDisabled {
-			status = "skipped"
-		}
-		results = append(results, StorageCheckSpaceResult{SpaceID: space.ID, Status: status})
-	}
-	data, err := json.Marshal(results)
-	if err != nil {
-		return nil, nil, err
-	}
+	var check *ent.StorageCheck
+	var results []StorageCheckSpaceResult
 	mode := "read_only"
 	if write {
 		mode = "write"
 	}
-	deadline, _ := ctx.Deadline()
-	check, err := s.client.StorageCheck.Create().SetConnectionID(id).SetActorID(actor).SetMode(mode).SetManagementGeneration(generation).SetDeadline(deadline.Add(5 * time.Second)).SetResults(data).Save(ctx)
+	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		if err := storageguard.LockConnection(ctx, tx, id); err != nil {
+			return err
+		}
+		connection, err := s.authorized(ctx, tx, actor, id)
+		if err != nil {
+			return err
+		}
+		if connection.ManagementGeneration != generation {
+			return ErrStorageConflict
+		}
+		op := storageOpCheckRead
+		if write {
+			op = storageOpCheckWrite
+		}
+		if authorize {
+			op = storageOpAuthorizeRead
+			if write {
+				op = storageOpAuthorizeWrite
+			}
+		}
+		if err = s.admitManagement(ctx, tx, connection, op); err != nil {
+			return err
+		}
+		spaces, err := tx.StorageSpace.Query().Where(storagespace.ConnectionIDEQ(id), storagespace.LifecycleNEQ(storagespace.LifecycleRemoved)).Order(ent.Asc(storagespace.FieldID)).Limit(101).All(ctx)
+		if err != nil {
+			return err
+		}
+		results = make([]StorageCheckSpaceResult, 0, len(spaces))
+		for _, space := range spaces {
+			status := "not_checked"
+			if space.Status == storagespace.StatusDisabled {
+				status = "skipped"
+			}
+			results = append(results, StorageCheckSpaceResult{SpaceID: space.ID, Status: status})
+		}
+		data, err := json.Marshal(results)
+		if err != nil {
+			return err
+		}
+		deadline, _ := ctx.Deadline()
+		check, err = tx.StorageCheck.Create().SetConnectionID(id).SetActorID(actor).SetMode(mode).SetManagementGeneration(generation).SetDeadline(deadline.Add(5 * time.Second)).SetResults(data).Save(ctx)
+		return err
+	})
 	if err != nil {
 		return nil, nil, err
 	}

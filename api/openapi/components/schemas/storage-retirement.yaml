@@ -1,0 +1,549 @@
+# Contract version 1: normalized target, scope and generations, preview, acceptance, recovery.
+StorageRetirementGeneration:
+  type: integer
+  format: int64
+  minimum: 0
+  maximum: 9007199254740991
+StorageRetirementTargetKind:
+  type: string
+  enum: [connection, space]
+StorageRetirementScope:
+  type: string
+  enum: [user, org, site]
+StorageRetirementTarget:
+  type: object
+  additionalProperties: false
+  required: [target_kind, target_id, target_identity, scope, owner_id, configuration_source, backend_id, management_generation, execution_generation, spaces]
+  description: >-
+    Complete normalized confirmation scope, never paginated. A site space entry
+    normalizes to its entire backend connection and all non-removed child spaces;
+    BYOS space retirement covers only that space. Connection retirement freezes all
+    non-removed children. The caller must echo this entire object unchanged.
+    target_identity is an opaque immutable identity, never a provider path.
+    Management generations protect configuration; execution generations fence I/O.
+    Neither generations nor preview revisions grant authority.
+  properties:
+    target_kind:
+      $ref: '#/StorageRetirementTargetKind'
+    target_id:
+      type: integer
+      minimum: 1
+    target_identity:
+      type: string
+      minLength: 1
+    scope:
+      $ref: '#/StorageRetirementScope'
+    owner_id:
+      type: integer
+      minimum: 0
+      description: Current user ID for user, organization ID for org, and 0 for site.
+    configuration_source:
+      $ref: './storage.yaml#/StorageConfigurationSource'
+    backend_id:
+      type: string
+      nullable: true
+      minLength: 1
+      description: >-
+        Required in every normalized target and confirmed scope. For deployment
+        configuration, the actual non-empty backend_id from the loaded deployment
+        configuration, displayed explicitly so the operator can identify the backend
+        configuration to remove and echoed unchanged on confirmation. Never substitute
+        a connection ID or opaque target_identity. For stored configuration, always null.
+    management_generation:
+      $ref: '#/StorageRetirementGeneration'
+    execution_generation:
+      $ref: '#/StorageRetirementGeneration'
+    spaces:
+      type: array
+      uniqueItems: true
+      description: Complete covered space set; an unused connection may have none.
+      items:
+        $ref: '#/StorageRetirementSpaceScope'
+StorageRetirementSpaceScope:
+  type: object
+  additionalProperties: false
+  required: [space_id, space_identity, connection_id, management_generation, execution_generation]
+  properties:
+    space_id:
+      type: integer
+      minimum: 1
+    space_identity:
+      type: string
+      minLength: 1
+    connection_id:
+      type: integer
+      minimum: 1
+    management_generation:
+      $ref: '#/StorageRetirementGeneration'
+    execution_generation:
+      $ref: '#/StorageRetirementGeneration'
+StorageRetirementProjectPlan:
+  type: object
+  additionalProperties: false
+  required: [project_id, target_space_id, expected_storage_generation, expected_target_management_generation, expected_target_execution_generation]
+  description: >-
+    One destination per project. Project migration authority is checked separately
+    from connection/space management, at preview, acceptance and child acceptance.
+    A destination must be outside the complete retiring source set and pass existing
+    policy, capacity, authorization and lifecycle checks. Already accepted child
+    input is immutable; updating a plan cannot enlarge the retirement scope.
+  properties:
+    project_id:
+      type: integer
+      minimum: 1
+    target_space_id:
+      type: integer
+      minimum: 1
+    expected_storage_generation:
+      $ref: '#/StorageRetirementGeneration'
+    expected_target_management_generation:
+      $ref: '#/StorageRetirementGeneration'
+    expected_target_execution_generation:
+      $ref: '#/StorageRetirementGeneration'
+StorageRetirementPreviewRequest:
+  type: object
+  additionalProperties: false
+  required: [target_kind, target_id]
+  properties:
+    target_kind:
+      $ref: '#/StorageRetirementTargetKind'
+    target_id:
+      type: integer
+      minimum: 1
+    plan:
+      type: array
+      description: Optional per-project destinations; omitted projects may remain blocked for their authorized managers.
+      items:
+        $ref: '#/StorageRetirementProjectPlan'
+    cursor:
+      type: integer
+      minimum: 0
+      description: Dependency page cursor; when present, preview_revision is required to retain the same snapshot.
+    limit:
+      type: integer
+      minimum: 1
+      maximum: 100
+      default: 50
+    preview_revision:
+      type: string
+      minLength: 1
+      description: Required with cursor; an expired or changed snapshot returns storage_retirement_preview_stale.
+StorageRetirementAssessmentReasonCode:
+  type: string
+  description: >-
+    Retirement-only permission and destination assessment reasons. forbidden denotes
+    the caller lacking the required project or management permission;
+    storage_permission_denied denotes provider permission failure. Preserve existing
+    destination discovery reasons such as policy_disallowed and space_unverified.
+    This enum does not expand the reason vocabulary or semantics of management actions.
+  enum:
+    - forbidden
+    - policy_disallowed
+    - selection_required
+    - byos_disabled
+    - storage_policy_violation
+    - storage_permission_denied
+    - space_unverified
+    - storage_operation_in_progress
+    - project_not_empty
+    - storage_generation_conflict
+    - storage_maintenance
+    - storage_deployment_disabled
+    - storage_capability_unsupported
+    - connection_disabled
+    - storage_space_required
+    - storage_check_space_limit_exceeded
+    - space_disabled
+    - space_read_only
+    - storage_auth_required
+    - storage_crypto_unavailable
+    - storage_disk_insufficient
+    - storage_disk_probe_failed
+    - storage_quota_exceeded
+    - storage_unavailable
+    - storage_retiring
+    - storage_removed
+    - storage_retirement_conflict
+    - storage_retirement_preview_stale
+    - storage_retirement_dependencies_remaining
+    - storage_retirement_configuration_pending
+StorageRetirementAssessment:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [allowed, reason_codes]
+  description: >-
+    Metadata-only retirement assessment of current actor permissions or destination
+    eligibility, not a management action or guarantee of provider I/O success.
+    Allowed assessments have no reasons; denied assessments have at least one stable,
+    sanitized reason. Connection management never implies project migration permission.
+  properties:
+    allowed:
+      type: boolean
+    reason_codes:
+      type: array
+      uniqueItems: true
+      items:
+        $ref: '#/StorageRetirementAssessmentReasonCode'
+StorageRetirementProjectAssessment:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [project_id, permissions, target_check, accepted]
+  description: Only returned for a project the caller may view; hidden projects appear solely in redacted dependency aggregates.
+  properties:
+    project_id:
+      type: integer
+      minimum: 1
+    plan:
+      $ref: '#/StorageRetirementProjectPlan'
+    permissions:
+      type: object
+      additionalProperties: false
+      required: [view, migrate, update_plan]
+      properties:
+        view:
+          $ref: '#/StorageRetirementAssessment'
+        migrate:
+          $ref: '#/StorageRetirementAssessment'
+        update_plan:
+          $ref: '#/StorageRetirementAssessment'
+    target_check:
+      $ref: '#/StorageRetirementAssessment'
+    accepted:
+      type: boolean
+    migration_task_id:
+      type: integer
+      minimum: 1
+      description: Included only when the caller may view this child task.
+StorageRetirementDependency:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [kind, status, redacted, count, reason_codes]
+  description: >-
+    Metadata-only projection. No credentials, ciphertext, object keys, provider
+    versions, bucket/prefix, leases or signed URLs. Without project visibility,
+    aggregate by kind, set redacted=true and omit project_id, space_id,
+    migration_task_id and protected_bytes. Reason codes remain sanitized.
+  properties:
+    kind:
+      type: string
+      enum: [project_binding, active_location, candidate, probe, reservation, unknown_write, deletion, execution_reference, backup_pin, default_policy, configuration, marker]
+    status:
+      $ref: '#/StorageRetirementStatus'
+    redacted:
+      type: boolean
+    count:
+      type: integer
+      minimum: 1
+    project_id:
+      type: integer
+      minimum: 1
+    space_id:
+      type: integer
+      minimum: 1
+    migration_task_id:
+      type: integer
+      minimum: 1
+    protected_bytes:
+      type: integer
+      format: int64
+      minimum: 0
+      maximum: 9007199254740991
+    next_check_at:
+      type: string
+      format: date-time
+      nullable: true
+    reason_codes:
+      type: array
+      uniqueItems: true
+      items:
+        type: string
+      description: Stable domain codes; permission, capacity, maintenance and missing-object reasons remain distinct.
+StorageRetirementDependencyPage:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [items, next_cursor, has_more]
+  description: >-
+    Stable cursor pagination of the authorized projection. Never infer safe removal
+    from an empty page, redacted details, a failed page load or incomplete pagination.
+    Completion depends on authoritative inventory, not this projection.
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/StorageRetirementDependency'
+    next_cursor:
+      type: integer
+      minimum: 1
+      nullable: true
+      description: Opaque numeric continuation; null exactly when has_more is false.
+    has_more:
+      type: boolean
+StorageRetirementPreview:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [contract_version, target, preview_revision, expires_at, required_capability, availability, projects, dependencies, impact]
+  description: >-
+    Read-only metadata snapshot only, never a remote capability guarantee. Revision
+    covers normalized target, complete scope/generations, bindings/objects, defaults,
+    policy and confirmed destinations. Acceptance rechecks all facts transactionally.
+  properties:
+    contract_version:
+      type: integer
+      enum: [1]
+    target:
+      $ref: '#/StorageRetirementTarget'
+    preview_revision:
+      type: string
+      minLength: 1
+      description: >-
+        Signed preview revision; valid for five minutes and bound to the requesting actor.
+        A service restart rotates the signing key, so revisions issued before a restart are
+        stale and the caller must re-preview. An expired, restarted or changed snapshot
+        returns storage_retirement_preview_stale.
+    expires_at:
+      type: string
+      format: date-time
+    required_capability:
+      type: string
+      enum: [unused_removal, in_use_retirement]
+    availability:
+      $ref: '#/StorageRetirementAssessment'
+    projects:
+      type: array
+      items:
+        $ref: '#/StorageRetirementProjectAssessment'
+    dependencies:
+      $ref: '#/StorageRetirementDependencyPage'
+    impact:
+      type: object
+      additionalProperties: false
+      required: [space_count, project_count, hidden_project_count, configuration_action_required]
+      properties:
+        space_count:
+          type: integer
+          minimum: 0
+        project_count:
+          type: integer
+          minimum: 0
+        hidden_project_count:
+          type: integer
+          minimum: 0
+        configuration_action_required:
+          type: boolean
+StorageRetirementCreateRequest:
+  type: object
+  additionalProperties: false
+  required: [preview_revision, confirmed_scope, plan]
+  description: >-
+    Echo the full normalized target as confirmed_scope, including management and
+    execution generations. No omitted or additional source spaces. An explicit
+    empty plan is permitted only as evaluated by preview and actual capability.
+    Same idempotency key with different confirmed input conflicts; an accepted
+    idempotent result is replayed first, reauthorized and returned as the original
+    identity, even after removal.
+  properties:
+    preview_revision:
+      type: string
+      minLength: 1
+      description: >-
+        Signed preview revision; valid for five minutes and bound to the requesting actor.
+        A service restart rotates the signing key, so revisions issued before a restart are
+        stale and the caller must re-preview. An expired, restarted or changed snapshot
+        returns storage_retirement_preview_stale.
+    confirmed_scope:
+      $ref: '#/StorageRetirementTarget'
+    plan:
+      type: array
+      items:
+        $ref: '#/StorageRetirementProjectPlan'
+StorageRetirementPlanRequest:
+  type: object
+  additionalProperties: false
+  required: [expected_generation, preview_revision, confirmed_scope, plan]
+  properties:
+    expected_generation:
+      $ref: '#/StorageRetirementGeneration'
+    preview_revision:
+      type: string
+      minLength: 1
+      description: >-
+        Signed preview revision; valid for five minutes and bound to the requesting actor.
+        A service restart rotates the signing key, so revisions issued before a restart are
+        stale and the caller must re-preview. An expired, restarted or changed snapshot
+        returns storage_retirement_preview_stale.
+    confirmed_scope:
+      $ref: '#/StorageRetirementTarget'
+    plan:
+      type: array
+      description: Replace only unaccepted project destinations; never rewrite accepted child inputs or expand the source scope.
+      items:
+        $ref: '#/StorageRetirementProjectPlan'
+StorageRetirementActionRequest:
+  type: object
+  additionalProperties: false
+  required: [expected_generation]
+  properties:
+    expected_generation:
+      $ref: '#/StorageRetirementGeneration'
+StorageRetirementRecoverAuthorizationRequest:
+  type: object
+  additionalProperties: false
+  required: [expected_generation, expected_management_generation, credentials]
+  description: >-
+    Stored connections only, with connection management permission, while the same
+    retirement is blocked in finalizing. Save candidate credentials through an
+    authorization version restricted to this retirement's exact verification/cleanup.
+    Never activate ordinary business authorization, recreate removed markers, enable
+    the connection or unlock ordinary I/O. Deployment sources reject uploaded
+    credentials and return configuration recovery guidance. Never echo secrets.
+  properties:
+    expected_generation:
+      $ref: '#/StorageRetirementGeneration'
+    expected_management_generation:
+      $ref: '#/StorageRetirementGeneration'
+    credentials:
+      type: object
+      writeOnly: true
+      additionalProperties: false
+      required: [access_key_id, secret_access_key]
+      properties:
+        access_key_id:
+          type: string
+          minLength: 1
+          writeOnly: true
+        secret_access_key:
+          type: string
+          minLength: 1
+          writeOnly: true
+        session_token:
+          type: string
+          writeOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+StorageRetirementStatus:
+  type: string
+  enum: [pending, running, waiting_retry, needs_action, completed, failed, cancelled]
+StorageRetirementPhase:
+  type: string
+  enum: [draining, migrating, waiting_cleanup, finalizing, waiting_configuration, completed]
+StorageRetirementAllowedActions:
+  type: array
+  uniqueItems: true
+  description: >-
+    Recomputed using current actor permissions and durable state. Connection management
+    never grants project migration authority. Cancel is absent from finalizing onward.
+    Resume continues the same task. Merely viewing progress does not require permission
+    to migrate every project. update_plan, resume, cancel and recover_authorization are
+    recomputed per request; cancel disappears from finalizing onward and resume only
+    continues the same durable task.
+  items:
+    type: string
+    enum: [update_plan, resume, cancel, recover_authorization]
+StorageRetirement:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [retirement_id, contract_version, target, status, phase, generation, cancel_requested, next_check_at, reason_codes, allowed_actions, created_at, updated_at, result]
+  description: >-
+    Dedicated cross-project parent, with no fabricated project_id. Failed retains
+    lifecycle=retiring and exclusive ownership; resume uses this same identity.
+    Completed means the target and every covered space are removed, with cleanup
+    and configuration obligations satisfied. Cancellation does not roll back migrated
+    projects or override subsequent disable/revocation. Historical results remain
+    queryable under management ownership permissions.
+  properties:
+    retirement_id:
+      type: integer
+      minimum: 1
+    contract_version:
+      type: integer
+      enum: [1]
+    target:
+      $ref: '#/StorageRetirementTarget'
+    status:
+      $ref: '#/StorageRetirementStatus'
+    phase:
+      $ref: '#/StorageRetirementPhase'
+    generation:
+      $ref: '#/StorageRetirementGeneration'
+    cancel_requested:
+      type: boolean
+    next_check_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: Durable retention/pin waiting does not consume failure retry attempts.
+    reason_codes:
+      type: array
+      uniqueItems: true
+      items:
+        type: string
+    allowed_actions:
+      $ref: '#/StorageRetirementAllowedActions'
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+    result:
+      $ref: '#/StorageRetirementResult'
+StorageRetirementResult:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [cleanup_status, configuration_source, configuration_status, configuration_actions]
+  properties:
+    cleanup_status:
+      type: string
+      enum: [pending, running, blocked, completed]
+    configuration_source:
+      $ref: './storage.yaml#/StorageConfigurationSource'
+    configuration_status:
+      type: string
+      enum: [not_required, pending, completed]
+    configuration_actions:
+      type: array
+      uniqueItems: true
+      description: Sanitized operator guidance; completion requires actual loaded configuration verification, never a client acknowledgement.
+      items:
+        type: string
+        enum: [change_default, restore_deployment_authorization, remove_backend_configuration, reload_configuration]
+StorageRetirementDetail:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [retirement, projects, dependencies]
+  properties:
+    retirement:
+      $ref: '#/StorageRetirement'
+    projects:
+      type: array
+      description: Authorized project/child projections for this dependency page; never include hidden project identities.
+      items:
+        $ref: '#/StorageRetirementProjectAssessment'
+    dependencies:
+      $ref: '#/StorageRetirementDependencyPage'
+StorageRetirementList:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [items, next_cursor, has_more]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/StorageRetirement'
+    next_cursor:
+      type: integer
+      minimum: 1
+      nullable: true
+    has_more:
+      type: boolean

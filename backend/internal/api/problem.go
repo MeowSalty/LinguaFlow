@@ -23,15 +23,16 @@ const (
 )
 
 type problemDetails struct {
-	ErrorCode   string `json:"error_code,omitempty"`
-	TaskID      int    `json:"task_id,omitempty"`
-	OperationID string `json:"operation_id,omitempty"`
-	CheckID     int    `json:"check_id,omitempty"`
-	Type        string `json:"type,omitempty"`
-	Title       string `json:"title"`
-	Status      int    `json:"status"`
-	Detail      string `json:"detail,omitempty"`
-	Instance    string `json:"instance,omitempty"`
+	ErrorCode    string `json:"error_code,omitempty"`
+	TaskID       int    `json:"task_id,omitempty"`
+	OperationID  string `json:"operation_id,omitempty"`
+	CheckID      int    `json:"check_id,omitempty"`
+	RetirementID int    `json:"retirement_id,omitempty"`
+	Type         string `json:"type,omitempty"`
+	Title        string `json:"title"`
+	Status       int    `json:"status"`
+	Detail       string `json:"detail,omitempty"`
+	Instance     string `json:"instance,omitempty"`
 }
 
 type storageProblemIdentityKey struct{}
@@ -161,6 +162,7 @@ func (s *Server) writeProblemWithType(w http.ResponseWriter, r *http.Request, st
 	}
 	if identity, ok := r.Context().Value(storageProblemIdentityKey{}).(*service.StorageOperationError); ok {
 		problem.TaskID, problem.OperationID, problem.CheckID = identity.TaskID, identity.OperationID, identity.CheckID
+		problem.RetirementID = identity.RetirementID
 	}
 	_ = json.NewEncoder(w).Encode(problem)
 }
@@ -183,7 +185,14 @@ func (s *Server) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) boo
 }
 
 func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
+	var accountInput *service.AccountInputError
+	if errors.As(err, &accountInput) {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", accountInput.Error())
+		return
+	}
 	switch {
+	case errors.Is(err, service.ErrAuthenticationRuleDenied):
+		s.writeProblemWithType(w, r, http.StatusForbidden, urnPrefix+"authentication-rule-denied", "authentication_rule_denied", "当前注册资料不满足准入条件")
 	case errors.Is(err, event.ErrHistoryUnavailable):
 		s.writeProblem(w, r, http.StatusServiceUnavailable, "history_unavailable", "任务事件历史暂不可用")
 	case errors.Is(err, service.ErrTaskHistoryNotFound), errors.Is(err, service.ErrJobNotFound), errors.Is(err, service.ErrSyncTaskNotFound), errors.Is(err, service.ErrProjectNotFound):
@@ -219,7 +228,7 @@ func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err e
 	case errors.Is(err, service.ErrInvalidInput):
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	case errors.Is(err, service.ErrInvalidCredentials):
-		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"invalid-credentials", "unauthorized", "用户名或密码错误")
+		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"invalid-credentials", "unauthorized", "账号或密码错误")
 	case errors.Is(err, service.ErrSettingsUnavailable):
 		s.writeProblemWithType(w, r, http.StatusServiceUnavailable, urnPrefix+"settings-unavailable", "unavailable", "系统设置暂不可用")
 	case errors.Is(err, service.ErrTokenExpired):
@@ -231,7 +240,9 @@ func (s *Server) writeServiceError(w http.ResponseWriter, r *http.Request, err e
 	case errors.Is(err, service.ErrUserInactive):
 		s.writeProblemWithType(w, r, http.StatusUnauthorized, urnPrefix+"user-inactive", "unauthorized", "用户已被禁用")
 	case errors.Is(err, service.ErrUserExists):
-		s.writeProblem(w, r, http.StatusConflict, "conflict", "用户已存在")
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "用户名不可用")
+	case errors.Is(err, service.ErrAccountConflict):
+		s.writeProblem(w, r, http.StatusConflict, "account_conflict", "账号状态已改变，请重新读取后重试")
 	case errors.Is(err, service.ErrForbidden):
 		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrRegistrationClosed):

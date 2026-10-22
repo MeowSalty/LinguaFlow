@@ -21,6 +21,92 @@ vars:
   BACKEND_LDFLAGS: '{{default (printf "%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=%s" .BACKEND_LDFLAGS_EXTRA .VERSION .COMMIT) .BACKEND_LDFLAGS}}'
 
 tasks:
+  test:auth:deployment:
+    desc: 隔离 PostgreSQL、Keycloak 26.8.0、通用 OAuth 及同源/跨域 A/B1/B2/B3 认证验收
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/deployment.mjs --postgres
+
+  test:auth:browser:
+    desc: 真实 Keycloak、受控通用 OAuth 与双部署浏览器认证验收
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/deployment.mjs
+
+  test:auth:browser:syntax:
+    desc: 检查后端独立认证浏览器验收脚本语法
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node --check ./internal/authacceptance/deployment.mjs
+      - node --check ./internal/authacceptance/runtime.mjs
+      - node --check ./internal/authacceptance/oauth2.mjs
+      - node --check ./internal/authacceptance/github.mjs
+      - node --check ./internal/authacceptance/postgres-b3.mjs
+      - node --check ./internal/authacceptance/postgres-b4.mjs
+      - node --check ./internal/authacceptance/postgres-b5.mjs
+
+  test:auth:b5:
+    desc: B5 本地政策、注册要求、派生规则及部署恢复验收
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test -count=1 ./internal/accountidentity ./internal/authrules
+      - go test -count=1 ./internal/service ./internal/api ./internal/cli -run 'AuthenticationB5|AuthenticationRecovery'
+
+  test:auth:postgres:b5:
+    desc: B5 隔离 PostgreSQL 配置、注册、账号维护和部署恢复竞态验收（未配置不计通过）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/postgres-b5.mjs
+
+  test:auth:postgres:b4:
+    desc: 独立隔离 PostgreSQL B4 认证契约与竞态验收（等待整个 Go 测试完成再清理实例）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/postgres-b4.mjs
+
+  test:auth:postgres:b3:
+    desc: 独立隔离 PostgreSQL B3 认证竞态验收（等待整个测试完成再清理实例）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/postgres-b3.mjs
+      - node --check ./internal/authacceptance/postgres-b4.mjs
+
+  test:auth:github:
+    desc: 显式真实 GitHub OAuth 交互验收（需专用 OAuth App 与人工浏览器授权；未运行不得记为通过）
+    dir: '{{.TASKFILE_DIR}}'
+    dotenv: ['{{.TASKFILE_DIR}}/internal/authacceptance/.env']
+    interactive: true
+    cmds:
+      - node ./internal/authacceptance/github.mjs
+
+  auth:prepare:
+    desc: 下载并校验隔离认证验收所需的 Keycloak 26.8.0
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/authacceptance/prepare.mjs
+
+  auth:browser:install:
+    desc: 安装后端独立浏览器验收依赖与 Chromium（不改前端）
+    dir: '{{.TASKFILE_DIR}}/internal/authacceptance'
+    cmds:
+      - pnpm install --ignore-workspace --registry=https://registry.npmjs.org
+      - pnpm exec playwright install chromium
+
+  test:auth:
+    desc: 认证合同、状态机及网络边界定向测试
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test -count=1 ./internal/authrules ./internal/authoidc ./internal/authoauth2 ./internal/config ./internal/service ./internal/api ./internal/database -run 'Auth|OIDC|OAuth|Generic|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
+
+  test:auth:postgres:
+    desc: 真实 PostgreSQL 认证竞态验收（缺少 DSN 直接失败）
+    dir: '{{.TASKFILE_DIR}}'
+    preconditions:
+      - sh: test -n "$LINGUAFLOW_TEST_POSTGRES_DSN"
+        msg: PostgreSQL 未验收，必须提供隔离实例 LINGUAFLOW_TEST_POSTGRES_DSN
+    cmds:
+      - go test -race -count=1 ./internal/service ./internal/database -run 'Auth|OAuth|Generic|External|Login|Register|Registration|Reauthentication|Refresh|Password|Session|Connection'
+
   deps:tidy:
     desc: 整理后端 Go 模块依赖
     dir: '{{.TASKFILE_DIR}}'
@@ -64,37 +150,37 @@ tasks:
       - go run ./cmd/linguaflow-storage-migrate rollback {{.CLI_ARGS}}
 
   migrate:v013:
-    desc: 预演 v0.13.0 PostgreSQL 迁移并回滚
+    desc: 历史 PostgreSQL 迁移入口（新账号格式不兼容，本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 postgres {{.CLI_ARGS}}
 
   migrate:v013:apply:
-    desc: 正式提交 v0.13.0 PostgreSQL 一次性迁移
+    desc: 历史 PostgreSQL 迁移提交入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 postgres --apply {{.CLI_ARGS}}
 
   migrate:v013:local:
-    desc: 预演 v0.13.0 SQLite local 数据目录迁移
+    desc: 历史 SQLite local 迁移入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 local {{.CLI_ARGS}}
 
   migrate:v013:local:apply:
-    desc: 迁移 v0.13.0 SQLite local 数据目录并保留原目录备份
+    desc: 历史 SQLite local 迁移提交入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 local --apply {{.CLI_ARGS}}
 
   migrate:v013:sqlite:
-    desc: 预演 SQLite 数据目录迁移（CLI_ARGS 显式指定 --mode serve 或 local）
+    desc: 历史 SQLite 迁移入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 sqlite {{.CLI_ARGS}}
 
   migrate:v013:sqlite:apply:
-    desc: 发布 SQLite 数据目录迁移并保留备份（显式指定 --mode）
+    desc: 历史 SQLite 迁移提交入口（本版本拒绝执行）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run ./cmd/linguaflow-migrate v013 sqlite --apply {{.CLI_ARGS}}

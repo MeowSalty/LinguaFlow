@@ -70,7 +70,7 @@ docker logs linguaflow  # 查看日志
 
 ### 从源码构建失败？
 
-1. 确认 Go 版本 >= 1.26.8（见 [安装部署 · 系统要求](/zh/guide/installation#系统要求)）
+1. 确认 Go 版本 >= 1.26.10（见 [安装部署 · 系统要求](/zh/guide/installation#系统要求)）
 2. 确认 Node.js 版本满足 `^20.19.0` 或 `>=22.12.0`(见 `frontend/package.json` 的 engines)
 3. 确认已安装 pnpm 与 [Task](https://taskfile.dev)
 4. 运行 `task backend:install` 和 `task frontend:install` 安装依赖

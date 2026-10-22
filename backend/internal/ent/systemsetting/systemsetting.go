@@ -21,6 +21,8 @@ const (
 	FieldKey = "key"
 	// FieldValue holds the string denoting the value field in the database.
 	FieldValue = "value"
+	// FieldRevision holds the string denoting the revision field in the database.
+	FieldRevision = "revision"
 	// FieldDescription holds the string denoting the description field in the database.
 	FieldDescription = "description"
 	// Table holds the table name of the systemsetting in the database.
@@ -34,6 +36,7 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldKey,
 	FieldValue,
+	FieldRevision,
 	FieldDescription,
 }
 
@@ -56,6 +59,10 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// KeyValidator is a validator for the "key" field. It is called by the builders before save.
 	KeyValidator func(string) error
+	// DefaultRevision holds the default value on creation for the "revision" field.
+	DefaultRevision int64
+	// RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
+	RevisionValidator func(int64) error
 )
 
 // OrderOption defines the ordering options for the SystemSetting queries.
@@ -84,6 +91,11 @@ func ByKey(opts ...sql.OrderTermOption) OrderOption {
 // ByValue orders the results by the value field.
 func ByValue(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldValue, opts...).ToFunc()
+}
+
+// ByRevision orders the results by the revision field.
+func ByRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRevision, opts...).ToFunc()
 }
 
 // ByDescription orders the results by the description field.

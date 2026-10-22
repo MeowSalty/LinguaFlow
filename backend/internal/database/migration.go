@@ -22,6 +22,16 @@ func WithMigrationLock(ctx context.Context, db *sql.DB, driver string, migrate f
 	if err != nil {
 		return err
 	}
+	return withMigrationConnection(ctx, db, driver, func(conn *sql.Conn) error {
+		drv := &migrationConnection{Driver: entsql.NewDriver(name, entsql.Conn{ExecQuerier: conn}), conn: conn}
+		client := ent.NewClient(ent.Driver(NewDriver(drv)))
+		return migrate(client)
+	})
+}
+
+// withMigrationConnection shares one advisory-lock boundary between format
+// checks and schema migration, including when the pool has only one connection.
+func withMigrationConnection(ctx context.Context, db *sql.DB, driver string, use func(*sql.Conn) error) (err error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return databaseError(driver, "acquire migration connection", err)
@@ -51,9 +61,7 @@ func WithMigrationLock(ctx context.Context, db *sql.DB, driver string, migrate f
 			}
 		}()
 	}
-	drv := &migrationConnection{Driver: entsql.NewDriver(name, entsql.Conn{ExecQuerier: conn}), conn: conn}
-	client := ent.NewClient(ent.Driver(NewDriver(drv)))
-	return migrate(client)
+	return use(conn)
 }
 
 type migrationConnection struct {

@@ -15,6 +15,60 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /auth/reauthenticate:
+    $ref: './paths/auth-external.yaml#/reauthenticate'
+  /auth/external/{connectionId}/start:
+    $ref: './paths/auth-external.yaml#/start'
+  /auth/external/{connectionId}/callback:
+    $ref: './paths/auth-external.yaml#/callback'
+  /auth/external/exchange:
+    $ref: './paths/auth-external.yaml#/exchange'
+  /auth/external/complete:
+    $ref: './paths/auth-external.yaml#/complete'
+  /auth/external/cancel:
+    $ref: './paths/auth-external.yaml#/cancel'
+  /auth/connections/{connectionId}/logo:
+    $ref: './paths/auth-external.yaml#/logo'
+  /users/me/login-methods:
+    $ref: './paths/auth-external.yaml#/methods'
+  /users/me/login-bindings/{connectionId}/start:
+    $ref: './paths/auth-external.yaml#/link'
+  /users/me/login-bindings/{bindingId}:
+    $ref: './paths/auth-external.yaml#/unlink'
+  /admin/auth-connections:
+    $ref: './paths/auth-connections.yaml#/collection'
+  /admin/auth-connections/{connectionId}:
+    $ref: './paths/auth-connections.yaml#/item'
+  /admin/auth-connections/{connectionId}/attributes:
+    $ref: './paths/auth-connections.yaml#/attributes'
+  /admin/auth-connections/{connectionId}/preview:
+    $ref: './paths/auth-connections.yaml#/preview'
+  /admin/auth-connections/{connectionId}/check:
+    $ref: './paths/auth-connections.yaml#/check'
+  /admin/auth-connections/{connectionId}/test:
+    $ref: './paths/auth-connections.yaml#/test'
+  /admin/auth-connections/{connectionId}/impact:
+    $ref: './paths/auth-connections.yaml#/impact'
+  /admin/auth-connections/{connectionId}/configure:
+    $ref: './paths/auth-connections.yaml#/configure'
+  /admin/auth-connections/{connectionId}/enable:
+    $ref: './paths/auth-connections.yaml#/enable'
+  /admin/auth-connections/{connectionId}/disable:
+    $ref: './paths/auth-connections.yaml#/disable'
+  /admin/auth-connections/{connectionId}/archive:
+    $ref: './paths/auth-connections.yaml#/archive'
+  /admin/auth-connections/{connectionId}/restore:
+    $ref: './paths/auth-connections.yaml#/restore'
+  /admin/auth-connections/{connectionId}/logo:
+    $ref: './paths/auth-connections.yaml#/logo'
+  /admin/local-account:
+    $ref: './paths/admin-local-account.yaml#/localAccount'
+  /admin/local-account/attributes:
+    $ref: './paths/admin-local-account.yaml#/localAccountAttributes'
+  /admin/local-account/preview:
+    $ref: './paths/admin-local-account.yaml#/localAccountPreview'
+  /admin/local-account/impact:
+    $ref: './paths/admin-local-account.yaml#/localAccountImpact'
   /admin/task-retention/preview:
     $ref: './paths/task-retention.yaml#/preview'
   /admin/task-retention/status:
@@ -23,6 +77,20 @@ paths:
     $ref: './paths/task-retention.yaml#/batchDelete'
   /storage/capabilities:
     $ref: './paths/storage.yaml#/storageCapabilities'
+  /storage/retirement-previews:
+    $ref: './paths/storage-retirements.yaml#/storageRetirementPreviews'
+  /storage/retirements:
+    $ref: './paths/storage-retirements.yaml#/storageRetirements'
+  /storage/retirements/{retirementId}:
+    $ref: './paths/storage-retirements.yaml#/storageRetirement'
+  /storage/retirements/{retirementId}/plan:
+    $ref: './paths/storage-retirements.yaml#/storageRetirementPlan'
+  /storage/retirements/{retirementId}/resume:
+    $ref: './paths/storage-retirements.yaml#/resumeStorageRetirement'
+  /storage/retirements/{retirementId}/cancel:
+    $ref: './paths/storage-retirements.yaml#/cancelStorageRetirement'
+  /storage/retirements/{retirementId}/recover-authorization:
+    $ref: './paths/storage-retirements.yaml#/recoverStorageRetirementAuthorization'
   /storage/options:
     $ref: './paths/storage.yaml#/storageOptions'
   /projects/{projectId}/storage/options:
@@ -99,6 +167,8 @@ paths:
     $ref: './paths/system.yaml#/ping'
   /mode:
     $ref: './paths/system.yaml#/mode'
+  /auth/capabilities:
+    $ref: './paths/auth.yaml#/capabilities'
   /auth/register:
     $ref: './paths/auth.yaml#/register'
   /auth/login:
@@ -304,6 +374,88 @@ components:
     Problem:
       $ref: './components/responses.yaml#/Problem'
   schemas:
+    OIDCConnectionConfig:
+      $ref: './components/schemas/auth-external.yaml#/OIDCConnectionConfig'
+    AuthConnectionPolicy:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionPolicy'
+    ExternalBrowserInput:
+      $ref: './components/schemas/auth-external.yaml#/ExternalBrowserInput'
+    ExternalLinkStartRequest:
+      $ref: './components/schemas/auth-external.yaml#/ExternalLinkStartRequest'
+    ExternalStartResponse:
+      $ref: './components/schemas/auth-external.yaml#/ExternalStartResponse'
+    ExternalExchangeRequest:
+      $ref: './components/schemas/auth-external.yaml#/ExternalExchangeRequest'
+    ExternalCompleteRequest:
+      $ref: './components/schemas/auth-external.yaml#/ExternalCompleteRequest'
+    ExternalCancelRequest:
+      $ref: './components/schemas/auth-external.yaml#/ExternalCancelRequest'
+    ReauthenticationRequest:
+      $ref: './components/schemas/auth-external.yaml#/ReauthenticationRequest'
+    ReauthenticationProofResponse:
+      $ref: './components/schemas/auth-external.yaml#/ReauthenticationProofResponse'
+    ExternalProfile:
+      $ref: './components/schemas/auth-external.yaml#/ExternalProfile'
+    ExternalConfirmationResponse:
+      $ref: './components/schemas/auth-external.yaml#/ExternalConfirmationResponse'
+    ExternalSessionResponse:
+      $ref: './components/schemas/auth-external.yaml#/ExternalSessionResponse'
+    ExternalProofResponse:
+      $ref: './components/schemas/auth-external.yaml#/ExternalProofResponse'
+    ExternalTestResponse:
+      $ref: './components/schemas/auth-external.yaml#/ExternalTestResponse'
+    ExternalExchangeResponse:
+      $ref: './components/schemas/auth-external.yaml#/ExternalExchangeResponse'
+    ExternalLinkedResponse:
+      $ref: './components/schemas/auth-external.yaml#/ExternalLinkedResponse'
+    ExternalCompleteResponse:
+      $ref: './components/schemas/auth-external.yaml#/ExternalCompleteResponse'
+    InitialPasswordRequest:
+      $ref: './components/schemas/auth-external.yaml#/InitialPasswordRequest'
+    SensitiveOperationRequest:
+      $ref: './components/schemas/auth-external.yaml#/SensitiveOperationRequest'
+    PublicAuthConnection:
+      $ref: './components/schemas/auth-external.yaml#/PublicAuthConnection'
+    CreateAuthConnectionRequest:
+      $ref: './components/schemas/auth-external.yaml#/CreateAuthConnectionRequest'
+    UpdateAuthConnectionRequest:
+      $ref: './components/schemas/auth-external.yaml#/UpdateAuthConnectionRequest'
+    AuthConnectionCandidateRequest:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionCandidateRequest'
+    AuthConnectionActionRequest:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionActionRequest'
+    AuthConnectionTestRequest:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionTestRequest'
+    AuthConnectionChanges:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionChanges'
+    AuthConnectionSnapshot:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionSnapshot'
+    AuthConnectionValidationResult:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionValidationResult'
+    AuthConnectionRecord:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionRecord'
+    AuthConnectionCapabilities:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionCapabilities'
+    AuthConnectionSetup:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionSetup'
+    AuthConnectionProtocolSetup:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionProtocolSetup'
+    AuthConfigurationIssue:
+      $ref: './components/schemas/auth-external.yaml#/AuthConfigurationIssue'
+    AuthConnectionErrorProblem:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionErrorProblem'
+    AuthConnectionErrorCode:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionErrorCode'
+    AuthConnectionsResponse:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionsResponse'
+    AuthConnectionCheck:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionCheck'
+    AuthConnectionImpactResult:
+      $ref: './components/schemas/auth-external.yaml#/AuthConnectionImpactResult'
+    LoginMethod:
+      $ref: './components/schemas/auth-external.yaml#/LoginMethod'
+    LoginMethodsResponse:
+      $ref: './components/schemas/auth-external.yaml#/LoginMethodsResponse'
     TaskRetentionPolicy:
       $ref: './components/schemas/task-retention.yaml#/TaskRetentionPolicy'
     TaskRetentionPatch:
@@ -322,6 +474,12 @@ components:
       $ref: './components/schemas/common.yaml#/HealthResponse'
     ModeResponse:
       $ref: './components/schemas/common.yaml#/ModeResponse'
+    UsernameInput:
+      $ref: './components/schemas/auth.yaml#/UsernameInput'
+    Username:
+      $ref: './components/schemas/auth.yaml#/Username'
+    AuthCapabilities:
+      $ref: './components/schemas/auth.yaml#/AuthCapabilities'
     User:
       $ref: './components/schemas/user.yaml#/User'
     RegisterRequest:
@@ -334,6 +492,16 @@ components:
       $ref: './components/schemas/auth.yaml#/LogoutRequest'
     AuthSession:
       $ref: './components/schemas/auth.yaml#/AuthSession'
+    LocalAccountPolicyInput:
+      $ref: './components/schemas/auth.yaml#/LocalAccountPolicyInput'
+    LocalAccountCapabilities:
+      $ref: './components/schemas/auth.yaml#/LocalAccountCapabilities'
+    LocalAccountPreviewRequest:
+      $ref: './components/schemas/auth-local.yaml#/LocalAccountPreviewRequest'
+    SignupPolicyRequirements:
+      $ref: './components/schemas/common.yaml#/SignupPolicyRequirements'
+    AuthSignupRequirements:
+      $ref: './components/schemas/common.yaml#/AuthSignupRequirements'
     UpdateCurrentUserRequest:
       $ref: './components/schemas/user.yaml#/UpdateCurrentUserRequest'
     ChangePasswordRequest:

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"modernc.org/sqlite"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -169,11 +170,12 @@ func (s *UserService) AddMember(ctx context.Context, actorUserID, orgID int, inp
 	if input.Role != nil {
 		role = *input.Role
 	}
-	if actorUserID <= 0 || !validOrgRole(role) || normalizeIdentity(input.Username) == "" {
+	username, err := accountidentity.NormalizeUsername(input.Username)
+	if actorUserID <= 0 || !validOrgRole(role) || err != nil {
 		return nil, ErrInvalidInput
 	}
 	var result *ent.OrgMembership
-	err := withOrganizationMutation(ctx, s.client, orgID, func(client *ent.Client) error {
+	err = withOrganizationMutation(ctx, s.client, orgID, func(client *ent.Client) error {
 		actor, err := requireOrganizationMembership(ctx, client, actorUserID, orgID, OrgRoleAdmin)
 		if err != nil {
 			return err
@@ -181,7 +183,7 @@ func (s *UserService) AddMember(ctx context.Context, actorUserID, orgID int, inp
 		if actor.Role != OrgRoleOwner && role != OrgRoleMember {
 			return ErrForbidden
 		}
-		target, err := client.User.Query().Where(user.UsernameEQ(normalizeIdentity(input.Username))).Only(ctx)
+		target, err := client.User.Query().Where(user.UsernameEQ(username)).Only(ctx)
 		if err != nil {
 			if ent.IsNotFound(err) {
 				return ErrInvalidInput

@@ -214,11 +214,21 @@ func TestOperationsQueriesAreBoundedAndIndexed(t *testing.T) {
 	if _, err := svc.List(context.Background(), actor.ID, OperationListOptions{AccessibleJobListOptions: AccessibleJobListOptions{Limit: 3}}); err != nil {
 		t.Fatal(err)
 	}
-	if len(recorder.queries) != 4 {
+	// 1 jobs + 2 sync_tasks + 3 storage_tasks + 4 storage_retirements 父任务 + 5 项目名回填。
+	if len(recorder.queries) != 5 {
 		t.Fatalf("list queries: %v", recorder.queries)
 	}
+	retirementSeen := false
 	for _, q := range recorder.queries {
-		for _, sensitive := range []string{"old_target", "new_target", "segment_ids", "resource_ids", "execution_config"} {
+		if strings.Contains(q, "storage_retirements") {
+			retirementSeen = true
+		}
+	}
+	if !retirementSeen {
+		t.Fatal("list queries: missing storage_retirements parent-task select")
+	}
+	for _, q := range recorder.queries {
+		for _, sensitive := range []string{"old_target", "new_target", "segment_ids", "resource_ids", "execution_config", "access_key", "secret", "bucket"} {
 			if strings.Contains(q, sensitive) {
 				t.Fatalf("heavy projection: %s", q)
 			}
@@ -228,7 +238,8 @@ func TestOperationsQueriesAreBoundedAndIndexed(t *testing.T) {
 	if _, err := svc.Summary(context.Background(), actor.ID, OperationSummaryOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if len(recorder.queries) != 3 {
+	// 1 jobs + 2 sync_tasks + 3 storage_tasks + 4 storage_retirements 计数。
+	if len(recorder.queries) != 4 {
 		t.Fatalf("summary queries: %v", recorder.queries)
 	}
 	if err := c.Schema.Create(context.Background()); err != nil {

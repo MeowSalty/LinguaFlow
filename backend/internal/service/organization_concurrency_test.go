@@ -231,16 +231,18 @@ func runOrganizationTransactionCompetition(t *testing.T, first, second *ent.Clie
 	}
 }
 
-func TestOrganizationTransactionRetriesAreBounded(t *testing.T) {
-	ctx := context.Background()
+func TestOrganizationTransactionRetriesRespectContext(t *testing.T) {
 	f := newOrganizationFixture(t)
 	for _, code := range []string{"40001", "40P01", "55P03"} {
+		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 		attempts := 0
 		err := withOrganizationMutation(ctx, f.client, f.org.ID, func(*ent.Client) error { attempts++; return &pgconn.PgError{Code: code} })
-		if err == nil || attempts != organizationMutationAttempts {
+		cancel()
+		if err == nil || !errors.Is(err, context.DeadlineExceeded) || attempts < 2 {
 			t.Fatalf("code=%s attempts=%d err=%v", code, attempts, err)
 		}
 	}
+	ctx := context.Background()
 	for _, cause := range []error{io.EOF, &pgconn.PgError{Code: "08007"}, ErrForbidden, ErrOwnerRequired} {
 		attempts := 0
 		err := withOrganizationMutation(ctx, f.client, f.org.ID, func(*ent.Client) error { attempts++; return cause })
@@ -253,6 +255,39 @@ func TestOrganizationTransactionRetriesAreBounded(t *testing.T) {
 	err := withOrganizationMutation(cancelled, f.client, f.org.ID, func(*ent.Client) error { cancel(); forbidden = true; return &pgconn.PgError{Code: "40001"} })
 	if !forbidden || !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled retry=%v", err)
+	}
+}
+
+func TestOrganizationTransactionDoesNotReplayCommitErrors(t *testing.T) {
+	ctx := context.Background()
+	f := newOrganizationFixture(t)
+	f.client.Organization.Use(func(next ent.Mutator) ent.Mutator {
+		return ent.MutateFunc(func(ctx context.Context, mutation ent.Mutation) (ent.Value, error) {
+			tx, err := mutation.(*ent.OrganizationMutation).Tx()
+			if err != nil {
+				return nil, err
+			}
+			tx.OnCommit(func(next ent.Committer) ent.Committer {
+				return ent.CommitFunc(func(ctx context.Context, tx *ent.Tx) error {
+					if err := next.Commit(ctx, tx); err != nil {
+						return err
+					}
+					// Even a normally retryable code must not replay an operation
+					// whose commit acknowledgement cannot establish rollback.
+					return &pgconn.PgError{Code: "40001"}
+				})
+			})
+			return next.Mutate(ctx, mutation)
+		})
+	})
+	attempts := 0
+	err := withOrganizationMutation(ctx, f.client, f.org.ID, func(*ent.Client) error {
+		attempts++
+		return nil
+	})
+	var commitErr *organizationCommitError
+	if !errors.As(err, &commitErr) || attempts != 1 || isOrganizationTransactionConflict(err) {
+		t.Fatalf("uncertain commit replayed: attempts=%d err=%v", attempts, err)
 	}
 }
 

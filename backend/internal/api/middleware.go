@@ -14,9 +14,10 @@ import (
 
 func (s *Server) applyMiddleware(r *chi.Mux) {
 	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.RealIP)
+	r.Use(s.trustedProxyMiddleware)
 	r.Use(s.requestLoggingMiddleware)
 	r.Use(s.recoverer)
+	r.Use(s.authenticationRateMiddleware)
 
 	allowedOrigins := s.serverCfg.CORS.AllowedOrigins
 	if s.isLocal() {
@@ -58,7 +59,6 @@ func (s *Server) requestLoggingMiddleware(next http.Handler) http.Handler {
 			"request_id", chimiddleware.GetReqID(r.Context()),
 			"method", r.Method,
 			"path", r.URL.Path,
-			"query", r.URL.RawQuery,
 			"status", statusCode,
 			"bytes", ww.BytesWritten(),
 			"duration_ms", time.Since(startedAt).Milliseconds(),

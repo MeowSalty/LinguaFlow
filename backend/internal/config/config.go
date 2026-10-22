@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/netip"
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -270,9 +272,26 @@ type ServerConfig struct {
 	QuickTranslate    QuickTranslateConfig `yaml:"quick_translate"`
 	SSE               SSEConfig            `yaml:"sse"`
 	CORS              CORSConfig           `yaml:"cors"`
+	Authentication    AuthDeploymentConfig `yaml:"authentication"`
 	Credentials       CredentialsConfig    `yaml:"credentials"`
 	Storage           StorageConfig        `yaml:"storage"`
 	ServeUI           bool                 `yaml:"serve_ui"`
+}
+
+// AuthDeploymentConfig defines the deployment-owned boundary around external
+// authentication. Connection-specific OIDC settings and secrets live in the
+// database; these fields describe the public URLs and outbound network policy
+// that an administrator cannot change through the API.
+type AuthDeploymentConfig struct {
+	PublicBaseURL      string        `yaml:"public_base_url"`
+	CompletionURLs     []string      `yaml:"completion_urls"`
+	AllowedHosts       []string      `yaml:"allowed_hosts"`
+	AllowedCIDRs       []string      `yaml:"allowed_cidrs"`
+	AllowHTTPLoopback  bool          `yaml:"allow_http_loopback"`
+	TrustedProxyCIDRs  []string      `yaml:"trusted_proxy_cidrs"`
+	RequestTimeout     time.Duration `yaml:"request_timeout"`
+	MaxResponseBytes   int64         `yaml:"max_response_bytes"`
+	RateLimitPerMinute int           `yaml:"rate_limit_per_minute"`
 }
 
 // CredentialsConfig 标识部署侧持有的加密密钥。
@@ -394,7 +413,12 @@ func DefaultServerConfig() *ServerConfig {
 		Preview:           DefaultPreviewConfig(),
 		QuickTranslate:    DefaultQuickTranslateConfig(),
 		SSE:               DefaultSSEConfig(),
-		Storage:           DefaultStorageConfig(),
+		Authentication: AuthDeploymentConfig{
+			RequestTimeout:     10 * time.Second,
+			MaxResponseBytes:   1 << 20,
+			RateLimitPerMinute: 60,
+		},
+		Storage: DefaultStorageConfig(),
 		CORS: CORSConfig{
 			AllowedOrigins: []string{"*"},
 		},
@@ -500,7 +524,118 @@ func validateServerConfig(c *ServerConfig, requireSecret bool) error {
 	if c.QuickTranslate.Timeout > c.QuickTranslate.MaxTimeout {
 		return fmt.Errorf("server.quick_translate.timeout must not exceed max_timeout")
 	}
+	if err := validateAuthDeploymentConfig(c.Authentication); err != nil {
+		return err
+	}
+	if err := validateAuthenticationCORS(c.Authentication, c.CORS); err != nil {
+		return err
+	}
 	return c.Storage.Validate()
+}
+
+func validateAuthenticationCORS(auth AuthDeploymentConfig, cors CORSConfig) error {
+	if auth.PublicBaseURL == "" {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(cors.AllowedOrigins))
+	for _, raw := range cors.AllowedOrigins {
+		if raw == "*" {
+			return fmt.Errorf("server.cors.allowed_origins must use exact origins when server.authentication.public_base_url is configured")
+		}
+		u, err := url.Parse(raw)
+		if err != nil || !u.IsAbs() || u.Host == "" || strings.Contains(u.Host, "*") || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Scheme != "https" && u.Scheme != "http") {
+			return fmt.Errorf("server.cors.allowed_origins must contain exact origins when server.authentication.public_base_url is configured")
+		}
+		allowed[originOf(u)] = struct{}{}
+	}
+
+	publicURL, _ := url.Parse(auth.PublicBaseURL)
+	publicOrigin := originOf(publicURL)
+	for _, raw := range auth.CompletionURLs {
+		completionURL, _ := url.Parse(raw)
+		completionOrigin := originOf(completionURL)
+		if completionOrigin == publicOrigin {
+			continue
+		}
+		if _, ok := allowed[completionOrigin]; !ok {
+			return fmt.Errorf("server.cors.allowed_origins must include the exact origin of cross-origin authentication completion URLs")
+		}
+	}
+	return nil
+}
+
+func originOf(u *url.URL) string {
+	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host)
+}
+
+func validateAuthDeploymentConfig(c AuthDeploymentConfig) error {
+	if c.RequestTimeout <= 0 || c.RequestTimeout > time.Minute {
+		return fmt.Errorf("server.authentication.request_timeout must be positive and at most 1m")
+	}
+	if c.MaxResponseBytes <= 0 || c.MaxResponseBytes > 8<<20 {
+		return fmt.Errorf("server.authentication.max_response_bytes must be between 1 and 8388608")
+	}
+	if c.RateLimitPerMinute <= 0 {
+		return fmt.Errorf("server.authentication.rate_limit_per_minute must be positive")
+	}
+	if c.PublicBaseURL == "" {
+		if len(c.CompletionURLs) != 0 {
+			return fmt.Errorf("server.authentication.public_base_url is required when completion_urls are configured")
+		}
+	} else if err := validateAuthURL("server.authentication.public_base_url", c.PublicBaseURL, c.AllowHTTPLoopback); err != nil {
+		return err
+	}
+	for _, raw := range c.CompletionURLs {
+		if err := validateAuthURL("server.authentication.completion_urls", raw, c.AllowHTTPLoopback); err != nil {
+			return err
+		}
+	}
+	seenHosts := make(map[string]struct{}, len(c.AllowedHosts))
+	for _, host := range c.AllowedHosts {
+		host = strings.ToLower(strings.TrimSpace(host))
+		if host == "" || strings.ContainsAny(host, "/*:@[]") || net.ParseIP(host) != nil {
+			return fmt.Errorf("server.authentication.allowed_hosts must contain exact DNS host names without ports or wildcards")
+		}
+		if _, duplicate := seenHosts[host]; duplicate {
+			return fmt.Errorf("server.authentication.allowed_hosts must not contain duplicates")
+		}
+		seenHosts[host] = struct{}{}
+	}
+	for field, values := range map[string][]string{
+		"allowed_cidrs":       c.AllowedCIDRs,
+		"trusted_proxy_cidrs": c.TrustedProxyCIDRs,
+	} {
+		seen := make(map[netip.Prefix]struct{}, len(values))
+		for _, value := range values {
+			prefix, err := netip.ParsePrefix(strings.TrimSpace(value))
+			if err != nil || prefix != prefix.Masked() {
+				return fmt.Errorf("server.authentication.%s must contain canonical IP CIDRs", field)
+			}
+			if _, duplicate := seen[prefix]; duplicate {
+				return fmt.Errorf("server.authentication.%s must not contain duplicates", field)
+			}
+			seen[prefix] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func validateAuthURL(field, raw string, allowHTTPLoopback bool) error {
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || u.Host == "" || u.User != nil || u.Fragment != "" {
+		return fmt.Errorf("%s must be an absolute URL without credentials or a fragment", field)
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	if u.Scheme == "http" && allowHTTPLoopback {
+		host := strings.Trim(u.Hostname(), "[]")
+		ip := net.ParseIP(host)
+		if strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s must use HTTPS (HTTP is allowed only for loopback when explicitly enabled)", field)
 }
 
 func validateSQLitePath(dsn string) error {

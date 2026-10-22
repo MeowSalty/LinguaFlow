@@ -11,16 +11,18 @@ AdminUserListResponse:
 
 AdminCreateUserRequest:
   type: object
-  required: [username, password, email]
+  additionalProperties: false
+  required: [username, password]
   properties:
     username:
-      type: string
+      $ref: './auth.yaml#/UsernameInput'
     password:
       type: string
       minLength: 8
     email:
       type: string
-      format: email
+      nullable: true
+      description: 可省略、为 null 或空字符串；非空值去除首尾空白并转小写后校验单个纯邮箱地址。管理员录入不代表已验证所有权。
     display_name:
       type: string
     role:
@@ -30,12 +32,14 @@ AdminCreateUserRequest:
 
 AdminUpdateUserRequest:
   type: object
+  additionalProperties: false
   properties:
     display_name:
       type: string
     email:
       type: string
-      format: email
+      nullable: true
+      description: 省略保持原值；null 或空串清空未验证邮箱；非空值去除首尾空白并转小写后校验单个纯邮箱地址。已有验证状态的邮箱禁止直接变更（409）。
     role:
       type: string
       enum: [user, admin]
@@ -44,6 +48,7 @@ AdminUpdateUserRequest:
 
 AdminResetPasswordRequest:
   type: object
+  additionalProperties: false
   required: [new_password]
   properties:
     new_password:

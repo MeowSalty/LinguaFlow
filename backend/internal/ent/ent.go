@@ -13,6 +13,12 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authchannelpolicy"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnectionsecret"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authenticationrecovery"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
@@ -25,16 +31,21 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/exportartifact"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/localaccountpolicy"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/reauthenticationproof"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -47,7 +58,11 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagecheckwrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagemigrationitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagenamespace"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagepathclaim"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageretirement"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageretiremententry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatch"
@@ -123,6 +138,12 @@ func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			activitylog.Table:               activitylog.ValidColumn,
+			authchannelpolicy.Table:         authchannelpolicy.ValidColumn,
+			authconnection.Table:            authconnection.ValidColumn,
+			authconnectionrevision.Table:    authconnectionrevision.ValidColumn,
+			authconnectionsecret.Table:      authconnectionsecret.ValidColumn,
+			authtransaction.Table:           authtransaction.ValidColumn,
+			authenticationrecovery.Table:    authenticationrecovery.ValidColumn,
 			backend.Table:                   backend.ValidColumn,
 			backuppin.Table:                 backuppin.ValidColumn,
 			blob.Table:                      blob.ValidColumn,
@@ -135,16 +156,21 @@ func checkColumn(t, c string) error {
 			executionplantemplate.Table:     executionplantemplate.ValidColumn,
 			executionprofile.Table:          executionprofile.ValidColumn,
 			exportartifact.Table:            exportartifact.ValidColumn,
+			externalidentity.Table:          externalidentity.ValidColumn,
 			glossaryentry.Table:             glossaryentry.ValidColumn,
 			instanceinitialization.Table:    instanceinitialization.ValidColumn,
 			job.Table:                       job.ValidColumn,
 			jobresource.Table:               jobresource.ValidColumn,
 			jobround.Table:                  jobround.ValidColumn,
 			jobroundsegment.Table:           jobroundsegment.ValidColumn,
+			localaccountpolicy.Table:        localaccountpolicy.ValidColumn,
+			loginbinding.Table:              loginbinding.ValidColumn,
 			orgmembership.Table:             orgmembership.ValidColumn,
 			organization.Table:              organization.ValidColumn,
 			project.Table:                   project.ValidColumn,
 			pruneprompttemplate.Table:       pruneprompttemplate.ValidColumn,
+			reauthenticationproof.Table:     reauthenticationproof.ValidColumn,
+			refreshsession.Table:            refreshsession.ValidColumn,
 			refreshtoken.Table:              refreshtoken.ValidColumn,
 			resource.Table:                  resource.ValidColumn,
 			sseevent.Table:                  sseevent.ValidColumn,
@@ -157,7 +183,11 @@ func checkColumn(t, c string) error {
 			storagecheckwrite.Table:         storagecheckwrite.ValidColumn,
 			storageconnection.Table:         storageconnection.ValidColumn,
 			storagemigrationitem.Table:      storagemigrationitem.ValidColumn,
+			storagenamespace.Table:          storagenamespace.ValidColumn,
+			storagepathclaim.Table:          storagepathclaim.ValidColumn,
 			storagereservation.Table:        storagereservation.ValidColumn,
+			storageretirement.Table:         storageretirement.ValidColumn,
+			storageretiremententry.Table:    storageretiremententry.ValidColumn,
 			storagespace.Table:              storagespace.ValidColumn,
 			storagetask.Table:               storagetask.ValidColumn,
 			storageuploadbatch.Table:        storageuploadbatch.ValidColumn,

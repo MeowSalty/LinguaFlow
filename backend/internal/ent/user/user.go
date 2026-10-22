@@ -22,8 +22,20 @@ const (
 	FieldUsername = "username"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
 	FieldPasswordHash = "password_hash"
+	// FieldPasswordVerifiedHash holds the string denoting the password_verified_hash field in the database.
+	FieldPasswordVerifiedHash = "password_verified_hash"
+	// FieldPasswordVerifiedAt holds the string denoting the password_verified_at field in the database.
+	FieldPasswordVerifiedAt = "password_verified_at"
 	// FieldEmail holds the string denoting the email field in the database.
 	FieldEmail = "email"
+	// FieldEmailVerifiedAt holds the string denoting the email_verified_at field in the database.
+	FieldEmailVerifiedAt = "email_verified_at"
+	// FieldEmailVerificationSource holds the string denoting the email_verification_source field in the database.
+	FieldEmailVerificationSource = "email_verification_source"
+	// FieldVerifiedEmailKey holds the string denoting the verified_email_key field in the database.
+	FieldVerifiedEmailKey = "verified_email_key"
+	// FieldAuthVersion holds the string denoting the auth_version field in the database.
+	FieldAuthVersion = "auth_version"
 	// FieldDisplayName holds the string denoting the display_name field in the database.
 	FieldDisplayName = "display_name"
 	// FieldRole holds the string denoting the role field in the database.
@@ -36,6 +48,12 @@ const (
 	EdgeReviewedSegments = "reviewed_segments"
 	// EdgeRefreshTokens holds the string denoting the refresh_tokens edge name in mutations.
 	EdgeRefreshTokens = "refresh_tokens"
+	// EdgeRefreshSessions holds the string denoting the refresh_sessions edge name in mutations.
+	EdgeRefreshSessions = "refresh_sessions"
+	// EdgeExternalIdentities holds the string denoting the external_identities edge name in mutations.
+	EdgeExternalIdentities = "external_identities"
+	// EdgeLoginBindings holds the string denoting the login_bindings edge name in mutations.
+	EdgeLoginBindings = "login_bindings"
 	// EdgeMemberships holds the string denoting the memberships edge name in mutations.
 	EdgeMemberships = "memberships"
 	// EdgeBackends holds the string denoting the backends edge name in mutations.
@@ -81,6 +99,27 @@ const (
 	RefreshTokensInverseTable = "refresh_tokens"
 	// RefreshTokensColumn is the table column denoting the refresh_tokens relation/edge.
 	RefreshTokensColumn = "user_refresh_tokens"
+	// RefreshSessionsTable is the table that holds the refresh_sessions relation/edge.
+	RefreshSessionsTable = "refresh_sessions"
+	// RefreshSessionsInverseTable is the table name for the RefreshSession entity.
+	// It exists in this package in order to avoid circular dependency with the "refreshsession" package.
+	RefreshSessionsInverseTable = "refresh_sessions"
+	// RefreshSessionsColumn is the table column denoting the refresh_sessions relation/edge.
+	RefreshSessionsColumn = "user_id"
+	// ExternalIdentitiesTable is the table that holds the external_identities relation/edge.
+	ExternalIdentitiesTable = "external_identities"
+	// ExternalIdentitiesInverseTable is the table name for the ExternalIdentity entity.
+	// It exists in this package in order to avoid circular dependency with the "externalidentity" package.
+	ExternalIdentitiesInverseTable = "external_identities"
+	// ExternalIdentitiesColumn is the table column denoting the external_identities relation/edge.
+	ExternalIdentitiesColumn = "user_id"
+	// LoginBindingsTable is the table that holds the login_bindings relation/edge.
+	LoginBindingsTable = "login_bindings"
+	// LoginBindingsInverseTable is the table name for the LoginBinding entity.
+	// It exists in this package in order to avoid circular dependency with the "loginbinding" package.
+	LoginBindingsInverseTable = "login_bindings"
+	// LoginBindingsColumn is the table column denoting the login_bindings relation/edge.
+	LoginBindingsColumn = "user_id"
 	// MembershipsTable is the table that holds the memberships relation/edge.
 	MembershipsTable = "org_memberships"
 	// MembershipsInverseTable is the table name for the OrgMembership entity.
@@ -167,7 +206,13 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldUsername,
 	FieldPasswordHash,
+	FieldPasswordVerifiedHash,
+	FieldPasswordVerifiedAt,
 	FieldEmail,
+	FieldEmailVerifiedAt,
+	FieldEmailVerificationSource,
+	FieldVerifiedEmailKey,
+	FieldAuthVersion,
 	FieldDisplayName,
 	FieldRole,
 	FieldActive,
@@ -196,6 +241,14 @@ var (
 	PasswordHashValidator func(string) error
 	// EmailValidator is a validator for the "email" field. It is called by the builders before save.
 	EmailValidator func(string) error
+	// EmailVerificationSourceValidator is a validator for the "email_verification_source" field. It is called by the builders before save.
+	EmailVerificationSourceValidator func(string) error
+	// VerifiedEmailKeyValidator is a validator for the "verified_email_key" field. It is called by the builders before save.
+	VerifiedEmailKeyValidator func(string) error
+	// DefaultAuthVersion holds the default value on creation for the "auth_version" field.
+	DefaultAuthVersion int64
+	// AuthVersionValidator is a validator for the "auth_version" field. It is called by the builders before save.
+	AuthVersionValidator func(int64) error
 	// DefaultRole holds the default value on creation for the "role" field.
 	DefaultRole string
 	// DefaultActive holds the default value on creation for the "active" field.
@@ -230,9 +283,39 @@ func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPasswordHash, opts...).ToFunc()
 }
 
+// ByPasswordVerifiedHash orders the results by the password_verified_hash field.
+func ByPasswordVerifiedHash(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPasswordVerifiedHash, opts...).ToFunc()
+}
+
+// ByPasswordVerifiedAt orders the results by the password_verified_at field.
+func ByPasswordVerifiedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPasswordVerifiedAt, opts...).ToFunc()
+}
+
 // ByEmail orders the results by the email field.
 func ByEmail(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEmail, opts...).ToFunc()
+}
+
+// ByEmailVerifiedAt orders the results by the email_verified_at field.
+func ByEmailVerifiedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailVerifiedAt, opts...).ToFunc()
+}
+
+// ByEmailVerificationSource orders the results by the email_verification_source field.
+func ByEmailVerificationSource(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailVerificationSource, opts...).ToFunc()
+}
+
+// ByVerifiedEmailKey orders the results by the verified_email_key field.
+func ByVerifiedEmailKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVerifiedEmailKey, opts...).ToFunc()
+}
+
+// ByAuthVersion orders the results by the auth_version field.
+func ByAuthVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAuthVersion, opts...).ToFunc()
 }
 
 // ByDisplayName orders the results by the display_name field.
@@ -289,6 +372,48 @@ func ByRefreshTokensCount(opts ...sql.OrderTermOption) OrderOption {
 func ByRefreshTokens(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newRefreshTokensStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByRefreshSessionsCount orders the results by refresh_sessions count.
+func ByRefreshSessionsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newRefreshSessionsStep(), opts...)
+	}
+}
+
+// ByRefreshSessions orders the results by refresh_sessions terms.
+func ByRefreshSessions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newRefreshSessionsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByExternalIdentitiesCount orders the results by external_identities count.
+func ByExternalIdentitiesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newExternalIdentitiesStep(), opts...)
+	}
+}
+
+// ByExternalIdentities orders the results by external_identities terms.
+func ByExternalIdentities(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newExternalIdentitiesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByLoginBindingsCount orders the results by login_bindings count.
+func ByLoginBindingsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newLoginBindingsStep(), opts...)
+	}
+}
+
+// ByLoginBindings orders the results by login_bindings terms.
+func ByLoginBindings(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newLoginBindingsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -464,6 +589,27 @@ func newRefreshTokensStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(RefreshTokensInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, RefreshTokensTable, RefreshTokensColumn),
+	)
+}
+func newRefreshSessionsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(RefreshSessionsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, RefreshSessionsTable, RefreshSessionsColumn),
+	)
+}
+func newExternalIdentitiesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ExternalIdentitiesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ExternalIdentitiesTable, ExternalIdentitiesColumn),
+	)
+}
+func newLoginBindingsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(LoginBindingsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, LoginBindingsTable, LoginBindingsColumn),
 	)
 }
 func newMembershipsStep() *sqlgraph.Step {

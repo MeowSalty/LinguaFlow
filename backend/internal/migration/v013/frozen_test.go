@@ -1,7 +1,6 @@
 package v013
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -131,58 +130,11 @@ func TestFrozenProfilesRejectMixedOrUnknownSourceFields(t *testing.T) {
 	}
 }
 
-func TestLegacyLocalIdentity(t *testing.T) {
-	for _, scenario := range []string{"valid", "missing", "inactive", "ordinary"} {
-		t.Run(scenario, func(t *testing.T) {
-			ctx := context.Background()
-			client := testClient(t)
-			legacyMigrationAdmin(t, ctx, client)
-			var localID int
-			if scenario != "missing" {
-				role := "admin"
-				if scenario == "ordinary" {
-					role = "user"
-				}
-				row := client.User.Create().SetUsername("local").SetEmail("preserve-custom@example.test").SetPasswordHash("preserved-local-hash").SetRole(role).SetActive(scenario != "inactive").SaveX(ctx)
-				localID = row.ID
-			}
-			tx, err := client.Tx(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer tx.Rollback()
-			_, err = Convert(ctx, tx.Client(), credentialTestKeyring(t, "one", "one"), "local")
-			if scenario != "valid" {
-				if err == nil {
-					t.Fatal("invalid local identity was accepted")
-				}
-				if err := tx.Rollback(); err != nil {
-					t.Fatal(err)
-				}
-				if client.InstanceInitialization.Query().ExistX(ctx) {
-					t.Fatal("failed local conversion published a marker")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
-			local, err := service.NewInitializationService(client).Validate(ctx, "local")
-			if err != nil || local.ID != localID || local.PasswordHash != "preserved-local-hash" || local.Email != "preserve-custom@example.test" {
-				t.Fatalf("local identity changed: %v", err)
-			}
-		})
-	}
-}
-
 func TestFrozenTargetCompatibility(t *testing.T) {
-	if err := checkTargetCompatibility(); err != nil {
-		t.Fatal(err)
+	if err := checkTargetCompatibility(); err != ErrTargetIncompatible {
+		t.Fatalf("historical target must be rejected: %v", err)
 	}
-	if targetSchemaVersion != 1 || targetDefaultsVersion != 1 || targetInitializationVersion != 1 || targetCredentialVersion != 1 || targetSQLiteVersion != 1 || execution.SchemaVersion != 1 {
+	if targetSchemaVersion != 1 || targetDefaultsVersion != 1 || targetInitializationVersion != 1 || targetCredentialVersion != 1 || targetSQLiteVersion != 1 || targetAuthFormatVersion != 0 || execution.SchemaVersion != 1 {
 		t.Fatal("explicit compatibility review required")
 	}
 }

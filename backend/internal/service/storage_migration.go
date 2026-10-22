@@ -11,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagereservation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageguard"
 )
 
 func (s *StorageService) StartMigration(ctx context.Context, actor, projectID, target int, generation int64, key string) (*ent.StorageTask, error) {
@@ -32,36 +33,10 @@ func (s *StorageService) StartMigration(ctx context.Context, actor, projectID, t
 		if e != nil {
 			return e
 		}
-		size, e := storageMigrationSize(ctx, tx, projectID)
-		if e != nil {
+		if e = storageguard.Gate(ctx, tx, target, storageguard.NewUse); e != nil {
 			return e
 		}
-		if e = s.validateStorageTarget(ctx, tx, p, target, size, false); e != nil {
-			return e
-		}
-		n, e := tx.Project.Update().Where(project.IDEQ(projectID), project.StorageGenerationEQ(generation), project.StorageStateEQ("active")).SetStorageState("draining").SetStorageMigrationTaskID(task.ID).AddStorageGeneration(1).Save(ctx)
-		if e != nil {
-			return e
-		}
-		if n != 1 {
-			return ErrStorageConflict
-		}
-		if e = storageTaskGate(ctx, tx, task); e != nil {
-			return e
-		}
-		rows, e := tx.Blob.Query().Where(blob.ProjectIDEQ(projectID), blob.StatusEQ(blob.StatusReady)).All(ctx)
-		if e != nil {
-			return e
-		}
-		for _, b := range rows {
-			if b.ActiveLocationID == nil || b.Size == nil || b.Sha256 == nil {
-				return ErrRepairMismatch
-			}
-			if e = tx.StorageMigrationItem.Create().SetTaskID(task.ID).SetBlobID(b.ID).SetSourceLocationID(*b.ActiveLocationID).SetExpectedLocationGeneration(b.LocationGeneration).Exec(ctx); e != nil {
-				return e
-			}
-		}
-		return tx.StorageTask.UpdateOneID(task.ID).SetExpectedStorageGeneration(generation + 1).SetPhase("draining").Exec(ctx)
+		return s.prepareMigration(ctx, tx, p, task, target, generation)
 	})
 	if err != nil {
 		return nil, err
@@ -258,6 +233,9 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) (err err
 			if e != nil || pending {
 				return e
 			}
+			if e = storageguard.Gate(ctx, tx, *t.TargetSpaceID, storageguard.NewUse); e != nil {
+				return e
+			}
 			if e = tx.StorageTask.UpdateOneID(id).SetPhase("cutover").ClearDeadline().Exec(ctx); e != nil {
 				return e
 			}
@@ -369,6 +347,9 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) (err err
 			if e = s.validateStorageTarget(ctx, tx, p, *task.TargetSpaceID, 0, false); e != nil {
 				return e
 			}
+			if e = storageguard.Gate(ctx, tx, *task.TargetSpaceID, storageguard.NewUse); e != nil {
+				return e
+			}
 			if e = tx.Project.UpdateOneID(task.ProjectID).SetStorageSpaceID(*task.TargetSpaceID).SetStorageState("active").ClearStorageMigrationTaskID().AddStorageGeneration(1).Exec(ctx); e != nil {
 				return e
 			}
@@ -382,6 +363,9 @@ func (s *StorageService) ContinueMigration(ctx context.Context, id int) (err err
 }
 
 func (s *StorageService) validateWriteTarget(ctx context.Context, tx *ent.Client, w *ent.StorageWrite) error {
+	if err := storageguard.Gate(ctx, tx, w.SpaceID, storageguard.NewUse); err != nil {
+		return err
+	}
 	sp, err := tx.StorageSpace.Get(ctx, w.SpaceID)
 	if err != nil {
 		return err

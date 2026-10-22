@@ -35,8 +35,14 @@ const (
 	FieldCiphertext = "ciphertext"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldPurpose holds the string denoting the purpose field in the database.
+	FieldPurpose = "purpose"
+	// FieldRetirementID holds the string denoting the retirement_id field in the database.
+	FieldRetirementID = "retirement_id"
 	// FieldExpiresAt holds the string denoting the expires_at field in the database.
 	FieldExpiresAt = "expires_at"
+	// FieldPurgedAt holds the string denoting the purged_at field in the database.
+	FieldPurgedAt = "purged_at"
 	// EdgeConnection holds the string denoting the connection edge name in mutations.
 	EdgeConnection = "connection"
 	// Table holds the table name of the storageauthversion in the database.
@@ -63,7 +69,10 @@ var Columns = []string{
 	FieldNonce,
 	FieldCiphertext,
 	FieldStatus,
+	FieldPurpose,
+	FieldRetirementID,
 	FieldExpiresAt,
+	FieldPurgedAt,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -93,6 +102,8 @@ var (
 	DefaultAadVersion int
 	// KeyIDValidator is a validator for the "key_id" field. It is called by the builders before save.
 	KeyIDValidator func(string) error
+	// RetirementIDValidator is a validator for the "retirement_id" field. It is called by the builders before save.
+	RetirementIDValidator func(int) error
 )
 
 // Status defines the type for the "status" enum field.
@@ -120,6 +131,32 @@ func StatusValidator(s Status) error {
 		return nil
 	default:
 		return fmt.Errorf("storageauthversion: invalid enum value for status field: %q", s)
+	}
+}
+
+// Purpose defines the type for the "purpose" enum field.
+type Purpose string
+
+// PurposeBusiness is the default value of the Purpose enum.
+const DefaultPurpose = PurposeBusiness
+
+// Purpose values.
+const (
+	PurposeBusiness   Purpose = "business"
+	PurposeRetirement Purpose = "retirement"
+)
+
+func (pu Purpose) String() string {
+	return string(pu)
+}
+
+// PurposeValidator is a validator for the "purpose" field enum values. It is called by the builders before save.
+func PurposeValidator(pu Purpose) error {
+	switch pu {
+	case PurposeBusiness, PurposeRetirement:
+		return nil
+	default:
+		return fmt.Errorf("storageauthversion: invalid enum value for purpose field: %q", pu)
 	}
 }
 
@@ -171,9 +208,24 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
 }
 
+// ByPurpose orders the results by the purpose field.
+func ByPurpose(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPurpose, opts...).ToFunc()
+}
+
+// ByRetirementID orders the results by the retirement_id field.
+func ByRetirementID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetirementID, opts...).ToFunc()
+}
+
 // ByExpiresAt orders the results by the expires_at field.
 func ByExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldExpiresAt, opts...).ToFunc()
+}
+
+// ByPurgedAt orders the results by the purged_at field.
+func ByPurgedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPurgedAt, opts...).ToFunc()
 }
 
 // ByConnectionField orders the results by connection field.

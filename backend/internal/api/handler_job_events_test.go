@@ -56,6 +56,9 @@ func newTestEntClient(t *testing.T) *ent.Client {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	// A :memory: database belongs to one connection. Concurrent HTTP handlers
+	// must queue on that connection instead of opening a separate empty database.
+	db.SetMaxOpenConns(1)
 	driver := database.NewDriver(entsql.OpenDB(dialect.SQLite, db))
 	client := ent.NewClient(ent.Driver(driver))
 	if err := client.Schema.Create(context.Background()); err != nil {

@@ -16,7 +16,7 @@ import (
 func (s *StorageConnectionService) ValidateCurrentKeys(ctx context.Context) (unavailable int, err error) {
 	last := 0
 	for {
-		rows, e := s.client.StorageConnection.Query().Where(storageconnection.IDGT(last), storageconnection.AuthSourceEQ(storageconnection.AuthSourceStored), storageconnection.ActiveAuthGenerationGT(0)).Order(ent.Asc(storageconnection.FieldID)).Limit(100).All(ctx)
+		rows, e := s.client.StorageConnection.Query().Where(storageconnection.IDGT(last), storageconnection.AuthSourceEQ(storageconnection.AuthSourceStored), storageconnection.ActiveAuthGenerationGT(0), storageconnection.LifecycleNEQ(storageconnection.LifecycleRemoved)).Order(ent.Asc(storageconnection.FieldID)).Limit(100).All(ctx)
 		if e != nil {
 			return unavailable, e
 		}

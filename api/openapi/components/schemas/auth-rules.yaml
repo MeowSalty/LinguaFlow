@@ -1,0 +1,205 @@
+AuthRuleSet:
+  oneOf:
+    - type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode: {type: string, enum: [unrestricted]}
+    - type: object
+      additionalProperties: false
+      required: [mode, match, conditions]
+      properties:
+        mode: {type: string, enum: [conditions]}
+        match: {type: string, enum: [all, any]}
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {$ref: '#/AuthRuleCondition'}
+AuthRuleCondition:
+  type: object
+  additionalProperties: false
+  required: [field_id, operator, value]
+  properties:
+    field_id: {type: string}
+    operator:
+      type: string
+      enum:
+        - eq
+        - ne
+        - in
+        - not_in
+        - gt
+        - gte
+        - lt
+        - lte
+        - contains
+        - not_contains
+        - starts_with
+        - not_starts_with
+        - ends_with
+        - not_ends_with
+        - contains_any
+        - contains_all
+    value:
+      description: Strictly typed against the referenced field. Strings are case-sensitive; integers retain precision; datetimes require RFC3339 with timezone. No coercion or null values.
+      oneOf:
+        - {type: string}
+        - {type: boolean}
+        - {type: number}
+        - type: array
+          items: {type: string}
+AuthAttributeMapping:
+  type: object
+  additionalProperties: false
+  description: Client-provided attribute mapping input. Server-owned field metadata is not accepted here.
+  required: [field_id, label, type, source, pointer]
+  properties:
+    field_id: {type: string}
+    label: {type: string}
+    type: {type: string, enum: [string, boolean, integer, number, datetime, string_list]}
+    source: {type: string, enum: [oidc_id_token, oidc_userinfo, oauth2_profile]}
+    pointer: {type: string}
+    required_scopes:
+      type: array
+      items: {type: string}
+    optional: {type: boolean}
+    user_editable:
+      type: boolean
+      default: false
+      description: Administrator-declared property of the upstream field; never grants trust or platform permissions.
+
+AuthAttributeField:
+  type: object
+  additionalProperties: false
+  required: [field_id, label, type, source, pointer, user_editable, allowed_operators]
+  properties:
+    field_id: {type: string}
+    label: {type: string}
+    type: {type: string, enum: [string, boolean, integer, number, datetime, string_list]}
+    source:
+      type: string
+      enum: [oidc_id_token, oidc_userinfo, oauth2_profile, derived, registration]
+    pointer: {type: string}
+    required_scopes:
+      type: array
+      items: {type: string}
+    optional: {type: boolean}
+    user_editable:
+      type: boolean
+    derived_from:
+      readOnly: true
+      type: array
+      items: {type: string}
+    allowed_operators:
+      readOnly: true
+      type: array
+      items: {type: string}
+    semantic_format:
+      readOnly: true
+      type: string
+    normalization_version:
+      readOnly: true
+      type: string
+    trust_pair:
+      $ref: '#/AuthFieldTrustPair'
+    dependency_fingerprint:
+      readOnly: true
+      type: string
+
+AuthFieldTrustPair:
+  type: object
+  additionalProperties: false
+  properties:
+    peer_field_id:
+      type: string
+    peer_source:
+      type: string
+AuthAttributeCatalog:
+  type: object
+  required: [revision, purpose, fields, operators]
+  properties:
+    revision: {type: integer, format: int64}
+    purpose: {type: string, enum: [login, signup, link]}
+    fields:
+      type: array
+      items: {$ref: '#/AuthAttributeField'}
+    operators:
+      type: object
+      additionalProperties:
+        type: array
+        items: {type: string}
+AuthRuleResult:
+  type: object
+  required: [status, retryable, conditions]
+  properties:
+    status: {type: string, enum: [pass, fail, unknown]}
+    retryable: {type: boolean}
+    conditions:
+      type: array
+      items:
+        type: object
+        required: [field_id, operator, status]
+        properties:
+          field_id: {type: string}
+          operator: {type: string}
+          status: {type: string, enum: [pass, fail, unknown]}
+          reason: {type: string}
+AuthRulesDiagnostics:
+  type: object
+  required: [login, signup, link]
+  properties:
+    login: {$ref: '#/AuthRuleResult'}
+    signup: {$ref: '#/AuthRuleResult'}
+    link: {$ref: '#/AuthRuleResult'}
+AuthRulesPreviewRequest:
+  type: object
+  additionalProperties: false
+  required: [expected_revision, sources]
+  properties:
+    expected_revision: {type: integer, format: int64, minimum: 1}
+    changes:
+      $ref: './auth-external.yaml#/AuthConnectionChanges'
+    registration:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          nullable: true
+    sources:
+      type: object
+      additionalProperties: false
+      properties:
+        oidc_id_token: {type: object, additionalProperties: true}
+        oidc_userinfo: {type: object, additionalProperties: true}
+AuthRulesPreview:
+  type: object
+  required: [revision, simulated, attributes, rules]
+  properties:
+    revision: {type: integer, format: int64}
+    simulated: {type: boolean, enum: [true]}
+    attributes:
+      type: object
+      additionalProperties:
+        $ref: '#/AuthAttributeValue'
+    rules: {$ref: '#/AuthRulesDiagnostics'}
+AuthAttributeValue:
+  type: object
+  required: [status, fingerprint]
+  properties:
+    value: {}
+    status: {type: string, enum: [pass, fail, unknown]}
+    reason: {type: string}
+    fingerprint: {type: string}
+AuthConnectionErrorProblem:
+  allOf:
+    - {$ref: './common.yaml#/Problem'}
+    - type: object
+      required: [issues]
+      properties:
+        issues:
+          type: array
+          items: {$ref: './auth-external.yaml#/AuthConfigurationIssue'}
+        impact:
+          $ref: './auth-external.yaml#/AuthConnectionImpactResult'

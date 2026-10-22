@@ -41,6 +41,15 @@ func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, 
 		if err := validateSQLiteTimeDSN(cfg.DatabaseDSN()); err != nil {
 			return nil, nil, err
 		}
+		probe, probeErr := openSQLiteFormatProbe(ctx, cfg.DatabaseDSN(), cfg.AutoMigrate)
+		if probeErr != nil {
+			return nil, nil, probeErr
+		}
+		// Keep a shared in-memory database alive until the configured runtime
+		// pool connects. The probe writes no markers, including for :memory:.
+		if probe != nil {
+			defer probe.Close()
+		}
 		db, err = sql.Open(sqlDriver, cfg.DatabaseDSN())
 	} else {
 		var pgConfig *pgx.ConnConfig
@@ -67,7 +76,12 @@ func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, 
 
 	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
-	if err := db.PingContext(pingCtx); err != nil {
+	if entDialect == dialect.SQLite {
+		err = pingSQLite(pingCtx, db)
+	} else {
+		err = db.PingContext(pingCtx)
+	}
+	if err != nil {
 		_ = db.Close()
 		return nil, nil, databaseError(cfg.Database.Driver, "ping", err)
 	}
@@ -77,6 +91,10 @@ func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, 
 			_ = db.Close()
 			return nil, nil, databaseError(cfg.Database.Driver, "check timestamp format", err)
 		}
+	}
+	if err := ensureAuthFormat(ctx, db, cfg.Database.Driver, cfg.AutoMigrate); err != nil {
+		_ = db.Close()
+		return nil, nil, fmt.Errorf("check account database format: %w", err)
 	}
 	driver := NewDriver(entsql.OpenDB(entDialect, db))
 	client := ent.NewClient(ent.Driver(driver))
@@ -138,6 +156,11 @@ func DialectFor(driver string) string {
 }
 
 func databaseError(driver, stage string, cause error) error {
+	if driver == config.DatabaseDriverSQLite {
+		// 保留 SQLite 错误码和上下文取消信息，供启动重试及调用方判断，
+		// 同时维持原有的错误描述格式。
+		return fmt.Errorf("%s database %s failed: %w", driver, stage, cause)
+	}
 	detail := cause.Error()
 	if driver == config.DatabaseDriverPostgres {
 		detail = postgresErrorDetail(cause)

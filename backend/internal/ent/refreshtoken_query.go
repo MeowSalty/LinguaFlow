@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -19,12 +20,13 @@ import (
 // RefreshTokenQuery is the builder for querying RefreshToken entities.
 type RefreshTokenQuery struct {
 	config
-	ctx        *QueryContext
-	order      []refreshtoken.OrderOption
-	inters     []Interceptor
-	predicates []predicate.RefreshToken
-	withUser   *UserQuery
-	withFKs    bool
+	ctx         *QueryContext
+	order       []refreshtoken.OrderOption
+	inters      []Interceptor
+	predicates  []predicate.RefreshToken
+	withSession *RefreshSessionQuery
+	withUser    *UserQuery
+	withFKs     bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -59,6 +61,28 @@ func (_q *RefreshTokenQuery) Unique(unique bool) *RefreshTokenQuery {
 func (_q *RefreshTokenQuery) Order(o ...refreshtoken.OrderOption) *RefreshTokenQuery {
 	_q.order = append(_q.order, o...)
 	return _q
+}
+
+// QuerySession chains the current query on the "session" edge.
+func (_q *RefreshTokenQuery) QuerySession() *RefreshSessionQuery {
+	query := (&RefreshSessionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(refreshtoken.Table, refreshtoken.FieldID, selector),
+			sqlgraph.To(refreshsession.Table, refreshsession.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, refreshtoken.SessionTable, refreshtoken.SessionColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // QueryUser chains the current query on the "user" edge.
@@ -270,16 +294,28 @@ func (_q *RefreshTokenQuery) Clone() *RefreshTokenQuery {
 		return nil
 	}
 	return &RefreshTokenQuery{
-		config:     _q.config,
-		ctx:        _q.ctx.Clone(),
-		order:      append([]refreshtoken.OrderOption{}, _q.order...),
-		inters:     append([]Interceptor{}, _q.inters...),
-		predicates: append([]predicate.RefreshToken{}, _q.predicates...),
-		withUser:   _q.withUser.Clone(),
+		config:      _q.config,
+		ctx:         _q.ctx.Clone(),
+		order:       append([]refreshtoken.OrderOption{}, _q.order...),
+		inters:      append([]Interceptor{}, _q.inters...),
+		predicates:  append([]predicate.RefreshToken{}, _q.predicates...),
+		withSession: _q.withSession.Clone(),
+		withUser:    _q.withUser.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
+}
+
+// WithSession tells the query-builder to eager-load the nodes that are connected to
+// the "session" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *RefreshTokenQuery) WithSession(opts ...func(*RefreshSessionQuery)) *RefreshTokenQuery {
+	query := (&RefreshSessionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSession = query
+	return _q
 }
 
 // WithUser tells the query-builder to eager-load the nodes that are connected to
@@ -372,7 +408,8 @@ func (_q *RefreshTokenQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 		nodes       = []*RefreshToken{}
 		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
-		loadedTypes = [1]bool{
+		loadedTypes = [2]bool{
+			_q.withSession != nil,
 			_q.withUser != nil,
 		}
 	)
@@ -400,6 +437,12 @@ func (_q *RefreshTokenQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := _q.withSession; query != nil {
+		if err := _q.loadSession(ctx, query, nodes, nil,
+			func(n *RefreshToken, e *RefreshSession) { n.Edges.Session = e }); err != nil {
+			return nil, err
+		}
+	}
 	if query := _q.withUser; query != nil {
 		if err := _q.loadUser(ctx, query, nodes, nil,
 			func(n *RefreshToken, e *User) { n.Edges.User = e }); err != nil {
@@ -409,6 +452,35 @@ func (_q *RefreshTokenQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	return nodes, nil
 }
 
+func (_q *RefreshTokenQuery) loadSession(ctx context.Context, query *RefreshSessionQuery, nodes []*RefreshToken, init func(*RefreshToken), assign func(*RefreshToken, *RefreshSession)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*RefreshToken)
+	for i := range nodes {
+		fk := nodes[i].SessionID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(refreshsession.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "session_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
 func (_q *RefreshTokenQuery) loadUser(ctx context.Context, query *UserQuery, nodes []*RefreshToken, init func(*RefreshToken), assign func(*RefreshToken, *User)) error {
 	ids := make([]int, 0, len(nodes))
 	nodeids := make(map[int][]*RefreshToken)
@@ -466,6 +538,9 @@ func (_q *RefreshTokenQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != refreshtoken.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withSession != nil {
+			_spec.Node.AddColumnOnce(refreshtoken.FieldSessionID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

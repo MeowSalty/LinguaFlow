@@ -5,6 +5,7 @@ package refreshtoken
 import (
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 )
@@ -20,14 +21,29 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldTokenHash holds the string denoting the token_hash field in the database.
 	FieldTokenHash = "token_hash"
+	// FieldSessionID holds the string denoting the session_id field in the database.
+	FieldSessionID = "session_id"
+	// FieldGeneration holds the string denoting the generation field in the database.
+	FieldGeneration = "generation"
 	// FieldExpiresAt holds the string denoting the expires_at field in the database.
 	FieldExpiresAt = "expires_at"
+	// FieldConsumedAt holds the string denoting the consumed_at field in the database.
+	FieldConsumedAt = "consumed_at"
 	// FieldRevokedAt holds the string denoting the revoked_at field in the database.
 	FieldRevokedAt = "revoked_at"
+	// EdgeSession holds the string denoting the session edge name in mutations.
+	EdgeSession = "session"
 	// EdgeUser holds the string denoting the user edge name in mutations.
 	EdgeUser = "user"
 	// Table holds the table name of the refreshtoken in the database.
 	Table = "refresh_tokens"
+	// SessionTable is the table that holds the session relation/edge.
+	SessionTable = "refresh_tokens"
+	// SessionInverseTable is the table name for the RefreshSession entity.
+	// It exists in this package in order to avoid circular dependency with the "refreshsession" package.
+	SessionInverseTable = "refresh_sessions"
+	// SessionColumn is the table column denoting the session relation/edge.
+	SessionColumn = "session_id"
 	// UserTable is the table that holds the user relation/edge.
 	UserTable = "refresh_tokens"
 	// UserInverseTable is the table name for the User entity.
@@ -43,7 +59,10 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldTokenHash,
+	FieldSessionID,
+	FieldGeneration,
 	FieldExpiresAt,
+	FieldConsumedAt,
 	FieldRevokedAt,
 }
 
@@ -68,7 +87,13 @@ func ValidColumn(column string) bool {
 	return false
 }
 
+// Note that the variables below are initialized by the runtime
+// package on the initialization of the application. Therefore,
+// it should be imported in the main as follows:
+//
+//	import _ "github.com/MeowSalty/LinguaFlow/backend/internal/ent/runtime"
 var (
+	Hooks [1]ent.Hook
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -77,6 +102,10 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// TokenHashValidator is a validator for the "token_hash" field. It is called by the builders before save.
 	TokenHashValidator func(string) error
+	// SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	SessionIDValidator func(int) error
+	// GenerationValidator is a validator for the "generation" field. It is called by the builders before save.
+	GenerationValidator func(int64) error
 )
 
 // OrderOption defines the ordering options for the RefreshToken queries.
@@ -102,9 +131,24 @@ func ByTokenHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTokenHash, opts...).ToFunc()
 }
 
+// BySessionID orders the results by the session_id field.
+func BySessionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSessionID, opts...).ToFunc()
+}
+
+// ByGeneration orders the results by the generation field.
+func ByGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGeneration, opts...).ToFunc()
+}
+
 // ByExpiresAt orders the results by the expires_at field.
 func ByExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldExpiresAt, opts...).ToFunc()
+}
+
+// ByConsumedAt orders the results by the consumed_at field.
+func ByConsumedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldConsumedAt, opts...).ToFunc()
 }
 
 // ByRevokedAt orders the results by the revoked_at field.
@@ -112,11 +156,25 @@ func ByRevokedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRevokedAt, opts...).ToFunc()
 }
 
+// BySessionField orders the results by session field.
+func BySessionField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSessionStep(), sql.OrderByField(field, opts...))
+	}
+}
+
 // ByUserField orders the results by user field.
 func ByUserField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newUserStep(), sql.OrderByField(field, opts...))
 	}
+}
+func newSessionStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SessionInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, SessionTable, SessionColumn),
+	)
 }
 func newUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(

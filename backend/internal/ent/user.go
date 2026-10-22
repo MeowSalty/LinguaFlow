@@ -25,8 +25,20 @@ type User struct {
 	Username string `json:"username,omitempty"`
 	// PasswordHash holds the value of the "password_hash" field.
 	PasswordHash string `json:"-"`
+	// PasswordVerifiedHash holds the value of the "password_verified_hash" field.
+	PasswordVerifiedHash string `json:"-"`
+	// PasswordVerifiedAt holds the value of the "password_verified_at" field.
+	PasswordVerifiedAt *time.Time `json:"password_verified_at,omitempty"`
 	// Email holds the value of the "email" field.
 	Email string `json:"email,omitempty"`
+	// EmailVerifiedAt holds the value of the "email_verified_at" field.
+	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
+	// EmailVerificationSource holds the value of the "email_verification_source" field.
+	EmailVerificationSource string `json:"email_verification_source,omitempty"`
+	// VerifiedEmailKey holds the value of the "verified_email_key" field.
+	VerifiedEmailKey string `json:"verified_email_key,omitempty"`
+	// AuthVersion holds the value of the "auth_version" field.
+	AuthVersion int64 `json:"auth_version,omitempty"`
 	// DisplayName holds the value of the "display_name" field.
 	DisplayName string `json:"display_name,omitempty"`
 	// Role holds the value of the "role" field.
@@ -47,6 +59,12 @@ type UserEdges struct {
 	ReviewedSegments []*Segment `json:"reviewed_segments,omitempty"`
 	// RefreshTokens holds the value of the refresh_tokens edge.
 	RefreshTokens []*RefreshToken `json:"refresh_tokens,omitempty"`
+	// RefreshSessions holds the value of the refresh_sessions edge.
+	RefreshSessions []*RefreshSession `json:"refresh_sessions,omitempty"`
+	// ExternalIdentities holds the value of the external_identities edge.
+	ExternalIdentities []*ExternalIdentity `json:"external_identities,omitempty"`
+	// LoginBindings holds the value of the login_bindings edge.
+	LoginBindings []*LoginBinding `json:"login_bindings,omitempty"`
 	// Memberships holds the value of the memberships edge.
 	Memberships []*OrgMembership `json:"memberships,omitempty"`
 	// Backends holds the value of the backends edge.
@@ -71,7 +89,7 @@ type UserEdges struct {
 	SyncTasks []*SyncTask `json:"sync_tasks,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [14]bool
+	loadedTypes [17]bool
 }
 
 // CreatedJobsOrErr returns the CreatedJobs value or an error if the edge
@@ -101,10 +119,37 @@ func (e UserEdges) RefreshTokensOrErr() ([]*RefreshToken, error) {
 	return nil, &NotLoadedError{edge: "refresh_tokens"}
 }
 
+// RefreshSessionsOrErr returns the RefreshSessions value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) RefreshSessionsOrErr() ([]*RefreshSession, error) {
+	if e.loadedTypes[3] {
+		return e.RefreshSessions, nil
+	}
+	return nil, &NotLoadedError{edge: "refresh_sessions"}
+}
+
+// ExternalIdentitiesOrErr returns the ExternalIdentities value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) ExternalIdentitiesOrErr() ([]*ExternalIdentity, error) {
+	if e.loadedTypes[4] {
+		return e.ExternalIdentities, nil
+	}
+	return nil, &NotLoadedError{edge: "external_identities"}
+}
+
+// LoginBindingsOrErr returns the LoginBindings value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) LoginBindingsOrErr() ([]*LoginBinding, error) {
+	if e.loadedTypes[5] {
+		return e.LoginBindings, nil
+	}
+	return nil, &NotLoadedError{edge: "login_bindings"}
+}
+
 // MembershipsOrErr returns the Memberships value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) MembershipsOrErr() ([]*OrgMembership, error) {
-	if e.loadedTypes[3] {
+	if e.loadedTypes[6] {
 		return e.Memberships, nil
 	}
 	return nil, &NotLoadedError{edge: "memberships"}
@@ -113,7 +158,7 @@ func (e UserEdges) MembershipsOrErr() ([]*OrgMembership, error) {
 // BackendsOrErr returns the Backends value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) BackendsOrErr() ([]*Backend, error) {
-	if e.loadedTypes[4] {
+	if e.loadedTypes[7] {
 		return e.Backends, nil
 	}
 	return nil, &NotLoadedError{edge: "backends"}
@@ -122,7 +167,7 @@ func (e UserEdges) BackendsOrErr() ([]*Backend, error) {
 // OwnedProjectsOrErr returns the OwnedProjects value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) OwnedProjectsOrErr() ([]*Project, error) {
-	if e.loadedTypes[5] {
+	if e.loadedTypes[8] {
 		return e.OwnedProjects, nil
 	}
 	return nil, &NotLoadedError{edge: "owned_projects"}
@@ -131,7 +176,7 @@ func (e UserEdges) OwnedProjectsOrErr() ([]*Project, error) {
 // ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
-	if e.loadedTypes[6] {
+	if e.loadedTypes[9] {
 		return e.ActivityLogs, nil
 	}
 	return nil, &NotLoadedError{edge: "activity_logs"}
@@ -140,7 +185,7 @@ func (e UserEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
 // UsageRecordsOrErr returns the UsageRecords value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
-	if e.loadedTypes[7] {
+	if e.loadedTypes[10] {
 		return e.UsageRecords, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_records"}
@@ -149,7 +194,7 @@ func (e UserEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
 // TranslationPromptTemplatesOrErr returns the TranslationPromptTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) TranslationPromptTemplatesOrErr() ([]*TranslationPromptTemplate, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[11] {
 		return e.TranslationPromptTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "translation_prompt_templates"}
@@ -158,7 +203,7 @@ func (e UserEdges) TranslationPromptTemplatesOrErr() ([]*TranslationPromptTempla
 // BootstrapPromptTemplatesOrErr returns the BootstrapPromptTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) BootstrapPromptTemplatesOrErr() ([]*BootstrapPromptTemplate, error) {
-	if e.loadedTypes[9] {
+	if e.loadedTypes[12] {
 		return e.BootstrapPromptTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "bootstrap_prompt_templates"}
@@ -167,7 +212,7 @@ func (e UserEdges) BootstrapPromptTemplatesOrErr() ([]*BootstrapPromptTemplate, 
 // PrunePromptTemplatesOrErr returns the PrunePromptTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) PrunePromptTemplatesOrErr() ([]*PrunePromptTemplate, error) {
-	if e.loadedTypes[10] {
+	if e.loadedTypes[13] {
 		return e.PrunePromptTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "prune_prompt_templates"}
@@ -176,7 +221,7 @@ func (e UserEdges) PrunePromptTemplatesOrErr() ([]*PrunePromptTemplate, error) {
 // ExecutionProfilesOrErr returns the ExecutionProfiles value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) ExecutionProfilesOrErr() ([]*ExecutionProfile, error) {
-	if e.loadedTypes[11] {
+	if e.loadedTypes[14] {
 		return e.ExecutionProfiles, nil
 	}
 	return nil, &NotLoadedError{edge: "execution_profiles"}
@@ -185,7 +230,7 @@ func (e UserEdges) ExecutionProfilesOrErr() ([]*ExecutionProfile, error) {
 // ExecutionPlanTemplatesOrErr returns the ExecutionPlanTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) ExecutionPlanTemplatesOrErr() ([]*ExecutionPlanTemplate, error) {
-	if e.loadedTypes[12] {
+	if e.loadedTypes[15] {
 		return e.ExecutionPlanTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "execution_plan_templates"}
@@ -194,7 +239,7 @@ func (e UserEdges) ExecutionPlanTemplatesOrErr() ([]*ExecutionPlanTemplate, erro
 // SyncTasksOrErr returns the SyncTasks value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) SyncTasksOrErr() ([]*SyncTask, error) {
-	if e.loadedTypes[13] {
+	if e.loadedTypes[16] {
 		return e.SyncTasks, nil
 	}
 	return nil, &NotLoadedError{edge: "sync_tasks"}
@@ -207,11 +252,11 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldActive:
 			values[i] = new(sql.NullBool)
-		case user.FieldID:
+		case user.FieldID, user.FieldAuthVersion:
 			values[i] = new(sql.NullInt64)
-		case user.FieldUsername, user.FieldPasswordHash, user.FieldEmail, user.FieldDisplayName, user.FieldRole:
+		case user.FieldUsername, user.FieldPasswordHash, user.FieldPasswordVerifiedHash, user.FieldEmail, user.FieldEmailVerificationSource, user.FieldVerifiedEmailKey, user.FieldDisplayName, user.FieldRole:
 			values[i] = new(sql.NullString)
-		case user.FieldCreatedAt, user.FieldUpdatedAt:
+		case user.FieldCreatedAt, user.FieldUpdatedAt, user.FieldPasswordVerifiedAt, user.FieldEmailVerifiedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -258,11 +303,49 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.PasswordHash = value.String
 			}
+		case user.FieldPasswordVerifiedHash:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field password_verified_hash", values[i])
+			} else if value.Valid {
+				_m.PasswordVerifiedHash = value.String
+			}
+		case user.FieldPasswordVerifiedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field password_verified_at", values[i])
+			} else if value.Valid {
+				_m.PasswordVerifiedAt = new(time.Time)
+				*_m.PasswordVerifiedAt = value.Time
+			}
 		case user.FieldEmail:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field email", values[i])
 			} else if value.Valid {
 				_m.Email = value.String
+			}
+		case user.FieldEmailVerifiedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field email_verified_at", values[i])
+			} else if value.Valid {
+				_m.EmailVerifiedAt = new(time.Time)
+				*_m.EmailVerifiedAt = value.Time
+			}
+		case user.FieldEmailVerificationSource:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field email_verification_source", values[i])
+			} else if value.Valid {
+				_m.EmailVerificationSource = value.String
+			}
+		case user.FieldVerifiedEmailKey:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field verified_email_key", values[i])
+			} else if value.Valid {
+				_m.VerifiedEmailKey = value.String
+			}
+		case user.FieldAuthVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field auth_version", values[i])
+			} else if value.Valid {
+				_m.AuthVersion = value.Int64
 			}
 		case user.FieldDisplayName:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -308,6 +391,21 @@ func (_m *User) QueryReviewedSegments() *SegmentQuery {
 // QueryRefreshTokens queries the "refresh_tokens" edge of the User entity.
 func (_m *User) QueryRefreshTokens() *RefreshTokenQuery {
 	return NewUserClient(_m.config).QueryRefreshTokens(_m)
+}
+
+// QueryRefreshSessions queries the "refresh_sessions" edge of the User entity.
+func (_m *User) QueryRefreshSessions() *RefreshSessionQuery {
+	return NewUserClient(_m.config).QueryRefreshSessions(_m)
+}
+
+// QueryExternalIdentities queries the "external_identities" edge of the User entity.
+func (_m *User) QueryExternalIdentities() *ExternalIdentityQuery {
+	return NewUserClient(_m.config).QueryExternalIdentities(_m)
+}
+
+// QueryLoginBindings queries the "login_bindings" edge of the User entity.
+func (_m *User) QueryLoginBindings() *LoginBindingQuery {
+	return NewUserClient(_m.config).QueryLoginBindings(_m)
 }
 
 // QueryMemberships queries the "memberships" edge of the User entity.
@@ -399,8 +497,29 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("password_hash=<sensitive>")
 	builder.WriteString(", ")
+	builder.WriteString("password_verified_hash=<sensitive>")
+	builder.WriteString(", ")
+	if v := _m.PasswordVerifiedAt; v != nil {
+		builder.WriteString("password_verified_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
 	builder.WriteString("email=")
 	builder.WriteString(_m.Email)
+	builder.WriteString(", ")
+	if v := _m.EmailVerifiedAt; v != nil {
+		builder.WriteString("email_verified_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("email_verification_source=")
+	builder.WriteString(_m.EmailVerificationSource)
+	builder.WriteString(", ")
+	builder.WriteString("verified_email_key=")
+	builder.WriteString(_m.VerifiedEmailKey)
+	builder.WriteString(", ")
+	builder.WriteString("auth_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AuthVersion))
 	builder.WriteString(", ")
 	builder.WriteString("display_name=")
 	builder.WriteString(_m.DisplayName)

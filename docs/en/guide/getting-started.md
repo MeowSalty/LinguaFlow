@@ -4,7 +4,7 @@ This guide will help you get started with LinguaFlow.
 
 ## Prerequisites
 
-- Go 1.21 or higher
+- Go 1.26.10 or higher
 - Node.js 20 or higher
 - pnpm package manager
 

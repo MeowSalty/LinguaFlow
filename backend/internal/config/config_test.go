@@ -439,6 +439,110 @@ func TestPublicDeploymentFieldsAreUnique(t *testing.T) {
 	}
 }
 
+func TestAuthenticationDeploymentDefaultsAndValidation(t *testing.T) {
+	in := deploymentInputs(t)
+	r, err := ResolveServerConfig(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Config.Authentication; got.RequestTimeout != 10*time.Second || got.MaxResponseBytes != 1<<20 || got.RateLimitPerMinute != 60 {
+		t.Fatalf("unexpected authentication defaults: %+v", got)
+	}
+	for _, test := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{"http public base", "server:\n  authentication:\n    public_base_url: http://example.test\n", "HTTPS"},
+		{"wildcard host", "server:\n  authentication:\n    allowed_hosts: ['*.example.test']\n", "exact DNS"},
+		{"noncanonical cidr", "server:\n  authentication:\n    allowed_cidrs: ['10.0.0.1/24']\n", "canonical"},
+		{"zero timeout", "server:\n  authentication:\n    request_timeout: 0s\n", "positive"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			in := deploymentInputs(t)
+			withDocument(t, &in, "kind: server\nversion: 1\n"+test.body)
+			_, err := ResolveServerConfig(in)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error=%v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestAuthenticationDeploymentAllowsLoopbackHTTPWhenExplicit(t *testing.T) {
+	in := deploymentInputs(t)
+	withDocument(t, &in, "kind: server\nversion: 1\nserver:\n  authentication:\n    allow_http_loopback: true\n    public_base_url: http://127.0.0.1:8080\n    completion_urls: ['http://localhost:8080/auth/complete']\n  cors:\n    allowed_origins: ['http://localhost:8080']\n")
+	if _, err := ResolveServerConfig(in); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAuthenticationCORSRequiresExactOriginForCrossOriginCompletion(t *testing.T) {
+	tests := []struct {
+		name    string
+		cors    string
+		wantErr bool
+	}{
+		{"wildcard", "allowed_origins: ['*']", true},
+		{"host wildcard", "allowed_origins: ['https://*.example.test', 'https://app.example.test']", true},
+		{"missing completion origin", "allowed_origins: ['https://other.example.test']", true},
+		{"exact completion origin", "allowed_origins: ['https://app.example.test']", false},
+		{"empty same-origin only", "allowed_origins: []", true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			in := deploymentInputs(t)
+			body := "kind: server\nversion: 1\nserver:\n  authentication:\n    public_base_url: https://api.example.test\n    completion_urls: ['https://app.example.test/auth/complete']\n  cors:\n    " + test.cors + "\n"
+			withDocument(t, &in, body)
+			_, err := ResolveServerConfig(in)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("error=%v, wantErr=%v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestAuthenticationCORSPermitsSameOriginOrExplicitEmptyPolicy(t *testing.T) {
+	for _, cors := range []string{"allowed_origins: []", "allowed_origins: ['https://api.example.test']"} {
+		t.Run(cors, func(t *testing.T) {
+			in := deploymentInputs(t)
+			withDocument(t, &in, "kind: server\nversion: 1\nserver:\n  authentication:\n    public_base_url: https://api.example.test/base\n    completion_urls: ['https://api.example.test/auth/complete']\n  cors:\n    "+cors+"\n")
+			if _, err := ResolveServerConfig(in); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestAuthenticationDeploymentEnvironmentContract(t *testing.T) {
+	in := deploymentInputs(t)
+	for key, value := range map[string]string{
+		"LINGUAFLOW_AUTHENTICATION_PUBLIC_BASE_URL":       "https://linguaflow.example.test/base",
+		"LINGUAFLOW_AUTHENTICATION_COMPLETION_URLS":       "https://app.example.test/auth/complete,https://admin.example.test/auth/complete",
+		"LINGUAFLOW_AUTHENTICATION_ALLOWED_HOSTS":         "idp.example.test,login.example.test",
+		"LINGUAFLOW_AUTHENTICATION_ALLOWED_CIDRS":         "10.0.0.0/8,fd00::/8",
+		"LINGUAFLOW_AUTHENTICATION_ALLOW_HTTP_LOOPBACK":   "true",
+		"LINGUAFLOW_AUTHENTICATION_TRUSTED_PROXY_CIDRS":   "192.0.2.0/24",
+		"LINGUAFLOW_AUTHENTICATION_REQUEST_TIMEOUT":       "3s",
+		"LINGUAFLOW_AUTHENTICATION_MAX_RESPONSE_BYTES":    "65536",
+		"LINGUAFLOW_AUTHENTICATION_RATE_LIMIT_PER_MINUTE": "20",
+	} {
+		in.Environment[key] = value
+	}
+	in.Environment["LINGUAFLOW_CORS_ORIGINS"] = "https://app.example.test,https://admin.example.test"
+	r, err := ResolveServerConfig(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := r.Config.Authentication
+	if got.PublicBaseURL != "https://linguaflow.example.test/base" || len(got.CompletionURLs) != 2 || len(got.AllowedHosts) != 2 || len(got.AllowedCIDRs) != 2 || !got.AllowHTTPLoopback || len(got.TrustedProxyCIDRs) != 1 || got.RequestTimeout != 3*time.Second || got.MaxResponseBytes != 65536 || got.RateLimitPerMinute != 20 {
+		t.Fatalf("authentication deployment fields were not loaded: %+v", got)
+	}
+	if field := explainField(t, r, "server.authentication.public_base_url"); field.Source != "env: LINGUAFLOW_AUTHENTICATION_PUBLIC_BASE_URL" {
+		t.Fatalf("source=%q", field.Source)
+	}
+}
+
 func TestDatabaseDSN_CustomSQLiteForcesForeignKeys(t *testing.T) {
 	cfg := DefaultServerConfig()
 	cfg.Database.DSN = filepath.Join(t.TempDir(), "custom.db") + "?_pragma=foreign_keys(0)"

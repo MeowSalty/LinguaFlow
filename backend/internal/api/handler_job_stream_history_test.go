@@ -20,6 +20,8 @@ type historyStreamRecorder struct {
 	once      sync.Once
 }
 
+func (w *historyStreamRecorder) SetWriteDeadline(time.Time) error { return nil }
+
 func (w *historyStreamRecorder) Flush() {
 	w.ResponseRecorder.Flush()
 	w.once.Do(func() { close(w.connected); <-w.resume })

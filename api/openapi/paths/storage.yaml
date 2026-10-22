@@ -1,3 +1,16 @@
+storageLifecycleFilter:
+  name: lifecycle
+  in: query
+  required: false
+  schema:
+    type: string
+    enum: [available, retiring, removed, all]
+  description: >-
+    Lifecycle filter for connection and space lists. Omitted returns available and
+    retiring only; removed rows are hidden by default and need this explicit filter
+    or all. available, retiring and removed return their own lifecycle; all includes
+    removed history. Removed history keeps management-ownership authorization, never
+    revives the identity and never relaxes admission, migration or configuration gates.
 storageCapabilities:
   get:
     operationId: GetStorageCapabilities
@@ -82,6 +95,9 @@ siteStorageConnections:
   get:
     operationId: ListSiteStorageConnections
     summary: List configured site storage connections
+    description: 列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
+    parameters:
+      - $ref: '#/storageLifecycleFilter'
     security:
       - bearerAuth: []
     responses:
@@ -196,7 +212,9 @@ storageConnections:
   get:
     operationId: ListStorageConnections
     summary: ListStorageConnections
-    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
+    parameters:
+      - $ref: '#/storageLifecycleFilter'
     security:
       - bearerAuth: []
     responses:
@@ -252,7 +270,9 @@ orgStorageConnections:
   get:
     operationId: ListOrgStorageConnections
     summary: ListOrgStorageConnections
-    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
+    parameters:
+      - $ref: '#/storageLifecycleFilter'
     security:
       - bearerAuth: []
     responses:
@@ -343,7 +363,9 @@ connectionSpaces:
   get:
     operationId: ListStorageConnectionSpaces
     summary: ListStorageConnectionSpaces
-    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+    description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
+    parameters:
+      - $ref: '#/storageLifecycleFilter'
     security:
       - bearerAuth: []
     responses:

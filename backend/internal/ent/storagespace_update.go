@@ -133,6 +133,47 @@ func (_u *StorageSpaceUpdate) SetNillableStatus(v *storagespace.Status) *Storage
 	return _u
 }
 
+// SetLifecycle sets the "lifecycle" field.
+func (_u *StorageSpaceUpdate) SetLifecycle(v storagespace.Lifecycle) *StorageSpaceUpdate {
+	_u.mutation.SetLifecycle(v)
+	return _u
+}
+
+// SetNillableLifecycle sets the "lifecycle" field if the given value is not nil.
+func (_u *StorageSpaceUpdate) SetNillableLifecycle(v *storagespace.Lifecycle) *StorageSpaceUpdate {
+	if v != nil {
+		_u.SetLifecycle(*v)
+	}
+	return _u
+}
+
+// SetRetirementID sets the "retirement_id" field.
+func (_u *StorageSpaceUpdate) SetRetirementID(v int) *StorageSpaceUpdate {
+	_u.mutation.ResetRetirementID()
+	_u.mutation.SetRetirementID(v)
+	return _u
+}
+
+// SetNillableRetirementID sets the "retirement_id" field if the given value is not nil.
+func (_u *StorageSpaceUpdate) SetNillableRetirementID(v *int) *StorageSpaceUpdate {
+	if v != nil {
+		_u.SetRetirementID(*v)
+	}
+	return _u
+}
+
+// AddRetirementID adds value to the "retirement_id" field.
+func (_u *StorageSpaceUpdate) AddRetirementID(v int) *StorageSpaceUpdate {
+	_u.mutation.AddRetirementID(v)
+	return _u
+}
+
+// ClearRetirementID clears the value of the "retirement_id" field.
+func (_u *StorageSpaceUpdate) ClearRetirementID() *StorageSpaceUpdate {
+	_u.mutation.ClearRetirementID()
+	return _u
+}
+
 // SetVerified sets the "verified" field.
 func (_u *StorageSpaceUpdate) SetVerified(v bool) *StorageSpaceUpdate {
 	_u.mutation.SetVerified(v)
@@ -272,6 +313,88 @@ func (_u *StorageSpaceUpdate) AddPendingDeleteBytes(v int64) *StorageSpaceUpdate
 	return _u
 }
 
+// SetRemovedAt sets the "removed_at" field.
+func (_u *StorageSpaceUpdate) SetRemovedAt(v time.Time) *StorageSpaceUpdate {
+	_u.mutation.SetRemovedAt(v)
+	return _u
+}
+
+// SetNillableRemovedAt sets the "removed_at" field if the given value is not nil.
+func (_u *StorageSpaceUpdate) SetNillableRemovedAt(v *time.Time) *StorageSpaceUpdate {
+	if v != nil {
+		_u.SetRemovedAt(*v)
+	}
+	return _u
+}
+
+// ClearRemovedAt clears the value of the "removed_at" field.
+func (_u *StorageSpaceUpdate) ClearRemovedAt() *StorageSpaceUpdate {
+	_u.mutation.ClearRemovedAt()
+	return _u
+}
+
+// SetRemovedBy sets the "removed_by" field.
+func (_u *StorageSpaceUpdate) SetRemovedBy(v int) *StorageSpaceUpdate {
+	_u.mutation.ResetRemovedBy()
+	_u.mutation.SetRemovedBy(v)
+	return _u
+}
+
+// SetNillableRemovedBy sets the "removed_by" field if the given value is not nil.
+func (_u *StorageSpaceUpdate) SetNillableRemovedBy(v *int) *StorageSpaceUpdate {
+	if v != nil {
+		_u.SetRemovedBy(*v)
+	}
+	return _u
+}
+
+// AddRemovedBy adds value to the "removed_by" field.
+func (_u *StorageSpaceUpdate) AddRemovedBy(v int) *StorageSpaceUpdate {
+	_u.mutation.AddRemovedBy(v)
+	return _u
+}
+
+// ClearRemovedBy clears the value of the "removed_by" field.
+func (_u *StorageSpaceUpdate) ClearRemovedBy() *StorageSpaceUpdate {
+	_u.mutation.ClearRemovedBy()
+	return _u
+}
+
+// SetExecutionGeneration sets the "execution_generation" field.
+func (_u *StorageSpaceUpdate) SetExecutionGeneration(v int64) *StorageSpaceUpdate {
+	_u.mutation.ResetExecutionGeneration()
+	_u.mutation.SetExecutionGeneration(v)
+	return _u
+}
+
+// SetNillableExecutionGeneration sets the "execution_generation" field if the given value is not nil.
+func (_u *StorageSpaceUpdate) SetNillableExecutionGeneration(v *int64) *StorageSpaceUpdate {
+	if v != nil {
+		_u.SetExecutionGeneration(*v)
+	}
+	return _u
+}
+
+// AddExecutionGeneration adds value to the "execution_generation" field.
+func (_u *StorageSpaceUpdate) AddExecutionGeneration(v int64) *StorageSpaceUpdate {
+	_u.mutation.AddExecutionGeneration(v)
+	return _u
+}
+
+// SetRemoteUseState sets the "remote_use_state" field.
+func (_u *StorageSpaceUpdate) SetRemoteUseState(v storagespace.RemoteUseState) *StorageSpaceUpdate {
+	_u.mutation.SetRemoteUseState(v)
+	return _u
+}
+
+// SetNillableRemoteUseState sets the "remote_use_state" field if the given value is not nil.
+func (_u *StorageSpaceUpdate) SetNillableRemoteUseState(v *storagespace.RemoteUseState) *StorageSpaceUpdate {
+	if v != nil {
+		_u.SetRemoteUseState(*v)
+	}
+	return _u
+}
+
 // SetConnection sets the "connection" edge to the StorageConnection entity.
 func (_u *StorageSpaceUpdate) SetConnection(v *StorageConnection) *StorageSpaceUpdate {
 	return _u.SetConnectionID(v.ID)
@@ -356,6 +479,16 @@ func (_u *StorageSpaceUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Lifecycle(); ok {
+		if err := storagespace.LifecycleValidator(v); err != nil {
+			return &ValidationError{Name: "lifecycle", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.lifecycle": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RetirementID(); ok {
+		if err := storagespace.RetirementIDValidator(v); err != nil {
+			return &ValidationError{Name: "retirement_id", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.retirement_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.CapacityBytes(); ok {
 		if err := storagespace.CapacityBytesValidator(v); err != nil {
 			return &ValidationError{Name: "capacity_bytes", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.capacity_bytes": %w`, err)}
@@ -379,6 +512,21 @@ func (_u *StorageSpaceUpdate) check() error {
 	if v, ok := _u.mutation.PendingDeleteBytes(); ok {
 		if err := storagespace.PendingDeleteBytesValidator(v); err != nil {
 			return &ValidationError{Name: "pending_delete_bytes", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.pending_delete_bytes": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RemovedBy(); ok {
+		if err := storagespace.RemovedByValidator(v); err != nil {
+			return &ValidationError{Name: "removed_by", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.removed_by": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ExecutionGeneration(); ok {
+		if err := storagespace.ExecutionGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "execution_generation", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.execution_generation": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RemoteUseState(); ok {
+		if err := storagespace.RemoteUseStateValidator(v); err != nil {
+			return &ValidationError{Name: "remote_use_state", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.remote_use_state": %w`, err)}
 		}
 	}
 	if _u.mutation.ConnectionCleared() && len(_u.mutation.ConnectionIDs()) > 0 {
@@ -423,6 +571,18 @@ func (_u *StorageSpaceUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(storagespace.FieldStatus, field.TypeEnum, value)
 	}
+	if value, ok := _u.mutation.Lifecycle(); ok {
+		_spec.SetField(storagespace.FieldLifecycle, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.RetirementID(); ok {
+		_spec.SetField(storagespace.FieldRetirementID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRetirementID(); ok {
+		_spec.AddField(storagespace.FieldRetirementID, field.TypeInt, value)
+	}
+	if _u.mutation.RetirementIDCleared() {
+		_spec.ClearField(storagespace.FieldRetirementID, field.TypeInt)
+	}
 	if value, ok := _u.mutation.Verified(); ok {
 		_spec.SetField(storagespace.FieldVerified, field.TypeBool, value)
 	}
@@ -461,6 +621,30 @@ func (_u *StorageSpaceUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if value, ok := _u.mutation.AddedPendingDeleteBytes(); ok {
 		_spec.AddField(storagespace.FieldPendingDeleteBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.RemovedAt(); ok {
+		_spec.SetField(storagespace.FieldRemovedAt, field.TypeTime, value)
+	}
+	if _u.mutation.RemovedAtCleared() {
+		_spec.ClearField(storagespace.FieldRemovedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RemovedBy(); ok {
+		_spec.SetField(storagespace.FieldRemovedBy, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRemovedBy(); ok {
+		_spec.AddField(storagespace.FieldRemovedBy, field.TypeInt, value)
+	}
+	if _u.mutation.RemovedByCleared() {
+		_spec.ClearField(storagespace.FieldRemovedBy, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ExecutionGeneration(); ok {
+		_spec.SetField(storagespace.FieldExecutionGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedExecutionGeneration(); ok {
+		_spec.AddField(storagespace.FieldExecutionGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.RemoteUseState(); ok {
+		_spec.SetField(storagespace.FieldRemoteUseState, field.TypeEnum, value)
 	}
 	if _u.mutation.ConnectionCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -615,6 +799,47 @@ func (_u *StorageSpaceUpdateOne) SetNillableStatus(v *storagespace.Status) *Stor
 	return _u
 }
 
+// SetLifecycle sets the "lifecycle" field.
+func (_u *StorageSpaceUpdateOne) SetLifecycle(v storagespace.Lifecycle) *StorageSpaceUpdateOne {
+	_u.mutation.SetLifecycle(v)
+	return _u
+}
+
+// SetNillableLifecycle sets the "lifecycle" field if the given value is not nil.
+func (_u *StorageSpaceUpdateOne) SetNillableLifecycle(v *storagespace.Lifecycle) *StorageSpaceUpdateOne {
+	if v != nil {
+		_u.SetLifecycle(*v)
+	}
+	return _u
+}
+
+// SetRetirementID sets the "retirement_id" field.
+func (_u *StorageSpaceUpdateOne) SetRetirementID(v int) *StorageSpaceUpdateOne {
+	_u.mutation.ResetRetirementID()
+	_u.mutation.SetRetirementID(v)
+	return _u
+}
+
+// SetNillableRetirementID sets the "retirement_id" field if the given value is not nil.
+func (_u *StorageSpaceUpdateOne) SetNillableRetirementID(v *int) *StorageSpaceUpdateOne {
+	if v != nil {
+		_u.SetRetirementID(*v)
+	}
+	return _u
+}
+
+// AddRetirementID adds value to the "retirement_id" field.
+func (_u *StorageSpaceUpdateOne) AddRetirementID(v int) *StorageSpaceUpdateOne {
+	_u.mutation.AddRetirementID(v)
+	return _u
+}
+
+// ClearRetirementID clears the value of the "retirement_id" field.
+func (_u *StorageSpaceUpdateOne) ClearRetirementID() *StorageSpaceUpdateOne {
+	_u.mutation.ClearRetirementID()
+	return _u
+}
+
 // SetVerified sets the "verified" field.
 func (_u *StorageSpaceUpdateOne) SetVerified(v bool) *StorageSpaceUpdateOne {
 	_u.mutation.SetVerified(v)
@@ -754,6 +979,88 @@ func (_u *StorageSpaceUpdateOne) AddPendingDeleteBytes(v int64) *StorageSpaceUpd
 	return _u
 }
 
+// SetRemovedAt sets the "removed_at" field.
+func (_u *StorageSpaceUpdateOne) SetRemovedAt(v time.Time) *StorageSpaceUpdateOne {
+	_u.mutation.SetRemovedAt(v)
+	return _u
+}
+
+// SetNillableRemovedAt sets the "removed_at" field if the given value is not nil.
+func (_u *StorageSpaceUpdateOne) SetNillableRemovedAt(v *time.Time) *StorageSpaceUpdateOne {
+	if v != nil {
+		_u.SetRemovedAt(*v)
+	}
+	return _u
+}
+
+// ClearRemovedAt clears the value of the "removed_at" field.
+func (_u *StorageSpaceUpdateOne) ClearRemovedAt() *StorageSpaceUpdateOne {
+	_u.mutation.ClearRemovedAt()
+	return _u
+}
+
+// SetRemovedBy sets the "removed_by" field.
+func (_u *StorageSpaceUpdateOne) SetRemovedBy(v int) *StorageSpaceUpdateOne {
+	_u.mutation.ResetRemovedBy()
+	_u.mutation.SetRemovedBy(v)
+	return _u
+}
+
+// SetNillableRemovedBy sets the "removed_by" field if the given value is not nil.
+func (_u *StorageSpaceUpdateOne) SetNillableRemovedBy(v *int) *StorageSpaceUpdateOne {
+	if v != nil {
+		_u.SetRemovedBy(*v)
+	}
+	return _u
+}
+
+// AddRemovedBy adds value to the "removed_by" field.
+func (_u *StorageSpaceUpdateOne) AddRemovedBy(v int) *StorageSpaceUpdateOne {
+	_u.mutation.AddRemovedBy(v)
+	return _u
+}
+
+// ClearRemovedBy clears the value of the "removed_by" field.
+func (_u *StorageSpaceUpdateOne) ClearRemovedBy() *StorageSpaceUpdateOne {
+	_u.mutation.ClearRemovedBy()
+	return _u
+}
+
+// SetExecutionGeneration sets the "execution_generation" field.
+func (_u *StorageSpaceUpdateOne) SetExecutionGeneration(v int64) *StorageSpaceUpdateOne {
+	_u.mutation.ResetExecutionGeneration()
+	_u.mutation.SetExecutionGeneration(v)
+	return _u
+}
+
+// SetNillableExecutionGeneration sets the "execution_generation" field if the given value is not nil.
+func (_u *StorageSpaceUpdateOne) SetNillableExecutionGeneration(v *int64) *StorageSpaceUpdateOne {
+	if v != nil {
+		_u.SetExecutionGeneration(*v)
+	}
+	return _u
+}
+
+// AddExecutionGeneration adds value to the "execution_generation" field.
+func (_u *StorageSpaceUpdateOne) AddExecutionGeneration(v int64) *StorageSpaceUpdateOne {
+	_u.mutation.AddExecutionGeneration(v)
+	return _u
+}
+
+// SetRemoteUseState sets the "remote_use_state" field.
+func (_u *StorageSpaceUpdateOne) SetRemoteUseState(v storagespace.RemoteUseState) *StorageSpaceUpdateOne {
+	_u.mutation.SetRemoteUseState(v)
+	return _u
+}
+
+// SetNillableRemoteUseState sets the "remote_use_state" field if the given value is not nil.
+func (_u *StorageSpaceUpdateOne) SetNillableRemoteUseState(v *storagespace.RemoteUseState) *StorageSpaceUpdateOne {
+	if v != nil {
+		_u.SetRemoteUseState(*v)
+	}
+	return _u
+}
+
 // SetConnection sets the "connection" edge to the StorageConnection entity.
 func (_u *StorageSpaceUpdateOne) SetConnection(v *StorageConnection) *StorageSpaceUpdateOne {
 	return _u.SetConnectionID(v.ID)
@@ -851,6 +1158,16 @@ func (_u *StorageSpaceUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Lifecycle(); ok {
+		if err := storagespace.LifecycleValidator(v); err != nil {
+			return &ValidationError{Name: "lifecycle", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.lifecycle": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RetirementID(); ok {
+		if err := storagespace.RetirementIDValidator(v); err != nil {
+			return &ValidationError{Name: "retirement_id", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.retirement_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.CapacityBytes(); ok {
 		if err := storagespace.CapacityBytesValidator(v); err != nil {
 			return &ValidationError{Name: "capacity_bytes", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.capacity_bytes": %w`, err)}
@@ -874,6 +1191,21 @@ func (_u *StorageSpaceUpdateOne) check() error {
 	if v, ok := _u.mutation.PendingDeleteBytes(); ok {
 		if err := storagespace.PendingDeleteBytesValidator(v); err != nil {
 			return &ValidationError{Name: "pending_delete_bytes", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.pending_delete_bytes": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RemovedBy(); ok {
+		if err := storagespace.RemovedByValidator(v); err != nil {
+			return &ValidationError{Name: "removed_by", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.removed_by": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ExecutionGeneration(); ok {
+		if err := storagespace.ExecutionGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "execution_generation", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.execution_generation": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RemoteUseState(); ok {
+		if err := storagespace.RemoteUseStateValidator(v); err != nil {
+			return &ValidationError{Name: "remote_use_state", err: fmt.Errorf(`ent: validator failed for field "StorageSpace.remote_use_state": %w`, err)}
 		}
 	}
 	if _u.mutation.ConnectionCleared() && len(_u.mutation.ConnectionIDs()) > 0 {
@@ -935,6 +1267,18 @@ func (_u *StorageSpaceUpdateOne) sqlSave(ctx context.Context) (_node *StorageSpa
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(storagespace.FieldStatus, field.TypeEnum, value)
 	}
+	if value, ok := _u.mutation.Lifecycle(); ok {
+		_spec.SetField(storagespace.FieldLifecycle, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.RetirementID(); ok {
+		_spec.SetField(storagespace.FieldRetirementID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRetirementID(); ok {
+		_spec.AddField(storagespace.FieldRetirementID, field.TypeInt, value)
+	}
+	if _u.mutation.RetirementIDCleared() {
+		_spec.ClearField(storagespace.FieldRetirementID, field.TypeInt)
+	}
 	if value, ok := _u.mutation.Verified(); ok {
 		_spec.SetField(storagespace.FieldVerified, field.TypeBool, value)
 	}
@@ -973,6 +1317,30 @@ func (_u *StorageSpaceUpdateOne) sqlSave(ctx context.Context) (_node *StorageSpa
 	}
 	if value, ok := _u.mutation.AddedPendingDeleteBytes(); ok {
 		_spec.AddField(storagespace.FieldPendingDeleteBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.RemovedAt(); ok {
+		_spec.SetField(storagespace.FieldRemovedAt, field.TypeTime, value)
+	}
+	if _u.mutation.RemovedAtCleared() {
+		_spec.ClearField(storagespace.FieldRemovedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RemovedBy(); ok {
+		_spec.SetField(storagespace.FieldRemovedBy, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRemovedBy(); ok {
+		_spec.AddField(storagespace.FieldRemovedBy, field.TypeInt, value)
+	}
+	if _u.mutation.RemovedByCleared() {
+		_spec.ClearField(storagespace.FieldRemovedBy, field.TypeInt)
+	}
+	if value, ok := _u.mutation.ExecutionGeneration(); ok {
+		_spec.SetField(storagespace.FieldExecutionGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedExecutionGeneration(); ok {
+		_spec.AddField(storagespace.FieldExecutionGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.RemoteUseState(); ok {
+		_spec.SetField(storagespace.FieldRemoteUseState, field.TypeEnum, value)
 	}
 	if _u.mutation.ConnectionCleared() {
 		edge := &sqlgraph.EdgeSpec{

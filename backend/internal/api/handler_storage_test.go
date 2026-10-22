@@ -132,7 +132,7 @@ func TestStorageAPIOwnershipSecretsAndAdminPolicy(t *testing.T) {
 		t.Fatalf("project scope escaped: %d", w.Code)
 	}
 	w = httptest.NewRecorder()
-	s.ListSiteStorageConnections(w, credentialAPIRequest(t, u, "GET", "/admin/storage/connections", "", nil))
+	s.ListSiteStorageConnections(w, credentialAPIRequest(t, u, "GET", "/admin/storage/connections", "", nil), ListSiteStorageConnectionsParams{})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("site listing was not admin-only: %d", w.Code)
 	}

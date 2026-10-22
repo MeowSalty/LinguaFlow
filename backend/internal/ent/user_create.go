@@ -15,10 +15,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
@@ -74,9 +77,109 @@ func (_c *UserCreate) SetPasswordHash(v string) *UserCreate {
 	return _c
 }
 
+// SetNillablePasswordHash sets the "password_hash" field if the given value is not nil.
+func (_c *UserCreate) SetNillablePasswordHash(v *string) *UserCreate {
+	if v != nil {
+		_c.SetPasswordHash(*v)
+	}
+	return _c
+}
+
+// SetPasswordVerifiedHash sets the "password_verified_hash" field.
+func (_c *UserCreate) SetPasswordVerifiedHash(v string) *UserCreate {
+	_c.mutation.SetPasswordVerifiedHash(v)
+	return _c
+}
+
+// SetNillablePasswordVerifiedHash sets the "password_verified_hash" field if the given value is not nil.
+func (_c *UserCreate) SetNillablePasswordVerifiedHash(v *string) *UserCreate {
+	if v != nil {
+		_c.SetPasswordVerifiedHash(*v)
+	}
+	return _c
+}
+
+// SetPasswordVerifiedAt sets the "password_verified_at" field.
+func (_c *UserCreate) SetPasswordVerifiedAt(v time.Time) *UserCreate {
+	_c.mutation.SetPasswordVerifiedAt(v)
+	return _c
+}
+
+// SetNillablePasswordVerifiedAt sets the "password_verified_at" field if the given value is not nil.
+func (_c *UserCreate) SetNillablePasswordVerifiedAt(v *time.Time) *UserCreate {
+	if v != nil {
+		_c.SetPasswordVerifiedAt(*v)
+	}
+	return _c
+}
+
 // SetEmail sets the "email" field.
 func (_c *UserCreate) SetEmail(v string) *UserCreate {
 	_c.mutation.SetEmail(v)
+	return _c
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_c *UserCreate) SetNillableEmail(v *string) *UserCreate {
+	if v != nil {
+		_c.SetEmail(*v)
+	}
+	return _c
+}
+
+// SetEmailVerifiedAt sets the "email_verified_at" field.
+func (_c *UserCreate) SetEmailVerifiedAt(v time.Time) *UserCreate {
+	_c.mutation.SetEmailVerifiedAt(v)
+	return _c
+}
+
+// SetNillableEmailVerifiedAt sets the "email_verified_at" field if the given value is not nil.
+func (_c *UserCreate) SetNillableEmailVerifiedAt(v *time.Time) *UserCreate {
+	if v != nil {
+		_c.SetEmailVerifiedAt(*v)
+	}
+	return _c
+}
+
+// SetEmailVerificationSource sets the "email_verification_source" field.
+func (_c *UserCreate) SetEmailVerificationSource(v string) *UserCreate {
+	_c.mutation.SetEmailVerificationSource(v)
+	return _c
+}
+
+// SetNillableEmailVerificationSource sets the "email_verification_source" field if the given value is not nil.
+func (_c *UserCreate) SetNillableEmailVerificationSource(v *string) *UserCreate {
+	if v != nil {
+		_c.SetEmailVerificationSource(*v)
+	}
+	return _c
+}
+
+// SetVerifiedEmailKey sets the "verified_email_key" field.
+func (_c *UserCreate) SetVerifiedEmailKey(v string) *UserCreate {
+	_c.mutation.SetVerifiedEmailKey(v)
+	return _c
+}
+
+// SetNillableVerifiedEmailKey sets the "verified_email_key" field if the given value is not nil.
+func (_c *UserCreate) SetNillableVerifiedEmailKey(v *string) *UserCreate {
+	if v != nil {
+		_c.SetVerifiedEmailKey(*v)
+	}
+	return _c
+}
+
+// SetAuthVersion sets the "auth_version" field.
+func (_c *UserCreate) SetAuthVersion(v int64) *UserCreate {
+	_c.mutation.SetAuthVersion(v)
+	return _c
+}
+
+// SetNillableAuthVersion sets the "auth_version" field if the given value is not nil.
+func (_c *UserCreate) SetNillableAuthVersion(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetAuthVersion(*v)
+	}
 	return _c
 }
 
@@ -165,6 +268,51 @@ func (_c *UserCreate) AddRefreshTokens(v ...*RefreshToken) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddRefreshTokenIDs(ids...)
+}
+
+// AddRefreshSessionIDs adds the "refresh_sessions" edge to the RefreshSession entity by IDs.
+func (_c *UserCreate) AddRefreshSessionIDs(ids ...int) *UserCreate {
+	_c.mutation.AddRefreshSessionIDs(ids...)
+	return _c
+}
+
+// AddRefreshSessions adds the "refresh_sessions" edges to the RefreshSession entity.
+func (_c *UserCreate) AddRefreshSessions(v ...*RefreshSession) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddRefreshSessionIDs(ids...)
+}
+
+// AddExternalIdentityIDs adds the "external_identities" edge to the ExternalIdentity entity by IDs.
+func (_c *UserCreate) AddExternalIdentityIDs(ids ...int) *UserCreate {
+	_c.mutation.AddExternalIdentityIDs(ids...)
+	return _c
+}
+
+// AddExternalIdentities adds the "external_identities" edges to the ExternalIdentity entity.
+func (_c *UserCreate) AddExternalIdentities(v ...*ExternalIdentity) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddExternalIdentityIDs(ids...)
+}
+
+// AddLoginBindingIDs adds the "login_bindings" edge to the LoginBinding entity by IDs.
+func (_c *UserCreate) AddLoginBindingIDs(ids ...int) *UserCreate {
+	_c.mutation.AddLoginBindingIDs(ids...)
+	return _c
+}
+
+// AddLoginBindings adds the "login_bindings" edges to the LoginBinding entity.
+func (_c *UserCreate) AddLoginBindings(v ...*LoginBinding) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddLoginBindingIDs(ids...)
 }
 
 // AddMembershipIDs adds the "memberships" edge to the OrgMembership entity by IDs.
@@ -375,6 +523,10 @@ func (_c *UserCreate) defaults() {
 		v := user.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.AuthVersion(); !ok {
+		v := user.DefaultAuthVersion
+		_c.mutation.SetAuthVersion(v)
+	}
 	if _, ok := _c.mutation.Role(); !ok {
 		v := user.DefaultRole
 		_c.mutation.SetRole(v)
@@ -401,20 +553,32 @@ func (_c *UserCreate) check() error {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.PasswordHash(); !ok {
-		return &ValidationError{Name: "password_hash", err: errors.New(`ent: missing required field "User.password_hash"`)}
-	}
 	if v, ok := _c.mutation.PasswordHash(); ok {
 		if err := user.PasswordHashValidator(v); err != nil {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.Email(); !ok {
-		return &ValidationError{Name: "email", err: errors.New(`ent: missing required field "User.email"`)}
-	}
 	if v, ok := _c.mutation.Email(); ok {
 		if err := user.EmailValidator(v); err != nil {
 			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.EmailVerificationSource(); ok {
+		if err := user.EmailVerificationSourceValidator(v); err != nil {
+			return &ValidationError{Name: "email_verification_source", err: fmt.Errorf(`ent: validator failed for field "User.email_verification_source": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.VerifiedEmailKey(); ok {
+		if err := user.VerifiedEmailKeyValidator(v); err != nil {
+			return &ValidationError{Name: "verified_email_key", err: fmt.Errorf(`ent: validator failed for field "User.verified_email_key": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.AuthVersion(); !ok {
+		return &ValidationError{Name: "auth_version", err: errors.New(`ent: missing required field "User.auth_version"`)}
+	}
+	if v, ok := _c.mutation.AuthVersion(); ok {
+		if err := user.AuthVersionValidator(v); err != nil {
+			return &ValidationError{Name: "auth_version", err: fmt.Errorf(`ent: validator failed for field "User.auth_version": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Role(); !ok {
@@ -465,9 +629,33 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 		_node.PasswordHash = value
 	}
+	if value, ok := _c.mutation.PasswordVerifiedHash(); ok {
+		_spec.SetField(user.FieldPasswordVerifiedHash, field.TypeString, value)
+		_node.PasswordVerifiedHash = value
+	}
+	if value, ok := _c.mutation.PasswordVerifiedAt(); ok {
+		_spec.SetField(user.FieldPasswordVerifiedAt, field.TypeTime, value)
+		_node.PasswordVerifiedAt = &value
+	}
 	if value, ok := _c.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 		_node.Email = value
+	}
+	if value, ok := _c.mutation.EmailVerifiedAt(); ok {
+		_spec.SetField(user.FieldEmailVerifiedAt, field.TypeTime, value)
+		_node.EmailVerifiedAt = &value
+	}
+	if value, ok := _c.mutation.EmailVerificationSource(); ok {
+		_spec.SetField(user.FieldEmailVerificationSource, field.TypeString, value)
+		_node.EmailVerificationSource = value
+	}
+	if value, ok := _c.mutation.VerifiedEmailKey(); ok {
+		_spec.SetField(user.FieldVerifiedEmailKey, field.TypeString, value)
+		_node.VerifiedEmailKey = value
+	}
+	if value, ok := _c.mutation.AuthVersion(); ok {
+		_spec.SetField(user.FieldAuthVersion, field.TypeInt64, value)
+		_node.AuthVersion = value
 	}
 	if value, ok := _c.mutation.DisplayName(); ok {
 		_spec.SetField(user.FieldDisplayName, field.TypeString, value)
@@ -522,6 +710,54 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(refreshtoken.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.RefreshSessionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RefreshSessionsTable,
+			Columns: []string{user.RefreshSessionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(refreshsession.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ExternalIdentitiesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExternalIdentitiesTable,
+			Columns: []string{user.ExternalIdentitiesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(externalidentity.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.LoginBindingsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.LoginBindingsTable,
+			Columns: []string{user.LoginBindingsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(loginbinding.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

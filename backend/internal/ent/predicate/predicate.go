@@ -9,6 +9,24 @@ import (
 // ActivityLog is the predicate function for activitylog builders.
 type ActivityLog func(*sql.Selector)
 
+// AuthChannelPolicy is the predicate function for authchannelpolicy builders.
+type AuthChannelPolicy func(*sql.Selector)
+
+// AuthConnection is the predicate function for authconnection builders.
+type AuthConnection func(*sql.Selector)
+
+// AuthConnectionRevision is the predicate function for authconnectionrevision builders.
+type AuthConnectionRevision func(*sql.Selector)
+
+// AuthConnectionSecret is the predicate function for authconnectionsecret builders.
+type AuthConnectionSecret func(*sql.Selector)
+
+// AuthTransaction is the predicate function for authtransaction builders.
+type AuthTransaction func(*sql.Selector)
+
+// AuthenticationRecovery is the predicate function for authenticationrecovery builders.
+type AuthenticationRecovery func(*sql.Selector)
+
 // Backend is the predicate function for backend builders.
 type Backend func(*sql.Selector)
 
@@ -45,6 +63,9 @@ type ExecutionProfile func(*sql.Selector)
 // ExportArtifact is the predicate function for exportartifact builders.
 type ExportArtifact func(*sql.Selector)
 
+// ExternalIdentity is the predicate function for externalidentity builders.
+type ExternalIdentity func(*sql.Selector)
+
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
 
@@ -63,6 +84,12 @@ type JobRound func(*sql.Selector)
 // JobRoundSegment is the predicate function for jobroundsegment builders.
 type JobRoundSegment func(*sql.Selector)
 
+// LocalAccountPolicy is the predicate function for localaccountpolicy builders.
+type LocalAccountPolicy func(*sql.Selector)
+
+// LoginBinding is the predicate function for loginbinding builders.
+type LoginBinding func(*sql.Selector)
+
 // OrgMembership is the predicate function for orgmembership builders.
 type OrgMembership func(*sql.Selector)
 
@@ -74,6 +101,12 @@ type Project func(*sql.Selector)
 
 // PrunePromptTemplate is the predicate function for pruneprompttemplate builders.
 type PrunePromptTemplate func(*sql.Selector)
+
+// ReauthenticationProof is the predicate function for reauthenticationproof builders.
+type ReauthenticationProof func(*sql.Selector)
+
+// RefreshSession is the predicate function for refreshsession builders.
+type RefreshSession func(*sql.Selector)
 
 // RefreshToken is the predicate function for refreshtoken builders.
 type RefreshToken func(*sql.Selector)
@@ -111,8 +144,20 @@ type StorageConnection func(*sql.Selector)
 // StorageMigrationItem is the predicate function for storagemigrationitem builders.
 type StorageMigrationItem func(*sql.Selector)
 
+// StorageNamespace is the predicate function for storagenamespace builders.
+type StorageNamespace func(*sql.Selector)
+
+// StoragePathClaim is the predicate function for storagepathclaim builders.
+type StoragePathClaim func(*sql.Selector)
+
 // StorageReservation is the predicate function for storagereservation builders.
 type StorageReservation func(*sql.Selector)
+
+// StorageRetirement is the predicate function for storageretirement builders.
+type StorageRetirement func(*sql.Selector)
+
+// StorageRetirementEntry is the predicate function for storageretiremententry builders.
+type StorageRetirementEntry func(*sql.Selector)
 
 // StorageSpace is the predicate function for storagespace builders.
 type StorageSpace func(*sql.Selector)

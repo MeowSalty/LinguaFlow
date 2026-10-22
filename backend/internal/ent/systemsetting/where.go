@@ -74,6 +74,11 @@ func Value(v string) predicate.SystemSetting {
 	return predicate.SystemSetting(sql.FieldEQ(FieldValue, v))
 }
 
+// Revision applies equality check predicate on the "revision" field. It's identical to RevisionEQ.
+func Revision(v int64) predicate.SystemSetting {
+	return predicate.SystemSetting(sql.FieldEQ(FieldRevision, v))
+}
+
 // Description applies equality check predicate on the "description" field. It's identical to DescriptionEQ.
 func Description(v string) predicate.SystemSetting {
 	return predicate.SystemSetting(sql.FieldEQ(FieldDescription, v))
@@ -297,6 +302,46 @@ func ValueEqualFold(v string) predicate.SystemSetting {
 // ValueContainsFold applies the ContainsFold predicate on the "value" field.
 func ValueContainsFold(v string) predicate.SystemSetting {
 	return predicate.SystemSetting(sql.FieldContainsFold(FieldValue, v))
+}
+
+// RevisionEQ applies the EQ predicate on the "revision" field.
+func RevisionEQ(v int64) predicate.SystemSetting {
+	return predicate.SystemSetting(sql.FieldEQ(FieldRevision, v))
+}
+
+// RevisionNEQ applies the NEQ predicate on the "revision" field.
+func RevisionNEQ(v int64) predicate.SystemSetting {
+	return predicate.SystemSetting(sql.FieldNEQ(FieldRevision, v))
+}
+
+// RevisionIn applies the In predicate on the "revision" field.
+func RevisionIn(vs ...int64) predicate.SystemSetting {
+	return predicate.SystemSetting(sql.FieldIn(FieldRevision, vs...))
+}
+
+// RevisionNotIn applies the NotIn predicate on the "revision" field.
+func RevisionNotIn(vs ...int64) predicate.SystemSetting {
+	return predicate.SystemSetting(sql.FieldNotIn(FieldRevision, vs...))
+}
+
+// RevisionGT applies the GT predicate on the "revision" field.
+func RevisionGT(v int64) predicate.SystemSetting {
+	return predicate.SystemSetting(sql.FieldGT(FieldRevision, v))
+}
+
+// RevisionGTE applies the GTE predicate on the "revision" field.
+func RevisionGTE(v int64) predicate.SystemSetting {
+	return predicate.SystemSetting(sql.FieldGTE(FieldRevision, v))
+}
+
+// RevisionLT applies the LT predicate on the "revision" field.
+func RevisionLT(v int64) predicate.SystemSetting {
+	return predicate.SystemSetting(sql.FieldLT(FieldRevision, v))
+}
+
+// RevisionLTE applies the LTE predicate on the "revision" field.
+func RevisionLTE(v int64) predicate.SystemSetting {
+	return predicate.SystemSetting(sql.FieldLTE(FieldRevision, v))
 }
 
 // DescriptionEQ applies the EQ predicate on the "description" field.

@@ -1,0 +1,660 @@
+collection:
+  get:
+    operationId: "ListAuthConnections"
+    summary: "管理员列出认证连接"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
+    security:
+      -
+        bearerAuth: []
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionsResponse"
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+  post:
+    operationId: "CreateAuthConnection"
+    summary: "创建进入 configuring 状态的新连接"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/CreateAuthConnectionRequest"
+    responses:
+      201:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionRecord"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+item:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  get:
+    operationId: "GetAuthConnection"
+    summary: "管理员读取连接当前配置"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
+    security:
+      -
+        bearerAuth: []
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionRecord"
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+  patch:
+    operationId: "UpdateAuthConnection"
+    summary: "原子保存连接配置变更"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/UpdateAuthConnectionRequest"
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionRecord"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+check:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  post:
+    operationId: "CheckAuthConnection"
+    summary: "本地检查连接候选配置（不访问第三方）"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/AuthConnectionCandidateRequest"
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionCheck"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+impact:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  post:
+    operationId: "GetAuthConnectionImpact"
+    summary: "评估保存候选配置对现有用户的影响"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. Disabled and archived connections block this operation."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/AuthConnectionCandidateRequest"
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionImpactResult"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+configure:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  post:
+    operationId: "ConfigureAuthConnection"
+    summary: "退出服务并回到 configuring 状态"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. Disabling formal use revokes dependent sessions in the same transaction."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/AuthConnectionActionRequest"
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionRecord"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+enable:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  post:
+    operationId: "EnableAuthConnection"
+
+    summary: "启用连接并开放正式用途"
+    description: "Server mode only. Requires complete configuration, fresh matching validation bound to the current admin session and browser proof, purpose switches, and fallback protection. Authentication secrets and flow results use Cache-Control: no-store."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/AuthConnectionActionRequest"
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionRecord"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        description: "Revision conflict, incomplete configuration, missing/expired/mismatched test evidence, state conflict, or users without a verified fallback."
+        content:
+          application/problem+json:
+            schema:
+              anyOf:
+                - $ref: '../components/schemas/auth-external.yaml#/AuthConnectionErrorProblem'
+                - $ref: '../components/schemas/common.yaml#/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+disable:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  post:
+    operationId: "DisableAuthConnection"
+    summary: "停用连接并撤销正式用途"
+    description: "Server mode only. Stops all formal use, blocks new external requests, and revokes dependent sessions in one transaction. Disabled requires an explicit configure step before testing again."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/AuthConnectionActionRequest"
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionRecord"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+archive:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  post:
+    operationId: "ArchiveAuthConnection"
+    summary: "管理员 archive 连接"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/AuthConnectionActionRequest"
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionRecord"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+restore:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  post:
+    operationId: "RestoreAuthConnection"
+    summary: "管理员 restore 连接"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/AuthConnectionActionRequest"
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionRecord"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+test:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  post:
+    operationId: "TestAuthConnection"
+    summary: "以管理员身份对候选配置发起真实认证测试"
+    description: "Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503."
+    security:
+      -
+        bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/auth-external.yaml#/AuthConnectionTestRequest"
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/ExternalStartResponse"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+logo:
+  parameters:
+    -
+      name: "connectionId"
+      in: "path"
+      required: true
+      schema:
+        type: "string"
+  get:
+    operationId: "GetAuthConnectionLogo"
+    summary: "管理员读取当前配置Logo"
+    description: "Server mode only. Sensitive artefacts use Cache-Control: no-store."
+    security:
+      -
+        bearerAuth: []
+    responses:
+      200:
+        description: "Validated PNG"
+        content:
+          image/png:
+            schema:
+              type: "string"
+              format: "binary"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+  post:
+    operationId: "UploadAuthConnectionLogo"
+    summary: "上传256KiB以内PNG/WebP并解码重编码"
+    description: "Server mode only. Sensitive artefacts use Cache-Control: no-store."
+    security:
+      -
+        bearerAuth: []
+    parameters:
+      -
+        name: "expected_revision"
+        in: "query"
+        required: true
+        schema:
+          type: "integer"
+          format: "int64"
+          minimum: 1
+    responses:
+      200:
+        description: "Result"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/auth-external.yaml#/AuthConnectionRecord"
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '429':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '503':
+        $ref: '../base.yaml#/components/responses/Problem'
+      default:
+        $ref: "../base.yaml#/components/responses/Problem"
+    requestBody:
+      required: true
+      content:
+        image/png:
+          schema:
+            type: "string"
+            format: "binary"
+        image/webp:
+          schema:
+            type: "string"
+            format: "binary"
+attributes:
+  parameters:
+    - name: connectionId
+      in: path
+      required: true
+      schema: {type: string}
+  get:
+    operationId: GetAuthConnectionAttributes
+    summary: 获取指定版本的受信属性目录和可用运算符
+    security: [{bearerAuth: []}]
+    parameters:
+      - name: expected_revision
+        in: query
+        required: true
+        schema: {type: integer, format: int64, minimum: 1}
+      - name: purpose
+        in: query
+        required: true
+        schema: {type: string, enum: [login, signup, link]}
+    responses:
+      '200':
+        description: Attribute catalogue
+        content:
+          application/json:
+            schema: {$ref: '../components/schemas/auth-rules.yaml#/AuthAttributeCatalog'}
+      '400': {$ref: '../base.yaml#/components/responses/Problem'}
+      '401': {$ref: '../base.yaml#/components/responses/Problem'}
+      '403': {$ref: '../base.yaml#/components/responses/Problem'}
+      '409': {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}
+  post:
+    operationId: PreviewAuthConnectionAttributes
+    summary: 获取候选版本的受信属性目录和可用运算符（不访问第三方）
+    security: [{bearerAuth: []}]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [expected_revision, purpose]
+            properties:
+              expected_revision: {type: integer, format: int64, minimum: 1}
+              purpose: {type: string, enum: [login, signup, link]}
+              changes: {$ref: '../components/schemas/auth-external.yaml#/AuthConnectionChanges'}
+    responses:
+      '200':
+        description: Attribute catalogue for the candidate configuration
+        content:
+          application/json:
+            schema: {$ref: '../components/schemas/auth-rules.yaml#/AuthAttributeCatalog'}
+      '400': {$ref: '../base.yaml#/components/responses/Problem'}
+      '401': {$ref: '../base.yaml#/components/responses/Problem'}
+      '403': {$ref: '../base.yaml#/components/responses/Problem'}
+      '409': {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}
+preview:
+  parameters:
+    - name: connectionId
+      in: path
+      required: true
+      schema: {type: string}
+  post:
+    operationId: PreviewAuthConnectionRules
+    summary: 使用模拟数据预览候选规则，不创建认证证据
+    security: [{bearerAuth: []}]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '../components/schemas/auth-rules.yaml#/AuthRulesPreviewRequest'}
+    responses:
+      '200':
+        description: Simulated diagnostics only
+        content:
+          application/json:
+            schema: {$ref: '../components/schemas/auth-rules.yaml#/AuthRulesPreview'}
+      '400': {$ref: '../base.yaml#/components/responses/Problem'}
+      '401': {$ref: '../base.yaml#/components/responses/Problem'}
+      '403': {$ref: '../base.yaml#/components/responses/Problem'}
+      '409': {$ref: '../base.yaml#/components/responses/Problem'}
+      default: {$ref: '../base.yaml#/components/responses/Problem'}

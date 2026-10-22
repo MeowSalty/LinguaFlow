@@ -45,11 +45,23 @@ type StorageConnection struct {
 	ManagementGeneration int64 `json:"management_generation,omitempty"`
 	// Status holds the value of the "status" field.
 	Status storageconnection.Status `json:"status,omitempty"`
+	// Lifecycle holds the value of the "lifecycle" field.
+	Lifecycle storageconnection.Lifecycle `json:"lifecycle,omitempty"`
+	// RetirementID holds the value of the "retirement_id" field.
+	RetirementID *int `json:"retirement_id,omitempty"`
 	// Health holds the value of the "health" field.
 	Health string `json:"health,omitempty"`
 	// CheckedAt holds the value of the "checked_at" field.
-	CheckedAt    *time.Time `json:"checked_at,omitempty"`
-	selectValues sql.SelectValues
+	CheckedAt *time.Time `json:"checked_at,omitempty"`
+	// RemovedAt holds the value of the "removed_at" field.
+	RemovedAt *time.Time `json:"removed_at,omitempty"`
+	// RemovedBy holds the value of the "removed_by" field.
+	RemovedBy *int `json:"removed_by,omitempty"`
+	// ExecutionGeneration holds the value of the "execution_generation" field.
+	ExecutionGeneration int64 `json:"execution_generation,omitempty"`
+	// RemoteUseState holds the value of the "remote_use_state" field.
+	RemoteUseState storageconnection.RemoteUseState `json:"remote_use_state,omitempty"`
+	selectValues   sql.SelectValues
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -59,11 +71,11 @@ func (*StorageConnection) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case storageconnection.FieldPathStyle:
 			values[i] = new(sql.NullBool)
-		case storageconnection.FieldID, storageconnection.FieldOwnerID, storageconnection.FieldActiveAuthGeneration, storageconnection.FieldManagementGeneration:
+		case storageconnection.FieldID, storageconnection.FieldOwnerID, storageconnection.FieldActiveAuthGeneration, storageconnection.FieldManagementGeneration, storageconnection.FieldRetirementID, storageconnection.FieldRemovedBy, storageconnection.FieldExecutionGeneration:
 			values[i] = new(sql.NullInt64)
-		case storageconnection.FieldName, storageconnection.FieldDriver, storageconnection.FieldOwnerKind, storageconnection.FieldBackendID, storageconnection.FieldEndpoint, storageconnection.FieldRegion, storageconnection.FieldAuthSource, storageconnection.FieldStatus, storageconnection.FieldHealth:
+		case storageconnection.FieldName, storageconnection.FieldDriver, storageconnection.FieldOwnerKind, storageconnection.FieldBackendID, storageconnection.FieldEndpoint, storageconnection.FieldRegion, storageconnection.FieldAuthSource, storageconnection.FieldStatus, storageconnection.FieldLifecycle, storageconnection.FieldHealth, storageconnection.FieldRemoteUseState:
 			values[i] = new(sql.NullString)
-		case storageconnection.FieldCreatedAt, storageconnection.FieldUpdatedAt, storageconnection.FieldCheckedAt:
+		case storageconnection.FieldCreatedAt, storageconnection.FieldUpdatedAt, storageconnection.FieldCheckedAt, storageconnection.FieldRemovedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -170,6 +182,19 @@ func (_m *StorageConnection) assignValues(columns []string, values []any) error 
 			} else if value.Valid {
 				_m.Status = storageconnection.Status(value.String)
 			}
+		case storageconnection.FieldLifecycle:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field lifecycle", values[i])
+			} else if value.Valid {
+				_m.Lifecycle = storageconnection.Lifecycle(value.String)
+			}
+		case storageconnection.FieldRetirementID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field retirement_id", values[i])
+			} else if value.Valid {
+				_m.RetirementID = new(int)
+				*_m.RetirementID = int(value.Int64)
+			}
 		case storageconnection.FieldHealth:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field health", values[i])
@@ -182,6 +207,32 @@ func (_m *StorageConnection) assignValues(columns []string, values []any) error 
 			} else if value.Valid {
 				_m.CheckedAt = new(time.Time)
 				*_m.CheckedAt = value.Time
+			}
+		case storageconnection.FieldRemovedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field removed_at", values[i])
+			} else if value.Valid {
+				_m.RemovedAt = new(time.Time)
+				*_m.RemovedAt = value.Time
+			}
+		case storageconnection.FieldRemovedBy:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field removed_by", values[i])
+			} else if value.Valid {
+				_m.RemovedBy = new(int)
+				*_m.RemovedBy = int(value.Int64)
+			}
+		case storageconnection.FieldExecutionGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field execution_generation", values[i])
+			} else if value.Valid {
+				_m.ExecutionGeneration = value.Int64
+			}
+		case storageconnection.FieldRemoteUseState:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field remote_use_state", values[i])
+			} else if value.Valid {
+				_m.RemoteUseState = storageconnection.RemoteUseState(value.String)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -261,6 +312,14 @@ func (_m *StorageConnection) String() string {
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))
 	builder.WriteString(", ")
+	builder.WriteString("lifecycle=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Lifecycle))
+	builder.WriteString(", ")
+	if v := _m.RetirementID; v != nil {
+		builder.WriteString("retirement_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
 	builder.WriteString("health=")
 	builder.WriteString(_m.Health)
 	builder.WriteString(", ")
@@ -268,6 +327,22 @@ func (_m *StorageConnection) String() string {
 		builder.WriteString("checked_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	if v := _m.RemovedAt; v != nil {
+		builder.WriteString("removed_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.RemovedBy; v != nil {
+		builder.WriteString("removed_by=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("execution_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExecutionGeneration))
+	builder.WriteString(", ")
+	builder.WriteString("remote_use_state=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RemoteUseState))
 	builder.WriteByte(')')
 	return builder.String()
 }

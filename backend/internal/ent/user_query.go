@@ -17,11 +17,14 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/externalidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/loginbinding"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshsession"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
@@ -40,6 +43,9 @@ type UserQuery struct {
 	withCreatedJobs                *JobQuery
 	withReviewedSegments           *SegmentQuery
 	withRefreshTokens              *RefreshTokenQuery
+	withRefreshSessions            *RefreshSessionQuery
+	withExternalIdentities         *ExternalIdentityQuery
+	withLoginBindings              *LoginBindingQuery
 	withMemberships                *OrgMembershipQuery
 	withBackends                   *BackendQuery
 	withOwnedProjects              *ProjectQuery
@@ -146,6 +152,72 @@ func (_q *UserQuery) QueryRefreshTokens() *RefreshTokenQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(refreshtoken.Table, refreshtoken.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.RefreshTokensTable, user.RefreshTokensColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryRefreshSessions chains the current query on the "refresh_sessions" edge.
+func (_q *UserQuery) QueryRefreshSessions() *RefreshSessionQuery {
+	query := (&RefreshSessionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(refreshsession.Table, refreshsession.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.RefreshSessionsTable, user.RefreshSessionsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryExternalIdentities chains the current query on the "external_identities" edge.
+func (_q *UserQuery) QueryExternalIdentities() *ExternalIdentityQuery {
+	query := (&ExternalIdentityClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(externalidentity.Table, externalidentity.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.ExternalIdentitiesTable, user.ExternalIdentitiesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryLoginBindings chains the current query on the "login_bindings" edge.
+func (_q *UserQuery) QueryLoginBindings() *LoginBindingQuery {
+	query := (&LoginBindingClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(loginbinding.Table, loginbinding.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.LoginBindingsTable, user.LoginBindingsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -590,6 +662,9 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withCreatedJobs:                _q.withCreatedJobs.Clone(),
 		withReviewedSegments:           _q.withReviewedSegments.Clone(),
 		withRefreshTokens:              _q.withRefreshTokens.Clone(),
+		withRefreshSessions:            _q.withRefreshSessions.Clone(),
+		withExternalIdentities:         _q.withExternalIdentities.Clone(),
+		withLoginBindings:              _q.withLoginBindings.Clone(),
 		withMemberships:                _q.withMemberships.Clone(),
 		withBackends:                   _q.withBackends.Clone(),
 		withOwnedProjects:              _q.withOwnedProjects.Clone(),
@@ -637,6 +712,39 @@ func (_q *UserQuery) WithRefreshTokens(opts ...func(*RefreshTokenQuery)) *UserQu
 		opt(query)
 	}
 	_q.withRefreshTokens = query
+	return _q
+}
+
+// WithRefreshSessions tells the query-builder to eager-load the nodes that are connected to
+// the "refresh_sessions" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithRefreshSessions(opts ...func(*RefreshSessionQuery)) *UserQuery {
+	query := (&RefreshSessionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withRefreshSessions = query
+	return _q
+}
+
+// WithExternalIdentities tells the query-builder to eager-load the nodes that are connected to
+// the "external_identities" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithExternalIdentities(opts ...func(*ExternalIdentityQuery)) *UserQuery {
+	query := (&ExternalIdentityClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withExternalIdentities = query
+	return _q
+}
+
+// WithLoginBindings tells the query-builder to eager-load the nodes that are connected to
+// the "login_bindings" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithLoginBindings(opts ...func(*LoginBindingQuery)) *UserQuery {
+	query := (&LoginBindingClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withLoginBindings = query
 	return _q
 }
 
@@ -839,10 +947,13 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [14]bool{
+		loadedTypes = [17]bool{
 			_q.withCreatedJobs != nil,
 			_q.withReviewedSegments != nil,
 			_q.withRefreshTokens != nil,
+			_q.withRefreshSessions != nil,
+			_q.withExternalIdentities != nil,
+			_q.withLoginBindings != nil,
 			_q.withMemberships != nil,
 			_q.withBackends != nil,
 			_q.withOwnedProjects != nil,
@@ -892,6 +1003,27 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadRefreshTokens(ctx, query, nodes,
 			func(n *User) { n.Edges.RefreshTokens = []*RefreshToken{} },
 			func(n *User, e *RefreshToken) { n.Edges.RefreshTokens = append(n.Edges.RefreshTokens, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withRefreshSessions; query != nil {
+		if err := _q.loadRefreshSessions(ctx, query, nodes,
+			func(n *User) { n.Edges.RefreshSessions = []*RefreshSession{} },
+			func(n *User, e *RefreshSession) { n.Edges.RefreshSessions = append(n.Edges.RefreshSessions, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withExternalIdentities; query != nil {
+		if err := _q.loadExternalIdentities(ctx, query, nodes,
+			func(n *User) { n.Edges.ExternalIdentities = []*ExternalIdentity{} },
+			func(n *User, e *ExternalIdentity) { n.Edges.ExternalIdentities = append(n.Edges.ExternalIdentities, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withLoginBindings; query != nil {
+		if err := _q.loadLoginBindings(ctx, query, nodes,
+			func(n *User) { n.Edges.LoginBindings = []*LoginBinding{} },
+			func(n *User, e *LoginBinding) { n.Edges.LoginBindings = append(n.Edges.LoginBindings, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -1071,6 +1203,96 @@ func (_q *UserQuery) loadRefreshTokens(ctx context.Context, query *RefreshTokenQ
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "user_refresh_tokens" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadRefreshSessions(ctx context.Context, query *RefreshSessionQuery, nodes []*User, init func(*User), assign func(*User, *RefreshSession)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(refreshsession.FieldUserID)
+	}
+	query.Where(predicate.RefreshSession(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.RefreshSessionsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadExternalIdentities(ctx context.Context, query *ExternalIdentityQuery, nodes []*User, init func(*User), assign func(*User, *ExternalIdentity)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(externalidentity.FieldUserID)
+	}
+	query.Where(predicate.ExternalIdentity(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.ExternalIdentitiesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadLoginBindings(ctx context.Context, query *LoginBindingQuery, nodes []*User, init func(*User), assign func(*User, *LoginBinding)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(loginbinding.FieldUserID)
+	}
+	query.Where(predicate.LoginBinding(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.LoginBindingsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}

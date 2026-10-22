@@ -25,6 +25,8 @@ type SystemSetting struct {
 	Key string `json:"key,omitempty"`
 	// Value holds the value of the "value" field.
 	Value string `json:"value,omitempty"`
+	// Revision holds the value of the "revision" field.
+	Revision int64 `json:"revision,omitempty"`
 	// Description holds the value of the "description" field.
 	Description  string `json:"description,omitempty"`
 	selectValues sql.SelectValues
@@ -35,7 +37,7 @@ func (*SystemSetting) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case systemsetting.FieldID:
+		case systemsetting.FieldID, systemsetting.FieldRevision:
 			values[i] = new(sql.NullInt64)
 		case systemsetting.FieldKey, systemsetting.FieldValue, systemsetting.FieldDescription:
 			values[i] = new(sql.NullString)
@@ -85,6 +87,12 @@ func (_m *SystemSetting) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field value", values[i])
 			} else if value.Valid {
 				_m.Value = value.String
+			}
+		case systemsetting.FieldRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field revision", values[i])
+			} else if value.Valid {
+				_m.Revision = value.Int64
 			}
 		case systemsetting.FieldDescription:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -139,6 +147,9 @@ func (_m *SystemSetting) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("value=")
 	builder.WriteString(_m.Value)
+	builder.WriteString(", ")
+	builder.WriteString("revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Revision))
 	builder.WriteString(", ")
 	builder.WriteString("description=")
 	builder.WriteString(_m.Description)

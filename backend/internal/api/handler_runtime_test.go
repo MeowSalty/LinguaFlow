@@ -188,6 +188,11 @@ func TestServerRuntimeLifecycle(t *testing.T) {
 			if s.ready.Load() {
 				t.Fatal("stopped server remains ready")
 			}
+			select {
+			case <-s.authCleanupDone:
+			default:
+				t.Fatal("authentication cleanup was not joined")
+			}
 			if _, err := s.limiterPool.Lookup(1); !errors.Is(err, backend.ErrLimiterClosed) {
 				t.Fatal("limiter not shut down", err)
 			}

@@ -24,6 +24,8 @@ func (StorageSpace) Fields() []ent.Field {
 		field.Int("owner_id").Default(0).NonNegative(),
 		field.Int64("management_generation").Default(0).NonNegative(),
 		field.Enum("status").Values("active", "read_only", "disabled").Default("active"),
+		field.Enum("lifecycle").Values("available", "retiring", "removed").Default("available"),
+		field.Int("retirement_id").Optional().Nillable().Positive(),
 		field.Bool("verified").Default(false),
 		field.Bool("versioned").Default(false),
 		field.Int64("capacity_bytes").Optional().Nillable().Positive(),
@@ -31,6 +33,12 @@ func (StorageSpace) Fields() []ent.Field {
 		field.Int64("candidate_bytes").Default(0).NonNegative(),
 		field.Int64("live_bytes").Default(0).NonNegative(),
 		field.Int64("pending_delete_bytes").Default(0).NonNegative(),
+		field.Time("removed_at").Optional().Nillable(),
+		field.Int("removed_by").Optional().Nillable().NonNegative(),
+		field.Int64("execution_generation").Default(0).NonNegative(),
+		// Unknown is the safe upgrade default. Only new application builders can
+		// assert never; every remote admission records attempted before I/O.
+		field.Enum("remote_use_state").Values("unknown", "never", "attempted").Default("unknown"),
 	}
 }
 func (StorageSpace) Edges() []ent.Edge {
@@ -39,5 +47,5 @@ func (StorageSpace) Edges() []ent.Edge {
 
 // Database checks also cover atomic Add mutations, which skip field validators.
 func (StorageSpace) Annotations() []schema.Annotation {
-	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"storage_space_management_generation_safe": "management_generation >= 0 AND management_generation <= 9007199254740991", "storage_space_reserved_bytes_safe": "reserved_bytes >= 0 AND reserved_bytes <= 9007199254740991", "storage_space_candidate_bytes_safe": "candidate_bytes >= 0 AND candidate_bytes <= 9007199254740991", "storage_space_live_bytes_safe": "live_bytes >= 0 AND live_bytes <= 9007199254740991", "storage_space_pending_delete_bytes_safe": "pending_delete_bytes >= 0 AND pending_delete_bytes <= 9007199254740991", "storage_space_total_safe": "reserved_bytes + candidate_bytes + live_bytes + pending_delete_bytes <= 9007199254740991", "storage_space_capacity_safe": "capacity_bytes IS NULL OR (capacity_bytes >= 1 AND capacity_bytes <= 9007199254740991)"}}}
+	return []schema.Annotation{entsql.Annotation{Checks: map[string]string{"storage_space_management_generation_safe": "management_generation >= 0 AND management_generation <= 9007199254740991", "storage_space_reserved_bytes_safe": "reserved_bytes >= 0 AND reserved_bytes <= 9007199254740991", "storage_space_candidate_bytes_safe": "candidate_bytes >= 0 AND candidate_bytes <= 9007199254740991", "storage_space_live_bytes_safe": "live_bytes >= 0 AND live_bytes <= 9007199254740991", "storage_space_pending_delete_bytes_safe": "pending_delete_bytes >= 0 AND pending_delete_bytes <= 9007199254740991", "storage_space_total_safe": "reserved_bytes + candidate_bytes + live_bytes + pending_delete_bytes <= 9007199254740991", "storage_space_capacity_safe": "capacity_bytes IS NULL OR (capacity_bytes >= 1 AND capacity_bytes <= 9007199254740991)", "storage_space_execution_generation_safe": "execution_generation >= 0 AND execution_generation <= 9007199254740991"}}}
 }

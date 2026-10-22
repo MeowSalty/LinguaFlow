@@ -32,9 +32,6 @@ func newAdminCmd(rt *appCtx) *cobra.Command {
 					if username == "" {
 						return errors.New("--username is required")
 					}
-					if action != "recover" && email == "" {
-						return errors.New("--email is required")
-					}
 					password, err = readAdministratorPassword(cmd.InOrStdin(), passwordFile, passwordStdin)
 					if err != nil {
 						return err
@@ -67,7 +64,7 @@ func newAdminCmd(rt *appCtx) *cobra.Command {
 			},
 		}
 		cmd.Flags().StringVar(&username, "username", "", "管理员用户名")
-		cmd.Flags().StringVar(&email, "email", "", "管理员邮箱（创建时必填）")
+		cmd.Flags().StringVar(&email, "email", "", "管理员联系邮箱（可选，恢复时保留原邮箱）")
 		cmd.Flags().StringVar(&passwordFile, "password-file", "", "从文件读取密码，移除一个末尾换行")
 		cmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "从标准输入读取密码")
 		cmd.Flags().String("data-dir", "", "覆盖部署数据目录")
@@ -76,6 +73,7 @@ func newAdminCmd(rt *appCtx) *cobra.Command {
 		group.AddCommand(cmd)
 	}
 	group.AddCommand(newAdminCredentialsCmd(rt))
+	group.AddCommand(newAuthenticationRecoveryCmd(rt))
 	return group
 }
 

@@ -8,16 +8,18 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func newAccountTestAuth(t *testing.T) (*AuthService, *ent.Client) {
 	t.Helper()
 	client := testClient(t)
+	if err := initializePasswordConnection(context.Background(), client); err != nil {
+		t.Fatal(err)
+	}
 	client.SystemSetting.Create().SetKey(SettingRegistrationEnabled).SetValue("true").SaveX(context.Background())
 	return NewAuthService(client, AuthConfig{
 		Secret: []byte("account-service-test-secret"), Issuer: "account-service-test",
@@ -94,11 +96,11 @@ func TestRegisterPasswordContract(t *testing.T) {
 			if session.User.Username != username {
 				t.Fatalf("registered username = %q, want %q", session.User.Username, username)
 			}
-			if _, err := svc.Login(ctx, LoginInput{Username: username, Password: tt.password}); err != nil {
+			if _, err := svc.Login(ctx, LoginInput{Identifier: username, Password: tt.password}); err != nil {
 				t.Fatalf("registered password cannot log in: %v", err)
 			}
 			if trimmed := strings.TrimSpace(tt.password); trimmed != tt.password {
-				if _, err := svc.Login(ctx, LoginInput{Username: username, Password: trimmed}); !errors.Is(err, ErrInvalidCredentials) {
+				if _, err := svc.Login(ctx, LoginInput{Identifier: username, Password: trimmed}); !errors.Is(err, ErrInvalidCredentials) {
 					t.Fatalf("trimmed password error = %v, want ErrInvalidCredentials", err)
 				}
 			}
@@ -176,13 +178,13 @@ func TestChangePasswordCurrentPasswordErrors(t *testing.T) {
 	}
 }
 
-func TestChangePasswordAcceptsLegacyPasswordsAndPreservesSessions(t *testing.T) {
+func TestChangePasswordVerifiesStoredPasswordsAndRevokesSessions(t *testing.T) {
 	ctx := context.Background()
 	svc, client := newAccountTestAuth(t)
 	for i, oldPassword := range []string{"short", "旧密码", " old "} {
 		t.Run(fmt.Sprintf("legacy-%d", i), func(t *testing.T) {
 			account := createPasswordTestUser(t, client, fmt.Sprintf("legacy-%d", i), oldPassword)
-			session, err := svc.Login(ctx, LoginInput{Username: account.Username, Password: oldPassword})
+			session, err := svc.Login(ctx, LoginInput{Identifier: account.Username, Password: oldPassword})
 			if err != nil {
 				t.Fatalf("legacy password cannot log in: %v", err)
 			}
@@ -190,17 +192,17 @@ func TestChangePasswordAcceptsLegacyPasswordsAndPreservesSessions(t *testing.T) 
 			if err := NewUserService(client, svc).ChangeMyPassword(ctx, account.ID, oldPassword, newPassword); err != nil {
 				t.Fatalf("legacy password cannot be used for change: %v", err)
 			}
-			if _, err := svc.Login(ctx, LoginInput{Username: account.Username, Password: oldPassword}); !errors.Is(err, ErrInvalidCredentials) {
+			if _, err := svc.Login(ctx, LoginInput{Identifier: account.Username, Password: oldPassword}); !errors.Is(err, ErrInvalidCredentials) {
 				t.Fatalf("old password login error = %v, want ErrInvalidCredentials", err)
 			}
-			if _, err := svc.Login(ctx, LoginInput{Username: account.Username, Password: newPassword}); err != nil {
+			if _, err := svc.Login(ctx, LoginInput{Identifier: account.Username, Password: newPassword}); err != nil {
 				t.Fatalf("new password cannot log in: %v", err)
 			}
-			if _, _, err := svc.ResolveUserFromAccessToken(ctx, session.AccessToken); err != nil {
-				t.Fatalf("password change invalidated existing access token: %v", err)
+			if _, _, err := svc.ResolveUserFromAccessToken(ctx, session.AccessToken); !errors.Is(err, ErrTokenInvalid) {
+				t.Fatalf("password change failed to invalidate access token: %v", err)
 			}
-			if _, err := svc.Refresh(ctx, session.RefreshToken); err != nil {
-				t.Fatalf("password change invalidated existing refresh token: %v", err)
+			if _, err := svc.Refresh(ctx, session.RefreshToken); !errors.Is(err, ErrRefreshTokenRevoked) {
+				t.Fatalf("password change failed to revoke refresh chain: %v", err)
 			}
 		})
 	}
@@ -213,7 +215,7 @@ func TestLogoutOwnershipAndSessionIsolation(t *testing.T) {
 	other := createTestUser(t, client, "logout-other")
 	issue := func(account *ent.User) *Session {
 		t.Helper()
-		session, err := svc.issueSession(ctx, account, nil)
+		session, err := svc.issueSession(ctx, account)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -272,7 +274,8 @@ func TestLogoutInvalidAndExpiredTokens(t *testing.T) {
 		}
 	}
 	const raw = "expired-but-owned-refresh-token"
-	_, err := client.RefreshToken.Create().SetTokenHash(hash.Full(raw)).
+	chain := client.RefreshSession.Create().SetUserID(owner.ID).SetAuthVersion(owner.AuthVersion).SetConnectionID(PasswordConnectionID).SetConnectionGeneration(1).SetLoginPolicyRevision(1).SetExpiresAt(time.Now().UTC().Add(-time.Hour)).SaveX(ctx)
+	_, err := client.RefreshToken.Create().SetSessionID(chain.ID).SetGeneration(0).SetTokenHash(hash.Full(raw)).
 		SetExpiresAt(time.Now().UTC().Add(-time.Hour)).SetUserID(owner.ID).Save(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -300,7 +303,7 @@ func createPasswordTestUser(t *testing.T, client *ent.Client, username, password
 	}
 	account, err := client.User.Create().SetUsername(username).
 		SetEmail(username + "@example.com").SetDisplayName("Original profile").
-		SetPasswordHash(string(passwordHash)).Save(context.Background())
+		SetPasswordHash(string(passwordHash)).SetPasswordVerifiedAt(time.Now().UTC()).SetPasswordVerifiedHash(hash.Full(string(passwordHash))).Save(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

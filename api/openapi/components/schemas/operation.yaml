@@ -14,12 +14,14 @@ OperationSummary:
     - $ref: '#/TranslationOperation'
     - $ref: '#/GlossarySyncOperation'
     - $ref: '#/StorageOperation'
+    - $ref: '#/StorageRetirementOperation'
   discriminator:
     propertyName: task_type
     mapping:
       translation: '#/TranslationOperation'
       glossary_sync: '#/GlossarySyncOperation'
       storage: '#/StorageOperation'
+      storage_retirement: '#/StorageRetirementOperation'
 
 OperationBase:
   type: object
@@ -172,7 +174,7 @@ OperationsSummaryResponse:
       $ref: '#/OperationCounts'
     by_type:
       type: object
-      required: [translation, glossary_sync, storage]
+      required: [translation, glossary_sync, storage, storage_retirement]
       properties:
         translation:
           $ref: '#/OperationCounts'
@@ -180,9 +182,83 @@ OperationsSummaryResponse:
           $ref: '#/OperationCounts'
         storage:
           $ref: '#/OperationCounts'
+        storage_retirement:
+          $ref: '#/OperationCounts'
     recent_failed_since:
       type: string
       format: date-time
     as_of:
       type: string
       format: date-time
+
+StorageRetirementOperation:
+  type: object
+  additionalProperties: false
+  required: [task_type, task_id, scope, owner_id, target_kind, target_id, name, status, phase, error_code, next_check_at, created_at, updated_at, started_at, finished_at, can_delete, supported_actions]
+  description: >-
+    专用跨项目退出父任务投影。父任务没有虚构的 project_id，因此不继承带 project_id 的
+    OperationBase；显式 project_id 筛选必须排除父任务。只投影任务中心需要的稳定字段，
+    不返回凭据、对象键、bucket/prefix、租约、内部 CAS 或依赖明细。历史结果按管理归属
+    权限可查，移除完成后保留 tombstone 与已完成的幂等结果。
+  properties:
+    task_type:
+      type: string
+      enum: [storage_retirement]
+    task_id:
+      type: string
+      pattern: '^[1-9][0-9]*$'
+      description: 退出任务标识；与项目任务一致以字符串返回，避免大整数精度损失。
+    scope:
+      $ref: './storage-retirement.yaml#/StorageRetirementScope'
+    owner_id:
+      type: integer
+      minimum: 0
+      description: user 为当前用户 ID，org 为组织 ID，site 为 0，与退出任务归属一致。
+    target_kind:
+      $ref: './storage-retirement.yaml#/StorageRetirementTargetKind'
+    target_id:
+      type: integer
+      minimum: 1
+    name:
+      type: string
+      description: 目标显示名，来自连接或空间；不含 provider 路径、凭据或对象键。
+    status:
+      $ref: './storage-retirement.yaml#/StorageRetirementStatus'
+    phase:
+      $ref: './storage-retirement.yaml#/StorageRetirementPhase'
+    error_code:
+      type: string
+      description: 脱敏的稳定领域错误码；空字符串表示无错误，不返回错误正文。
+    next_check_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: 持久等待（保留期、pin、部署配置）的下一次检查时间；纯等待不消耗失败重试次数。
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+    started_at:
+      type: string
+      format: date-time
+      nullable: true
+    finished_at:
+      type: string
+      format: date-time
+      nullable: true
+    can_delete:
+      type: boolean
+      enum: [false]
+      readOnly: true
+      x-go-type-skip-optional-pointer: true
+      x-omitempty: false
+      description: 退出父任务承担屏障与恢复依据，本功能不可删除，始终为 false。
+    supported_actions:
+      type: array
+      uniqueItems: true
+      description: 类型能力，不是当前状态或用户权限许可；执行时必须再次鉴权。
+      items:
+        type: string
+        enum: [view, resume, cancel]

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
 // parseSSECursor parses a Last-Event-ID value into a non-negative seq.
@@ -18,7 +20,7 @@ func (s *Server) parseSSECursor(raw, source string) int64 {
 	v, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || v < 0 {
 		s.logger.Warn("job_stream: invalid Last-Event-ID, falling back to full replay",
-			"source", source, "raw", raw)
+			"source", source)
 		return 0
 	}
 	return v
@@ -43,12 +45,37 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 		s.writeAuthProblem(w, r, err)
 		return
 	}
+	// Freeze the identity of this connection. A refreshed token or a later user
+	// snapshot cannot extend or replace the access token that opened the stream.
+	userID := authUser.User.ID
+	var authVersion int64
+	var expiresAt time.Time
+	local := s.isLocal()
+	if !local {
+		claims := authUser.Claims
+		if claims == nil || claims.UserID != userID || claims.AuthVersion < 1 || claims.ExpiresAt == nil {
+			s.writeAuthProblem(w, r, service.ErrTokenInvalid)
+			return
+		}
+		authVersion, expiresAt = claims.AuthVersion, claims.ExpiresAt.Time
+	}
+	checkAccessError := func() error {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if !local {
+			if err := s.authService.CheckAccessSession(ctx, userID, authVersion, expiresAt); err != nil {
+				return err
+			}
+		}
+		return s.jobSvc.CheckJobAccess(ctx, userID, jobID)
+	}
+	checkAccess := func() bool { return checkAccessError() == nil }
 	guard, err := s.taskLifecycle.Lock(r.Context(), "translation", jobID)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
 	}
-	if err := s.jobSvc.CheckJobAccess(r.Context(), authUser.User.ID, jobID); err != nil {
+	if err := s.jobSvc.CheckJobAccess(r.Context(), userID, jobID); err != nil {
 		guard.Release()
 		s.writeJobServiceError(w, r, err)
 		return
@@ -56,15 +83,26 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 	ch := s.eventBroker.Subscribe(jobID)
 	guard.Release()
 	defer s.eventBroker.Unsubscribe(jobID, ch)
-	checkAccess := func() bool {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		return s.jobSvc.CheckJobAccess(ctx, authUser.User.ID, jobID) == nil
-	}
-
-	flusher, ok := w.(http.Flusher)
+	_, ok := w.(http.Flusher)
 	if !ok {
 		s.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "streaming not supported")
+		return
+	}
+	controller := http.NewResponseController(w)
+	prepareWrite := func() bool {
+		deadline := time.Now().Add(5 * time.Second)
+		if !local && expiresAt.Before(deadline) {
+			deadline = expiresAt
+		}
+		return controller.SetWriteDeadline(deadline) == nil
+	}
+	if err := checkAccessError(); err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	// A writer that cannot bound a blocked write cannot uphold stream revocation.
+	if !prepareWrite() {
+		s.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "streaming deadlines not supported")
 		return
 	}
 
@@ -74,13 +112,12 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 
-	controller := http.NewResponseController(w)
-	// Bound a slow client's write so it cannot indefinitely defer authorization checks.
-	_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	if _, err := fmt.Fprintf(w, ": connected\n\n"); err != nil {
 		return
 	}
-	flusher.Flush()
+	if err := controller.Flush(); err != nil {
+		return
+	}
 
 	// 从 ring buffer 回放历史事件
 	var lastSeq int64
@@ -148,18 +185,25 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 			if err != nil {
 				continue
 			}
-			_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if !prepareWrite() {
+				return
+			}
 			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", evt.Seq, sseEventTypeReplacer.Replace(evt.Type), string(data)); err != nil {
 				return
 			}
 		}
 		replayed += len(batch)
-		flusher.Flush()
+		if !checkAccess() || controller.Flush() != nil {
+			return
+		}
 		if len(batch) < thisBatch {
 			break // 无更多历史
 		}
 	}
 
+	if checkInterval <= 0 || checkInterval > 5*time.Second {
+		checkInterval = 5 * time.Second
+	}
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
 	for {
@@ -181,20 +225,28 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 			if err != nil {
 				continue
 			}
-			_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if !prepareWrite() {
+				return
+			}
 			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", lastSeq, sseEventTypeReplacer.Replace(evt.Type), string(data)); err != nil {
 				return
 			}
-			flusher.Flush()
+			if err := controller.Flush(); err != nil {
+				return
+			}
 		case <-ticker.C:
 			if !checkAccess() {
 				return
 			}
-			_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if !prepareWrite() {
+				return
+			}
 			if _, err := fmt.Fprintf(w, ": keepalive %d\n\n", time.Now().Unix()); err != nil {
 				return
 			}
-			flusher.Flush()
+			if err := controller.Flush(); err != nil {
+				return
+			}
 		}
 	}
 }

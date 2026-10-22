@@ -100,9 +100,19 @@ func Ciphertext(v []byte) predicate.StorageAuthVersion {
 	return predicate.StorageAuthVersion(sql.FieldEQ(FieldCiphertext, v))
 }
 
+// RetirementID applies equality check predicate on the "retirement_id" field. It's identical to RetirementIDEQ.
+func RetirementID(v int) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldEQ(FieldRetirementID, v))
+}
+
 // ExpiresAt applies equality check predicate on the "expires_at" field. It's identical to ExpiresAtEQ.
 func ExpiresAt(v time.Time) predicate.StorageAuthVersion {
 	return predicate.StorageAuthVersion(sql.FieldEQ(FieldExpiresAt, v))
+}
+
+// PurgedAt applies equality check predicate on the "purged_at" field. It's identical to PurgedAtEQ.
+func PurgedAt(v time.Time) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldEQ(FieldPurgedAt, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -430,6 +440,16 @@ func NonceLTE(v []byte) predicate.StorageAuthVersion {
 	return predicate.StorageAuthVersion(sql.FieldLTE(FieldNonce, v))
 }
 
+// NonceIsNil applies the IsNil predicate on the "nonce" field.
+func NonceIsNil() predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldIsNull(FieldNonce))
+}
+
+// NonceNotNil applies the NotNil predicate on the "nonce" field.
+func NonceNotNil() predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNotNull(FieldNonce))
+}
+
 // CiphertextEQ applies the EQ predicate on the "ciphertext" field.
 func CiphertextEQ(v []byte) predicate.StorageAuthVersion {
 	return predicate.StorageAuthVersion(sql.FieldEQ(FieldCiphertext, v))
@@ -470,6 +490,16 @@ func CiphertextLTE(v []byte) predicate.StorageAuthVersion {
 	return predicate.StorageAuthVersion(sql.FieldLTE(FieldCiphertext, v))
 }
 
+// CiphertextIsNil applies the IsNil predicate on the "ciphertext" field.
+func CiphertextIsNil() predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldIsNull(FieldCiphertext))
+}
+
+// CiphertextNotNil applies the NotNil predicate on the "ciphertext" field.
+func CiphertextNotNil() predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNotNull(FieldCiphertext))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v Status) predicate.StorageAuthVersion {
 	return predicate.StorageAuthVersion(sql.FieldEQ(FieldStatus, v))
@@ -488,6 +518,76 @@ func StatusIn(vs ...Status) predicate.StorageAuthVersion {
 // StatusNotIn applies the NotIn predicate on the "status" field.
 func StatusNotIn(vs ...Status) predicate.StorageAuthVersion {
 	return predicate.StorageAuthVersion(sql.FieldNotIn(FieldStatus, vs...))
+}
+
+// PurposeEQ applies the EQ predicate on the "purpose" field.
+func PurposeEQ(v Purpose) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldEQ(FieldPurpose, v))
+}
+
+// PurposeNEQ applies the NEQ predicate on the "purpose" field.
+func PurposeNEQ(v Purpose) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNEQ(FieldPurpose, v))
+}
+
+// PurposeIn applies the In predicate on the "purpose" field.
+func PurposeIn(vs ...Purpose) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldIn(FieldPurpose, vs...))
+}
+
+// PurposeNotIn applies the NotIn predicate on the "purpose" field.
+func PurposeNotIn(vs ...Purpose) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNotIn(FieldPurpose, vs...))
+}
+
+// RetirementIDEQ applies the EQ predicate on the "retirement_id" field.
+func RetirementIDEQ(v int) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldEQ(FieldRetirementID, v))
+}
+
+// RetirementIDNEQ applies the NEQ predicate on the "retirement_id" field.
+func RetirementIDNEQ(v int) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNEQ(FieldRetirementID, v))
+}
+
+// RetirementIDIn applies the In predicate on the "retirement_id" field.
+func RetirementIDIn(vs ...int) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldIn(FieldRetirementID, vs...))
+}
+
+// RetirementIDNotIn applies the NotIn predicate on the "retirement_id" field.
+func RetirementIDNotIn(vs ...int) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNotIn(FieldRetirementID, vs...))
+}
+
+// RetirementIDGT applies the GT predicate on the "retirement_id" field.
+func RetirementIDGT(v int) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldGT(FieldRetirementID, v))
+}
+
+// RetirementIDGTE applies the GTE predicate on the "retirement_id" field.
+func RetirementIDGTE(v int) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldGTE(FieldRetirementID, v))
+}
+
+// RetirementIDLT applies the LT predicate on the "retirement_id" field.
+func RetirementIDLT(v int) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldLT(FieldRetirementID, v))
+}
+
+// RetirementIDLTE applies the LTE predicate on the "retirement_id" field.
+func RetirementIDLTE(v int) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldLTE(FieldRetirementID, v))
+}
+
+// RetirementIDIsNil applies the IsNil predicate on the "retirement_id" field.
+func RetirementIDIsNil() predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldIsNull(FieldRetirementID))
+}
+
+// RetirementIDNotNil applies the NotNil predicate on the "retirement_id" field.
+func RetirementIDNotNil() predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNotNull(FieldRetirementID))
 }
 
 // ExpiresAtEQ applies the EQ predicate on the "expires_at" field.
@@ -538,6 +638,56 @@ func ExpiresAtIsNil() predicate.StorageAuthVersion {
 // ExpiresAtNotNil applies the NotNil predicate on the "expires_at" field.
 func ExpiresAtNotNil() predicate.StorageAuthVersion {
 	return predicate.StorageAuthVersion(sql.FieldNotNull(FieldExpiresAt))
+}
+
+// PurgedAtEQ applies the EQ predicate on the "purged_at" field.
+func PurgedAtEQ(v time.Time) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldEQ(FieldPurgedAt, v))
+}
+
+// PurgedAtNEQ applies the NEQ predicate on the "purged_at" field.
+func PurgedAtNEQ(v time.Time) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNEQ(FieldPurgedAt, v))
+}
+
+// PurgedAtIn applies the In predicate on the "purged_at" field.
+func PurgedAtIn(vs ...time.Time) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldIn(FieldPurgedAt, vs...))
+}
+
+// PurgedAtNotIn applies the NotIn predicate on the "purged_at" field.
+func PurgedAtNotIn(vs ...time.Time) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNotIn(FieldPurgedAt, vs...))
+}
+
+// PurgedAtGT applies the GT predicate on the "purged_at" field.
+func PurgedAtGT(v time.Time) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldGT(FieldPurgedAt, v))
+}
+
+// PurgedAtGTE applies the GTE predicate on the "purged_at" field.
+func PurgedAtGTE(v time.Time) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldGTE(FieldPurgedAt, v))
+}
+
+// PurgedAtLT applies the LT predicate on the "purged_at" field.
+func PurgedAtLT(v time.Time) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldLT(FieldPurgedAt, v))
+}
+
+// PurgedAtLTE applies the LTE predicate on the "purged_at" field.
+func PurgedAtLTE(v time.Time) predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldLTE(FieldPurgedAt, v))
+}
+
+// PurgedAtIsNil applies the IsNil predicate on the "purged_at" field.
+func PurgedAtIsNil() predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldIsNull(FieldPurgedAt))
+}
+
+// PurgedAtNotNil applies the NotNil predicate on the "purged_at" field.
+func PurgedAtNotNil() predicate.StorageAuthVersion {
+	return predicate.StorageAuthVersion(sql.FieldNotNull(FieldPurgedAt))
 }
 
 // HasConnection applies the HasEdge predicate on the "connection" edge.

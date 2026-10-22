@@ -200,6 +200,34 @@ func (_c *StorageConnectionCreate) SetNillableStatus(v *storageconnection.Status
 	return _c
 }
 
+// SetLifecycle sets the "lifecycle" field.
+func (_c *StorageConnectionCreate) SetLifecycle(v storageconnection.Lifecycle) *StorageConnectionCreate {
+	_c.mutation.SetLifecycle(v)
+	return _c
+}
+
+// SetNillableLifecycle sets the "lifecycle" field if the given value is not nil.
+func (_c *StorageConnectionCreate) SetNillableLifecycle(v *storageconnection.Lifecycle) *StorageConnectionCreate {
+	if v != nil {
+		_c.SetLifecycle(*v)
+	}
+	return _c
+}
+
+// SetRetirementID sets the "retirement_id" field.
+func (_c *StorageConnectionCreate) SetRetirementID(v int) *StorageConnectionCreate {
+	_c.mutation.SetRetirementID(v)
+	return _c
+}
+
+// SetNillableRetirementID sets the "retirement_id" field if the given value is not nil.
+func (_c *StorageConnectionCreate) SetNillableRetirementID(v *int) *StorageConnectionCreate {
+	if v != nil {
+		_c.SetRetirementID(*v)
+	}
+	return _c
+}
+
 // SetHealth sets the "health" field.
 func (_c *StorageConnectionCreate) SetHealth(v string) *StorageConnectionCreate {
 	_c.mutation.SetHealth(v)
@@ -224,6 +252,62 @@ func (_c *StorageConnectionCreate) SetCheckedAt(v time.Time) *StorageConnectionC
 func (_c *StorageConnectionCreate) SetNillableCheckedAt(v *time.Time) *StorageConnectionCreate {
 	if v != nil {
 		_c.SetCheckedAt(*v)
+	}
+	return _c
+}
+
+// SetRemovedAt sets the "removed_at" field.
+func (_c *StorageConnectionCreate) SetRemovedAt(v time.Time) *StorageConnectionCreate {
+	_c.mutation.SetRemovedAt(v)
+	return _c
+}
+
+// SetNillableRemovedAt sets the "removed_at" field if the given value is not nil.
+func (_c *StorageConnectionCreate) SetNillableRemovedAt(v *time.Time) *StorageConnectionCreate {
+	if v != nil {
+		_c.SetRemovedAt(*v)
+	}
+	return _c
+}
+
+// SetRemovedBy sets the "removed_by" field.
+func (_c *StorageConnectionCreate) SetRemovedBy(v int) *StorageConnectionCreate {
+	_c.mutation.SetRemovedBy(v)
+	return _c
+}
+
+// SetNillableRemovedBy sets the "removed_by" field if the given value is not nil.
+func (_c *StorageConnectionCreate) SetNillableRemovedBy(v *int) *StorageConnectionCreate {
+	if v != nil {
+		_c.SetRemovedBy(*v)
+	}
+	return _c
+}
+
+// SetExecutionGeneration sets the "execution_generation" field.
+func (_c *StorageConnectionCreate) SetExecutionGeneration(v int64) *StorageConnectionCreate {
+	_c.mutation.SetExecutionGeneration(v)
+	return _c
+}
+
+// SetNillableExecutionGeneration sets the "execution_generation" field if the given value is not nil.
+func (_c *StorageConnectionCreate) SetNillableExecutionGeneration(v *int64) *StorageConnectionCreate {
+	if v != nil {
+		_c.SetExecutionGeneration(*v)
+	}
+	return _c
+}
+
+// SetRemoteUseState sets the "remote_use_state" field.
+func (_c *StorageConnectionCreate) SetRemoteUseState(v storageconnection.RemoteUseState) *StorageConnectionCreate {
+	_c.mutation.SetRemoteUseState(v)
+	return _c
+}
+
+// SetNillableRemoteUseState sets the "remote_use_state" field if the given value is not nil.
+func (_c *StorageConnectionCreate) SetNillableRemoteUseState(v *storageconnection.RemoteUseState) *StorageConnectionCreate {
+	if v != nil {
+		_c.SetRemoteUseState(*v)
 	}
 	return _c
 }
@@ -307,9 +391,21 @@ func (_c *StorageConnectionCreate) defaults() {
 		v := storageconnection.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.Lifecycle(); !ok {
+		v := storageconnection.DefaultLifecycle
+		_c.mutation.SetLifecycle(v)
+	}
 	if _, ok := _c.mutation.Health(); !ok {
 		v := storageconnection.DefaultHealth
 		_c.mutation.SetHealth(v)
+	}
+	if _, ok := _c.mutation.ExecutionGeneration(); !ok {
+		v := storageconnection.DefaultExecutionGeneration
+		_c.mutation.SetExecutionGeneration(v)
+	}
+	if _, ok := _c.mutation.RemoteUseState(); !ok {
+		v := storageconnection.DefaultRemoteUseState
+		_c.mutation.SetRemoteUseState(v)
 	}
 }
 
@@ -394,8 +490,42 @@ func (_c *StorageConnectionCreate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "StorageConnection.status": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.Lifecycle(); !ok {
+		return &ValidationError{Name: "lifecycle", err: errors.New(`ent: missing required field "StorageConnection.lifecycle"`)}
+	}
+	if v, ok := _c.mutation.Lifecycle(); ok {
+		if err := storageconnection.LifecycleValidator(v); err != nil {
+			return &ValidationError{Name: "lifecycle", err: fmt.Errorf(`ent: validator failed for field "StorageConnection.lifecycle": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.RetirementID(); ok {
+		if err := storageconnection.RetirementIDValidator(v); err != nil {
+			return &ValidationError{Name: "retirement_id", err: fmt.Errorf(`ent: validator failed for field "StorageConnection.retirement_id": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Health(); !ok {
 		return &ValidationError{Name: "health", err: errors.New(`ent: missing required field "StorageConnection.health"`)}
+	}
+	if v, ok := _c.mutation.RemovedBy(); ok {
+		if err := storageconnection.RemovedByValidator(v); err != nil {
+			return &ValidationError{Name: "removed_by", err: fmt.Errorf(`ent: validator failed for field "StorageConnection.removed_by": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ExecutionGeneration(); !ok {
+		return &ValidationError{Name: "execution_generation", err: errors.New(`ent: missing required field "StorageConnection.execution_generation"`)}
+	}
+	if v, ok := _c.mutation.ExecutionGeneration(); ok {
+		if err := storageconnection.ExecutionGenerationValidator(v); err != nil {
+			return &ValidationError{Name: "execution_generation", err: fmt.Errorf(`ent: validator failed for field "StorageConnection.execution_generation": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.RemoteUseState(); !ok {
+		return &ValidationError{Name: "remote_use_state", err: errors.New(`ent: missing required field "StorageConnection.remote_use_state"`)}
+	}
+	if v, ok := _c.mutation.RemoteUseState(); ok {
+		if err := storageconnection.RemoteUseStateValidator(v); err != nil {
+			return &ValidationError{Name: "remote_use_state", err: fmt.Errorf(`ent: validator failed for field "StorageConnection.remote_use_state": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -479,6 +609,14 @@ func (_c *StorageConnectionCreate) createSpec() (*StorageConnection, *sqlgraph.C
 		_spec.SetField(storageconnection.FieldStatus, field.TypeEnum, value)
 		_node.Status = value
 	}
+	if value, ok := _c.mutation.Lifecycle(); ok {
+		_spec.SetField(storageconnection.FieldLifecycle, field.TypeEnum, value)
+		_node.Lifecycle = value
+	}
+	if value, ok := _c.mutation.RetirementID(); ok {
+		_spec.SetField(storageconnection.FieldRetirementID, field.TypeInt, value)
+		_node.RetirementID = &value
+	}
 	if value, ok := _c.mutation.Health(); ok {
 		_spec.SetField(storageconnection.FieldHealth, field.TypeString, value)
 		_node.Health = value
@@ -486,6 +624,22 @@ func (_c *StorageConnectionCreate) createSpec() (*StorageConnection, *sqlgraph.C
 	if value, ok := _c.mutation.CheckedAt(); ok {
 		_spec.SetField(storageconnection.FieldCheckedAt, field.TypeTime, value)
 		_node.CheckedAt = &value
+	}
+	if value, ok := _c.mutation.RemovedAt(); ok {
+		_spec.SetField(storageconnection.FieldRemovedAt, field.TypeTime, value)
+		_node.RemovedAt = &value
+	}
+	if value, ok := _c.mutation.RemovedBy(); ok {
+		_spec.SetField(storageconnection.FieldRemovedBy, field.TypeInt, value)
+		_node.RemovedBy = &value
+	}
+	if value, ok := _c.mutation.ExecutionGeneration(); ok {
+		_spec.SetField(storageconnection.FieldExecutionGeneration, field.TypeInt64, value)
+		_node.ExecutionGeneration = value
+	}
+	if value, ok := _c.mutation.RemoteUseState(); ok {
+		_spec.SetField(storageconnection.FieldRemoteUseState, field.TypeEnum, value)
+		_node.RemoteUseState = value
 	}
 	return _node, _spec
 }

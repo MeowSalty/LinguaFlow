@@ -39,6 +39,10 @@ const (
 	FieldManagementGeneration = "management_generation"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldLifecycle holds the string denoting the lifecycle field in the database.
+	FieldLifecycle = "lifecycle"
+	// FieldRetirementID holds the string denoting the retirement_id field in the database.
+	FieldRetirementID = "retirement_id"
 	// FieldVerified holds the string denoting the verified field in the database.
 	FieldVerified = "verified"
 	// FieldVersioned holds the string denoting the versioned field in the database.
@@ -53,6 +57,14 @@ const (
 	FieldLiveBytes = "live_bytes"
 	// FieldPendingDeleteBytes holds the string denoting the pending_delete_bytes field in the database.
 	FieldPendingDeleteBytes = "pending_delete_bytes"
+	// FieldRemovedAt holds the string denoting the removed_at field in the database.
+	FieldRemovedAt = "removed_at"
+	// FieldRemovedBy holds the string denoting the removed_by field in the database.
+	FieldRemovedBy = "removed_by"
+	// FieldExecutionGeneration holds the string denoting the execution_generation field in the database.
+	FieldExecutionGeneration = "execution_generation"
+	// FieldRemoteUseState holds the string denoting the remote_use_state field in the database.
+	FieldRemoteUseState = "remote_use_state"
 	// EdgeConnection holds the string denoting the connection edge name in mutations.
 	EdgeConnection = "connection"
 	// Table holds the table name of the storagespace in the database.
@@ -81,6 +93,8 @@ var Columns = []string{
 	FieldOwnerID,
 	FieldManagementGeneration,
 	FieldStatus,
+	FieldLifecycle,
+	FieldRetirementID,
 	FieldVerified,
 	FieldVersioned,
 	FieldCapacityBytes,
@@ -88,6 +102,10 @@ var Columns = []string{
 	FieldCandidateBytes,
 	FieldLiveBytes,
 	FieldPendingDeleteBytes,
+	FieldRemovedAt,
+	FieldRemovedBy,
+	FieldExecutionGeneration,
+	FieldRemoteUseState,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -127,6 +145,8 @@ var (
 	DefaultManagementGeneration int64
 	// ManagementGenerationValidator is a validator for the "management_generation" field. It is called by the builders before save.
 	ManagementGenerationValidator func(int64) error
+	// RetirementIDValidator is a validator for the "retirement_id" field. It is called by the builders before save.
+	RetirementIDValidator func(int) error
 	// DefaultVerified holds the default value on creation for the "verified" field.
 	DefaultVerified bool
 	// DefaultVersioned holds the default value on creation for the "versioned" field.
@@ -149,6 +169,12 @@ var (
 	DefaultPendingDeleteBytes int64
 	// PendingDeleteBytesValidator is a validator for the "pending_delete_bytes" field. It is called by the builders before save.
 	PendingDeleteBytesValidator func(int64) error
+	// RemovedByValidator is a validator for the "removed_by" field. It is called by the builders before save.
+	RemovedByValidator func(int) error
+	// DefaultExecutionGeneration holds the default value on creation for the "execution_generation" field.
+	DefaultExecutionGeneration int64
+	// ExecutionGenerationValidator is a validator for the "execution_generation" field. It is called by the builders before save.
+	ExecutionGenerationValidator func(int64) error
 )
 
 // OwnerKind defines the type for the "owner_kind" enum field.
@@ -202,6 +228,60 @@ func StatusValidator(s Status) error {
 		return nil
 	default:
 		return fmt.Errorf("storagespace: invalid enum value for status field: %q", s)
+	}
+}
+
+// Lifecycle defines the type for the "lifecycle" enum field.
+type Lifecycle string
+
+// LifecycleAvailable is the default value of the Lifecycle enum.
+const DefaultLifecycle = LifecycleAvailable
+
+// Lifecycle values.
+const (
+	LifecycleAvailable Lifecycle = "available"
+	LifecycleRetiring  Lifecycle = "retiring"
+	LifecycleRemoved   Lifecycle = "removed"
+)
+
+func (l Lifecycle) String() string {
+	return string(l)
+}
+
+// LifecycleValidator is a validator for the "lifecycle" field enum values. It is called by the builders before save.
+func LifecycleValidator(l Lifecycle) error {
+	switch l {
+	case LifecycleAvailable, LifecycleRetiring, LifecycleRemoved:
+		return nil
+	default:
+		return fmt.Errorf("storagespace: invalid enum value for lifecycle field: %q", l)
+	}
+}
+
+// RemoteUseState defines the type for the "remote_use_state" enum field.
+type RemoteUseState string
+
+// RemoteUseStateUnknown is the default value of the RemoteUseState enum.
+const DefaultRemoteUseState = RemoteUseStateUnknown
+
+// RemoteUseState values.
+const (
+	RemoteUseStateUnknown   RemoteUseState = "unknown"
+	RemoteUseStateNever     RemoteUseState = "never"
+	RemoteUseStateAttempted RemoteUseState = "attempted"
+)
+
+func (rus RemoteUseState) String() string {
+	return string(rus)
+}
+
+// RemoteUseStateValidator is a validator for the "remote_use_state" field enum values. It is called by the builders before save.
+func RemoteUseStateValidator(rus RemoteUseState) error {
+	switch rus {
+	case RemoteUseStateUnknown, RemoteUseStateNever, RemoteUseStateAttempted:
+		return nil
+	default:
+		return fmt.Errorf("storagespace: invalid enum value for remote_use_state field: %q", rus)
 	}
 }
 
@@ -273,6 +353,16 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
 }
 
+// ByLifecycle orders the results by the lifecycle field.
+func ByLifecycle(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLifecycle, opts...).ToFunc()
+}
+
+// ByRetirementID orders the results by the retirement_id field.
+func ByRetirementID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetirementID, opts...).ToFunc()
+}
+
 // ByVerified orders the results by the verified field.
 func ByVerified(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldVerified, opts...).ToFunc()
@@ -306,6 +396,26 @@ func ByLiveBytes(opts ...sql.OrderTermOption) OrderOption {
 // ByPendingDeleteBytes orders the results by the pending_delete_bytes field.
 func ByPendingDeleteBytes(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPendingDeleteBytes, opts...).ToFunc()
+}
+
+// ByRemovedAt orders the results by the removed_at field.
+func ByRemovedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRemovedAt, opts...).ToFunc()
+}
+
+// ByRemovedBy orders the results by the removed_by field.
+func ByRemovedBy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRemovedBy, opts...).ToFunc()
+}
+
+// ByExecutionGeneration orders the results by the execution_generation field.
+func ByExecutionGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExecutionGeneration, opts...).ToFunc()
+}
+
+// ByRemoteUseState orders the results by the remote_use_state field.
+func ByRemoteUseState(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRemoteUseState, opts...).ToFunc()
 }
 
 // ByConnectionField orders the results by connection field.

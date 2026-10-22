@@ -42,10 +42,22 @@ const (
 	FieldManagementGeneration = "management_generation"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldLifecycle holds the string denoting the lifecycle field in the database.
+	FieldLifecycle = "lifecycle"
+	// FieldRetirementID holds the string denoting the retirement_id field in the database.
+	FieldRetirementID = "retirement_id"
 	// FieldHealth holds the string denoting the health field in the database.
 	FieldHealth = "health"
 	// FieldCheckedAt holds the string denoting the checked_at field in the database.
 	FieldCheckedAt = "checked_at"
+	// FieldRemovedAt holds the string denoting the removed_at field in the database.
+	FieldRemovedAt = "removed_at"
+	// FieldRemovedBy holds the string denoting the removed_by field in the database.
+	FieldRemovedBy = "removed_by"
+	// FieldExecutionGeneration holds the string denoting the execution_generation field in the database.
+	FieldExecutionGeneration = "execution_generation"
+	// FieldRemoteUseState holds the string denoting the remote_use_state field in the database.
+	FieldRemoteUseState = "remote_use_state"
 	// Table holds the table name of the storageconnection in the database.
 	Table = "storage_connections"
 )
@@ -67,8 +79,14 @@ var Columns = []string{
 	FieldActiveAuthGeneration,
 	FieldManagementGeneration,
 	FieldStatus,
+	FieldLifecycle,
+	FieldRetirementID,
 	FieldHealth,
 	FieldCheckedAt,
+	FieldRemovedAt,
+	FieldRemovedBy,
+	FieldExecutionGeneration,
+	FieldRemoteUseState,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -108,8 +126,16 @@ var (
 	DefaultManagementGeneration int64
 	// ManagementGenerationValidator is a validator for the "management_generation" field. It is called by the builders before save.
 	ManagementGenerationValidator func(int64) error
+	// RetirementIDValidator is a validator for the "retirement_id" field. It is called by the builders before save.
+	RetirementIDValidator func(int) error
 	// DefaultHealth holds the default value on creation for the "health" field.
 	DefaultHealth string
+	// RemovedByValidator is a validator for the "removed_by" field. It is called by the builders before save.
+	RemovedByValidator func(int) error
+	// DefaultExecutionGeneration holds the default value on creation for the "execution_generation" field.
+	DefaultExecutionGeneration int64
+	// ExecutionGenerationValidator is a validator for the "execution_generation" field. It is called by the builders before save.
+	ExecutionGenerationValidator func(int64) error
 )
 
 // Driver defines the type for the "driver" enum field.
@@ -214,6 +240,60 @@ func StatusValidator(s Status) error {
 	}
 }
 
+// Lifecycle defines the type for the "lifecycle" enum field.
+type Lifecycle string
+
+// LifecycleAvailable is the default value of the Lifecycle enum.
+const DefaultLifecycle = LifecycleAvailable
+
+// Lifecycle values.
+const (
+	LifecycleAvailable Lifecycle = "available"
+	LifecycleRetiring  Lifecycle = "retiring"
+	LifecycleRemoved   Lifecycle = "removed"
+)
+
+func (l Lifecycle) String() string {
+	return string(l)
+}
+
+// LifecycleValidator is a validator for the "lifecycle" field enum values. It is called by the builders before save.
+func LifecycleValidator(l Lifecycle) error {
+	switch l {
+	case LifecycleAvailable, LifecycleRetiring, LifecycleRemoved:
+		return nil
+	default:
+		return fmt.Errorf("storageconnection: invalid enum value for lifecycle field: %q", l)
+	}
+}
+
+// RemoteUseState defines the type for the "remote_use_state" enum field.
+type RemoteUseState string
+
+// RemoteUseStateUnknown is the default value of the RemoteUseState enum.
+const DefaultRemoteUseState = RemoteUseStateUnknown
+
+// RemoteUseState values.
+const (
+	RemoteUseStateUnknown   RemoteUseState = "unknown"
+	RemoteUseStateNever     RemoteUseState = "never"
+	RemoteUseStateAttempted RemoteUseState = "attempted"
+)
+
+func (rus RemoteUseState) String() string {
+	return string(rus)
+}
+
+// RemoteUseStateValidator is a validator for the "remote_use_state" field enum values. It is called by the builders before save.
+func RemoteUseStateValidator(rus RemoteUseState) error {
+	switch rus {
+	case RemoteUseStateUnknown, RemoteUseStateNever, RemoteUseStateAttempted:
+		return nil
+	default:
+		return fmt.Errorf("storageconnection: invalid enum value for remote_use_state field: %q", rus)
+	}
+}
+
 // OrderOption defines the ordering options for the StorageConnection queries.
 type OrderOption func(*sql.Selector)
 
@@ -292,6 +372,16 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
 }
 
+// ByLifecycle orders the results by the lifecycle field.
+func ByLifecycle(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLifecycle, opts...).ToFunc()
+}
+
+// ByRetirementID orders the results by the retirement_id field.
+func ByRetirementID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetirementID, opts...).ToFunc()
+}
+
 // ByHealth orders the results by the health field.
 func ByHealth(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldHealth, opts...).ToFunc()
@@ -300,4 +390,24 @@ func ByHealth(opts ...sql.OrderTermOption) OrderOption {
 // ByCheckedAt orders the results by the checked_at field.
 func ByCheckedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCheckedAt, opts...).ToFunc()
+}
+
+// ByRemovedAt orders the results by the removed_at field.
+func ByRemovedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRemovedAt, opts...).ToFunc()
+}
+
+// ByRemovedBy orders the results by the removed_by field.
+func ByRemovedBy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRemovedBy, opts...).ToFunc()
+}
+
+// ByExecutionGeneration orders the results by the execution_generation field.
+func ByExecutionGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExecutionGeneration, opts...).ToFunc()
+}
+
+// ByRemoteUseState orders the results by the remote_use_state field.
+func ByRemoteUseState(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRemoteUseState, opts...).ToFunc()
 }

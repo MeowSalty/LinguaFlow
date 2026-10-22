@@ -2,13 +2,15 @@ StorageRuntime:
   type: object
   readOnly: true
   additionalProperties: false
-  required: [deployment_enabled, maintenance]
-  description: Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate.
+  required: [deployment_enabled, maintenance, retirement]
+  description: Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate. retirement carries the independent retirement contract version and staged action availability.
   properties:
     deployment_enabled:
       type: boolean
     maintenance:
       type: boolean
+    retirement:
+      $ref: '#/StorageRetirementCapabilities'
 StorageActionReasonCode:
   type: string
   enum:
@@ -26,6 +28,12 @@ StorageActionReasonCode:
     - storage_disk_probe_failed
     - storage_quota_exceeded
     - storage_unavailable
+    - storage_retiring
+    - storage_removed
+    - storage_retirement_conflict
+    - storage_retirement_preview_stale
+    - storage_retirement_dependencies_remaining
+    - storage_retirement_configuration_pending
 StorageActionAvailability:
   type: object
   readOnly: true
@@ -40,12 +48,55 @@ StorageActionAvailability:
       uniqueItems: true
       items:
         $ref: '#/StorageActionReasonCode'
+StorageRetirementCapabilities:
+  type: object
+  readOnly: true
+  additionalProperties: false
+  required: [contract_version, unused_removal, in_use_retirement]
+  description: >-
+    Independent retirement contract. Support for S3, project migration or connection
+    disable does not imply that complete connection removal is available; clients must
+    read this contract instead of inferring it. Contract version 1 exposes two independent
+    stages: unused_removal for targets with no remote use facts, and in_use_retirement for
+    targets that still need project migration, cleanup and marker recovery. Each stage is
+    computed from the running service configuration, so a stage that is not enabled, or is
+    blocked by local mode, a disabled deployment or global maintenance, reports
+    storage_capability_unsupported or the matching availability reason.
+  properties:
+    contract_version:
+      type: integer
+      enum: [1]
+      description: Retirement contract version; version 1 covers preview, acceptance, plan update, resume, cancel and restricted authorization recovery.
+    unused_removal:
+      $ref: '#/StorageActionAvailability'
+    in_use_retirement:
+      $ref: '#/StorageActionAvailability'
+  example:
+    contract_version: 1
+    unused_removal: {allowed: false, reason_codes: [storage_capability_unsupported]}
+    in_use_retirement: {allowed: false, reason_codes: [storage_capability_unsupported]}
+StorageLifecycle:
+  type: string
+  enum: [available, retiring, removed]
+  description: >-
+    Independent of administrative status, health and authorization. Existing identities
+    start available, including disabled ones. Retiring rejects new bindings, incoming
+    migrations and ordinary writes; finalizing also denies ordinary reads. Failed
+    retirement retains the barrier. Removed permanently denies I/O for this identity.
+    Admission, migration and configuration gates all read this same lifecycle fact.
+StorageConfigurationSource:
+  type: string
+  enum: [stored, deployment]
+  description: Stored configuration is managed through the service; deployment configuration requires operator action and never accepts uploaded retirement credentials.
 StorageConnectionManagementActions:
   type: object
   readOnly: true
   additionalProperties: false
-  required: [create_space, authorize_read, authorize_write, check_read, check_write, revoke_auth, set_status]
+  required: [retire, create_space, authorize_read, authorize_write, check_read, check_write, revoke_auth, set_status]
+  description: Retire enters the retirement workflow and is gated by the retirement contract plus the connection's current lifecycle, permissions and maintenance state. Other actions retain their existing behavior.
   properties:
+    retire:
+      $ref: '#/StorageActionAvailability'
     create_space:
       $ref: '#/StorageActionAvailability'
     authorize_read:
@@ -64,8 +115,11 @@ StorageSpaceManagementActions:
   type: object
   readOnly: true
   additionalProperties: false
-  required: [set_status, set_quota]
+  required: [retire, set_status, set_quota]
+  description: Retire enters the retirement workflow and is gated by the retirement contract plus the connection's current lifecycle, permissions and maintenance state. Other actions retain their existing behavior.
   properties:
+    retire:
+      $ref: '#/StorageActionAvailability'
     set_quota:
       $ref: "#/StorageActionAvailability"
     set_status:
@@ -94,7 +148,13 @@ StorageCapabilities:
   example:
     scope: user
     owner_id: 1
-    runtime: {deployment_enabled: false, maintenance: false}
+    runtime:
+      deployment_enabled: false
+      maintenance: false
+      retirement:
+        contract_version: 1
+        unused_removal: {allowed: false, reason_codes: [storage_capability_unsupported]}
+        in_use_retirement: {allowed: false, reason_codes: [storage_capability_unsupported]}
     management_actions:
       create_connection:
         allowed: false
@@ -195,7 +255,13 @@ StoragePolicy:
     generation: 3
     logical_limit_bytes: 107374182400
     default_space_capacity_bytes: null
-    runtime: {deployment_enabled: false, maintenance: false}
+    runtime:
+      deployment_enabled: false
+      maintenance: false
+      retirement:
+        contract_version: 1
+        unused_removal: {allowed: false, reason_codes: [storage_capability_unsupported]}
+        in_use_retirement: {allowed: false, reason_codes: [storage_capability_unsupported]}
     allowed_policy_modes: [site_only]
     policy_restriction_codes: [storage_deployment_disabled]
 StorageTask:
@@ -423,7 +489,19 @@ StorageConnection:
     - "management_generation"
     - "auth_generation"
     - "management_actions"
+    - "lifecycle"
+    - "retirement_id"
+    - "configuration_source"
   properties:
+    lifecycle:
+      $ref: '#/StorageLifecycle'
+    retirement_id:
+      type: integer
+      minimum: 1
+      nullable: true
+      description: Owning retirement, including failed tasks that still hold the barrier; null when none.
+    configuration_source:
+      $ref: '#/StorageConfigurationSource'
     management_actions:
       $ref: '#/StorageConnectionManagementActions'
     id:
@@ -488,7 +566,19 @@ StorageSpace:
     - "live_bytes"
     - "pending_delete_bytes"
     - "management_actions"
+    - "lifecycle"
+    - "retirement_id"
+    - "configuration_source"
   properties:
+    lifecycle:
+      $ref: '#/StorageLifecycle'
+    retirement_id:
+      type: integer
+      minimum: 1
+      nullable: true
+      description: Owning retirement, including a connection retirement covering this space; null when none.
+    configuration_source:
+      $ref: '#/StorageConfigurationSource'
     available_bytes:
       type: integer
       format: int64
@@ -635,6 +725,10 @@ ExportArtifact:
       nullable: true
 StorageConnectionList:
   type: "object"
+  description: >-
+    Lifecycle-filtered connection projection. The default list hides removed rows;
+    available, retiring, removed and all select one lifecycle explicitly. A removed row
+    keeps its tombstone identity for authorized history but no longer serves storage I/O.
   required:
     - "items"
   properties:
@@ -644,6 +738,9 @@ StorageConnectionList:
         $ref: "#/StorageConnection"
 StorageSpaceList:
   type: "object"
+  description: >-
+    Lifecycle-filtered space projection. The default list hides removed rows; a space may
+    be retiring because of its own retirement or the covering connection retirement.
   required:
     - "items"
   properties:
@@ -951,6 +1048,9 @@ StorageOption:
           - "storage_quota_exceeded"
           - "storage_operation_in_progress"
           - "project_not_empty"
+          - "storage_retiring"
+          - "storage_removed"
+          - "storage_retirement_conflict"
 StorageOptions:
   type: "object"
   additionalProperties: false
@@ -1020,6 +1120,8 @@ StorageOptions:
         - "storage_quota_exceeded"
         - "storage_operation_in_progress"
         - "project_not_empty"
+        - "storage_removed"
+        - "storage_retirement_conflict"
     items:
       type: "array"
       items:
@@ -1141,6 +1243,8 @@ ProjectStorage:
           - "storage_quota_exceeded"
           - "storage_operation_in_progress"
           - "project_not_empty"
+          - "storage_removed"
+          - "storage_retirement_conflict"
 StorageCheckSpaceResult:
   type: "object"
   additionalProperties: false
