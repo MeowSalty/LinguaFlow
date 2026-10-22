@@ -107,6 +107,7 @@ func TestOperationRetirementListSummaryAndCursor(t *testing.T) {
 	conn := c.StorageConnection.Create().SetName("retirement-connection").SetDriver("s3").SetOwnerKind("user").SetOwnerID(actor.ID).SetAuthSource("stored").SaveX(ctx)
 	space := c.StorageSpace.Create().SetConnectionID(conn.ID).SetName("retirement-space").SetIdentity("retirement-space-identity").SetMarkerNonce("retirement-space-nonce").SetOwnerKind("user").SetOwnerID(actor.ID).SaveX(ctx)
 	at := time.Date(2026, 10, 14, 3, 4, 5, 123456789, time.UTC)
+	now := at.Add(time.Hour)
 	var retirements []int
 	for i, status := range []string{"pending", "running", "waiting_retry", "needs_action", "completed", "failed", "cancelled"} {
 		row := seedOperationRetirement(t, c, "space", ScopeUser, actor.ID, space.ID, status, "draining", at.Add(time.Duration(i)*time.Second))
@@ -174,7 +175,7 @@ func TestOperationRetirementListSummaryAndCursor(t *testing.T) {
 		}
 	}
 
-	summary, err := svc.Summary(ctx, actor.ID, OperationSummaryOptions{})
+	summary, err := svc.summaryAt(ctx, actor.ID, OperationSummaryOptions{}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +186,7 @@ func TestOperationRetirementListSummaryAndCursor(t *testing.T) {
 	if summary.Total != (OperationCounts{Pending: 6, Running: 1, WaitingRetry: 1, NeedsAction: 1, RecentFailed: 1}) {
 		t.Fatalf("total=%+v", summary.Total)
 	}
-	scoped, err := svc.Summary(ctx, actor.ID, OperationSummaryOptions{ProjectID: p.ID})
+	scoped, err := svc.summaryAt(ctx, actor.ID, OperationSummaryOptions{ProjectID: p.ID}, now)
 	if err != nil || scoped.ByType.StorageRetirement != (OperationCounts{}) {
 		t.Fatalf("project-scoped summary=%+v err=%v", scoped, err)
 	}
@@ -202,5 +203,34 @@ func TestOperationRetirementListSummaryAndCursor(t *testing.T) {
 	}
 	if page, err := svc.List(ctx, actor.ID, OperationListOptions{TaskType: OperationStorageRetirement, AccessibleJobListOptions: AccessibleJobListOptions{Status: JobStatusPausing}}); err != nil || len(page.Items) != 0 {
 		t.Fatalf("pausing must not match a retirement: %+v err=%v", page, err)
+	}
+}
+
+func TestOperationRetirementRecentFailedWindow(t *testing.T) {
+	ctx := context.Background()
+	c := testClient(t)
+	actor := createTestUser(t, c, "retirement-recent-failed")
+	now := time.Date(2026, 10, 22, 3, 4, 5, 123456789, time.UTC)
+	since := now.Add(-7 * 24 * time.Hour)
+
+	for i, expected := range []int{0, 1, 2, 2, 2} {
+		at := []time.Time{
+			since.Add(-time.Nanosecond),
+			since,
+			now.Add(-time.Nanosecond),
+			now,
+			now.Add(time.Nanosecond),
+		}[i]
+		seedOperationRetirement(t, c, "space", ScopeUser, actor.ID, i+1, "failed", "draining", at)
+		summary, err := NewOperationQueryService(c).summaryAt(ctx, actor.ID, OperationSummaryOptions{}, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if summary.AsOf != now || summary.RecentFailedSince != since {
+			t.Fatalf("failure window at boundary %d=[%s,%s)", i, summary.RecentFailedSince, summary.AsOf)
+		}
+		if summary.ByType.StorageRetirement.RecentFailed != expected || summary.Total.RecentFailed != expected {
+			t.Fatalf("recent failed retirement counts at boundary %d: by_type=%d total=%d want=%d", i, summary.ByType.StorageRetirement.RecentFailed, summary.Total.RecentFailed, expected)
+		}
 	}
 }

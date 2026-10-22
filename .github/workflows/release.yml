@@ -12,6 +12,7 @@ jobs:
   test:
     name: 发布前测试
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:16
@@ -39,9 +40,22 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: 运行测试
+        timeout-minutes: 30
+        shell: bash
         env:
           LINGUAFLOW_TEST_POSTGRES_DSN: postgres://linguaflow:linguaflow-test@localhost:5432/linguaflow_test?sslmode=disable
-        run: task backend:test:race
+        run: |
+          set -o pipefail
+          task backend:test:race -- -json -count=1 -timeout=20m ./... 2>&1 | tee backend/test-results.out
+
+      - name: 上传测试日志
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-test-results
+          path: backend/test-results.out
+          retention-days: 7
+          if-no-files-found: warn
 
   build:
     name: 构建发布二进制

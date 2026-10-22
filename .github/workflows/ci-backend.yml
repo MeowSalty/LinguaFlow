@@ -48,6 +48,7 @@ jobs:
   test:
     name: 自动化测试
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:16
@@ -75,15 +76,30 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: 运行测试（含竞态检测）
+        timeout-minutes: 30
+        shell: bash
         env:
           LINGUAFLOW_TEST_POSTGRES_DSN: postgres://linguaflow:linguaflow-test@localhost:5432/linguaflow_test?sslmode=disable
-        run: task backend:test:race -- -coverprofile=coverage.out -covermode=atomic ./...
+        run: |
+          set -o pipefail
+          task backend:test:race -- -json -count=1 -timeout=20m -coverprofile=coverage.out -covermode=atomic ./... 2>&1 | tee backend/test-results.out
+
+      - name: 上传测试日志
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-test-results
+          path: backend/test-results.out
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: 上传覆盖率报告
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: backend/coverage.out
+          retention-days: 7
 
   build:
     name: 构建验证
