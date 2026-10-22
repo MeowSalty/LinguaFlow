@@ -149,8 +149,9 @@ func TestGateBlockCancelsActiveAndDrains(t *testing.T) {
 	}
 	go func() {
 		<-actCtx.Done()
-		release()
 		released.Add(1)
+		// Block waits for release, so record cancellation before releasing.
+		release()
 	}()
 	<-entered
 	unblock, blockErr := gate.Block(context.Background(), "conn-1")
