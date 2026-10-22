@@ -211,7 +211,7 @@ func (f *EngineFactory) buildBackend(ctx context.Context, snapshot service.Backe
 	if err != nil {
 		return nil, err
 	}
-	options := make(map[string]any, len(snapshot.Options)+1)
+	options := make(map[string]any, len(snapshot.Options))
 	for k, v := range snapshot.Options {
 		options[k] = v
 	}

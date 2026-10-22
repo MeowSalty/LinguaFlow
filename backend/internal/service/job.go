@@ -356,7 +356,7 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	// 预建 resource×round 完整矩阵（含动态选择资源）：每资源每轮一行 pending
 	// JobRound。矩阵是进度的唯一事实源，Job.progress_total/progress_completed
 	// 是其派生缓存（DBReporter 首次揭示工作量时累加分母）。
-	roundBuilders := make([]*ent.JobRoundCreate, 0, len(resourceIDs)*len(snapshot.Rounds))
+	roundBuilders := make([]*ent.JobRoundCreate, 0, jobRoundBulkChunk)
 	for _, resourceID := range resourceIDs {
 		segmentIDs := append([]int(nil), selection[resourceID]...)
 		sort.Ints(segmentIDs)
@@ -387,6 +387,13 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 				SetRoundIndex(i).
 				SetMode(rd.Mode).
 				SetStatus(JobRoundStatusPending))
+			if len(roundBuilders) == jobRoundBulkChunk {
+				if err := bulkCreateJobRounds(ctx, roundBuilders, tx.JobRound.CreateBulk); err != nil {
+					return nil, err
+				}
+				clear(roundBuilders)
+				roundBuilders = roundBuilders[:0]
+			}
 		}
 	}
 	if len(roundBuilders) > 0 {
@@ -1001,6 +1008,7 @@ func (s *JobService) failRecoveryJob(ctx context.Context, id int, message string
 
 // backfillJobRoundsForRecovery 仅从完整、经过校验的快照重建缺失的矩阵。
 // 它绝不解释缺失或过时的格式。
+// 调用方的恢复事务覆盖全部分片和任务状态更新。
 func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int) error {
 	count, err := s.client.JobRound.Query().
 		Where(jobround.JobIDEQ(jobID)).
@@ -1039,7 +1047,7 @@ func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int
 			rounds = append(rounds, backfillRound{index: i, mode: rd.Mode})
 		}
 	}
-	builders := make([]*ent.JobRoundCreate, 0, len(resources)*len(rounds))
+	builders := make([]*ent.JobRoundCreate, 0, jobRoundBulkChunk)
 	for _, jr := range resources {
 		for _, rd := range rounds {
 			builders = append(builders, s.client.JobRound.Create().
@@ -1048,6 +1056,13 @@ func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int
 				SetRoundIndex(rd.index).
 				SetMode(rd.mode).
 				SetStatus(JobRoundStatusPending))
+			if len(builders) == jobRoundBulkChunk {
+				if err := bulkCreateJobRounds(ctx, builders, s.client.JobRound.CreateBulk); err != nil {
+					return fmt.Errorf("create job rounds: %w", err)
+				}
+				clear(builders)
+				builders = builders[:0]
+			}
 		}
 	}
 	if err := bulkCreateJobRounds(ctx, builders, s.client.JobRound.CreateBulk); err != nil {
