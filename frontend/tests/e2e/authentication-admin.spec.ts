@@ -137,7 +137,7 @@ test('create, copy callback, save conflicting candidate, reconnect, then enable'
   await drawer.getByRole('button', { name: '保存配置', exact: true }).click()
   const conflictPanel = drawer
     .locator('.n-alert')
-    .filter({ hasText: '修订发生变化。请选择最新设置，或将我的修改重新应用后手动保存。' })
+    .filter({ hasText: '设置已被其他管理员更新。请选择最新设置，或将我的修改重新应用后手动保存。' })
   await expect.poll(() => calls.save).toBe(1)
   await expect(conflictPanel).toContainText('https://writer.example')
   await expect(conflictPanel).toContainText('https://candidate.example')
