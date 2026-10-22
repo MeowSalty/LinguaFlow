@@ -12,7 +12,7 @@ import IconCarbonWarning from '~icons/carbon/warning'
 import IconCarbonTime from '~icons/carbon/time'
 import { isTerminalOperation, operationKey, operationLocation } from '@/utils/operationQuery'
 import { taskTrackerPresentation } from '@/utils/taskTrackerPresentation'
-import type { Operation } from '@/api/operations'
+import { isSupportedOperation, type SupportedOperation } from '@/api/operations'
 
 const { t } = useI18n()
 const router = useRouter(),
@@ -35,6 +35,9 @@ const presentation = computed(() =>
     retainTerminal: preferences.retainTerminal,
     hiddenTerminalKeys: preferences.hiddenTerminalKeys,
   }),
+)
+const visibleTasks = computed<SupportedOperation[]>(() =>
+  presentation.value.displayed.filter(isSupportedOperation),
 )
 const attentionIcon = computed(
   () =>
@@ -115,7 +118,7 @@ function onFocusout(event: FocusEvent): void {
   if (event.relatedTarget instanceof Node && !root.contains(event.relatedTarget))
     expanded.value = false
 }
-const progress = (task: Operation): string => {
+const progress = (task: SupportedOperation): string => {
   if (task.task_type === 'storage')
     return t(`operations.storageTask.cleanup.${task.cleanup_status}`)
   if (task.task_type === 'glossary_sync')
@@ -126,7 +129,7 @@ const progress = (task: Operation): string => {
   const { progress_completed: completed, progress_total: total } = task.progress
   return completed == null || total == null ? '—' : `${completed} / ${total}`
 }
-const open = (task: Operation): void => {
+const open = (task: SupportedOperation): void => {
   expanded.value = false
   void router.push(operationLocation(task))
 }
@@ -276,7 +279,7 @@ watch(
             {{ t('operations.loading') }}
           </div>
           <div
-            v-for="task in presentation.displayed"
+            v-for="task in visibleTasks"
             :key="operationKey(task)"
             class="flex items-center gap-2 border-b border-lf-border-soft p-4 last:border-0"
           >

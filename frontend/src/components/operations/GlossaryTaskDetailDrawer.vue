@@ -10,6 +10,7 @@ import { useOperationsStore } from '@/stores/operations'
 import { useTaskHistoryStore } from '@/stores/taskHistory'
 import { useTaskMutationsStore } from '@/stores/taskMutations'
 import { taskHistoryKey, taskHistoryErrorMessage } from '@/api/task-history'
+import { extractErrorMessage } from '@/utils/errors'
 import { formatDateTime } from '@/utils/datetime'
 import { taskHistoryDeleteOption } from '@/utils/taskHistoryPresentation'
 import { useAuthStore } from '@/stores/auth'
@@ -99,9 +100,7 @@ const fail = (cause: unknown, projectDenied = false): void => {
       ? t('taskHistory.missing')
       : isAccessDenied(cause)
         ? t('taskHistory.inaccessible')
-        : cause instanceof Error
-          ? cause.message
-          : t('operations.loadFailed')
+        : extractErrorMessage(cause, t('operations.loadFailed'))
   if (isAccessDenied(cause)) {
     generation++
     task.value = null

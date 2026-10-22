@@ -113,6 +113,7 @@ const save = (page: Page) => page.getByRole('button', { name: '保存保留策�
 
 test('settings cards submit separate patches and retain the other card draft', async ({ page }) => {
   const state = await arrange(page)
+  await expect(page.getByText(/^策略版本 \d+$/)).toHaveCount(0)
   await days(page).fill('7')
   await page.getByRole('switch', { name: '允许公开注册' }).click()
   await page.getByRole('button', { name: '保存注册设置' }).click()

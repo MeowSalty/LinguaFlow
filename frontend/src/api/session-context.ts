@@ -57,3 +57,13 @@ export const changeSessionContext = (
   for (const callback of callbacks) if (listeners.has(callback)) callback()
 }
 export const invalidateSessionViews = (): void => changeSessionContext(baseUrl, userId, true, true)
+
+/** End this document's identity without opening a new request scope before a reload. */
+export const suspendSessionContext = (): void => {
+  userId = null
+  authGeneration++
+  controller.abort()
+  sessionGeneration.value++
+  const callbacks = Array.from(listeners)
+  for (const callback of callbacks) if (listeners.has(callback)) callback()
+}

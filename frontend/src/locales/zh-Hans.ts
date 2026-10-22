@@ -1,4 +1,10 @@
 import operations from './operations'
+import { authenticationMessages } from './authentication'
+import { accountAuthMessages } from './account-auth'
+import { authAdminMessages } from './auth-admin'
+import { authRulesMessages } from './auth-rules'
+import { accountInputMessages } from './account-input'
+import { localAccountMessages } from './local-account'
 import taskHistory from './task-history'
 import taskHistoryErrors from './task-history-errors'
 import taskRetention from './task-retention'
@@ -22,6 +28,12 @@ import { rubyAlignmentConfig } from './ruby-alignment-config'
 import jobStages from './job-stages'
 
 const messages = {
+  authentication: authenticationMessages,
+  accountAuth: accountAuthMessages,
+  authAdmin: authAdminMessages,
+  authRules: authRulesMessages,
+  localAccount: localAccountMessages,
+  accountInput: accountInputMessages,
   rubyAlignmentConfig,
   jobStages,
   taskHistory,
@@ -344,7 +356,7 @@ const messages = {
     subtitle: '创建一个 LinguaFlow 账号',
     form: {
       username: '用户名',
-      usernamePlaceholder: '3-32 位，字母 / 数字 / 下划线',
+      usernamePlaceholder: '3–32 个字符，以字母开头',
       email: '邮箱',
       emailPlaceholder: "you{'@'}example.com",
       displayName: '显示名（可选）',

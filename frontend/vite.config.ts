@@ -16,6 +16,27 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    {
+      name: 'auth-completion-headers',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url?.split('?')[0] === '/auth/complete') {
+            res.setHeader('Cache-Control', 'no-store')
+            res.setHeader('Referrer-Policy', 'no-referrer')
+          }
+          next()
+        })
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url?.split('?')[0] === '/auth/complete') {
+            res.setHeader('Cache-Control', 'no-store')
+            res.setHeader('Referrer-Policy', 'no-referrer')
+          }
+          next()
+        })
+      },
+    },
     VueRouter({
       routesFolder: 'src/pages',
       dts: 'src/typed-router.d.ts',

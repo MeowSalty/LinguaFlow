@@ -98,7 +98,6 @@ const restoreFocus = () => {
             })
           }}
         </p>
-        <p class="text-xs">{{ t('taskRetention.revision', { revision: policy.revision }) }}</p>
       </div>
       <NForm :model="draft" :rules="rules" :disabled="busy" label-placement="top">
         <div class="mb-4 flex items-center justify-between gap-4">

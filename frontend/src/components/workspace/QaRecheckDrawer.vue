@@ -17,6 +17,7 @@ import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 import { qaRecheck } from '@/api/projects'
+import { extractErrorMessage } from '@/utils/errors'
 import { useExecutionProfilesStore } from '@/stores/executionProfiles'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
@@ -211,7 +212,7 @@ const submit = async (): Promise<void> => {
     message.success(t('workspace.qaRecheck.successToast'))
     emit('completed')
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : t('api.errors.qaRecheckFailed')
+    errorMessage.value = extractErrorMessage(error, t('api.errors.qaRecheckFailed'))
   } finally {
     submitting.value = false
   }

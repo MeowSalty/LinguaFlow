@@ -59,7 +59,7 @@ describe('public API entry compatibility', () => {
     setLocalMode(false)
     setApiBaseUrl('https://auth.example/api/v1')
 
-    await loginWithPassword({ username: 'tester', password: 'password' })
+    await loginWithPassword({ identifier: 'tester', password: 'password' })
     expect(getAccessToken()).toBe('access')
     expect(getRefreshToken()).toBe('refresh')
     await logout()

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Operation } from '@/api/operations'
+import { isSupportedOperation, type Operation } from '@/api/operations'
 import { useI18n } from 'vue-i18n'
 import { operationKey } from '@/utils/operationQuery'
 import { formatDateTime } from '@/utils/datetime'
@@ -44,17 +44,19 @@ const tone = (status: string): 'info' | 'warning' | 'success' | 'error' | 'defau
         : ['pausing', 'paused', 'pending', 'waiting_retry', 'needs_action'].includes(status)
           ? 'warning'
           : 'default'
-const progress = (item: Operation): string =>
-  item.task_type === 'storage'
-    ? t(`operations.storageTask.cleanup.${item.cleanup_status}`)
-    : item.task_type === 'glossary_sync'
-      ? t('operations.syncProgress', {
-          processed: item.progress.processed_segments,
-          total: item.progress.total_segments,
-        })
-      : item.progress.progress_completed == null || item.progress.progress_total == null
-        ? '—'
-        : `${item.progress.progress_completed} / ${item.progress.progress_total}`
+const progress = (item: Operation): string => {
+  if (!isSupportedOperation(item)) return '—'
+  if (item.task_type === 'storage')
+    return t(`operations.storageTask.cleanup.${item.cleanup_status}`)
+  if (item.task_type === 'glossary_sync')
+    return t('operations.syncProgress', {
+      processed: item.progress.processed_segments,
+      total: item.progress.total_segments,
+    })
+  return item.progress.progress_completed == null || item.progress.progress_total == null
+    ? '—'
+    : `${item.progress.progress_completed} / ${item.progress.progress_total}`
+}
 </script>
 <template>
   <div class="lf-panel overflow-hidden">
@@ -97,8 +99,11 @@ const progress = (item: Operation): string =>
           @update:checked="(value: boolean) => emit('select', item, value)"
         />
         <div class="min-w-0">
-          <div class="truncate font-medium text-lf-text-strong" :title="item.project_name">
-            {{ item.project_name }}
+          <div
+            class="truncate font-medium text-lf-text-strong"
+            :title="isSupportedOperation(item) ? item.project_name : ''"
+          >
+            {{ isSupportedOperation(item) ? item.project_name : '' }}
           </div>
           <div class="mt-1 text-xs text-lf-text-subtle">#{{ item.task_id }}</div>
           <p

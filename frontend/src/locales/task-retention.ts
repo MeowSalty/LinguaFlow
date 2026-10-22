@@ -11,7 +11,6 @@ export default {
   unconfirmed: '设置暂不可用。读取成功后才能修改保留政策。',
   savedEnabled: '已保存：自动清理开启，保留 {days} 天',
   savedDisabled: '已保存：自动清理关闭，预设 {days} 天',
-  revision: '策略版本 {revision}',
   save: '保存保留策略',
   saveRegistration: '保存注册设置',
   discard: '放弃修改',
@@ -63,7 +62,7 @@ export default {
   confirmationInvalid: '政策或草稿已变化，请重新核对保存影响。',
   conflict: '设置已被其他管理员修改',
   conflictHint:
-    '对照已保存政策与当前草稿，选择使用服务器设置，或审阅后基于最新版本继续。不会自动重新提交。',
+    '对照已保存政策与当前草稿，选择使用服务器设置，或审阅后基于最新设置继续。不会自动重新提交。',
   conflictReadFailed: '读取最新政策失败。当前草稿已保留；请重试读取后再保存。',
   useServer: '使用服务器设置',
   useLatest: '基于最新设置继续',

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import type { Operation } from '@/api/operations'
+import { isSupportedOperation, type Operation } from '@/api/operations'
 import { formatRelativeTime } from '@/utils/datetime'
 
 defineProps<{
@@ -17,7 +17,9 @@ const taskLink = (task: Operation) => ({
   query: {
     task_type: task.task_type,
     task_id: task.task_id,
-    ...(task.task_type !== 'translation' ? { project_id: String(task.project_id) } : {}),
+    ...(task.task_type === 'glossary_sync' || task.task_type === 'storage'
+      ? { project_id: String(task.project_id) }
+      : {}),
   },
 })
 const tones = {
@@ -60,7 +62,9 @@ const tones = {
           class="flex items-center justify-between gap-3 rounded-lg py-3 text-lf-text no-underline hover:bg-lf-surface focus-visible:outline-2 focus-visible:outline-brand-500"
         >
           <div class="min-w-0">
-            <p class="truncate text-sm font-medium text-lf-text-strong">{{ task.project_name }}</p>
+            <p class="truncate text-sm font-medium text-lf-text-strong">
+              {{ isSupportedOperation(task) ? task.project_name : '' }}
+            </p>
             <p class="mt-1 truncate text-xs text-lf-text-muted">
               {{ t(`workbench.home.${task.task_type}`) }} ·
               {{ t('workbench.home.task', { id: task.task_id }) }}

@@ -66,6 +66,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/admin/authentication': RouteRecordInfo<
+      '/admin/authentication',
+      '/admin/authentication',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/admin/runtime': RouteRecordInfo<
       '/admin/runtime',
       '/admin/runtime',
@@ -90,6 +97,13 @@ declare module 'vue-router/auto-routes' {
     '/admin/users': RouteRecordInfo<
       '/admin/users',
       '/admin/users',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/auth/complete': RouteRecordInfo<
+      '/auth/complete',
+      '/auth/complete',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -320,6 +334,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/admin/authentication.vue': {
+      routes:
+        | '/admin/authentication'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/admin/runtime.vue': {
       routes:
         | '/admin/runtime'
@@ -347,6 +369,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/admin/users.vue': {
       routes:
         | '/admin/users'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/auth/complete.vue': {
+      routes:
+        | '/auth/complete'
       views:
         | never
       pathParamNames:

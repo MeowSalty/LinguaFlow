@@ -48,6 +48,7 @@ import { useEntityCrud } from '@/composables/useEntityCrud'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { formatDateTime } from '@/utils/datetime'
+import { extractErrorMessage } from '@/utils/errors'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 import { rubyRetryValidationKeys } from '@/locales/ruby-alignment-config'
 
@@ -209,7 +210,7 @@ const ensureDependenciesLoaded = async (): Promise<void> => {
     dependenciesLoaded.value = true
   } catch (cause) {
     if (request === dependencyGeneration && isSessionCurrent(session))
-      message.error(cause instanceof Error ? cause.message : t('team.errors.loadResource'))
+      message.error(extractErrorMessage(cause, t('team.errors.loadResource')))
   }
 }
 
@@ -439,7 +440,7 @@ const onSubmit = async (): Promise<void> => {
     // A closed/replaced draft must not receive the old write's failure toast.
     if (isSessionCurrent(session) && organization === store.orgId) store.error = null
     if (current()) {
-      message.error(cause instanceof Error ? cause.message : t('team.errors.saveResource'), {
+      message.error(extractErrorMessage(cause, t('team.errors.saveResource')), {
         duration: 0,
         closable: true,
       })
