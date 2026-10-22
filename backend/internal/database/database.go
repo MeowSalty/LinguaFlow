@@ -156,6 +156,11 @@ func DialectFor(driver string) string {
 }
 
 func databaseError(driver, stage string, cause error) error {
+	if driver == config.DatabaseDriverSQLite {
+		// 保留 SQLite 错误码和上下文取消信息，供启动重试及调用方判断，
+		// 同时维持原有的错误描述格式。
+		return fmt.Errorf("%s database %s failed: %w", driver, stage, cause)
+	}
 	detail := cause.Error()
 	if driver == config.DatabaseDriverPostgres {
 		detail = postgresErrorDetail(cause)

@@ -124,6 +124,11 @@ func inspectAuthFormat(ctx context.Context, conn *sql.Conn, driver string) (bool
 	}
 	rows, err = conn.QueryContext(ctx, "SELECT id, version FROM "+authFormatTable+" LIMIT 2")
 	if err != nil {
+		if driver == config.DatabaseDriverSQLite && (isSQLiteContention(err) || ctx.Err() != nil) {
+			// 读取架构与标记之间出现锁竞争，并不代表账户格式无效。
+			// 保留该错误，以便只读探测稍后重试。
+			return false, err
+		}
 		return false, fmt.Errorf("%w: invalid format marker", ErrAuthFormatUnsupported)
 	}
 	defer rows.Close()

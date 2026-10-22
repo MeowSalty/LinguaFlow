@@ -184,8 +184,10 @@ func TestAuthFormatConcurrentOpenOfNewSQLiteDatabase(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, client, err := Open(t.Context(), cfg)
-			if err == nil {
-				err = client.Close()
+			if err != nil {
+				err = fmt.Errorf("concurrent SQLite Open: %w", err)
+			} else if err = client.Close(); err != nil {
+				err = fmt.Errorf("concurrent SQLite Close: %w", err)
 			}
 			errs <- err
 		}()
@@ -194,7 +196,7 @@ func TestAuthFormatConcurrentOpenOfNewSQLiteDatabase(t *testing.T) {
 	close(errs)
 	for err := range errs {
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 	}
 }
