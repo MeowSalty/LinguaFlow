@@ -1,10 +1,22 @@
 # v0.13.0 conversion boundary
 
-Source release: `v0.13.0`, commit `416b7fc909dda3ed9179bcdbaf4ba47b6b55779d`.
-The standalone importer supports that source only. It does not infer a migration
-chain, invoke current execution defaulting, or accept partially upgraded JSON.
-The package and its fixtures can be removed together when this upgrade path is
-retired. Normal service code must never import it.
+Source release: `v0.13.0`, peeled commit
+`99cb87dea19a7fcc61b6c267f916bfe046b2d355`. The annotated tag object is
+`416b7fc909dda3ed9179bcdbaf4ba47b6b55779d`; it is not the commit.
+
+Status checked 2026-10-22: `archived_unverified`. This frozen importer recognizes
+that source only and remains rejected by the current account-format boundary.
+The exact historical tool tree is v0.14.0 at
+`4bc4577cd669d9ccbbc4980f19e259b5beff2b18`. A runnable binary archive and its
+interrupted-operation/backup recovery acceptance are still required before
+removing this source body and fixtures. Git history alone does not fulfill them.
+It does not infer a migration chain, invoke current execution defaulting, or
+accept partially upgraded JSON. Normal service code must never import it.
+
+Retirement is governed by COMPAT(migration-v013-route) and
+COMPAT(migration-journal-readers) in
+`internal/migration/catalog/compatibility.md`; no complete v0.13/v0.14 upgrade
+chain is currently promised.
 
 ## Retained historical fields
 

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "checked_date": "2026-10-22",
+  "completed_date": "2026-10-23",
+  "source_release": "v0.15.0",
+  "source_commit": "6b264ad5d8b88295c397204eacaa0838cfc97a69",
+  "implementation_base": "666dd98b6cb9df01790fd3309f3b9e79edf477d7",
+  "target": {"auth_format": 1, "data_version": 3, "release": null, "schema_binding": "sha256 of generated table, column, primary key, index, foreign key and check descriptors", "build_binding": "executing binary sha256"},
+  "backup_boundary": {
+    "checked_date": "2026-10-23",
+    "stage": "B0",
+    "status": "command_and_dependency_split_implemented",
+    "removed": "general instance backup CLI, Task, catalog routes and unpublished orchestration",
+    "retained": "operation-bound upgrade/storage snapshots and recovery evidence; storagebackup manifest version 1 readers, reference/key checks and BackupPin consumers",
+    "general_backup_creation": "deferred to B1; no replacement command is available",
+    "published_backup_restore_handoff": "unverified: retained readers and current-format tests do not certify exact old-version recovery tools or real PostgreSQL/S3 restore cells"
+  },
+  "environment": {"os": "Windows 10 22H2 build 19045", "architecture": "amd64", "go": "1.26.10", "shell": "pwsh 7.6.7", "postgres_live": "unverified: no three disposable DSNs and matching dump/restore tools", "s3_live": "unverified: no real provider or Object Lock retention fixture", "production_switch": "not performed; explicit operator handoff"},
+  "checks": [
+    {"task": "backend:migrate:test", "status": "passed", "evidence": "exact frozen release schema, full business/credential/source revision comparison, durable fault recovery, manifest-v1, explicit source selection, baseline and startup refusal"},
+    {"task": "backend:migrate:test:binary", "status": "passed", "evidence": "SQLite serve/local fresh-process list, inspect, plan, rehearse, apply, status, verify, resume, rollback; original source bytes and administrator/local identity"},
+    {"task": "backend:format", "status": "passed", "evidence": "go fmt ./..."},
+    {"task": "backend:lint", "status": "passed", "evidence": "go vet ./..."},
+    {"task": "backend:test", "status": "passed", "evidence": "go test ./...; API, runtime services, worker, migration and retained historical packages passed"},
+    {"task": "backend:test:race", "status": "passed", "evidence": "go test -race ./...; runtime services, API, migration and retained historical packages passed"},
+    {"task": "backend:build", "status": "passed", "evidence": "normal linguaflow executable built with current build/version flags"},
+    {"task": "backend:migrate:build", "status": "passed", "evidence": "unique offline executable built and invoked by binary acceptance"},
+    {"task": "backend:migrate:check-dependencies", "status": "passed", "evidence": "normal service dependency graph excludes every internal/migration package"}
+  ],
+  "limits": ["No maintainer database or production file root was selected", "Skipped external tests never promote support", "Platform compilation is not platform acceptance", "No release workflow changes, DSN switch or source/object deletion"],
+  "retirement": {"historical_status": "archived_unverified", "v013_commit": "99cb87dea19a7fcc61b6c267f916bfe046b2d355", "v013_tag_object": "416b7fc909dda3ed9179bcdbaf4ba47b6b55779d", "historical_tool_commit": "4bc4577cd669d9ccbbc4980f19e259b5beff2b18", "source_body": "retained under upgrade/v013 with current-target refusal", "archive_binary": "unverified", "interrupted_restore": "unverified", "register": "compatibility.md"}
+}

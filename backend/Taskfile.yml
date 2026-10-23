@@ -113,80 +113,68 @@ tasks:
     cmds:
       - go mod tidy
 
-  storage:backup:
-    desc: 独立存储备份工具（CLI_ARGS选择manifest/capture/restore-check；需 --offline）
+  migrate:list:
+    desc: 展示统一离线路线、支持矩阵与历史归档指引（不读取数据库和秘密）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-storage-migrate backup {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate list {{.CLI_ARGS}}
 
-  storage:inventory:
-    desc: 只读生成旧文件存储迁移清单（显式指定 --manifest）
+  migrate:inspect:
+    desc: 仅解析数据库连接输入并只读探测源格式
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-storage-migrate inventory {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate inspect {{.CLI_ARGS}}
 
-  storage:dry-run:
-    desc: 只读预演旧文件引用、摘要与定位核验
+  migrate:plan:
+    desc: 冻结 v0.15 源指纹、完整账号映射、独立目标及工具 build
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-storage-migrate dry-run {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate upgrade plan {{.CLI_ARGS}}
 
-  storage:apply:
-    desc: 停服备份后显式迁移旧文件元数据（需 --offline --backup-confirmed）
+  migrate:rehearse:
+    desc: 在隔离目标实际转换并保留验证报告（需 --offline）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-storage-migrate apply {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate upgrade rehearse {{.CLI_ARGS}}
 
-  storage:resume:
-    desc: 按持久清单恢复中断的旧文件元数据迁移
+  migrate:apply:
+    desc: 按实际备份收据转换独立目标并无覆盖发布（需 --offline）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-storage-migrate resume {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate upgrade apply {{.CLI_ARGS}}
 
-  storage:rollback:
-    desc: 回滚尚未继续编辑或写入的旧文件迁移元数据（不回滚schema，不删除原件）
+  migrate:status:
+    desc: 读取独立计划、日志和报告位置
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-storage-migrate rollback {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate status {{.CLI_ARGS}}
 
-  migrate:v013:
-    desc: 历史 PostgreSQL 迁移入口（新账号格式不兼容，本版本拒绝执行）
+  migrate:resume:
+    desc: 按 operation kind 和数据库回执恢复（需 --offline）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-migrate v013 postgres {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate resume {{.CLI_ARGS}}
 
-  migrate:v013:apply:
-    desc: 历史 PostgreSQL 迁移提交入口（本版本拒绝执行）
+  migrate:verify:
+    desc: 只读复核转换目标、账号、业务及恢复字节
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-migrate v013 postgres --apply {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate verify {{.CLI_ARGS}}
 
-  migrate:v013:local:
-    desc: 历史 SQLite local 迁移入口（本版本拒绝执行）
+  migrate:rollback:
+    desc: 保留恢复材料并按领域限制回退（需 --offline）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-migrate v013 local {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate rollback {{.CLI_ARGS}}
 
-  migrate:v013:local:apply:
-    desc: 历史 SQLite local 迁移提交入口（本版本拒绝执行）
+  migrate:storage:
+    desc: 当前格式库的遗留存储 plan/apply（可显式接入 ManifestVersion=1）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go run ./cmd/linguaflow-migrate v013 local --apply {{.CLI_ARGS}}
-
-  migrate:v013:sqlite:
-    desc: 历史 SQLite 迁移入口（本版本拒绝执行）
-    dir: '{{.TASKFILE_DIR}}'
-    cmds:
-      - go run ./cmd/linguaflow-migrate v013 sqlite {{.CLI_ARGS}}
-
-  migrate:v013:sqlite:apply:
-    desc: 历史 SQLite 迁移提交入口（本版本拒绝执行）
-    dir: '{{.TASKFILE_DIR}}'
-    cmds:
-      - go run ./cmd/linguaflow-migrate v013 sqlite --apply {{.CLI_ARGS}}
+      - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate storage {{.CLI_ARGS}}
 
   migrate:build:
-    desc: 构建独立的一次性迁移程序（支持 GOOS、GOARCH 交叉编译）
+    desc: 构建唯一离线工具（计划绑定此精确二进制摘要；支持 GOOS、GOARCH）
     dir: '{{.TASKFILE_DIR}}'
     vars:
       MIGRATE_BINARY: '{{default "bin/linguaflow-migrate" .MIGRATE_BINARY}}'
@@ -195,13 +183,29 @@ tasks:
       GOOS: '{{.MIGRATE_GOOS}}'
       GOARCH: '{{default ARCH .GOARCH}}'
     cmds:
-      - go build -o "{{.MIGRATE_BINARY}}{{if eq .MIGRATE_GOOS "windows"}}.exe{{end}}" ./cmd/linguaflow-migrate
+      - go build -ldflags "{{.BACKEND_LDFLAGS}}" -o "{{.MIGRATE_BINARY}}{{if eq .MIGRATE_GOOS "windows"}}.exe{{end}}" ./cmd/linguaflow-migrate
 
-  check-dependencies:
-    desc: 验证正常服务构建不依赖历史迁移包
+  migrate:test:
+    desc: 统一迁移专项及真实发布 schema 验收（外部环境缺失仍为 unverified）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go test ./internal/migrationcli -run '^TestServiceDependenciesExcludeMigration$' -count=1
+      - go test -count=1 {{default "./internal/migration/... ./internal/database ./internal/config" .CLI_ARGS}}
+
+  migrate:check-dependencies:
+    desc: 验证正常服务依赖树不包含 internal/migration
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go test ./internal/migration/cli -run '^TestServiceDependenciesExcludeMigration$' -count=1
+
+  migrate:test:binary:
+    desc: 构建唯一工具并以独立进程验收 SQLite serve/local 全部升级操作
+    dir: '{{.TASKFILE_DIR}}'
+    deps:
+      - migrate:build
+    env:
+      MIGRATION_ACCEPTANCE_BINARY: '{{.TASKFILE_DIR}}/bin/linguaflow-migrate{{if eq OS "windows"}}.exe{{end}}'
+    cmds:
+      - go test -count=1 ./internal/migration/cli -run '^TestBuiltCLIReleaseAcceptance$' -v
 
   deps:add:
     desc: 添加或更新显式指定的后端 Go 模块依赖

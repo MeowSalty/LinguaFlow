@@ -30,6 +30,9 @@ var ErrTargetIncompatible = errors.New("v0.13.0 migration is unavailable for thi
 // CheckTargetCompatibility must run before opening a database, reading secrets,
 // preparing files or recovering an interrupted directory switch. Keeping the
 // historical target frozen does not make it compatible with the current ORM.
+// COMPAT(migration-v013-route): retain frozen source and refusal until an exact
+// runnable archive and interrupted recovery are verified.
+// Tracking: backend/internal/migration/catalog/compatibility.md
 func CheckTargetCompatibility() error {
 	if database.AuthFormatVersion != targetAuthFormatVersion {
 		return ErrTargetIncompatible
