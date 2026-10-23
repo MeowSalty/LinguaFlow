@@ -145,15 +145,15 @@
 退役任务可在 [任务中心](/zh/guide/projects#任务中心-跨项目任务列表) 以 **存储退役** 类型跨项目追踪，支持恢复与取消（进入收尾阶段后不可取消）；中途失败（如凭据暂时不可用）可在补齐授权后续跑。连接与空间列表接口支持按 `lifecycle` 筛选，被退役对象的操作会返回明确的稳定错误码（如 `storage_retiring`、`storage_removed`）。接口细节见 [API 参考](/zh/api/)。
 
 ::: warning 退役是破坏性操作
-`removed` 不可逆：目标存储身份永久退出服务，已迁走的数据在新空间、未迁移的依赖会被预览阶段拦下。发起前请确认预览中的迁移计划，并按 [旧数据迁移与备份](#旧数据迁移与备份独立工具) 的原则先做好备份。
+`removed` 不可逆：目标存储身份永久退出服务，已迁走的数据在新空间、未迁移的依赖会被预览阶段拦下。发起前请确认预览中的迁移计划，并先做好备份。
 :::
 
-## 旧数据迁移与备份（独立工具）
+## 旧数据迁移（独立工具）
 
-从旧版本升级（把 `data/jobs` 下的文件搬入新存储）或做灾备时，使用独立命令行工具 `linguaflow-storage-migrate`：支持清点、演练、正式迁移、断点续跑、回滚，以及离线一致性备份与恢复校验。用法见 [CLI 命令参考 · 存储迁移与备份工具](/zh/guide/cli#linguaflow-storage-migrate-命令)。
+从旧版本升级、把 `data/jobs` 下的旧版文件搬入新对象存储体系时，使用独立命令行工具 `linguaflow-migrate storage`：支持只读探测、计划冻结、演练、正式导入与断点续跑。用法见 [CLI 命令参考 · linguaflow-migrate](/zh/guide/cli#linguaflow-migrate-命令)。
 
-::: warning 迁移前先备份
-正式迁移要求同时提供 `--offline` 与 `--backup-confirmed`——先完成备份并确认，再执行迁移。
+::: warning 迁移必须离线执行
+导入写操作（`storage apply`）要求 `--offline`——先停止全部 LinguaFlow 服务进程再执行。迁移要求默认站点空间是 `local` 驱动——先迁到本地空间，再在界面上把项目迁往 S3。
 :::
 
 ::: info 配额随迁移回填
@@ -163,7 +163,7 @@
 ## 相关文档
 
 - [配置文件与环境变量](/zh/guide/configuration#server-storage-—-对象存储) — `server.storage.*` 部署配置
-- [CLI 命令参考](/zh/guide/cli#linguaflow-storage-migrate-命令) — 迁移与备份工具
+- [CLI 命令参考](/zh/guide/cli#linguaflow-migrate-命令) — 离线迁移工具
 - [项目管理](/zh/guide/projects) — 项目工作区与源文件操作
 - [管理员后台](/zh/guide/admin) — 用户、系统设置与审计
 - [API 参考](/zh/api/) — 存储接口与错误码

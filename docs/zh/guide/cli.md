@@ -1,6 +1,6 @@
 # CLI 命令参考
 
-LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需的密钥生成、配置预检与管理员维护；另有独立二进制 `linguaflow-storage-migrate`（旧存储迁移与备份）和 `linguaflow-migrate`（v0.13.0 历史数据一次性迁移）。
+LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需的密钥生成、配置预检与管理员维护；另有独立二进制 `linguaflow-migrate`，负责版本升级的离线数据迁移与旧存储数据导入。
 
 ::: tip 只想马上译一个文件？
 先看 [快速开始 · CLI](/zh/guide/cli-quickstart)，本页为完整参数参考。配置文件字段见 [配置文件与环境变量](/zh/guide/configuration)。
@@ -18,8 +18,7 @@ LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需
 | `linguaflow config`    | 只读预检部署配置（`check` / `explain`）       |
 | `linguaflow secrets`   | 离线生成密钥材料（`generate` / `keyring init` / `keyring rotate`） |
 | `linguaflow admin`     | 管理员维护（`initialize` / `create` / `recover` / `credentials reencrypt` / `authentication-recovery`） |
-| `linguaflow-storage-migrate` | 存储迁移与备份（独立工具，`inventory` / `dry-run` / `apply` / `resume` / `rollback` / `backup`） |
-| `linguaflow-migrate`   | v0.13.0 历史迁移工具（**本版本已停用历史转换**，仅可建新开发/验收实例，见下文） |
+| `linguaflow-migrate`   | 离线迁移工具（独立二进制：`list` / `inspect` / `upgrade plan|rehearse|apply` / `storage plan|apply` / `status` / `resume` / `verify` / `rollback`，见下文） |
 | `linguaflow version`   | 显示版本信息                                  |
 
 ## 全局参数
@@ -305,71 +304,105 @@ linguaflow admin authentication-recovery revoke --config ./server.yaml \
 
 各命令均支持 `--data-dir`（覆盖部署数据目录）与 `--auto-migrate`（默认 `true`，执行前准备数据库 schema）。
 
-## linguaflow-storage-migrate 命令
-
-存储迁移与备份**独立工具**（与主程序一同分发，有意不挂在 `linguaflow` 命令树上），用于两类场景：
-
-- **旧数据迁移** — 把旧版文件存储（默认 `data_dir/jobs`）迁入新的对象存储体系，产品背景见 [存储管理](/zh/guide/storage)
-- **备份与恢复校验** — 对现有存储做离线一致性备份与恢复演练
-
-```bash
-# 只读清点：看看有多少旧文件要迁
-linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json inventory
-
-# 演练：不写任何数据，输出迁移计划
-linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json dry-run
-
-# 正式迁移（要求先备份，见下方 warning）
-linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json apply \
-  --offline --backup-confirmed
-
-# 中断后续跑 / 回滚
-linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json resume --offline --backup-confirmed
-linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json rollback --offline --backup-confirmed
-
-# 离线一致性备份
-linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storage-migration.json backup capture \
-  --offline --destination /backup/linguaflow
-```
-
-| 持久参数 | 默认值 | 描述 |
-| --- | --- | --- |
-| `--config` | `""` | 部署文档路径 |
-| `--mode` | `serve` | 部署模式：`serve` / `local` |
-| `--manifest` | `""` | 迁移清单文件路径 (工具生成与续跑依据);`inventory` / `dry-run` / `apply` / `resume` / `rollback` 与全部 `backup` 动作**必填** |
-| `--legacy-root` | `<data_dir>/jobs` | 旧版文件存储根目录 |
-| `--offline` | `false` | 离线操作标记；写操作必填 |
-| `--backup-confirmed` | `false` | 确认已完成备份；写操作必填 |
-
-| 子命令 | 说明 |
-| --- | --- |
-| `inventory` | 只读清点旧文件，生成清单 |
-| `dry-run` | 只读演练，输出迁移计划但不落盘 |
-| `apply` | 正式迁移（写操作，需 `--offline --backup-confirmed`） |
-| `resume` | 从中断点续跑迁移 |
-| `rollback` | 回滚迁移 |
-| `backup manifest` / `backup capture` / `backup restore-check` | 生成备份清单 / 执行离线一致性备份（`--destination`，`--retention` 默认 30 天、上限 366 天）/ 只读校验恢复结果（要求目标部署处于维护态） |
-
-::: warning 写操作前置条件
-`apply` / `resume` / `rollback` 与所有 `backup` 动作都要求 `--offline`（服务停机、独占数据），且迁移写操作必须同时提供 `--backup-confirmed`。离线迁移要求默认站点空间是 `local` 驱动——先迁到本地空间，再在界面上把项目迁往 S3。`apply` 完成后按输出提示把后端的 legacy 根配置为清单中的 `LegacyRoot` 路径，再启动新服务。
-:::
-
 ## linguaflow-migrate 命令
 
-v0.13.0 历史迁移工具（与主程序一同分发）。**注意：当前版本的二进制不再提供历史数据转换**——`v013 postgres` / `v013 sqlite` / `v013 local` 全部子命令会在任何副作用发生前被目标兼容性检查直接拒绝。
+版本升级的**离线迁移工具**（与主程序一同分发的独立二进制，有意不挂在 `linguaflow` 命令树上）。覆盖两类场景：
 
-::: warning 历史迁移请使用原版迁移程序
-账号库格式在新版本中变更：数据库新增账号库格式标记，**不含该标记的既有数据库（含 v0.13.0 数据）启动时会被直接拒绝**，且本版本不提供旧账户转换入口。把 v0.13.0 数据迁到当前版本，必须使用发布对应版本的原版迁移程序完成一次性迁移；本工具当前仅支持**新建**开发 / 验收实例。背景与工具自带说明见 `backend/cmd/linguaflow-migrate/README.md`。
+- **版本升级**（`upgrade`）— 把 v0.15.0 的数据库与账号数据离线转换到当前版本
+- **旧存储导入**（`storage`）— 把旧版文件存储（`data/jobs` 目录）迁入当前的对象存储体系，产品背景见 [存储管理](/zh/guide/storage)
+
+::: warning 迁移必须离线执行
+所有写操作（`upgrade rehearse|apply`、`resume`、`rollback`、`storage apply`）都要求 `--offline`——先停掉全部 LinguaFlow 服务进程（含 worker），确认没有写入者后再执行。中断的迁移不会自动恢复：数据库带未完成迁移状态时**服务会拒绝启动**（报错提示保留数据库并恢复迁移操作），需用 `status` 确认状态后以 `resume --offline` 续跑，直到迁移完成。
 :::
 
-通常不直接调用二进制，而是通过 backend Taskfile 任务（`CLI_ARGS=...` 写法兼容 PowerShell 包装器）：
+::: warning v0.13 / v0.14 历史数据不在支持范围
+本工具只支持从 **v0.15.0** 升级。v0.13.0 / v0.14 的历史数据请使用**发布对应版本的原版迁移程序**做一次性迁移——不带账号库格式标记的旧数据库（含 v0.13.0）启动时会被直接拒绝，当前版本不提供旧账户自动转换。
+:::
+
+### 迁移前准备
+
+工具**强制显式指定数据来源**，不会静默读取默认路径。三者选一：
+
+| 输入方式 | 参数 | 说明 |
+| --- | --- | --- |
+| 部署文档 | `--config server.yaml` | 文档内需含 `server.data_dir`（serve 模式还需 `server.database.driver` / `server.database.dsn`） |
+| 数据目录 | `--data-dir <路径>` | local 模式或未写进部署文档时直接指定 |
+| 环境变量 | `LINGUAFLOW_DATABASE_DSN` 等 | 也可用 `LINGUAFLOW_DATA_DIR`、`LINGUAFLOW_DATABASE_DRIVER`、`LINGUAFLOW_DATABASE_DSN_FILE` |
+
+同时用 `--mode serve|local` 声明实例模式，必须与实际实例一致。迁移工具只读取数据库位置相关的输入，不会加载 JWT、密钥环等凭据。
+
+SQLite 升级会把转换结果发布到一个**全新的目标数据目录**（`--target-data-dir`，必须不存在），绝不覆盖源数据；PostgreSQL 升级改用 `--target-config` 指向独立空目标库的部署文档。演练（`rehearse`）则用 `--rehearsal-config` 指定另一个独立演练库。
+
+### 命令速查
+
+| 命令 | 说明 |
+| --- | --- |
+| `list` | 显示支持的迁移路线与验收状态（只读，无需数据库输入） |
+| `inspect` | 只读探测源数据库格式，确认工具能否识别 |
+| `upgrade plan` | 冻结升级计划：源指纹、账号映射、目标 schema、工具构建摘要，写入操作目录 |
+| `upgrade rehearse` | 在隔离演练目标上实际转换一遍并生成验证报告（需 `--offline`） |
+| `upgrade apply` | 按计划正式转换目标并发布（需 `--offline`） |
+| `status` | 查看操作目录中计划、日志与报告的状态（只读） |
+| `resume` | 中断后续跑（需 `--offline`） |
+| `verify` | 只读复核转换结果 |
+| `rollback` | 保留恢复材料并回退（需 `--offline`） |
+| `storage plan` | 清点旧版 `data/jobs` 文件并生成导入计划 |
+| `storage apply` | 执行旧存储导入（需 `--offline`） |
+
+计划冻结后，`apply` / `resume` / `verify` 都会校验执行二进制与计划中的构建摘要一致——生产操作请固定使用 `migrate:build` 构建出的同一个二进制，不要混用不同版本的工具。
+
+### 版本升级示例
 
 ```bash
-task -t backend/Taskfile.yml migrate:build
-task -t backend/Taskfile.yml migrate:v013 'CLI_ARGS=--data-dir data'
+# 1. 只读探测源库，确认可识别
+linguaflow-migrate inspect --mode serve --config server.yaml
+
+# 2. 生成升级计划（冻结源、账号映射与目标）
+linguaflow-migrate upgrade plan --mode serve --config server.yaml \
+  --operation-dir /var/linguaflow/upgrade-op \
+  --target-data-dir /var/linguaflow/new-data \
+  --account-map ./accounts.json
+
+# 3. 停服后先演练，检查验证报告
+linguaflow-migrate upgrade rehearse --operation-dir /var/linguaflow/upgrade-op --offline
+
+# 4. 正式转换并发布
+linguaflow-migrate upgrade apply --operation-dir /var/linguaflow/upgrade-op --offline
+
+# 5. 复核结果后，用新数据目录启动新版本
+linguaflow-migrate verify --operation-dir /var/linguaflow/upgrade-op
 ```
 
-中断恢复、Windows 路径限制、备份与恢复规则等完整行为见工具自带文档 `backend/cmd/linguaflow-migrate/README.md`。
+账号映射（`--account-map`，可选）以用户 ID 为键，只允许调整 `username` / `email`，未给出的用户保持原值；密码、角色与数据归属不会被改动。不提供映射时按原值规范化全部账号。
+
+### 旧存储导入示例
+
+```bash
+# 生成导入计划（默认读取 <data_dir>/jobs，可用 --legacy-root 覆盖）
+linguaflow-migrate storage plan --mode serve --config server.yaml \
+  --operation-dir /var/linguaflow/storage-op
+
+# 停服后执行导入
+linguaflow-migrate storage apply --operation-dir /var/linguaflow/storage-op --offline
+```
+
+::: info 配额与清单
+旧存储导入会记录两层配额（见 [配置文件与环境变量 · 对象存储](/zh/guide/configuration#server-storage-—-对象存储)）；serve 模式要求两个配额都已显式配置。若此前已生成过迁移清单文件（ManifestVersion=1），可用 `storage plan --manifest <文件>` 接管继续。
+:::
+
+### 从源码运行（Taskfile）
+
+开发环境下通常不直接调用二进制，而是通过 backend Taskfile 任务（`CLI_ARGS` 写法兼容 PowerShell 包装器）：
+
+```bash
+task -t backend/Taskfile.yml migrate:list
+task -t backend/Taskfile.yml migrate:inspect 'CLI_ARGS=--mode serve --config /abs/server.yaml'
+task -t backend/Taskfile.yml migrate:build      # 构建唯一离线工具二进制
+task -t backend/Taskfile.yml migrate:plan 'CLI_ARGS=... '   # 等价于 upgrade plan
+task -t backend/Taskfile.yml migrate:apply 'CLI_ARGS=--operation-dir /abs/op --offline'
+```
+
+`CLI_ARGS` 中的文件路径必须使用绝对路径。生产操作固定使用 `migrate:build` 产物（`backend/bin/linguaflow-migrate`）。
 
 ## version 命令
 
