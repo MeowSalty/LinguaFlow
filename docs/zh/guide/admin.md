@@ -13,6 +13,7 @@
 - **首次初始化** — 空实例首次启动时通过 `bootstrap.admin` 输入（环境变量 `LINGUAFLOW_BOOTSTRAP_ADMIN_*` 或部署文档）创建初始管理员；也可用 `linguaflow admin initialize` 命令显式初始化（详见 [使用模式 · 管理员配置](/zh/guide/modes#管理员配置)）。
 - **管理员追加** — 已初始化的实例可由维护命令 `linguaflow admin create` 追加管理员；已登录的管理员也可在用户管理中把其他用户的角色改为 `admin`。
 - **管理员找回** — 初始管理员密码丢失或账户被停用时，用 `linguaflow admin recover` 将已有账户恢复为活跃管理员、重置密码并吊销其刷新令牌。
+- **兜底恢复** — 所有管理员都无法登录时，在部署机上用 `linguaflow admin authentication-recovery` 命令组签发恢复凭据、重置密码并恢复密码登录（详见 [账号与认证 · 管理员登录恢复](/zh/guide/authentication#管理员登录恢复)）。
 
 ::: warning 注册不再自动产生管理员
 公开注册一律创建普通用户；旧版「首个注册用户自动成为管理员」（`registration.auto_admin`）行为已移除。
@@ -49,6 +50,7 @@
 管理端设置页（`/admin/settings`）当前提供一个**开放注册**开关：
 
 - 开关开启后，注册页接受新用户注册；关闭时注册接口返回 403，注册页显示「注册已关闭」提示
+- 该开关是注册的**总入口**：关闭时本地注册与外部渠道注册都不能创建新账号（已有账号的登录与绑定不受影响）；各渠道自身的准入政策见 [账号与认证](/zh/guide/authentication#注册)
 - 注册政策存储在数据库中，跨重启持久化；修改即时生效，无需重启服务
 - 首次初始化时的默认值由部署文档的 `bootstrap.registration_enabled` 决定（默认 `false`，详见 [配置文件与环境变量](/zh/guide/configuration#bootstrap-—-首次初始化-顶层)）
 
@@ -66,6 +68,10 @@
 ::: warning 与部署配置的关系
 此处的「系统设置」是数据库内的运行期政策，与 `server.yaml` 部署文档 / 环境变量是两套机制：部署配置在启动时加载，决定监听端口、数据库、密钥等基础设施行为；设置页面向可在线调整的运行期政策。初始化完成后，数据库中的注册政策**优先于** `bootstrap.registration_enabled`。
 :::
+
+## 账号与认证
+
+管理员后台的「账号与认证」页负责登录体系：本地账号政策（密码登录 / 定位符 / 首次设密 / 本地注册）、外部认证连接（OIDC / 通用 OAuth2）的配置、测试与启用生命周期，以及登录 / 注册 / 绑定的准入规则。页面结构与操作详见 [账号与认证](/zh/guide/authentication)。
 
 ## 存储管理
 
@@ -146,6 +152,13 @@ LinguaFlow 区分两套活动视图：
 | `job.history_deleted` | 删除单条翻译任务记录 | `job` |
 | `glossary.sync_task_history_deleted` | 删除单条术语同步任务记录 | `glossary` |
 | `admin.task_retention.update` | 修改任务历史保留策略 | `system_settings` |
+| `account.authentication.*` | 注册 / 登录等账号认证事件（如 `registered`） | `user` |
+| `account.password.*` | 用户设置 / 修改 / 移除自己的本地密码（`set` / `changed` / `deleted`） | `user` |
+| `account.login_binding.*` | 用户绑定 / 解绑外部登录方式（`linked` / `unlinked`） | `login_binding` |
+| `admin.account.updated` | 管理员更新用户资料 | `user` |
+| `admin.account.password_reset` | 管理员重置用户密码 | `user` |
+| `admin.auth_connection.*` | 管理员维护外部认证连接（创建 / 保存 / 启停 / 归档 / 恢复 / Logo 等） | `auth_connection` |
+| `admin.authentication_recovery.*` | 管理员登录恢复凭据的签发 / 消费 / 撤销 | `system_settings` |
 
 ::: tip 即时翻译为何也记录
 即时翻译本身不落库译文，但仍会消耗 LLM 配额并可能触发限流。将其记入审计日志，便于管理员核算用量与排查异常。
@@ -176,12 +189,19 @@ LinguaFlow 区分两套活动视图：
 | `GET` | `/admin/storage/diagnostics` | 存储只读诊断（容量、缺失 / 损坏对象、恢复积压等） |
 | `GET` | `/admin/storage/connections` | 列出站点级存储连接 |
 | `GET` | `/admin/runtime/summary` | 运行时监控摘要（执行器、队列、限流器与外部请求遥测） |
+| `GET` | `/admin/local-account` | 读取本地账号政策与有效能力 |
+| `PUT` | `/admin/local-account` | 保存本地账号政策（乐观锁） |
+| `GET` / `POST` | `/admin/auth-connections` | 列出 / 创建外部认证连接 |
+| `GET` / `PUT` | `/admin/auth-connections/{connectionId}` | 读取 / 更新单个连接 |
+| `POST` | `/admin/auth-connections/{connectionId}/{configure\|enable\|disable\|archive\|restore}` | 连接生命周期动作 |
+| `POST` | `/admin/auth-connections/{connectionId}/test` | 真实认证测试（启用前置条件） |
 
 字段与响应结构的权威定义见 [OpenAPI 规范](/zh/api/#openapi-规范) 与 Redoc。
 
 ## 相关文档
 
 - [使用模式](/zh/guide/modes) — 服务器模式部署、初始管理员与密钥
+- [账号与认证](/zh/guide/authentication) — 登录方式、注册政策与认证连接管理
 - [存储管理](/zh/guide/storage) — 站点存储、政策与自有存储
 - [配置文件与环境变量](/zh/guide/configuration) — 部署文档与 `bootstrap.*` 配置项
 - [CLI 命令参考](/zh/guide/cli) — `secrets` / `admin` 维护命令
