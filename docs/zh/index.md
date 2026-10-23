@@ -40,7 +40,7 @@ features:
     details: 双击二进制即可启动本地模式，数据落在本机 SQLite。无需账号、无需把全文交给第三方 SaaS 平台。
   - icon: 🌐
     title: 团队协作（服务器模式 · 预览）
-    details: 多用户注册与登录、组织与成员角色、组织级资源共享;任务中心跨项目追踪翻译、术语与文件存储任务，服务重启自动断点续跑;支持任务历史清理与保留策略。
+    details: 多用户注册与登录、本地密码与 OIDC / OAuth2 外部身份登录、组织与成员角色;任务中心跨项目追踪翻译、术语与文件存储任务，服务重启自动断点续跑;支持任务历史清理与保留策略。
   - icon: 🗄️
     title: 存储可控（服务器模式 · 预览）
     details: 项目文件存站点托管空间或接入你自己的 S3 兼容存储;源文件版本化、预览式更新与固定交付;管理员可设两层容量配额、存储政策与磁盘水位保护。
@@ -105,7 +105,6 @@ docker run -p 8080:8080 \
   -e LINGUAFLOW_JWT_SECRET="<32 字节随机值>" \
   -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="<另一个独立随机值>" \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
-  -e LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>" \
   ghcr.io/meowsalty/linguaflow:latest
 # 访问 http://localhost:8080；完整示例见安装文档

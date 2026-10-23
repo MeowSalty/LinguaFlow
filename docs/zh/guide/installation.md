@@ -31,7 +31,7 @@ LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（�
 
 1. **JWT 签名密钥** — `LINGUAFLOW_JWT_SECRET`（≥32 字节随机值）
 2. **凭据加密密钥** — `LINGUAFLOW_CREDENTIALS_MASTER_KEY`（32 字节随机值的 Base64）
-3. **初始管理员** — `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD`（仅首次初始化需要）
+3. **初始管理员** — `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD`（`_EMAIL` 可选；仅首次初始化需要）
 
 三个值都可用 `linguaflow secrets generate --stdout` 生成；JWT secret 与凭据加密密钥必须是两个不同的随机值。服务器模式仍在完善中，适合试用，不建议作为生产唯一依赖。个人本机请优先使用 [预编译二进制](#预编译二进制)。
 :::
@@ -47,7 +47,6 @@ docker run -d \
   -e LINGUAFLOW_JWT_SECRET="$(linguaflow secrets generate --stdout)" \
   -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="$(linguaflow secrets generate --stdout)" \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
-  -e LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="请改成强密码" \
   ghcr.io/meowsalty/linguaflow:latest
 ```
@@ -55,7 +54,11 @@ docker run -d \
 浏览器访问 `http://localhost:8080`，用上面的管理员账号登录后使用。
 
 ::: warning 密钥保存与复用
-JWT secret 与凭据加密密钥请保存到密码管理器或部署平台的秘密配置中，并在**每次重建容器时注入同一份值**——凭据加密密钥一旦更换，数据库里已保存的 AI 密钥将无法解密。首次初始化成功后，`LINGUAFLOW_BOOTSTRAP_ADMIN_*` 三个变量可以不再注入（账号与注册政策已存入数据库）。
+JWT secret 与凭据加密密钥请保存到密码管理器或部署平台的秘密配置中，并在**每次重建容器时注入同一份值**——凭据加密密钥一旦更换，数据库里已保存的 AI 密钥将无法解密。首次初始化成功后，`LINGUAFLOW_BOOTSTRAP_ADMIN_*` 变量可以不再注入（账号与注册政策已存入数据库）。
+:::
+
+::: warning 旧版本数据目录不兼容
+新版本数据库带账号库格式标记，**旧版本（含 v0.13.0）创建的数据目录会拒绝启动**，且本版本不提供旧账户自动转换。升级前请确认数据目录由当前版本初始化；历史数据迁移见 [CLI 命令参考 · linguaflow-migrate](/zh/guide/cli#linguaflow-migrate-命令)。
 :::
 
 ::: tip 注意「非安全上下文」限制
@@ -82,7 +85,6 @@ services:
       LINGUAFLOW_JWT_SECRET: ${LINGUAFLOW_JWT_SECRET:?需要至少 32 字节的随机值}
       LINGUAFLOW_CREDENTIALS_MASTER_KEY: ${LINGUAFLOW_CREDENTIALS_MASTER_KEY:?需要 32 字节随机值的 Base64}
       LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME: ${LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME:-admin}
-      LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL: ${LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL:?需要初始管理员邮箱}
       LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD: ${LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD:?需要初始管理员密码}
 
 volumes:
@@ -95,7 +97,6 @@ volumes:
 LINGUAFLOW_JWT_SECRET=<secrets generate --stdout 的输出>
 LINGUAFLOW_CREDENTIALS_MASTER_KEY=<另一个独立随机值>
 LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
-LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
 LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD=<强密码>
 ```
 
@@ -117,7 +118,6 @@ services:
       LINGUAFLOW_JWT_SECRET: ${LINGUAFLOW_JWT_SECRET:?需要至少 32 字节的随机值}
       LINGUAFLOW_CREDENTIALS_MASTER_KEY: ${LINGUAFLOW_CREDENTIALS_MASTER_KEY:?需要 32 字节随机值的 Base64}
       LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME: ${LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME:-admin}
-      LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL: ${LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL:?需要初始管理员邮箱}
       LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD: ${LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD:?需要初始管理员密码}
       LINGUAFLOW_DATABASE_DRIVER: postgres
       LINGUAFLOW_DATABASE_DSN: postgres://linguaflow:secret@postgres:5432/linguaflow?sslmode=require
@@ -160,7 +160,7 @@ Compose 示例中常用变量：
 | `LINGUAFLOW_DATA_DIR` | 数据目录（SQLite 文件等） |
 | `LINGUAFLOW_JWT_SECRET` | JWT 签名密钥（必需，≥32 字节；支持 `_FILE`） |
 | `LINGUAFLOW_CREDENTIALS_MASTER_KEY` | 凭据加密密钥（必需；支持 `_FILE`） |
-| `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | 首次初始化的管理员（密码支持 `_FILE`） |
+| `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | 首次初始化的管理员（`_EMAIL` 可选；密码支持 `_FILE`） |
 | `LINGUAFLOW_BOOTSTRAP_REGISTRATION_ENABLED` | 是否开放注册（默认 `false`，也可登录后管理员在设置页开启） |
 | `LINGUAFLOW_DATABASE_DRIVER` / `DSN` | 切换 PostgreSQL 时使用（`DSN` 支持 `_FILE`） |
 | `LINGUAFLOW_SERVE_UI` | `false` 时仅 API（也可用 `--no-ui`） |
@@ -209,8 +209,7 @@ LinguaFlow 支持部署到 HuggingFace Spaces，使用 `Dockerfile.hf` 构建。
    | `LINGUAFLOW_JWT_SECRET`             | JWT 签名密钥（≥32 字节随机值）         |
    | `LINGUAFLOW_CREDENTIALS_MASTER_KEY` | 凭据加密密钥（32 字节随机值的 Base64） |
    | `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` | 初始管理员用户名                     |
-   | `LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL`  | 初始管理员邮箱                         |
-   | `LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD` | 初始管理员密码                       |
+   | `LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD` | 初始管理员密码（`_EMAIL` 可选）      |
    | `LINGUAFLOW_DATA_DIR`               | 设为 `/data`，否则重启丢数据           |
 
    ::: warning

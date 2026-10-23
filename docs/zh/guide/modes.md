@@ -88,7 +88,6 @@ linguaflow config explain --config server.yaml   # 查看最终配置与每项�
 export LINGUAFLOW_JWT_SECRET_FILE=/private/linguaflow/jwt-secret
 export LINGUAFLOW_CREDENTIALS_MASTER_KEY_FILE=/private/linguaflow/credentials-master-key
 export LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
-export LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
 export LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD='初次登录用，之后请修改'
 linguaflow serve --config server.yaml
 ```
@@ -101,7 +100,7 @@ linguaflow serve --config server.yaml
 
 ### 服务器模式特点
 
-- **多用户** — 注册 / 登录（注册默认关闭，由管理员在设置页开启）
+- **多用户** — 注册 / 登录（注册默认关闭，由管理员在设置页开启）；支持本地密码与 OIDC / OAuth2 外部身份登录（见 [账号与认证](/zh/guide/authentication)）
 - **JWT 认证** — Access Token 与 Refresh Token；JWT 签名密钥 ≥32 字节、必须显式提供
 - **凭据加密** — 所有 AI 服务密钥以加密形式落库，需要提供凭据加密密钥（master key 或 keyring 文件，二选一）
 - **网络访问** — 默认监听 `0.0.0.0`（部署时请自行限制暴露面）
@@ -127,23 +126,23 @@ linguaflow serve --config server.yaml
 服务器模式的初始管理员在**首次启动初始化**时创建，来源有两种：
 
 ```bash
-# 方式一：环境变量（首次启动自动初始化）
+# 方式一：环境变量（首次启动自动初始化；email 可选）
 export LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
-export LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
 export LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD='...'
 linguaflow serve --config server.yaml
 
 # 方式二：维护命令（服务未启动时离线执行也可）
 linguaflow admin initialize --config server.yaml \
-  --username admin --email admin@example.com --password-file ./admin-password
+  --username admin --password-file ./admin-password
 ```
 
 初始化只发生一次；之后数据库里的账号与注册政策才是权威，`bootstrap.admin` 输入可以在初始化完成后从部署配置中删除。后续维护使用：
 
 | 命令                                            | 用途                                                         |
 | ----------------------------------------------- | ------------------------------------------------------------ |
-| `linguaflow admin create --config ... --username ... --email ... --password-file ...` | 为已运行实例追加一名管理员 |
+| `linguaflow admin create --config ... --username ... --password-file ...` | 为已运行实例追加一名管理员 |
 | `linguaflow admin recover --config ... --username ... --password-stdin` | 找回：将已有账户恢复为活跃管理员、重置密码并吊销其刷新令牌 |
+| `linguaflow admin authentication-recovery ...` | 兜底恢复：管理员无法登录时签发恢复凭据、重置密码并恢复密码登录 |
 
 旧版本通过 `LINGUAFLOW_ADMIN_USERNAME` / `LINGUAFLOW_ADMIN_PASSWORD` 建号、或「首个注册用户自动成为管理员」的行为**均已移除**；注册一律创建普通用户。
 
@@ -189,7 +188,7 @@ linguaflow admin initialize --config server.yaml \
 | 特性           | 本地模式                             | 服务器模式                            |
 | -------------- | ------------------------------------ | ------------------------------------- |
 | CLI 命令       | `linguaflow local`                   | `linguaflow serve --config server.yaml` |
-| 用户认证       | 自动认证（跳过 JWT）                 | JWT Token 认证                        |
+| 用户认证       | 自动认证（跳过 JWT）                 | JWT Token 认证；可选本地密码与 OIDC / OAuth2 登录 |
 | 多用户         | 单用户（`local` 用户）               | 多用户、组织与角色                    |
 | 用户注册       | 不支持                               | 默认关闭，管理员可在设置页开启        |
 | 密钥           | 自动生成 `instance-secret` 与凭据 keyring | 必须显式提供 JWT secret 与凭据加密密钥 |
@@ -208,7 +207,7 @@ linguaflow admin initialize --config server.yaml \
 ## 界面上的差异
 
 - **本地模式**：免登录直接进入主界面，顶部通常有「本地模式」标识  
-- **服务器模式**：需登录（注册默认关闭，管理员可在设置页开启）；可在设置中心管理个人资料、安全、偏好与团队  
+- **服务器模式**：需登录（注册默认关闭，管理员可在设置页开启；登录方式由管理员配置，支持本地密码与外部身份）；可在设置中心管理个人资料、安全（含登录方式绑定）、偏好与团队  
 
 ## 下一步
 

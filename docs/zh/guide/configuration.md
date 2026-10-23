@@ -506,6 +506,11 @@ server:
     # PostgreSQL 需要提供 DSN
   cors:
     allowed_origins: []   # 显式 [] = 禁止跨域；不写此字段默认 ["*"]
+    # 配置了 server.authentication.public_base_url 时必须写精确 origin，不能用 ["*"]
+  authentication:
+    public_base_url: https://linguaflow.example.com   # 实例对外访问地址；不启用外部认证时可省略
+    completion_urls:                                  # 外部认证完成后允许回跳的可信地址
+      - https://linguaflow.example.com/auth/complete
 log:
   level: info
   format: text
@@ -513,7 +518,7 @@ bootstrap:
   registration_enabled: false   # 首次初始化时是否开放注册，默认关闭
   admin:                        # 仅首次初始化生效，完成后可删除
     username: admin
-    email: admin@example.com
+    email: admin@example.com    # 可选：不提供时初始管理员没有邮箱
     # 密码通过 LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD 或 _FILE 提供
 ```
 
@@ -541,6 +546,26 @@ bootstrap:
 | 字段 | 类型 | 默认值 | 说明 |
 | ----------------- | -------- | ------- | ------------------------------------------------------------ |
 | `allowed_origins` | []string | `["*"]` | 允许的来源；**显式写 `[]` 表示禁止一切跨域**（浏览器仅同源可用），不再回填 `*` |
+
+::: warning 与外部认证配置联动
+一旦配置了 `server.authentication.public_base_url`，`allowed_origins` 必须是**精确 origin 列表**（不允许 `*`），且所有跨域 `completion_urls` 的 origin 都必须显式列入，否则启动报错。用 `linguaflow config check` 可在部署前验证。
+:::
+
+##### server.authentication — 外部认证
+
+控制外部身份登录（OIDC / OAuth2）所需的公网地址与安全边界。不启用外部认证时全部字段可省略。功能说明见 [账号与认证](/zh/guide/authentication)。所有字段都有对应的 `LINGUAFLOW_AUTHENTICATION_*` 环境变量（如 `server.authentication.public_base_url` ↔ `LINGUAFLOW_AUTHENTICATION_PUBLIC_BASE_URL`）。
+
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `public_base_url` | string | 空 | 实例对外访问的基地址（仅接受 HTTPS；本机回环 HTTP 需开启 `allow_http_loopback`）。是外部认证回跳地址与可信跳转的基准 |
+| `completion_urls` | []string | 空 | 外部认证完成后允许跳转的可信完成地址；配置了它就必须同时配置 `public_base_url` |
+| `allowed_hosts` | []string | 空 | 出站请求允许的主机名（提供方 discovery / token / userinfo 端点） |
+| `allowed_cidrs` | []string | 空 | 出站请求允许的 IP 段 |
+| `trusted_proxy_cidrs` | []string | 空 | 可信反向代理的网段；只有来自这些地址的 `X-Forwarded-*` 头才被采信 |
+| `allow_http_loopback` | bool | `false` | 是否允许回环地址使用明文 HTTP（仅本机调试用） |
+| `request_timeout` | duration | `10s` | 对提供方出站请求的超时（上限 1m） |
+| `max_response_bytes` | 配额 | `1MiB` | 对提供方响应体的大小上限（上限 8MiB） |
+| `rate_limit_per_minute` | int | `60` | 每客户端每分钟的外部认证请求数上限 |
 
 ##### server.database — 数据库（仅 serve）
 
@@ -715,8 +740,10 @@ server:
 | ------------------------ | ------ | ------------------ | ------------------------------------------------------------ |
 | `registration_enabled` | bool | `false` | 初始化时是否开放注册；之后可在管理端设置页随时调整（数据库中的值优先） |
 | `admin.username` | string | serve 首次启动必填 | 初始管理员用户名 |
-| `admin.email` | string | serve 首次启动必填 | 初始管理员邮箱 |
+| `admin.email` | string | 可选 | 初始管理员邮箱；省略时初始管理员没有邮箱 |
 | `admin.password` | string | serve 首次启动必填 | 初始管理员密码；建议走 `LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD[_FILE]` |
+
+用户名与邮箱会做归一化与校验：保留名（`local` / `system`）与含非法分隔符的用户名会被拒绝，邮箱需为合法地址格式。`--email` 在 `linguaflow admin initialize` / `create` / `recover` 中同样可选。
 
 ::: warning 仅首次初始化生效
 这些值只在空实例首次初始化时写入数据库，之后数据库中的账号与注册政策才是权威——**初始化完成后请从部署文档和环境变量中删除管理员输入**。已初始化的实例再次启动不会覆盖、也不会重置管理员密码。本地模式不接受 `bootstrap.admin`。
