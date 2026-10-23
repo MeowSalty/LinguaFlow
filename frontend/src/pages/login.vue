@@ -6,7 +6,15 @@ import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 import { extractErrorMessage } from '@/utils/errors'
-import { StaleSessionError } from '@/api/session-context'
+import {
+  captureSession,
+  isSessionCurrent,
+  onSessionChange,
+  StaleSessionError,
+} from '@/api/session-context'
+import { useAuthCapabilities } from '@/composables/useAuthCapabilities'
+import { safeReturnPath } from '@/auth/return-path'
+import ExternalLoginOptions from '@/components/auth/ExternalLoginOptions.vue'
 
 definePage({
   meta: {
@@ -21,21 +29,44 @@ const auth = useAuthStore()
 const service = useServiceStore()
 const message = useMessage()
 const { t } = useI18n()
+const {
+  capabilities,
+  loginConnections,
+  canSignup,
+  loading,
+  error: capabilitiesError,
+  reload,
+} = useAuthCapabilities()
+const externalBusy = ref(false)
+const returnTo = computed(() => safeReturnPath(route.query.redirect))
+const identifierLabel = computed(() =>
+  capabilities.value?.local_account.email_login_enabled
+    ? capabilities.value.local_account.username_login_enabled
+      ? t('authentication.identifier')
+      : t('authentication.emailIdentifier')
+    : t('authentication.usernameIdentifier'),
+)
 
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
 let alive = true
+let startingLogin = false
 onBeforeUnmount(() => {
   alive = false
+  formValue.password = ''
+  stopSession()
 })
 
 const formValue = reactive({
-  username: '',
+  identifier: '',
   password: '',
+})
+const stopSession = onSessionChange(() => {
+  if (!startingLogin) formValue.password = ''
 })
 
 const rules = computed<FormRules>(() => ({
-  username: [
+  identifier: [
     { required: true, trigger: ['blur', 'input'], message: t('login.validation.usernameRequired') },
   ],
   password: [
@@ -44,34 +75,43 @@ const rules = computed<FormRules>(() => ({
 }))
 
 const onSubmit = async () => {
-  if (submitting.value) return
+  if (submitting.value || externalBusy.value || !capabilities.value?.local_account.can_login) return
+  let context = captureSession()
+  submitting.value = true
   try {
     await formRef.value?.validate()
   } catch {
+    submitting.value = false
     return
   }
 
-  if (!alive || submitting.value) return
-  submitting.value = true
+  if (!alive || !isSessionCurrent(context)) {
+    submitting.value = false
+    return
+  }
   try {
-    await auth.login({
-      username: formValue.username.trim(),
+    startingLogin = true
+    const request = auth.login({
+      identifier: formValue.identifier,
       password: formValue.password,
     })
+    startingLogin = false
+    context = captureSession()
+    await request
     if (!alive) return
     message.success(t('login.messages.success'))
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
-    await router.push(redirect ?? '/')
+    await router.push(returnTo.value)
   } catch (error) {
     if (
       !alive ||
+      !isSessionCurrent(context) ||
       error instanceof StaleSessionError ||
       (error instanceof DOMException && error.name === 'AbortError')
     )
       return
-    console.error(error)
     message.error(extractErrorMessage(error, t('login.messages.failed')))
   } finally {
+    startingLogin = false
     if (alive) submitting.value = false
   }
 }
@@ -80,7 +120,20 @@ const onSubmit = async () => {
 <template>
   <BlankLayout :title="t('login.title')" :subtitle="t('login.subtitle')">
     <div class="lf-panel p-6">
+      <NSkeleton v-if="loading" text :repeat="5" />
+      <NAlert v-else-if="capabilitiesError" type="error" :show-icon="false">
+        {{ capabilitiesError }}
+        <NButton class="mt-3" @click="reload">{{ t('authentication.retry') }}</NButton>
+      </NAlert>
+      <NAlert
+        v-else-if="!capabilities?.local_account.can_login && !loginConnections.length"
+        type="info"
+        :show-icon="false"
+      >
+        {{ t('authentication.noLogin') }}
+      </NAlert>
       <NForm
+        v-if="!loading && capabilities?.local_account.can_login"
         ref="formRef"
         :model="formValue"
         :rules="rules"
@@ -88,10 +141,10 @@ const onSubmit = async () => {
         require-mark-placement="right-hanging"
         @submit.prevent="onSubmit"
       >
-        <NFormItem :label="t('login.form.username')" path="username">
+        <NFormItem :label="identifierLabel" path="identifier">
           <NInput
-            v-model:value="formValue.username"
-            :placeholder="t('login.form.usernamePlaceholder')"
+            v-model:value="formValue.identifier"
+            :placeholder="identifierLabel"
             clearable
             :input-props="{ autocomplete: 'username' }"
           />
@@ -107,10 +160,27 @@ const onSubmit = async () => {
           />
         </NFormItem>
 
-        <NButton attr-type="submit" type="primary" size="large" block :loading="submitting">
+        <NButton
+          attr-type="submit"
+          type="primary"
+          size="large"
+          block
+          :loading="submitting"
+          :disabled="externalBusy"
+        >
           {{ t('login.form.submit') }}
         </NButton>
       </NForm>
+      <NDivider v-if="capabilities?.local_account.can_login && loginConnections.length">{{
+        t('authentication.externalDivider')
+      }}</NDivider>
+      <ExternalLoginOptions
+        v-if="loginConnections.length"
+        v-model:busy="externalBusy"
+        :connections="loginConnections"
+        :return-to="returnTo"
+        :disabled="submitting"
+      />
     </div>
 
     <div class="mt-6 flex items-center justify-between text-xs text-lf-text-muted">
@@ -120,7 +190,11 @@ const onSubmit = async () => {
       >
         {{ t('login.links.switchService', { name: service.displayName }) }}
       </RouterLink>
-      <RouterLink to="/register" class="text-brand-500 no-underline hover:underline">
+      <RouterLink
+        v-if="canSignup"
+        :to="{ path: '/register', query: { redirect: returnTo } }"
+        class="text-brand-500 no-underline hover:underline"
+      >
         {{ t('login.links.register') }}
       </RouterLink>
     </div>

@@ -12,6 +12,8 @@ import { installRouterGuards } from './router/guards'
 import { useLocaleStore } from './stores/locale'
 import { useThemeStore } from './stores/theme'
 import { installSessionIsolation } from './stores/sessionIsolation'
+import { installCrossTabSessionSync } from './auth/cross-tab-session'
+import { useServiceStore } from './stores/service'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -29,6 +31,7 @@ app.use(i18n)
 useLocaleStore()
 useThemeStore().initTheme()
 
+installCrossTabSessionSync(() => useServiceStore().isLocal)
 await bootstrapApp()
 
 app.use(router)

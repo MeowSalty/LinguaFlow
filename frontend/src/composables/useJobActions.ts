@@ -9,6 +9,7 @@ import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 import { isOrganizationDependency } from '@/utils/organization-scope'
 import { isJobActionAllowed, isJobTerminal, type JobAction } from '@/utils/jobPresentation'
 
@@ -195,9 +196,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
           await onJobCreated()
         } catch (error) {
           if (current())
-            message.warning(
-              error instanceof Error ? error.message : t('api.errors.fetchJobsFailed'),
-            )
+            message.warning(extractErrorMessage(error, t('api.errors.fetchJobsFailed')))
         }
       }
       return true

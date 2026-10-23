@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 import { useOrganizationsStore } from '@/stores/organizations'
 import { extractErrorMessage } from '@/utils/errors'
+import { fetchLoginMethods, type LoginMethods } from '@/api/login-methods'
 
 const auth = useAuthStore()
 const service = useServiceStore()
@@ -14,6 +15,24 @@ const message = useMessage()
 const { t } = useI18n()
 const formRef = ref<FormInst | null>(null)
 const error = ref<string | null>(null)
+const loginMethods = shallowRef<LoginMethods | null>(null)
+let disposed = false
+let emailRequest = 0
+const emailLocked = computed(() => !loginMethods.value || loginMethods.value.email.verified)
+const loadEmail = async (): Promise<void> => {
+  if (service.isLocal || disposed || captureSession().userId === null) return
+  const snapshot = captureSession()
+  const request = ++emailRequest
+  error.value = null
+  try {
+    const methods = await fetchLoginMethods()
+    if (!disposed && request === emailRequest && isSessionCurrent(snapshot))
+      loginMethods.value = methods
+  } catch (cause) {
+    if (!disposed && request === emailRequest && isSessionCurrent(snapshot))
+      error.value = extractErrorMessage(cause, t('accountAuth.security.loadFailed'))
+  }
+}
 const formValue = reactive({ email: '', display_name: '' })
 const syncForm = (): void => {
   formValue.email = auth.user?.email ?? ''
@@ -24,7 +43,7 @@ const rules = computed<FormRules>(() => ({
     {
       trigger: ['blur', 'input'],
       validator(_rule, value: string) {
-        if (!value?.trim()) return new Error(t('account.profile.validation.emailRequired'))
+        if (!value?.trim()) return true
         return (
           /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) ||
           new Error(t('account.profile.validation.emailInvalid'))
@@ -35,16 +54,17 @@ const rules = computed<FormRules>(() => ({
 }))
 const onSubmit = async (): Promise<void> => {
   if (service.isLocal || !auth.user || auth.profileUpdating) return
+  const snapshot = captureSession()
   try {
     await formRef.value?.validate()
   } catch {
     return
   }
-  const snapshot = captureSession()
-  const payload: { email?: string; display_name?: string } = {}
+  if (disposed || !isSessionCurrent(snapshot) || !auth.user || auth.profileUpdating) return
+  const payload: { email?: string | null; display_name?: string } = {}
   const email = formValue.email.trim()
   const displayName = formValue.display_name.trim()
-  if (email !== auth.user.email) payload.email = email
+  if (!emailLocked.value && email !== (auth.user.email ?? '')) payload.email = email || null
   if (displayName !== (auth.user.display_name ?? '')) payload.display_name = displayName
   if (!Object.keys(payload).length) {
     message.info(t('workbench.settings.noChanges'))
@@ -65,13 +85,19 @@ watch(
   sessionGeneration,
   () => {
     error.value = null
+    loginMethods.value = null
     syncForm()
+    void loadEmail()
   },
   { flush: 'sync' },
 )
 watch(() => auth.user, syncForm, { immediate: true })
 onMounted(() => {
+  void loadEmail()
   if (!service.isLocal) void organizations.refresh()
+})
+onBeforeUnmount(() => {
+  disposed = true
 })
 </script>
 <template>
@@ -83,7 +109,12 @@ onMounted(() => {
     <NAlert v-if="service.isLocal" type="info" class="mb-5">{{
       t('workbench.settings.localProfile')
     }}</NAlert>
-    <NAlert v-if="error" type="error" class="mb-5">{{ error }}</NAlert>
+    <NAlert v-if="error" type="error" class="mb-5"
+      >{{ error }}
+      <NButton v-if="!loginMethods && !service.isLocal" text @click="loadEmail">{{
+        t('accountAuth.security.retry')
+      }}</NButton>
+    </NAlert>
     <NForm
       ref="formRef"
       :model="formValue"
@@ -97,10 +128,14 @@ onMounted(() => {
       <NFormItem :label="t('account.profile.form.email')" path="email">
         <NInput
           v-model:value="formValue.email"
-          :disabled="service.isLocal"
+          :disabled="service.isLocal || emailLocked || auth.profileUpdating"
+          clearable
           :input-props="{ autocomplete: 'email', type: 'email' }"
         />
       </NFormItem>
+      <p v-if="!service.isLocal" class="mb-5 text-xs text-lf-text-muted">
+        {{ t('accountAuth.profile.emailHint') }}
+      </p>
       <NFormItem :label="t('account.profile.form.displayName')" path="display_name">
         <NInput
           v-model:value="formValue.display_name"

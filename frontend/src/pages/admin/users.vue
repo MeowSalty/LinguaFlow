@@ -20,8 +20,13 @@ import { type ApiSchemas } from '@/api/client'
 import { useAdminStore } from '@/stores/admin'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 import { useStoreErrorToast } from '@/composables/useStoreErrorToast'
+import { validateNewPassword } from '@/utils/password'
+import { normalizeUsername, validateUsername } from '@/utils/username'
 
 type User = ApiSchemas['User']
+
+/** Same single-address check the register and profile forms use. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 interface UserFormModel {
   username: string
@@ -109,22 +114,27 @@ const rules = computed<FormRules>(() => ({
       trigger: ['input', 'blur'],
     },
     {
-      min: 3,
-      max: 32,
-      message: t('admin.users.validation.usernameLength'),
       trigger: ['input', 'blur'],
+      validator(_rule, value: string) {
+        // Editing keeps the stored username, so only creation is re-validated.
+        if (isEditMode.value) return true
+        const purpose = formModel.role === 'admin' ? 'admin' : 'signup'
+        const issue = validateUsername(value || '', purpose)
+        return issue ? new Error(t(`accountInput.username.${issue}`)) : true
+      },
     },
   ],
   email: [
     {
-      required: true,
-      message: t('admin.users.validation.emailRequired'),
+      // Optional profile field: a blank value means no email at all.
       trigger: ['input', 'blur'],
-    },
-    {
-      type: 'email',
-      message: t('admin.users.validation.emailInvalid'),
-      trigger: ['input', 'blur'],
+      validator(_rule, value: string) {
+        const trimmed = (value || '').trim()
+        if (!trimmed) return true
+        return EMAIL_PATTERN.test(trimmed)
+          ? true
+          : new Error(t('admin.users.validation.emailInvalid'))
+      },
     },
   ],
   password: [
@@ -134,9 +144,12 @@ const rules = computed<FormRules>(() => ({
       trigger: ['input', 'blur'],
     },
     {
-      min: 8,
-      message: t('admin.users.validation.passwordMinLength'),
       trigger: ['input', 'blur'],
+      validator(_rule, value: string) {
+        if (!value) return true
+        const issue = validateNewPassword(value)
+        return issue ? new Error(t(`workbench.password.${issue}`)) : true
+      },
     },
   ],
   role: [
@@ -156,9 +169,12 @@ const resetPasswordRules = computed<FormRules>(() => ({
       trigger: ['input', 'blur'],
     },
     {
-      min: 8,
-      message: t('admin.users.validation.passwordMinLength'),
       trigger: ['input', 'blur'],
+      validator(_rule, value: string) {
+        if (!value) return true
+        const issue = validateNewPassword(value)
+        return issue ? new Error(t(`workbench.password.${issue}`)) : true
+      },
     },
   ],
 }))
@@ -169,6 +185,10 @@ const userInitial = (user: User): string => {
 }
 
 const displayName = (user: User): string => user.display_name?.trim() || user.username
+
+/** Compare blank and whitespace-only emails as the same empty value. */
+const normalizeEmail = (value: string | null | undefined): string =>
+  (value ?? '').trim().toLowerCase()
 
 const resetForm = (): void => {
   formModel.username = ''
@@ -187,7 +207,7 @@ const openCreateDrawer = (): void => {
 const openEditDrawer = (user: User): void => {
   editingUser.value = user
   formModel.username = user.username
-  formModel.email = user.email
+  formModel.email = user.email ?? ''
   formModel.display_name = user.display_name ?? ''
   formModel.password = ''
   formModel.role = user.role as 'user' | 'admin'
@@ -203,15 +223,19 @@ const onSubmit = async (): Promise<void> => {
 
   try {
     if (isEditMode.value && editingUser.value) {
-      await admin.updateUser(editingUser.value.id, {
+      const payload: ApiSchemas['AdminUpdateUserRequest'] = {
         display_name: formModel.display_name || undefined,
-        email: formModel.email,
         role: formModel.role,
-      })
+      }
+      // Only send the email when it changed, so verified addresses stay untouched.
+      if (normalizeEmail(formModel.email) !== normalizeEmail(editingUser.value.email)) {
+        payload.email = formModel.email
+      }
+      await admin.updateUser(editingUser.value.id, payload)
       message.success(t('admin.users.messages.updateSuccess'))
     } else {
       await admin.createUser({
-        username: formModel.username,
+        username: normalizeUsername(formModel.username),
         email: formModel.email,
         password: formModel.password,
         display_name: formModel.display_name || undefined,
@@ -370,7 +394,7 @@ useStoreErrorToast(
               <span class="mr-2 text-[11px] text-lf-text-subtle md:hidden">
                 {{ t('admin.users.columns.email') }}
               </span>
-              {{ user.email }}
+              {{ user.email || '—' }}
             </div>
           </div>
 
@@ -455,6 +479,9 @@ useStoreErrorToast(
               :placeholder="t('admin.users.form.emailPlaceholder')"
             />
           </NFormItem>
+          <p class="mb-4 text-xs leading-5 text-lf-text-muted">
+            {{ t('accountInput.email.optionalHint') }}
+          </p>
 
           <NFormItem :label="t('admin.users.form.displayName')" path="display_name">
             <NInput

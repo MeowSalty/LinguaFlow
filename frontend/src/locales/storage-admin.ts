@@ -46,7 +46,6 @@ export default {
   defaultSpaceCapacity: '新站点空间默认配额',
   defaultSpaceCapacityHint: '仅用于以后自动登记的站点空间。已有空间需单独调整。',
   invalidDraft: '输入无效',
-  policyGeneration: '版本 {value}',
   policyUnknown:
     '上次保存结果未知。请读取最新策略，核对原值、已提交内容与最新值后确认；不会自动重发保存。',
   originalPolicy: '原基线',
@@ -59,7 +58,7 @@ export default {
   reviewLoadLatest: '核对并载入最新值',
   reviewUnknownTitle: '确认已核对策略',
   confirmKeepDraft:
-    '确认已核对以上差异？将保留草稿并采用最新版本作为基线。需要重新保存时，请再点击“保存策略”。',
+    '确认已核对以上差异？将保留草稿并采用最新设置作为基线。需要重新保存时，请再点击“保存策略”。',
   confirmLoadLatest:
     '确认已核对以上差异？将载入最新策略并替换当前草稿。本次确认不代表上次保存成功。',
   confirmReviewed: '确认已核对',

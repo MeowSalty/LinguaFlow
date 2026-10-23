@@ -113,7 +113,6 @@ export default {
   noBinding: '尚未绑定存储空间',
   maintenance: '存储维护状态',
   maintenancePending: '当前存储处于维护阶段，相关文件操作暂不可用；仍可查看与编辑有权限的译文。',
-  generation: '存储代次',
   projectTasks: '查看存储任务',
   rebind: '重新绑定空项目',
   migrate: '迁移已有数据',
@@ -130,7 +129,6 @@ export default {
   parser: '解析器版本',
   size: '原件大小',
   digest: 'SHA-256',
-  locationGeneration: '位置代次',
   legacy: '历史原件尚未通过字节验证，无法保证可无损恢复。',
   repair: '同字节修复',
   repairHint:

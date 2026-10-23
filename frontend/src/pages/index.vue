@@ -16,6 +16,7 @@ import { isAccessDenied } from '@/api/utils'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useOperationsStore } from '@/stores/operations'
 import { formatRelativeTime } from '@/utils/datetime'
+import { extractErrorMessage } from '@/utils/errors'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -66,7 +67,7 @@ const refresh = (force = false): Promise<void> => {
     } catch (error) {
       if (!current()) return
       if (isAccessDenied(error)) state.items = []
-      state.error = error instanceof Error ? error.message : t('workbench.home.loadFailed')
+      state.error = extractErrorMessage(error, t('workbench.home.loadFailed'))
     } finally {
       if (current()) state.loading = false
     }
@@ -82,7 +83,7 @@ const refresh = (force = false): Promise<void> => {
     } catch (error) {
       if (!current()) return
       if (isAccessDenied(error)) projects.value = []
-      projectsError.value = error instanceof Error ? error.message : t('workbench.home.loadFailed')
+      projectsError.value = extractErrorMessage(error, t('workbench.home.loadFailed'))
     } finally {
       if (current()) projectsLoading.value = false
     }

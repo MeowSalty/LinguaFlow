@@ -5,6 +5,7 @@ import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session
 import { isAccessDenied } from '@/api/utils'
 import { onOrganizationInvalidated } from '@/utils/organization-scope'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 
 export const useStatsStore = defineStore('stats', () => {
   const stats = shallowRef<ApiSchemas['UsageStats'] | null>(null)
@@ -72,7 +73,7 @@ export const useStatsStore = defineStore('stats', () => {
       } catch (error) {
         if (!current()) return
         if (isAccessDenied(error)) stats.value = null
-        statsError.value = error instanceof Error ? error.message : t('api.errors.loadStatsFailed')
+        statsError.value = extractErrorMessage(error, t('api.errors.loadStatsFailed'))
       } finally {
         if (current()) {
           statsLoading.value = false
@@ -108,8 +109,7 @@ export const useStatsStore = defineStore('stats', () => {
           activities.value = []
           nextCursor.value = undefined
         }
-        activitiesError.value =
-          error instanceof Error ? error.message : t('api.errors.loadActivityFailed')
+        activitiesError.value = extractErrorMessage(error, t('api.errors.loadActivityFailed'))
       } finally {
         if (current()) {
           activitiesLoading.value = false

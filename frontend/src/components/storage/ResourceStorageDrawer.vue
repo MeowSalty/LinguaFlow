@@ -310,10 +310,6 @@ onUnmounted(() => {
                     }}
                   </dd>
                 </div>
-                <div>
-                  <dt class="text-lf-text-subtle">{{ t('storage.locationGeneration') }}</dt>
-                  <dd>{{ version.location_generation }}</dd>
-                </div>
                 <div v-if="version.sha256" class="col-span-2">
                   <dt class="text-lf-text-subtle">{{ t('storage.digest') }}</dt>
                   <dd class="break-all font-mono text-xs">{{ version.sha256 }}</dd>
