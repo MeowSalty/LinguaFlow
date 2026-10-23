@@ -447,6 +447,29 @@ curl -s -X POST http://localhost:8080/api/v1/auth/reauthenticate \
 
 管理端：连接 CRUD 与生命周期（`/admin/auth-connections` 及 `.../configure|enable|disable|archive|restore`，启用前必须 `.../test` 真实认证测试通过）、本地账号政策（`GET|PUT /admin/local-account` 及 `attributes` / `preview` / `impact`）、规则目录与预览（`.../attributes` / `.../preview`）。认证相关失败返回 `urn:linguaflow:auth-connection-*` 错误码，策略 / 版本冲突 409、上游提供方不可用 503。产品侧见 [账号与认证](/zh/guide/authentication)。
 
+### 21. 存储退役（服务器模式）
+
+存储连接与空间支持安全退役：预览 → 确认执行 → 可恢复 / 取消，生命周期为 `available` / `retiring` / `removed`（产品侧见 [存储管理 · 存储退役](/zh/guide/storage#存储退役)）：
+
+```bash
+# 1. 生成退役预览（只读；preview_revision 5 分钟有效且绑定调用者）
+curl -s -X POST http://localhost:8080/api/v1/storage/retirement-previews \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"target_kind": "space", "target_id": 3}'
+
+# 2. 确认执行（需 Idempotency-Key；回显预览的归一化目标与迁移计划；返回 202）
+curl -s -X POST http://localhost:8080/api/v1/storage/retirements \
+  -H "Authorization: Bearer <token>" -H "Idempotency-Key: <uuid>" \
+  -H "Content-Type: application/json" \
+  -d '{"preview_revision": "<...>", "confirmed_scope": { ... }, "plan": [ ... ]}'
+
+# 3. 跟踪：列表 / 详情 / 更新计划 / 恢复 / 取消 / 收尾期恢复授权
+curl -s "http://localhost:8080/api/v1/storage/retirements?scope=site" \
+  -H "Authorization: Bearer <token>"
+```
+
+要点：退役任务为跨项目运维任务（`task_type=storage_retirement`，父任务不可删除）；`retiring` 状态拒绝新建绑定、迁入与普通写入，`removed` 永久拒绝该身份的读写；连接与空间列表支持 `lifecycle` 查询参数（默认不含 `removed`）。相关错误码：`storage_retiring`、`storage_removed`、`storage_retirement_conflict`、`storage_retirement_preview_stale`、`storage_retirement_dependencies_remaining`。能力可用性经 `StorageRuntime.retirement` 发现（`unused_removal` 与 `in_use_retirement` 两个独立阶段）。
+
 ## 错误码
 
 | 状态码 | 说明                                       |
