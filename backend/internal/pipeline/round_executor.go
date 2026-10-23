@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"math/rand"
 	"sort"
 	"sync"
@@ -324,13 +325,25 @@ func runPool(
 	poolIndex int,
 	initialCursors map[int]WorkCursor,
 ) (poolResult, error) {
+	if len(batches) == 0 {
+		return poolResult{}, nil
+	}
 	concurrency := round.Concurrency
 	if concurrency < 1 {
 		concurrency = 1
 	}
+	concurrency = min(concurrency, len(batches))
 
-	jobs := make(chan batchJob, concurrency*2)
-	results := make(chan batchResult, concurrency*2)
+	// Workers and queued results never need more slots than there are batches.
+	bufferSize := len(batches)
+	if concurrency <= math.MaxInt/2 {
+		bufferSize = concurrency * 2
+	}
+	if bufferSize > len(batches) {
+		bufferSize = len(batches)
+	}
+	jobs := make(chan batchJob, bufferSize)
+	results := make(chan batchResult, bufferSize)
 
 	runCtx, runCancel := context.WithCancel(ctx)
 	defer runCancel()
@@ -631,7 +644,7 @@ cleanup:
 	// 回调成功）却还没把 result 交出来。必须在 wg.Wait() 之前持续接收，否则
 	//   (a) 这些批次的计数与断点永久丢失——业务结果已在库里，恢复时却无从判断
 	//       该段已处理，非翻译轮会重复调用 LLM，轮次进度也永远补不齐；
-	//   (b) results 缓冲（容量 concurrency*2）在取消时已满且仍有 worker 阻塞在
+	//   (b) results 缓冲在取消时已满且仍有 worker 阻塞在
 	//       发送上时，wg.Wait() 永不返回 —— runPool 悬挂 → 资源 goroutine 悬挂
 	//       → 整个任务卡死。
 	// 排空期 jobs 已关闭，重试不能重投，一律转 nextPending。

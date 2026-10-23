@@ -309,6 +309,9 @@ func maintenanceAuthorizedOperation(r *http.Request) bool {
 	}
 }
 
+// COMPAT(storage-legacy-runtime): retain original file roots and read-only
+// access until live, historical, task, pin and backup references are resolved.
+// Tracking: backend/internal/migration/catalog/compatibility.md
 type legacyStorageDriver struct{ storage.Driver }
 
 func (d *legacyStorageDriver) PutNew(context.Context, string, io.Reader, int64) (storage.Object, error) {

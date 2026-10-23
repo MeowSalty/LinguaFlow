@@ -124,6 +124,9 @@ func openSQLiteFormatProbeOnce(ctx context.Context, dsn string, autoMigrate bool
 	if err != nil {
 		return nil, databaseError(config.DatabaseDriverSQLite, "probe timestamp format", err)
 	}
+	if err := CheckMigrationState(ctx, conn, config.DatabaseDriverSQLite); err != nil {
+		return nil, databaseError(config.DatabaseDriverSQLite, "probe migration state", err)
+	}
 	present, err := inspectAuthFormat(ctx, conn, config.DatabaseDriverSQLite)
 	if err != nil {
 		return nil, fmt.Errorf("probe account database format: %w", err)
@@ -218,6 +221,9 @@ func ensureSQLiteTimeFormat(ctx context.Context, db *sql.DB, autoMigrate bool) e
 		return err
 	}
 	defer conn.Close()
+	if err := CheckMigrationState(ctx, conn, config.DatabaseDriverSQLite); err != nil {
+		return err
+	}
 	version, objects, err := sqliteFormatState(ctx, conn)
 	if err != nil {
 		return err
@@ -234,11 +240,18 @@ func ensureSQLiteTimeFormat(ctx context.Context, db *sql.DB, autoMigrate bool) e
 	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
 		return err
 	}
+	committed := false
 	defer func() {
+		if committed {
+			return
+		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		_, _ = conn.ExecContext(cleanupCtx, "ROLLBACK")
 	}()
+	if err := CheckMigrationState(ctx, conn, config.DatabaseDriverSQLite); err != nil {
+		return err
+	}
 	version, objects, err = sqliteFormatState(ctx, conn)
 	if err != nil {
 		return err
@@ -252,6 +265,7 @@ func ensureSQLiteTimeFormat(ctx context.Context, db *sql.DB, autoMigrate bool) e
 		}
 	}
 	_, err = conn.ExecContext(ctx, "COMMIT")
+	committed = err == nil
 	return err
 }
 

@@ -146,7 +146,7 @@ func ResolveBackendOptions(provider string, input map[string]any) (map[string]an
 		return nil, errors.New("unsupported provider")
 	}
 	allowed := map[string]bool{"type": true, "model": true, "base_url": true, "max_tokens": true, "timeout": true, "response_format": true, "temperature": true, "top_p": true, "stream": true, "thinking_level": true, "enable_prompt_cache": true, "thinking_budget_tokens": true}
-	opts := make(map[string]any, len(input)+6)
+	opts := make(map[string]any, len(allowed))
 	for key, value := range input {
 		if !allowed[key] {
 			return nil, errors.New("backend options contains an unsupported or sensitive field")

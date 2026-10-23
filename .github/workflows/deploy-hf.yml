@@ -9,6 +9,8 @@ on:
     types:
       - completed
 
+permissions: {}
+
 jobs:
   deploy:
     name: 部署到 Hugging Face Spaces

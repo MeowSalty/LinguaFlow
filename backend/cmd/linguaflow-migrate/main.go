@@ -8,14 +8,14 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/migrationcli"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/cli"
 )
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	if err := migrationcli.NewCommand().ExecuteContext(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "Migration failed:", err)
+	if err := cli.NewCommand().ExecuteContext(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, cli.PublicError(err))
 		os.Exit(1)
 	}
 }

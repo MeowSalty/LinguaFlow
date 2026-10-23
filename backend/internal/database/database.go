@@ -85,6 +85,10 @@ func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, 
 		_ = db.Close()
 		return nil, nil, databaseError(cfg.Database.Driver, "ping", err)
 	}
+	if err := checkMigrationState(ctx, db, cfg.Database.Driver); err != nil {
+		_ = db.Close()
+		return nil, nil, fmt.Errorf("check migration state: %w", err)
+	}
 
 	if entDialect == dialect.SQLite {
 		if err := ensureSQLiteTimeFormat(ctx, db, cfg.AutoMigrate); err != nil {
