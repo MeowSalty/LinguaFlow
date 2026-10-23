@@ -54,6 +54,9 @@ func ensureAuthFormat(ctx context.Context, db *sql.DB, driver string, autoMigrat
 		if _, err := conn.ExecContext(ctx, begin); err != nil {
 			return err
 		}
+		if err := CheckMigrationState(ctx, conn, driver); err != nil {
+			return err
+		}
 		committed := false
 		defer func() {
 			if committed {

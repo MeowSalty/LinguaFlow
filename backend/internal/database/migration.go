@@ -61,6 +61,9 @@ func withMigrationConnection(ctx context.Context, db *sql.DB, driver string, use
 			}
 		}()
 	}
+	if err := CheckMigrationState(ctx, conn, driver); err != nil {
+		return err
+	}
 	return use(conn)
 }
 
