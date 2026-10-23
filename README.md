@@ -160,8 +160,9 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 - 任务中心：跨项目任务列表、状态汇总与取消 / 重试；全局任务追踪挂件
 - 拖拽上传文件
 - 实时作业进度追踪（SSE 事件流，支持断线重连）
-- 账号中心：个人资料、安全设置（改密码）、偏好与团队（组织）管理
-- 管理员后台：用户管理、注册开关、任务历史保留策略、运行时监控与审计日志
+- 账号中心：个人资料、安全设置（改密码、绑定 / 解绑登录方式）、偏好与团队（组织）管理
+- 认证体系（服务器模式）：本地密码与 OIDC / OAuth2 外部身份登录，认证规则、本地账号政策与管理员登录恢复
+- 管理员后台：用户管理、账号与认证、注册开关、任务历史保留策略、运行时监控与审计日志
 - 暗色/亮色主题切换
 
 ### 命令行工具
@@ -205,7 +206,6 @@ docker run -d -p 8080:8080 -v linguaflow-data:/app/data \
   -e LINGUAFLOW_JWT_SECRET="<32 字节随机值>" \
   -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="<另一个独立随机值>" \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
-  -e LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>" \
   ghcr.io/meowsalty/linguaflow:latest
 ```
@@ -269,7 +269,6 @@ task backend:local:build
 export LINGUAFLOW_JWT_SECRET_FILE=./jwt-secret
 export LINGUAFLOW_CREDENTIALS_MASTER_KEY_FILE=./credentials-master-key
 export LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
-export LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
 export LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>"
 ./bin/linguaflow serve --config server.yaml
 

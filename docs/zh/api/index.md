@@ -58,7 +58,7 @@ curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -d '{"username": "admin", "password": "password"}'
 ```
 
-将返回中的 access token 用于后续请求：
+登录前可先 `GET /auth/capabilities`（无需认证）探测实例可用的登录方式：本地密码渠道的能力开关与已启用的外部认证连接（OIDC / OAuth2）都会列在其中，登录 / 注册页按它动态渲染。将返回中的 access token 用于后续请求：
 
 ```bash
 curl -s http://localhost:8080/api/v1/projects \
@@ -424,6 +424,28 @@ curl -s http://localhost:8080/api/v1/admin/task-retention/status \
 - **存储任务不可删**;`can_delete` 字段是「当前身份 + 状态 + 收尾 + 屏障」的即时投影，不替代删除请求的再次校验
 - **批量删除逐项返回**:响应 `items[].status` 取值 `deleted` / `not_found` / `forbidden` / `not_terminal` / `busy` / `blocked` / `deferred` / `failed`,已成功的项不因其他项失败而回滚
 - **保留策略**:`GET|PATCH /admin/settings` 中的 `task_retention`(`enabled` 默认 `false`、`retention_days` 默认 `30`、`revision` 乐观锁);修改需带 `expected_revision`,不一致返回 409 `settings_conflict`
+
+### 20. 账号认证与登录方式（服务器模式）
+
+注册（`POST /auth/register`，仅用户名 + 密码必填，邮箱可选）与登录（`POST /auth/login`）沿用基础端点。新认证体系围绕**登录方式**展开：
+
+```bash
+# 探测实例可用登录方式（无需认证）：本地密码能力 + 已启用外部连接
+curl -s http://localhost:8080/api/v1/auth/capabilities
+
+# 查看自己的登录方式（本地密码 + 已绑定外部身份）
+curl -s http://localhost:8080/api/v1/users/me/login-methods \
+  -H "Authorization: Bearer <token>"
+
+# 敏感操作前获取重认证证明（解绑等操作要求附带近期证明）
+curl -s -X POST http://localhost:8080/api/v1/auth/reauthenticate \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"password": "..."}'
+```
+
+外部身份（OIDC / 通用 OAuth2）走专用流程端点：`POST /auth/external/{connectionId}/start` 发起、提供方回跳 `/auth/external/{connectionId}/callback`、`POST /auth/external/exchange` 换取结果、`POST /auth/external/complete` 原子确认注册或绑定、`POST /auth/external/cancel` 取消。绑定管理在 `POST /users/me/login-bindings/{connectionId}/start` 与 `DELETE /users/me/login-bindings/{bindingId}`（解绑需附重认证证明，且必须保留至少一种可用登录方式）。
+
+管理端：连接 CRUD 与生命周期（`/admin/auth-connections` 及 `.../configure|enable|disable|archive|restore`，启用前必须 `.../test` 真实认证测试通过）、本地账号政策（`GET|PUT /admin/local-account` 及 `attributes` / `preview` / `impact`）、规则目录与预览（`.../attributes` / `.../preview`）。认证相关失败返回 `urn:linguaflow:auth-connection-*` 错误码，策略 / 版本冲突 409、上游提供方不可用 503。产品侧见 [账号与认证](/zh/guide/authentication)。
 
 ## 错误码
 

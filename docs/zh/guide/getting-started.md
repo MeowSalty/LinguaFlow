@@ -54,7 +54,6 @@ docker run --rm -p 8080:8080 \
   -e LINGUAFLOW_JWT_SECRET="$(openssl rand -base64 32)" \
   -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="$(openssl rand -base64 32)" \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
-  -e LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="changeme-please" \
   ghcr.io/meowsalty/linguaflow:latest
 ```

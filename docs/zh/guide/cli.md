@@ -17,9 +17,9 @@ LinguaFlow 命令行工具支持启动服务、翻译文件，以及部署所需
 | `linguaflow init`      | 生成配置模板（`--kind translation` / `--kind server`） |
 | `linguaflow config`    | 只读预检部署配置（`check` / `explain`）       |
 | `linguaflow secrets`   | 离线生成密钥材料（`generate` / `keyring init` / `keyring rotate`） |
-| `linguaflow admin`     | 管理员维护（`initialize` / `create` / `recover` / `credentials reencrypt`） |
+| `linguaflow admin`     | 管理员维护（`initialize` / `create` / `recover` / `credentials reencrypt` / `authentication-recovery`） |
 | `linguaflow-storage-migrate` | 存储迁移与备份（独立工具，`inventory` / `dry-run` / `apply` / `resume` / `rollback` / `backup`） |
-| `linguaflow-migrate`   | v0.13.0 历史数据一次性迁移（独立工具，`v013 postgres` / `v013 sqlite` / `v013 local`） |
+| `linguaflow-migrate`   | v0.13.0 历史迁移工具（**本版本已停用历史转换**，仅可建新开发/验收实例，见下文） |
 | `linguaflow version`   | 显示版本信息                                  |
 
 ## 全局参数
@@ -58,8 +58,8 @@ linguaflow translate -i input.md -o output.md --to zh
 | `--input` | `-i` | string[] | 必填 | 输入文件或目录路径，可传多个 |
 | `--output` | `-o` | string | 必填 | 输出路径（单文件为文件路径，多文件/目录为目录路径） |
 | `--config` | `-c` | string | `""` | 翻译配置路径（或 `LINGUAFLOW_TRANSLATION_CONFIG`） |
-| `--to` | | string | `""` | 目标语言代码(留空则用配置文件) |
-| `--from` | | string | `""` | 源语言代码(留空则用配置文件,可配 `auto` 自动检测) |
+| `--to` | | string | `""` | 目标语言代码 (留空则用配置文件) |
+| `--from` | | string | `""` | 源语言代码 (留空则用配置文件，可配 `auto` 自动检测) |
 | `--glossary-path` | | string | `""` | 术语表 CSV 路径 |
 | `--bootstrap` | | string | `""` | 术语提取模式：`off` \| `pre` \| `inline`。`inline` 开启所有翻译轮次的内联提取并移除独立抽取轮次；`pre` 改用独立抽取轮次（缺则自动补一个）；非 `off` 同时启用术语表 |
 | `--profile` | | string | `""` | 执行配置名称（覆盖计划级 `execution.profile`；引用 `translation_profiles` key，未命中报错） |
@@ -251,9 +251,10 @@ JWT secret 与凭据加密密钥必须各自独立生成，不要共用一个值
 
 | 子命令 | 用途 |
 | --- | --- |
-| `admin initialize` | 对空实例显式执行首次初始化（创建管理员与注册政策；`--username` / `--email` / `--password-file` 或 `--password-stdin`） |
+| `admin initialize` | 对空实例显式执行首次初始化（创建管理员与注册政策；`--username` / `--email`（可选） / `--password-file` 或 `--password-stdin`） |
 | `admin create` | 为已初始化实例追加一名管理员（参数同上；不含 `initialize`） |
-| `admin recover` | 找回管理员：将已有账户恢复为活跃管理员、重置密码并吊销其刷新令牌 |
+| `admin recover` | 找回管理员：将已有账户恢复为活跃管理员、重置密码并吊销其刷新令牌（保留原邮箱；`--email` 可选） |
+| `admin authentication-recovery` | 受部署权限保护的登录恢复命令组，见 [下文](#admin-authentication-recovery-命令组) |
 | `admin credentials reencrypt` | 凭据密钥轮换后重加密存量数据（含 LLM 凭据与存储授权；配合 keyring 轮换使用） |
 
 ```bash
@@ -261,9 +262,9 @@ JWT secret 与凭据加密密钥必须各自独立生成，不要共用一个值
 linguaflow admin initialize --config ./server.yaml \
   --username admin --email admin@example.com --password-file ./admin-password
 
-# 追加管理员
+# 追加管理员（email 现在是可选参数）
 linguaflow admin create --config ./server.yaml \
-  --username another-admin --email another@example.com --password-file ./admin-password
+  --username another-admin --password-file ./admin-password
 
 # 找回管理员（密码从标准输入读入）
 linguaflow admin recover --config ./server.yaml --username admin --password-stdin
@@ -273,6 +274,36 @@ linguaflow admin credentials reencrypt --config ./server.yaml
 ```
 
 密码输入保留空格、只移除末尾换行，不接受明文密码命令行参数。已初始化实例再次执行 `initialize` 只验证状态，不会覆盖政策、角色或密码。
+
+### admin authentication-recovery 命令组
+
+当所有管理员都无法登录（密码丢失、唯一管理员账户异常）时的兜底恢复入口，直接访问数据库运行，不受 Web 登录影响。前提是**能在部署机上执行命令**——它受部署权限（服务器与数据目录的物理控制权）保护：
+
+| 子命令 | 用途 |
+| --- | --- |
+| `admin authentication-recovery issue` | 为活跃管理员签发**短期、单次**的本地登录恢复凭据（写入私有文件，拒绝覆盖） |
+| `admin authentication-recovery restore-local-login` | 消费恢复凭据：恢复全站密码登录与用户名定位、关闭本地注册，并重置指定活跃管理员的密码 |
+| `admin authentication-recovery revoke` | 撤销未使用的恢复凭据 |
+
+```bash
+# 1. 为活跃管理员签发恢复凭据（输出到私有文件）
+linguaflow admin authentication-recovery issue --config ./server.yaml \
+  --username admin --output ./recovery-token
+
+# 2. 用凭据执行恢复：新密码从文件或标准输入读入
+linguaflow admin authentication-recovery restore-local-login \
+  --config ./server.yaml --token-file ./recovery-token --password-file ./new-password
+
+# 不再需要时撤销凭据
+linguaflow admin authentication-recovery revoke --config ./server.yaml \
+  --token-file ./recovery-token
+```
+
+::: warning 签发即敏感操作
+`issue` 会签发能重置管理员密码的凭据，凭据文件与恢复过程请按密钥同等对待；签发与消费都会记入审计日志（`admin.authentication_recovery.*`）。`restore-local-login` 会**关闭本地注册**并恢复密码登录，属于改变全站登录政策的操作，执行前确认这正是你要的。功能背景见 [账号与认证 · 管理员登录恢复](/zh/guide/authentication#管理员登录恢复)。
+:::
+
+各命令均支持 `--data-dir`（覆盖部署数据目录）与 `--auto-migrate`（默认 `true`，执行前准备数据库 schema）。
 
 ## linguaflow-storage-migrate 命令
 
@@ -305,7 +336,7 @@ linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storag
 | --- | --- | --- |
 | `--config` | `""` | 部署文档路径 |
 | `--mode` | `serve` | 部署模式：`serve` / `local` |
-| `--manifest` | `""` | 迁移清单文件路径(工具生成与续跑依据);`inventory` / `dry-run` / `apply` / `resume` / `rollback` 与全部 `backup` 动作**必填** |
+| `--manifest` | `""` | 迁移清单文件路径 (工具生成与续跑依据);`inventory` / `dry-run` / `apply` / `resume` / `rollback` 与全部 `backup` 动作**必填** |
 | `--legacy-root` | `<data_dir>/jobs` | 旧版文件存储根目录 |
 | `--offline` | `false` | 离线操作标记；写操作必填 |
 | `--backup-confirmed` | `false` | 确认已完成备份；写操作必填 |
@@ -325,42 +356,17 @@ linguaflow-storage-migrate --config server.yaml --mode serve --manifest ./storag
 
 ## linguaflow-migrate 命令
 
-v0.13.0 历史数据**一次性迁移**的独立工具（与主程序一同分发），把 v0.13.0 的 PostgreSQL / serve、SQLite / serve、SQLite / local 三种形态的数据迁到当前版本：转换历史任务快照、实例初始化状态与旧配置，并把旧明文 provider key 转成加密凭据；用户 ID、密码、角色与数据归属保持不变。正常 `linguaflow` 主程序不包含历史转换入口，迁移工具也不启动 HTTP 服务。
+v0.13.0 历史迁移工具（与主程序一同分发）。**注意：当前版本的二进制不再提供历史数据转换**——`v013 postgres` / `v013 sqlite` / `v013 local` 全部子命令会在任何副作用发生前被目标兼容性检查直接拒绝。
 
-::: warning 迁移前必读
-- 运行前**停止旧服务**与所有连接该数据目录的进程；PostgreSQL 务必先有可恢复的备份，SQLite 会由工具在切换时完整保留原目录作为备份
-- 默认**预演**（在数据库迁移锁与 SERIALIZABLE 事务内完成转换后回滚；预演会持锁，且可能消耗 PostgreSQL 序列值），加 `--apply` 才正式提交
-- 已经迁移、混合版本或无法可靠解释的数据会被拒绝，不会重置账户或猜测历史值
-- 不要把密码、DSN 或密钥内容写进命令参数，一律走环境变量或私有文件
+::: warning 历史迁移请使用原版迁移程序
+账号库格式在新版本中变更：数据库新增账号库格式标记，**不含该标记的既有数据库（含 v0.13.0 数据）启动时会被直接拒绝**，且本版本不提供旧账户转换入口。把 v0.13.0 数据迁到当前版本，必须使用发布对应版本的原版迁移程序完成一次性迁移；本工具当前仅支持**新建**开发 / 验收实例。背景与工具自带说明见 `backend/cmd/linguaflow-migrate/README.md`。
 :::
-
-```bash
-linguaflow-migrate v013 postgres [--apply] [--data-dir PATH] [--keyring-file PATH]
-linguaflow-migrate v013 sqlite --mode serve|local --data-dir PATH [--apply] [--keyring-file PATH]
-linguaflow-migrate v013 local --data-dir PATH [--apply]
-```
-
-| 参数 | 说明 |
-| --- | --- |
-| `--data-dir` | 数据目录（优先于 `LINGUAFLOW_DATA_DIR`，默认当前目录下 `data`） |
-| `--mode` | 仅 SQLite 入口需要：`serve`（服务器模式库）/ `local`（本地模式库），不按数据库类型或路径猜测 |
-| `--apply` | 正式提交；省略时只预演 |
-| `--keyring-file` | 指定凭据 keyring 文件；与主密钥环境变量互斥 |
-
-密钥来源（详见工具 README）：
-
-- 提供 `LINGUAFLOW_CREDENTIALS_MASTER_KEY`（32 字节随机值的标准 Base64，或其 `_FILE` 变体）时迁移直接使用该主密钥，**迁移后启动服务必须提供同一密钥**
-- 否则使用 keyring 文件（`--keyring-file` / `LINGUAFLOW_CREDENTIALS_KEYRING_FILE`，默认 `<data-dir>/credentials-keyring.json`；已有文件必须有效，绝不自动覆盖）
-- JWT secret 可提供 `LINGUAFLOW_JWT_SECRET`（≥32 字节，或 `_FILE`），未提供时复用或创建 `<data-dir>/jwt-secret`
-
-不读取 `.env` 或部署文档（迁移前应取消 `LINGUAFLOW_SERVER_CONFIG`）；PostgreSQL 连接通过 `LINGUAFLOW_DATABASE_DSN`（或 `_FILE`，二者互斥）提供。正式迁移成功后会输出启动所需的文件路径与变量名，按提示连同数据库备份妥善保管密钥。
 
 通常不直接调用二进制，而是通过 backend Taskfile 任务（`CLI_ARGS=...` 写法兼容 PowerShell 包装器）：
 
 ```bash
 task -t backend/Taskfile.yml migrate:build
 task -t backend/Taskfile.yml migrate:v013 'CLI_ARGS=--data-dir data'
-task -t backend/Taskfile.yml migrate:v013:apply 'CLI_ARGS=--data-dir data'
 ```
 
 中断恢复、Windows 路径限制、备份与恢复规则等完整行为见工具自带文档 `backend/cmd/linguaflow-migrate/README.md`。
