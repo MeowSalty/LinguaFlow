@@ -14,6 +14,7 @@ import {
   updateGlossaryEntry as updateGlossaryEntryRequest,
 } from '@/api/client'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
 import { ApiError, isAccessDenied } from '@/api/utils'
 import { useOperationsStore } from './operations'
@@ -145,8 +146,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
     } catch (loadError) {
       if (!current()) return
       if (isAccessDenied(loadError)) items.value = []
-      error.value =
-        loadError instanceof Error ? loadError.message : t('api.errors.fetchGlossaryFailed')
+      error.value = extractErrorMessage(loadError, t('api.errors.fetchGlossaryFailed'))
     } finally {
       if (current()) loading.value = false
     }
@@ -164,10 +164,10 @@ export const useGlossaryStore = defineStore('glossary', () => {
       items.value = [...items.value, entry]
       return entry
     } catch (submitError) {
-      createError.value =
-        submitError instanceof Error
-          ? submitError.message
-          : t('api.errors.createGlossaryEntryFailed')
+      createError.value = extractErrorMessage(
+        submitError,
+        t('api.errors.createGlossaryEntryFailed'),
+      )
       throw submitError
     } finally {
       creating.value = false
@@ -187,10 +187,10 @@ export const useGlossaryStore = defineStore('glossary', () => {
       items.value = items.value.map((item) => (item.id === response.id ? response : item))
       return response
     } catch (submitError) {
-      updateError.value =
-        submitError instanceof Error
-          ? submitError.message
-          : t('api.errors.updateGlossaryEntryFailed')
+      updateError.value = extractErrorMessage(
+        submitError,
+        t('api.errors.updateGlossaryEntryFailed'),
+      )
       throw submitError
     } finally {
       updating.value = false
@@ -205,10 +205,10 @@ export const useGlossaryStore = defineStore('glossary', () => {
       await deleteGlossaryEntryRequest(projectId, entryId)
       items.value = items.value.filter((item) => item.id !== entryId)
     } catch (submitError) {
-      deleteError.value =
-        submitError instanceof Error
-          ? submitError.message
-          : t('api.errors.deleteGlossaryEntryFailed')
+      deleteError.value = extractErrorMessage(
+        submitError,
+        t('api.errors.deleteGlossaryEntryFailed'),
+      )
       throw submitError
     } finally {
       deletingEntryIds.value = deletingEntryIds.value.filter((id) => id !== entryId)
@@ -226,8 +226,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
       await loadEntries(projectId)
       return result
     } catch (submitError) {
-      importError.value =
-        submitError instanceof Error ? submitError.message : t('api.errors.importGlossaryFailed')
+      importError.value = extractErrorMessage(submitError, t('api.errors.importGlossaryFailed'))
       throw submitError
     } finally {
       importing.value = false
@@ -244,8 +243,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
       anchor.click()
       URL.revokeObjectURL(url)
     } catch (submitError) {
-      const errorMessage =
-        submitError instanceof Error ? submitError.message : t('api.errors.exportGlossaryFailed')
+      const errorMessage = extractErrorMessage(submitError, t('api.errors.exportGlossaryFailed'))
       throw new Error(errorMessage)
     }
   }
@@ -413,8 +411,10 @@ export const useGlossaryStore = defineStore('glossary', () => {
       ) {
         return
       }
-      syncImpactError.value =
-        err instanceof Error ? err.message : t('workspace.glossary.sync.impactLoadFailed')
+      syncImpactError.value = extractErrorMessage(
+        err,
+        t('workspace.glossary.sync.impactLoadFailed'),
+      )
     } finally {
       if (isSessionCurrent(session) && generation === syncImpactGeneration) {
         syncImpactLoading.value = false
@@ -458,8 +458,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
       void operations.invalidate()
     } catch (err) {
       if (!isSessionCurrent(session) || generation !== syncImpactGeneration) return
-      syncError.value =
-        err instanceof Error ? err.message : t('workspace.glossary.sync.executeFailed')
+      syncError.value = extractErrorMessage(err, t('workspace.glossary.sync.executeFailed'))
       syncStep.value = 'error'
     }
   }
@@ -483,8 +482,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
           removeTaskHistories([{ kind: 'glossary_sync', id: taskId, project_id: projectId }], false)
           syncError.value = taskHistoryErrorMessage(cause)
         } else
-          syncError.value =
-            cause instanceof Error ? cause.message : t('workspace.glossary.sync.networkError')
+          syncError.value = extractErrorMessage(cause, t('workspace.glossary.sync.networkError'))
       },
       { terminalRecheckMs: 30_000 },
     )
@@ -565,10 +563,9 @@ export const useGlossaryStore = defineStore('glossary', () => {
           if (current()) applySyncStatus(latest, projectId)
         } catch (refreshError) {
           if (current())
-            syncError.value =
-              refreshError instanceof Error ? refreshError.message : t('operations.loadFailed')
+            syncError.value = extractErrorMessage(refreshError, t('operations.loadFailed'))
         }
-      } else syncError.value = err instanceof Error ? err.message : t('operations.loadFailed')
+      } else syncError.value = extractErrorMessage(err, t('operations.loadFailed'))
     } finally {
       if (current()) syncCancelling.value = false
     }

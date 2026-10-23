@@ -132,9 +132,21 @@ func (_u *StorageAuthVersionUpdate) SetNonce(v []byte) *StorageAuthVersionUpdate
 	return _u
 }
 
+// ClearNonce clears the value of the "nonce" field.
+func (_u *StorageAuthVersionUpdate) ClearNonce() *StorageAuthVersionUpdate {
+	_u.mutation.ClearNonce()
+	return _u
+}
+
 // SetCiphertext sets the "ciphertext" field.
 func (_u *StorageAuthVersionUpdate) SetCiphertext(v []byte) *StorageAuthVersionUpdate {
 	_u.mutation.SetCiphertext(v)
+	return _u
+}
+
+// ClearCiphertext clears the value of the "ciphertext" field.
+func (_u *StorageAuthVersionUpdate) ClearCiphertext() *StorageAuthVersionUpdate {
+	_u.mutation.ClearCiphertext()
 	return _u
 }
 
@@ -149,6 +161,47 @@ func (_u *StorageAuthVersionUpdate) SetNillableStatus(v *storageauthversion.Stat
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetPurpose sets the "purpose" field.
+func (_u *StorageAuthVersionUpdate) SetPurpose(v storageauthversion.Purpose) *StorageAuthVersionUpdate {
+	_u.mutation.SetPurpose(v)
+	return _u
+}
+
+// SetNillablePurpose sets the "purpose" field if the given value is not nil.
+func (_u *StorageAuthVersionUpdate) SetNillablePurpose(v *storageauthversion.Purpose) *StorageAuthVersionUpdate {
+	if v != nil {
+		_u.SetPurpose(*v)
+	}
+	return _u
+}
+
+// SetRetirementID sets the "retirement_id" field.
+func (_u *StorageAuthVersionUpdate) SetRetirementID(v int) *StorageAuthVersionUpdate {
+	_u.mutation.ResetRetirementID()
+	_u.mutation.SetRetirementID(v)
+	return _u
+}
+
+// SetNillableRetirementID sets the "retirement_id" field if the given value is not nil.
+func (_u *StorageAuthVersionUpdate) SetNillableRetirementID(v *int) *StorageAuthVersionUpdate {
+	if v != nil {
+		_u.SetRetirementID(*v)
+	}
+	return _u
+}
+
+// AddRetirementID adds value to the "retirement_id" field.
+func (_u *StorageAuthVersionUpdate) AddRetirementID(v int) *StorageAuthVersionUpdate {
+	_u.mutation.AddRetirementID(v)
+	return _u
+}
+
+// ClearRetirementID clears the value of the "retirement_id" field.
+func (_u *StorageAuthVersionUpdate) ClearRetirementID() *StorageAuthVersionUpdate {
+	_u.mutation.ClearRetirementID()
 	return _u
 }
 
@@ -169,6 +222,26 @@ func (_u *StorageAuthVersionUpdate) SetNillableExpiresAt(v *time.Time) *StorageA
 // ClearExpiresAt clears the value of the "expires_at" field.
 func (_u *StorageAuthVersionUpdate) ClearExpiresAt() *StorageAuthVersionUpdate {
 	_u.mutation.ClearExpiresAt()
+	return _u
+}
+
+// SetPurgedAt sets the "purged_at" field.
+func (_u *StorageAuthVersionUpdate) SetPurgedAt(v time.Time) *StorageAuthVersionUpdate {
+	_u.mutation.SetPurgedAt(v)
+	return _u
+}
+
+// SetNillablePurgedAt sets the "purged_at" field if the given value is not nil.
+func (_u *StorageAuthVersionUpdate) SetNillablePurgedAt(v *time.Time) *StorageAuthVersionUpdate {
+	if v != nil {
+		_u.SetPurgedAt(*v)
+	}
+	return _u
+}
+
+// ClearPurgedAt clears the value of the "purged_at" field.
+func (_u *StorageAuthVersionUpdate) ClearPurgedAt() *StorageAuthVersionUpdate {
+	_u.mutation.ClearPurgedAt()
 	return _u
 }
 
@@ -246,6 +319,16 @@ func (_u *StorageAuthVersionUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Purpose(); ok {
+		if err := storageauthversion.PurposeValidator(v); err != nil {
+			return &ValidationError{Name: "purpose", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.purpose": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RetirementID(); ok {
+		if err := storageauthversion.RetirementIDValidator(v); err != nil {
+			return &ValidationError{Name: "retirement_id", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.retirement_id": %w`, err)}
+		}
+	}
 	if _u.mutation.ConnectionCleared() && len(_u.mutation.ConnectionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "StorageAuthVersion.connection"`)
 	}
@@ -291,17 +374,41 @@ func (_u *StorageAuthVersionUpdate) sqlSave(ctx context.Context) (_node int, err
 	if value, ok := _u.mutation.Nonce(); ok {
 		_spec.SetField(storageauthversion.FieldNonce, field.TypeBytes, value)
 	}
+	if _u.mutation.NonceCleared() {
+		_spec.ClearField(storageauthversion.FieldNonce, field.TypeBytes)
+	}
 	if value, ok := _u.mutation.Ciphertext(); ok {
 		_spec.SetField(storageauthversion.FieldCiphertext, field.TypeBytes, value)
 	}
+	if _u.mutation.CiphertextCleared() {
+		_spec.ClearField(storageauthversion.FieldCiphertext, field.TypeBytes)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(storageauthversion.FieldStatus, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.Purpose(); ok {
+		_spec.SetField(storageauthversion.FieldPurpose, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.RetirementID(); ok {
+		_spec.SetField(storageauthversion.FieldRetirementID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRetirementID(); ok {
+		_spec.AddField(storageauthversion.FieldRetirementID, field.TypeInt, value)
+	}
+	if _u.mutation.RetirementIDCleared() {
+		_spec.ClearField(storageauthversion.FieldRetirementID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.ExpiresAt(); ok {
 		_spec.SetField(storageauthversion.FieldExpiresAt, field.TypeTime, value)
 	}
 	if _u.mutation.ExpiresAtCleared() {
 		_spec.ClearField(storageauthversion.FieldExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.PurgedAt(); ok {
+		_spec.SetField(storageauthversion.FieldPurgedAt, field.TypeTime, value)
+	}
+	if _u.mutation.PurgedAtCleared() {
+		_spec.ClearField(storageauthversion.FieldPurgedAt, field.TypeTime)
 	}
 	if _u.mutation.ConnectionCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -455,9 +562,21 @@ func (_u *StorageAuthVersionUpdateOne) SetNonce(v []byte) *StorageAuthVersionUpd
 	return _u
 }
 
+// ClearNonce clears the value of the "nonce" field.
+func (_u *StorageAuthVersionUpdateOne) ClearNonce() *StorageAuthVersionUpdateOne {
+	_u.mutation.ClearNonce()
+	return _u
+}
+
 // SetCiphertext sets the "ciphertext" field.
 func (_u *StorageAuthVersionUpdateOne) SetCiphertext(v []byte) *StorageAuthVersionUpdateOne {
 	_u.mutation.SetCiphertext(v)
+	return _u
+}
+
+// ClearCiphertext clears the value of the "ciphertext" field.
+func (_u *StorageAuthVersionUpdateOne) ClearCiphertext() *StorageAuthVersionUpdateOne {
+	_u.mutation.ClearCiphertext()
 	return _u
 }
 
@@ -472,6 +591,47 @@ func (_u *StorageAuthVersionUpdateOne) SetNillableStatus(v *storageauthversion.S
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetPurpose sets the "purpose" field.
+func (_u *StorageAuthVersionUpdateOne) SetPurpose(v storageauthversion.Purpose) *StorageAuthVersionUpdateOne {
+	_u.mutation.SetPurpose(v)
+	return _u
+}
+
+// SetNillablePurpose sets the "purpose" field if the given value is not nil.
+func (_u *StorageAuthVersionUpdateOne) SetNillablePurpose(v *storageauthversion.Purpose) *StorageAuthVersionUpdateOne {
+	if v != nil {
+		_u.SetPurpose(*v)
+	}
+	return _u
+}
+
+// SetRetirementID sets the "retirement_id" field.
+func (_u *StorageAuthVersionUpdateOne) SetRetirementID(v int) *StorageAuthVersionUpdateOne {
+	_u.mutation.ResetRetirementID()
+	_u.mutation.SetRetirementID(v)
+	return _u
+}
+
+// SetNillableRetirementID sets the "retirement_id" field if the given value is not nil.
+func (_u *StorageAuthVersionUpdateOne) SetNillableRetirementID(v *int) *StorageAuthVersionUpdateOne {
+	if v != nil {
+		_u.SetRetirementID(*v)
+	}
+	return _u
+}
+
+// AddRetirementID adds value to the "retirement_id" field.
+func (_u *StorageAuthVersionUpdateOne) AddRetirementID(v int) *StorageAuthVersionUpdateOne {
+	_u.mutation.AddRetirementID(v)
+	return _u
+}
+
+// ClearRetirementID clears the value of the "retirement_id" field.
+func (_u *StorageAuthVersionUpdateOne) ClearRetirementID() *StorageAuthVersionUpdateOne {
+	_u.mutation.ClearRetirementID()
 	return _u
 }
 
@@ -492,6 +652,26 @@ func (_u *StorageAuthVersionUpdateOne) SetNillableExpiresAt(v *time.Time) *Stora
 // ClearExpiresAt clears the value of the "expires_at" field.
 func (_u *StorageAuthVersionUpdateOne) ClearExpiresAt() *StorageAuthVersionUpdateOne {
 	_u.mutation.ClearExpiresAt()
+	return _u
+}
+
+// SetPurgedAt sets the "purged_at" field.
+func (_u *StorageAuthVersionUpdateOne) SetPurgedAt(v time.Time) *StorageAuthVersionUpdateOne {
+	_u.mutation.SetPurgedAt(v)
+	return _u
+}
+
+// SetNillablePurgedAt sets the "purged_at" field if the given value is not nil.
+func (_u *StorageAuthVersionUpdateOne) SetNillablePurgedAt(v *time.Time) *StorageAuthVersionUpdateOne {
+	if v != nil {
+		_u.SetPurgedAt(*v)
+	}
+	return _u
+}
+
+// ClearPurgedAt clears the value of the "purged_at" field.
+func (_u *StorageAuthVersionUpdateOne) ClearPurgedAt() *StorageAuthVersionUpdateOne {
+	_u.mutation.ClearPurgedAt()
 	return _u
 }
 
@@ -582,6 +762,16 @@ func (_u *StorageAuthVersionUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Purpose(); ok {
+		if err := storageauthversion.PurposeValidator(v); err != nil {
+			return &ValidationError{Name: "purpose", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.purpose": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RetirementID(); ok {
+		if err := storageauthversion.RetirementIDValidator(v); err != nil {
+			return &ValidationError{Name: "retirement_id", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.retirement_id": %w`, err)}
+		}
+	}
 	if _u.mutation.ConnectionCleared() && len(_u.mutation.ConnectionIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "StorageAuthVersion.connection"`)
 	}
@@ -644,17 +834,41 @@ func (_u *StorageAuthVersionUpdateOne) sqlSave(ctx context.Context) (_node *Stor
 	if value, ok := _u.mutation.Nonce(); ok {
 		_spec.SetField(storageauthversion.FieldNonce, field.TypeBytes, value)
 	}
+	if _u.mutation.NonceCleared() {
+		_spec.ClearField(storageauthversion.FieldNonce, field.TypeBytes)
+	}
 	if value, ok := _u.mutation.Ciphertext(); ok {
 		_spec.SetField(storageauthversion.FieldCiphertext, field.TypeBytes, value)
 	}
+	if _u.mutation.CiphertextCleared() {
+		_spec.ClearField(storageauthversion.FieldCiphertext, field.TypeBytes)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(storageauthversion.FieldStatus, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.Purpose(); ok {
+		_spec.SetField(storageauthversion.FieldPurpose, field.TypeEnum, value)
+	}
+	if value, ok := _u.mutation.RetirementID(); ok {
+		_spec.SetField(storageauthversion.FieldRetirementID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRetirementID(); ok {
+		_spec.AddField(storageauthversion.FieldRetirementID, field.TypeInt, value)
+	}
+	if _u.mutation.RetirementIDCleared() {
+		_spec.ClearField(storageauthversion.FieldRetirementID, field.TypeInt)
 	}
 	if value, ok := _u.mutation.ExpiresAt(); ok {
 		_spec.SetField(storageauthversion.FieldExpiresAt, field.TypeTime, value)
 	}
 	if _u.mutation.ExpiresAtCleared() {
 		_spec.ClearField(storageauthversion.FieldExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.PurgedAt(); ok {
+		_spec.SetField(storageauthversion.FieldPurgedAt, field.TypeTime, value)
+	}
+	if _u.mutation.PurgedAtCleared() {
+		_spec.ClearField(storageauthversion.FieldPurgedAt, field.TypeTime)
 	}
 	if _u.mutation.ConnectionCleared() {
 		edge := &sqlgraph.EdgeSpec{

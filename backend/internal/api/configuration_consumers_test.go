@@ -180,6 +180,8 @@ type configurationStreamRecorder struct {
 	onFlush func([]int64)
 }
 
+func (w *configurationStreamRecorder) SetWriteDeadline(time.Time) error { return nil }
+
 func (w *configurationStreamRecorder) Flush() {
 	w.ResponseRecorder.Flush()
 	body := w.Body.String()

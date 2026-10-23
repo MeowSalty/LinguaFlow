@@ -1,15 +1,12 @@
 package v013
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
 
 func unpublishedStagingFixture(t *testing.T) localJournal {
@@ -147,67 +144,5 @@ func TestUnpublishedStagingCleanupRejectsLinkedDirectory(t *testing.T) {
 	}
 	if exists, err := pathExists(moved); err != nil || !exists {
 		t.Fatalf("symlink target changed: %v", err)
-	}
-}
-
-func TestSQLiteUnpublishedCleanupReportsPrimaryAndCleanupFailures(t *testing.T) {
-	for _, failConversion := range []bool{false, true} {
-		t.Run(map[bool]string{false: "cleanup only", true: "conversion and cleanup"}[failConversion], func(t *testing.T) {
-			dir := localFixture(t, true)
-			if failConversion {
-				db := openLocalFixture(t, dir)
-				if _, err := db.Exec(`UPDATE jobs SET execution_config='{"rounds":[]}' WHERE id=1`); err != nil {
-					t.Fatal(err)
-				}
-				if err := db.Close(); err != nil {
-					t.Fatal(err)
-				}
-			}
-			before := readLocalBytes(t, filepath.Join(dir, localDatabaseName))
-			cleanupErr := errors.New("injected permanent cleanup failure")
-			var stage string
-			calls := 0
-			report, err := runSQLite(t.Context(), SQLiteOptions{DataDir: dir, Mode: config.ModeLocal, Apply: failConversion}, func(journal localJournal) error {
-				stage = journal.StageDir
-				lock := filepath.Join(filepath.Dir(dir), ".LinguaFlow.v013-migration.lock")
-				if unlock, err := acquireLocalLock(lock); err == nil {
-					_ = unlock()
-					t.Fatal("migration lock released before cleanup")
-				}
-				return cleanupUnpublishedStagingWith(journal, func(string) error {
-					calls++
-					return cleanupErr
-				}, unexpectedStagingWait(t))
-			})
-			if !errors.Is(err, cleanupErr) || report.Applied || calls != 1 || stage == "" {
-				t.Fatalf("report=%+v calls=%d err=%v", report, calls, err)
-			}
-			for _, text := range []string{stage, "after 1 removal attempts", "was not replaced", "residual files may remain"} {
-				if !strings.Contains(err.Error(), text) {
-					t.Fatalf("cleanup error lacks %q: %v", text, err)
-				}
-			}
-			if failConversion && !strings.Contains(err.Error(), "migrate job 1 execution") {
-				t.Fatalf("primary conversion failure lost: %v", err)
-			}
-			if !bytes.Equal(before, readLocalBytes(t, filepath.Join(dir, localDatabaseName))) ||
-				string(readLocalBytes(t, filepath.Join(dir, "jobs", "resources", "test.txt"))) != "original input" {
-				t.Fatal("unpublished migration changed source data")
-			}
-			if _, err := os.Stat(filepath.Join(filepath.Dir(dir), ".LinguaFlow.v013-switch.json")); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("switch journal published: %v", err)
-			}
-			backups, err := filepath.Glob(dir + ".v013-backup-*")
-			if err != nil || len(backups) != 0 {
-				t.Fatalf("backup published: %v %v", backups, err)
-			}
-			unlock, err := acquireLocalLock(filepath.Join(filepath.Dir(dir), ".LinguaFlow.v013-migration.lock"))
-			if err != nil {
-				t.Fatalf("migration lock remained held after cleanup: %v", err)
-			}
-			if err := unlock(); err != nil {
-				t.Fatal(err)
-			}
-		})
 	}
 }

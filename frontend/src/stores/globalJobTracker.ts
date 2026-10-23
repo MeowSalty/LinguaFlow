@@ -7,6 +7,7 @@ import { captureSession, isSessionCurrent } from '@/api/session-context'
 import { KNOWN_EVENT_TYPES, resolveStreamUrl, type SSEEvent } from '@/composables/sseShared'
 import { useOperationsStore } from './operations'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 import { jobObservationTime, latestJobStages, mergeJobObservation } from '@/utils/jobStages'
 
 type Job = ApiSchemas['Job']
@@ -271,7 +272,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
         task.task_id === String(id) &&
         (projectId == null || task.project_id === projectId),
     )
-    projectName.value = operation?.project_name
+    projectName.value = operation?.task_type === 'translation' ? operation.project_name : undefined
     const current = version,
       context = captureSession()
     const valid = () => current === version && isSessionCurrent(context) && !disposed
@@ -290,7 +291,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
         if (isAccessDenied(error)) denyAccess(true, error)
         else {
           loadingDetail.value = false
-          taskError = error instanceof Error ? error.message : t('operations.loadFailed')
+          taskError = extractErrorMessage(error, t('operations.loadFailed'))
           syncError()
           finishInitialRequest()
         }
@@ -320,7 +321,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
       if (current !== version || !isSessionCurrent(context) || disposed) return
       if (isAccessDenied(error)) denyAccess(true, error)
       else {
-        taskError = error instanceof Error ? error.message : t('operations.loadFailed')
+        taskError = extractErrorMessage(error, t('operations.loadFailed'))
         syncError()
       }
     } finally {

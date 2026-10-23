@@ -8,6 +8,9 @@ frontend/
 # 忽略文档文件
 *.md
 
+# 忽略各 JS 工程(backend/internal/authacceptance、frontend、docs 等)的本地依赖
+**/node_modules
+
 # 忽略 Docker 相关文件（避免递归构建）
 Dockerfile
 docker-compose.yml

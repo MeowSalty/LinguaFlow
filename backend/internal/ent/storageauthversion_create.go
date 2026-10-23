@@ -121,6 +121,34 @@ func (_c *StorageAuthVersionCreate) SetNillableStatus(v *storageauthversion.Stat
 	return _c
 }
 
+// SetPurpose sets the "purpose" field.
+func (_c *StorageAuthVersionCreate) SetPurpose(v storageauthversion.Purpose) *StorageAuthVersionCreate {
+	_c.mutation.SetPurpose(v)
+	return _c
+}
+
+// SetNillablePurpose sets the "purpose" field if the given value is not nil.
+func (_c *StorageAuthVersionCreate) SetNillablePurpose(v *storageauthversion.Purpose) *StorageAuthVersionCreate {
+	if v != nil {
+		_c.SetPurpose(*v)
+	}
+	return _c
+}
+
+// SetRetirementID sets the "retirement_id" field.
+func (_c *StorageAuthVersionCreate) SetRetirementID(v int) *StorageAuthVersionCreate {
+	_c.mutation.SetRetirementID(v)
+	return _c
+}
+
+// SetNillableRetirementID sets the "retirement_id" field if the given value is not nil.
+func (_c *StorageAuthVersionCreate) SetNillableRetirementID(v *int) *StorageAuthVersionCreate {
+	if v != nil {
+		_c.SetRetirementID(*v)
+	}
+	return _c
+}
+
 // SetExpiresAt sets the "expires_at" field.
 func (_c *StorageAuthVersionCreate) SetExpiresAt(v time.Time) *StorageAuthVersionCreate {
 	_c.mutation.SetExpiresAt(v)
@@ -131,6 +159,20 @@ func (_c *StorageAuthVersionCreate) SetExpiresAt(v time.Time) *StorageAuthVersio
 func (_c *StorageAuthVersionCreate) SetNillableExpiresAt(v *time.Time) *StorageAuthVersionCreate {
 	if v != nil {
 		_c.SetExpiresAt(*v)
+	}
+	return _c
+}
+
+// SetPurgedAt sets the "purged_at" field.
+func (_c *StorageAuthVersionCreate) SetPurgedAt(v time.Time) *StorageAuthVersionCreate {
+	_c.mutation.SetPurgedAt(v)
+	return _c
+}
+
+// SetNillablePurgedAt sets the "purged_at" field if the given value is not nil.
+func (_c *StorageAuthVersionCreate) SetNillablePurgedAt(v *time.Time) *StorageAuthVersionCreate {
+	if v != nil {
+		_c.SetPurgedAt(*v)
 	}
 	return _c
 }
@@ -195,6 +237,10 @@ func (_c *StorageAuthVersionCreate) defaults() {
 		v := storageauthversion.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.Purpose(); !ok {
+		v := storageauthversion.DefaultPurpose
+		_c.mutation.SetPurpose(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -235,18 +281,25 @@ func (_c *StorageAuthVersionCreate) check() error {
 			return &ValidationError{Name: "key_id", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.key_id": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.Nonce(); !ok {
-		return &ValidationError{Name: "nonce", err: errors.New(`ent: missing required field "StorageAuthVersion.nonce"`)}
-	}
-	if _, ok := _c.mutation.Ciphertext(); !ok {
-		return &ValidationError{Name: "ciphertext", err: errors.New(`ent: missing required field "StorageAuthVersion.ciphertext"`)}
-	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "StorageAuthVersion.status"`)}
 	}
 	if v, ok := _c.mutation.Status(); ok {
 		if err := storageauthversion.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Purpose(); !ok {
+		return &ValidationError{Name: "purpose", err: errors.New(`ent: missing required field "StorageAuthVersion.purpose"`)}
+	}
+	if v, ok := _c.mutation.Purpose(); ok {
+		if err := storageauthversion.PurposeValidator(v); err != nil {
+			return &ValidationError{Name: "purpose", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.purpose": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.RetirementID(); ok {
+		if err := storageauthversion.RetirementIDValidator(v); err != nil {
+			return &ValidationError{Name: "retirement_id", err: fmt.Errorf(`ent: validator failed for field "StorageAuthVersion.retirement_id": %w`, err)}
 		}
 	}
 	if len(_c.mutation.ConnectionIDs()) == 0 {
@@ -314,9 +367,21 @@ func (_c *StorageAuthVersionCreate) createSpec() (*StorageAuthVersion, *sqlgraph
 		_spec.SetField(storageauthversion.FieldStatus, field.TypeEnum, value)
 		_node.Status = value
 	}
+	if value, ok := _c.mutation.Purpose(); ok {
+		_spec.SetField(storageauthversion.FieldPurpose, field.TypeEnum, value)
+		_node.Purpose = value
+	}
+	if value, ok := _c.mutation.RetirementID(); ok {
+		_spec.SetField(storageauthversion.FieldRetirementID, field.TypeInt, value)
+		_node.RetirementID = &value
+	}
 	if value, ok := _c.mutation.ExpiresAt(); ok {
 		_spec.SetField(storageauthversion.FieldExpiresAt, field.TypeTime, value)
 		_node.ExpiresAt = &value
+	}
+	if value, ok := _c.mutation.PurgedAt(); ok {
+		_spec.SetField(storageauthversion.FieldPurgedAt, field.TypeTime, value)
+		_node.PurgedAt = &value
 	}
 	if nodes := _c.mutation.ConnectionIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

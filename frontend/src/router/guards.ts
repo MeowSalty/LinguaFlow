@@ -4,8 +4,9 @@ import { setUnauthorizedHandler } from '@/api/client'
 import { t } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
+import { safeReturnPath } from '@/auth/return-path'
 
-const PUBLIC_PATHS = new Set(['/login', '/register', '/service'])
+const PUBLIC_PATHS = new Set(['/login', '/register', '/service', '/auth/complete'])
 const AUTH_ENTRY_PATHS = new Set(['/login', '/register'])
 
 const ROUTE_TITLES: Record<string, string> = {
@@ -21,6 +22,8 @@ const ROUTE_TITLES: Record<string, string> = {
   '/execution-plan-templates': 'nav.executionPlanTemplates',
   '/execution-profiles': 'nav.executionProfiles',
   '/login': 'login.title',
+  '/auth/complete': 'authentication.callbackTitle',
+  '/admin/authentication': 'authentication.adminTitle',
   '/projects': 'nav.projects',
   '/projects/[projectId]': 'nav.projects',
   '/profile': 'account.profile.title',
@@ -75,17 +78,17 @@ export const installRouterGuards = (router: Router): void => {
 
     if (service.isLocal) {
       if (AUTH_ENTRY_PATHS.has(to.path)) {
-        const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : null
+        const redirect = safeReturnPath(to.query.redirect)
         return redirect ? { path: redirect } : { path: '/' }
       }
 
       if (to.path === '/service' && !forceService) {
-        const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : null
+        const redirect = safeReturnPath(to.query.redirect)
         return redirect ? { path: redirect } : { path: '/' }
       }
 
       if (!auth.user && !isPublic) {
-        const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : null
+        const redirect = safeReturnPath(to.query.redirect)
         return redirect ? { path: redirect } : { path: '/' }
       }
 
@@ -100,7 +103,7 @@ export const installRouterGuards = (router: Router): void => {
     }
 
     if (auth.isAuthenticated && AUTH_ENTRY_PATHS.has(to.path)) {
-      const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : null
+      const redirect = safeReturnPath(to.query.redirect)
       return redirect ? { path: redirect } : { path: '/' }
     }
 

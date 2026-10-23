@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,9 +12,43 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
+
+func TestPrepareDatabaseRejectsOldAccountsBeforeSchemaChanges(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.DataDir = t.TempDir()
+	db, err := sql.Open("sqlite", cfg.DatabasePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("PRAGMA user_version=1; CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT); INSERT INTO users VALUES(42,'old@username')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(cfg.DatabasePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, auto := range []bool{false, true} {
+		cfg.AutoMigrate = auto
+		_, _, cleanup, err := prepareDatabase(t.Context(), cfg)
+		if cleanup != nil {
+			cleanup()
+		}
+		if !errors.Is(err, database.ErrAuthFormatUnsupported) {
+			t.Fatalf("auto_migrate=%v: old accounts did not fail before schema work: %v", auto, err)
+		}
+		after, err := os.ReadFile(cfg.DatabasePath())
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatalf("auto_migrate=%v changed the old database: %v", auto, err)
+		}
+	}
+}
 
 func TestPrepareDatabaseAutomaticDataMigration(t *testing.T) {
 	for _, mode := range []string{"serve", "local"} {

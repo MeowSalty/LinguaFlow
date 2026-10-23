@@ -66,9 +66,10 @@ func authTestToken(t *testing.T, user *ent.User, expiresAt time.Time, secret []b
 
 	now := time.Now()
 	claims := &service.AccessTokenClaims{
-		UserID:   user.ID,
-		Username: user.Username,
-		Role:     user.Role,
+		UserID:      user.ID,
+		AuthVersion: user.AuthVersion,
+		Username:    user.Username,
+		Role:        user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    authTestIssuer,
 			Subject:   fmt.Sprintf("user:%d", user.ID),
@@ -158,6 +159,31 @@ func TestRequireAuth(t *testing.T) {
 			if problem.Detail != tt.detail {
 				t.Errorf("detail = %q, want %q", problem.Detail, tt.detail)
 			}
+		})
+	}
+}
+
+func TestRequireAuthRejectsMissingOrInvalidAccountVersion(t *testing.T) {
+	s, _, account := authTestServer(t)
+	cases := []struct {
+		name    string
+		value   any
+		present bool
+	}{
+		{"missing", nil, false}, {"null", nil, true}, {"zero", 0, true}, {"negative", -1, true},
+		{"string", "1", true}, {"fraction", 1.5, true}, {"boolean", true, true}, {"unsafe integer", int64(1 << 53), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			claims := jwt.MapClaims{"uid": account.ID, "iss": authTestIssuer, "sub": fmt.Sprintf("user:%d", account.ID), "exp": time.Now().Add(time.Hour).Unix()}
+			if tc.present {
+				claims["auth_version"] = tc.value
+			}
+			token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(authTestSecret))
+			if err != nil {
+				t.Fatal(err)
+			}
+			accountAssertProblem(t, requireAuthRequest(s, token), http.StatusUnauthorized, "urn:linguaflow:token-invalid")
 		})
 	}
 }

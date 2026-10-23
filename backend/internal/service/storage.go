@@ -27,6 +27,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageguard"
 )
 
 var (
@@ -74,6 +75,8 @@ type StorageService struct {
 	sourceRetention           time.Duration
 	dialect                   string
 	legacySnapshotCursor      int
+	ioGuard                   *storageguard.Coordinator
+	retirements               *StorageRetirementService
 }
 
 func NewStorageService(client *ent.Client, projects *ProjectService, workDir string) (*StorageService, error) {
@@ -84,7 +87,7 @@ func NewStorageService(client *ent.Client, projects *ProjectService, workDir str
 	if err != nil {
 		return nil, err
 	}
-	return &StorageService{client: client, projects: projects, cfg: config.DefaultStorageConfig(), drivers: map[int]storage.Driver{}, workDir: workDir, disk: disk, maxFileBytes: 100 << 20, maxTempBytes: 4 << 30, inFlight: map[int]bool{}, readers: map[int]int{}, slots: make(chan struct{}, 2), ingressSlots: make(chan struct{}, 2), deleteGrace: 24 * time.Hour, sourceRetention: 30 * 24 * time.Hour}, nil
+	return &StorageService{client: client, projects: projects, cfg: config.DefaultStorageConfig(), drivers: map[int]storage.Driver{}, workDir: workDir, disk: disk, maxFileBytes: 100 << 20, maxTempBytes: 4 << 30, inFlight: map[int]bool{}, readers: map[int]int{}, slots: make(chan struct{}, 2), ingressSlots: make(chan struct{}, 2), deleteGrace: 24 * time.Hour, sourceRetention: 30 * 24 * time.Hour, ioGuard: storageguard.New()}, nil
 }
 
 func (s *StorageService) RegisterDriver(spaceID int, driver storage.Driver) {
@@ -103,17 +106,24 @@ func (s *StorageService) driver(ctx context.Context, spaceID int, write bool) (s
 	check := func(ctx context.Context, write bool) (storage.Driver, error) {
 		return s.resolveDriver(ctx, spaceID, write)
 	}
-	return &storageGuardedDriver{check: check, deleteCheck: func(ctx context.Context) (storage.Driver, error) {
+	return bindStorageGuard(ctx, s.client, s.ioGuard, spaceID, &storageGuardedDriver{check: check, deleteCheck: func(ctx context.Context) (storage.Driver, error) {
 		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpDelete, nil)); err != nil {
 			return nil, err
 		}
 		return check(ctx, false)
-	}}, nil
+	}})
 }
 
 // Recheck at every driver call, including a PutNew through a previously resolved
 // read driver. Registered drivers and connection resolvers share this boundary.
 func (s *StorageService) resolveDriver(ctx context.Context, spaceID int, write bool) (storage.Driver, error) {
+	mode := storageguard.Read
+	if write {
+		mode = storageguard.NewUse
+	}
+	if _, _, err := storageguard.Check(ctx, s.client, spaceID, mode, 0); err != nil {
+		return nil, err
+	}
 	space, err := s.client.StorageSpace.Get(ctx, spaceID)
 	if err != nil {
 		return nil, err
@@ -280,6 +290,9 @@ func (s *StorageService) Begin(ctx context.Context, actorID, projectID int, in S
 		if in.TargetSpaceID != 0 {
 			target = in.TargetSpaceID
 		}
+		if e = storageguard.Gate(ctx, tx, target, storageguard.NewUse); e != nil {
+			return e
+		}
 		if target != *current.StorageSpaceID && in.Kind != "repair" {
 			if e := s.allowedTarget(ctx, tx, current, target); e != nil {
 				return e
@@ -426,6 +439,12 @@ func (s *StorageService) Stage(ctx context.Context, task *ent.StorageTask, r io.
 		}
 		if p.StorageState != "active" && !(current.Kind == "repair" || current.Kind == "migration") {
 			return ErrStorageMaintenance
+		}
+		if current.TargetSpaceID == nil {
+			return ErrStoragePolicy
+		}
+		if e = storageguard.Gate(ctx, tx, *current.TargetSpaceID, storageguard.NewUse); e != nil {
+			return e
 		}
 		if current.Kind == "repair" {
 			if current.SourceRevisionID == nil {
@@ -648,6 +667,9 @@ func (r *storageContextReader) Read(p []byte) (int, error) {
 
 // publish 只创建经过校验的引用。调用方需在同一个事务中提交业务变更。
 func (s *StorageService) publish(ctx context.Context, tx *ent.Client, w *ent.StorageWrite, purpose blob.Purpose, existing *ent.Blob) (*ent.Blob, error) {
+	if err := storageguard.Gate(ctx, tx, w.SpaceID, storageguard.NewUse); err != nil {
+		return nil, err
+	}
 	task, err := tx.StorageTask.Get(ctx, w.TaskID)
 	if err != nil {
 		return nil, err

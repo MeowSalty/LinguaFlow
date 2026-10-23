@@ -21,6 +21,78 @@ func (f ActivityLogFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ActivityLogMutation", m)
 }
 
+// The AuthChannelPolicyFunc type is an adapter to allow the use of ordinary
+// function as AuthChannelPolicy mutator.
+type AuthChannelPolicyFunc func(context.Context, *ent.AuthChannelPolicyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthChannelPolicyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthChannelPolicyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthChannelPolicyMutation", m)
+}
+
+// The AuthConnectionFunc type is an adapter to allow the use of ordinary
+// function as AuthConnection mutator.
+type AuthConnectionFunc func(context.Context, *ent.AuthConnectionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthConnectionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthConnectionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthConnectionMutation", m)
+}
+
+// The AuthConnectionRevisionFunc type is an adapter to allow the use of ordinary
+// function as AuthConnectionRevision mutator.
+type AuthConnectionRevisionFunc func(context.Context, *ent.AuthConnectionRevisionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthConnectionRevisionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthConnectionRevisionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthConnectionRevisionMutation", m)
+}
+
+// The AuthConnectionSecretFunc type is an adapter to allow the use of ordinary
+// function as AuthConnectionSecret mutator.
+type AuthConnectionSecretFunc func(context.Context, *ent.AuthConnectionSecretMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthConnectionSecretFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthConnectionSecretMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthConnectionSecretMutation", m)
+}
+
+// The AuthTransactionFunc type is an adapter to allow the use of ordinary
+// function as AuthTransaction mutator.
+type AuthTransactionFunc func(context.Context, *ent.AuthTransactionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthTransactionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthTransactionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthTransactionMutation", m)
+}
+
+// The AuthenticationRecoveryFunc type is an adapter to allow the use of ordinary
+// function as AuthenticationRecovery mutator.
+type AuthenticationRecoveryFunc func(context.Context, *ent.AuthenticationRecoveryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AuthenticationRecoveryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AuthenticationRecoveryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuthenticationRecoveryMutation", m)
+}
+
 // The BackendFunc type is an adapter to allow the use of ordinary
 // function as Backend mutator.
 type BackendFunc func(context.Context, *ent.BackendMutation) (ent.Value, error)
@@ -165,6 +237,18 @@ func (f ExportArtifactFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExportArtifactMutation", m)
 }
 
+// The ExternalIdentityFunc type is an adapter to allow the use of ordinary
+// function as ExternalIdentity mutator.
+type ExternalIdentityFunc func(context.Context, *ent.ExternalIdentityMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ExternalIdentityFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ExternalIdentityMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExternalIdentityMutation", m)
+}
+
 // The GlossaryEntryFunc type is an adapter to allow the use of ordinary
 // function as GlossaryEntry mutator.
 type GlossaryEntryFunc func(context.Context, *ent.GlossaryEntryMutation) (ent.Value, error)
@@ -237,6 +321,30 @@ func (f JobRoundSegmentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobRoundSegmentMutation", m)
 }
 
+// The LocalAccountPolicyFunc type is an adapter to allow the use of ordinary
+// function as LocalAccountPolicy mutator.
+type LocalAccountPolicyFunc func(context.Context, *ent.LocalAccountPolicyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f LocalAccountPolicyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.LocalAccountPolicyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.LocalAccountPolicyMutation", m)
+}
+
+// The LoginBindingFunc type is an adapter to allow the use of ordinary
+// function as LoginBinding mutator.
+type LoginBindingFunc func(context.Context, *ent.LoginBindingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f LoginBindingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.LoginBindingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.LoginBindingMutation", m)
+}
+
 // The OrgMembershipFunc type is an adapter to allow the use of ordinary
 // function as OrgMembership mutator.
 type OrgMembershipFunc func(context.Context, *ent.OrgMembershipMutation) (ent.Value, error)
@@ -283,6 +391,30 @@ func (f PrunePromptTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (en
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PrunePromptTemplateMutation", m)
+}
+
+// The ReauthenticationProofFunc type is an adapter to allow the use of ordinary
+// function as ReauthenticationProof mutator.
+type ReauthenticationProofFunc func(context.Context, *ent.ReauthenticationProofMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ReauthenticationProofFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ReauthenticationProofMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ReauthenticationProofMutation", m)
+}
+
+// The RefreshSessionFunc type is an adapter to allow the use of ordinary
+// function as RefreshSession mutator.
+type RefreshSessionFunc func(context.Context, *ent.RefreshSessionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RefreshSessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RefreshSessionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RefreshSessionMutation", m)
 }
 
 // The RefreshTokenFunc type is an adapter to allow the use of ordinary
@@ -429,6 +561,30 @@ func (f StorageMigrationItemFunc) Mutate(ctx context.Context, m ent.Mutation) (e
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageMigrationItemMutation", m)
 }
 
+// The StorageNamespaceFunc type is an adapter to allow the use of ordinary
+// function as StorageNamespace mutator.
+type StorageNamespaceFunc func(context.Context, *ent.StorageNamespaceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageNamespaceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageNamespaceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageNamespaceMutation", m)
+}
+
+// The StoragePathClaimFunc type is an adapter to allow the use of ordinary
+// function as StoragePathClaim mutator.
+type StoragePathClaimFunc func(context.Context, *ent.StoragePathClaimMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StoragePathClaimFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StoragePathClaimMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StoragePathClaimMutation", m)
+}
+
 // The StorageReservationFunc type is an adapter to allow the use of ordinary
 // function as StorageReservation mutator.
 type StorageReservationFunc func(context.Context, *ent.StorageReservationMutation) (ent.Value, error)
@@ -439,6 +595,30 @@ func (f StorageReservationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageReservationMutation", m)
+}
+
+// The StorageRetirementFunc type is an adapter to allow the use of ordinary
+// function as StorageRetirement mutator.
+type StorageRetirementFunc func(context.Context, *ent.StorageRetirementMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageRetirementFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageRetirementMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageRetirementMutation", m)
+}
+
+// The StorageRetirementEntryFunc type is an adapter to allow the use of ordinary
+// function as StorageRetirementEntry mutator.
+type StorageRetirementEntryFunc func(context.Context, *ent.StorageRetirementEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StorageRetirementEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StorageRetirementEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StorageRetirementEntryMutation", m)
 }
 
 // The StorageSpaceFunc type is an adapter to allow the use of ordinary

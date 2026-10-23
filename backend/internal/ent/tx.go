@@ -16,6 +16,18 @@ type Tx struct {
 	config
 	// ActivityLog is the client for interacting with the ActivityLog builders.
 	ActivityLog *ActivityLogClient
+	// AuthChannelPolicy is the client for interacting with the AuthChannelPolicy builders.
+	AuthChannelPolicy *AuthChannelPolicyClient
+	// AuthConnection is the client for interacting with the AuthConnection builders.
+	AuthConnection *AuthConnectionClient
+	// AuthConnectionRevision is the client for interacting with the AuthConnectionRevision builders.
+	AuthConnectionRevision *AuthConnectionRevisionClient
+	// AuthConnectionSecret is the client for interacting with the AuthConnectionSecret builders.
+	AuthConnectionSecret *AuthConnectionSecretClient
+	// AuthTransaction is the client for interacting with the AuthTransaction builders.
+	AuthTransaction *AuthTransactionClient
+	// AuthenticationRecovery is the client for interacting with the AuthenticationRecovery builders.
+	AuthenticationRecovery *AuthenticationRecoveryClient
 	// Backend is the client for interacting with the Backend builders.
 	Backend *BackendClient
 	// BackupPin is the client for interacting with the BackupPin builders.
@@ -40,6 +52,8 @@ type Tx struct {
 	ExecutionProfile *ExecutionProfileClient
 	// ExportArtifact is the client for interacting with the ExportArtifact builders.
 	ExportArtifact *ExportArtifactClient
+	// ExternalIdentity is the client for interacting with the ExternalIdentity builders.
+	ExternalIdentity *ExternalIdentityClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
 	// InstanceInitialization is the client for interacting with the InstanceInitialization builders.
@@ -52,6 +66,10 @@ type Tx struct {
 	JobRound *JobRoundClient
 	// JobRoundSegment is the client for interacting with the JobRoundSegment builders.
 	JobRoundSegment *JobRoundSegmentClient
+	// LocalAccountPolicy is the client for interacting with the LocalAccountPolicy builders.
+	LocalAccountPolicy *LocalAccountPolicyClient
+	// LoginBinding is the client for interacting with the LoginBinding builders.
+	LoginBinding *LoginBindingClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
 	OrgMembership *OrgMembershipClient
 	// Organization is the client for interacting with the Organization builders.
@@ -60,6 +78,10 @@ type Tx struct {
 	Project *ProjectClient
 	// PrunePromptTemplate is the client for interacting with the PrunePromptTemplate builders.
 	PrunePromptTemplate *PrunePromptTemplateClient
+	// ReauthenticationProof is the client for interacting with the ReauthenticationProof builders.
+	ReauthenticationProof *ReauthenticationProofClient
+	// RefreshSession is the client for interacting with the RefreshSession builders.
+	RefreshSession *RefreshSessionClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
 	RefreshToken *RefreshTokenClient
 	// Resource is the client for interacting with the Resource builders.
@@ -84,8 +106,16 @@ type Tx struct {
 	StorageConnection *StorageConnectionClient
 	// StorageMigrationItem is the client for interacting with the StorageMigrationItem builders.
 	StorageMigrationItem *StorageMigrationItemClient
+	// StorageNamespace is the client for interacting with the StorageNamespace builders.
+	StorageNamespace *StorageNamespaceClient
+	// StoragePathClaim is the client for interacting with the StoragePathClaim builders.
+	StoragePathClaim *StoragePathClaimClient
 	// StorageReservation is the client for interacting with the StorageReservation builders.
 	StorageReservation *StorageReservationClient
+	// StorageRetirement is the client for interacting with the StorageRetirement builders.
+	StorageRetirement *StorageRetirementClient
+	// StorageRetirementEntry is the client for interacting with the StorageRetirementEntry builders.
+	StorageRetirementEntry *StorageRetirementEntryClient
 	// StorageSpace is the client for interacting with the StorageSpace builders.
 	StorageSpace *StorageSpaceClient
 	// StorageTask is the client for interacting with the StorageTask builders.
@@ -246,6 +276,12 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.ActivityLog = NewActivityLogClient(tx.config)
+	tx.AuthChannelPolicy = NewAuthChannelPolicyClient(tx.config)
+	tx.AuthConnection = NewAuthConnectionClient(tx.config)
+	tx.AuthConnectionRevision = NewAuthConnectionRevisionClient(tx.config)
+	tx.AuthConnectionSecret = NewAuthConnectionSecretClient(tx.config)
+	tx.AuthTransaction = NewAuthTransactionClient(tx.config)
+	tx.AuthenticationRecovery = NewAuthenticationRecoveryClient(tx.config)
 	tx.Backend = NewBackendClient(tx.config)
 	tx.BackupPin = NewBackupPinClient(tx.config)
 	tx.Blob = NewBlobClient(tx.config)
@@ -258,16 +294,21 @@ func (tx *Tx) init() {
 	tx.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(tx.config)
 	tx.ExecutionProfile = NewExecutionProfileClient(tx.config)
 	tx.ExportArtifact = NewExportArtifactClient(tx.config)
+	tx.ExternalIdentity = NewExternalIdentityClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
 	tx.InstanceInitialization = NewInstanceInitializationClient(tx.config)
 	tx.Job = NewJobClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
 	tx.JobRound = NewJobRoundClient(tx.config)
 	tx.JobRoundSegment = NewJobRoundSegmentClient(tx.config)
+	tx.LocalAccountPolicy = NewLocalAccountPolicyClient(tx.config)
+	tx.LoginBinding = NewLoginBindingClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
 	tx.PrunePromptTemplate = NewPrunePromptTemplateClient(tx.config)
+	tx.ReauthenticationProof = NewReauthenticationProofClient(tx.config)
+	tx.RefreshSession = NewRefreshSessionClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)
 	tx.SSEEvent = NewSSEEventClient(tx.config)
@@ -280,7 +321,11 @@ func (tx *Tx) init() {
 	tx.StorageCheckWrite = NewStorageCheckWriteClient(tx.config)
 	tx.StorageConnection = NewStorageConnectionClient(tx.config)
 	tx.StorageMigrationItem = NewStorageMigrationItemClient(tx.config)
+	tx.StorageNamespace = NewStorageNamespaceClient(tx.config)
+	tx.StoragePathClaim = NewStoragePathClaimClient(tx.config)
 	tx.StorageReservation = NewStorageReservationClient(tx.config)
+	tx.StorageRetirement = NewStorageRetirementClient(tx.config)
+	tx.StorageRetirementEntry = NewStorageRetirementEntryClient(tx.config)
 	tx.StorageSpace = NewStorageSpaceClient(tx.config)
 	tx.StorageTask = NewStorageTaskClient(tx.config)
 	tx.StorageUploadBatch = NewStorageUploadBatchClient(tx.config)

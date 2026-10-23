@@ -68,6 +68,27 @@ func (_u *SystemSettingUpdate) ClearValue() *SystemSettingUpdate {
 	return _u
 }
 
+// SetRevision sets the "revision" field.
+func (_u *SystemSettingUpdate) SetRevision(v int64) *SystemSettingUpdate {
+	_u.mutation.ResetRevision()
+	_u.mutation.SetRevision(v)
+	return _u
+}
+
+// SetNillableRevision sets the "revision" field if the given value is not nil.
+func (_u *SystemSettingUpdate) SetNillableRevision(v *int64) *SystemSettingUpdate {
+	if v != nil {
+		_u.SetRevision(*v)
+	}
+	return _u
+}
+
+// AddRevision adds value to the "revision" field.
+func (_u *SystemSettingUpdate) AddRevision(v int64) *SystemSettingUpdate {
+	_u.mutation.AddRevision(v)
+	return _u
+}
+
 // SetDescription sets the "description" field.
 func (_u *SystemSettingUpdate) SetDescription(v string) *SystemSettingUpdate {
 	_u.mutation.SetDescription(v)
@@ -136,6 +157,11 @@ func (_u *SystemSettingUpdate) check() error {
 			return &ValidationError{Name: "key", err: fmt.Errorf(`ent: validator failed for field "SystemSetting.key": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Revision(); ok {
+		if err := systemsetting.RevisionValidator(v); err != nil {
+			return &ValidationError{Name: "revision", err: fmt.Errorf(`ent: validator failed for field "SystemSetting.revision": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -162,6 +188,12 @@ func (_u *SystemSettingUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	}
 	if _u.mutation.ValueCleared() {
 		_spec.ClearField(systemsetting.FieldValue, field.TypeString)
+	}
+	if value, ok := _u.mutation.Revision(); ok {
+		_spec.SetField(systemsetting.FieldRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRevision(); ok {
+		_spec.AddField(systemsetting.FieldRevision, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Description(); ok {
 		_spec.SetField(systemsetting.FieldDescription, field.TypeString, value)
@@ -226,6 +258,27 @@ func (_u *SystemSettingUpdateOne) SetNillableValue(v *string) *SystemSettingUpda
 // ClearValue clears the value of the "value" field.
 func (_u *SystemSettingUpdateOne) ClearValue() *SystemSettingUpdateOne {
 	_u.mutation.ClearValue()
+	return _u
+}
+
+// SetRevision sets the "revision" field.
+func (_u *SystemSettingUpdateOne) SetRevision(v int64) *SystemSettingUpdateOne {
+	_u.mutation.ResetRevision()
+	_u.mutation.SetRevision(v)
+	return _u
+}
+
+// SetNillableRevision sets the "revision" field if the given value is not nil.
+func (_u *SystemSettingUpdateOne) SetNillableRevision(v *int64) *SystemSettingUpdateOne {
+	if v != nil {
+		_u.SetRevision(*v)
+	}
+	return _u
+}
+
+// AddRevision adds value to the "revision" field.
+func (_u *SystemSettingUpdateOne) AddRevision(v int64) *SystemSettingUpdateOne {
+	_u.mutation.AddRevision(v)
 	return _u
 }
 
@@ -310,6 +363,11 @@ func (_u *SystemSettingUpdateOne) check() error {
 			return &ValidationError{Name: "key", err: fmt.Errorf(`ent: validator failed for field "SystemSetting.key": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Revision(); ok {
+		if err := systemsetting.RevisionValidator(v); err != nil {
+			return &ValidationError{Name: "revision", err: fmt.Errorf(`ent: validator failed for field "SystemSetting.revision": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -353,6 +411,12 @@ func (_u *SystemSettingUpdateOne) sqlSave(ctx context.Context) (_node *SystemSet
 	}
 	if _u.mutation.ValueCleared() {
 		_spec.ClearField(systemsetting.FieldValue, field.TypeString)
+	}
+	if value, ok := _u.mutation.Revision(); ok {
+		_spec.SetField(systemsetting.FieldRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRevision(); ok {
+		_spec.AddField(systemsetting.FieldRevision, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Description(); ok {
 		_spec.SetField(systemsetting.FieldDescription, field.TypeString, value)

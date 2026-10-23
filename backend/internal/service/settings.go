@@ -91,11 +91,20 @@ func parseRegistrationPolicy(value string) (bool, error) {
 }
 
 func readRegistrationPolicy(ctx context.Context, client *ent.Client) (bool, error) {
+	enabled, _, err := readRegistrationState(ctx, client)
+	return enabled, err
+}
+
+func readRegistrationState(ctx context.Context, client *ent.Client) (bool, int64, error) {
 	row, err := client.SystemSetting.Query().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).Only(ctx)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
-	return parseRegistrationPolicy(row.Value)
+	if row.Revision < 1 || row.Revision > maxAuthVersion {
+		return false, 0, ErrSettingsUnavailable
+	}
+	enabled, err := parseRegistrationPolicy(row.Value)
+	return enabled, row.Revision, err
 }
 
 func (s *SettingsService) RegistrationEnabled(ctx context.Context) (bool, error) {
@@ -122,7 +131,8 @@ func (s *SettingsService) Patch(ctx context.Context, actorID int, input Settings
 	var policyChanged bool
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		policyChanged = false
-		// All multi-domain updates lock registration before task retention.
+		// Registration's global dependency is locked before other policy rows
+		// and the actor. Task retention has no authentication dependency.
 		if input.RegistrationEnabled != nil {
 			if err := lockSetting(ctx, tx, SettingRegistrationEnabled); err != nil {
 				return err
@@ -133,11 +143,17 @@ func (s *SettingsService) Patch(ctx context.Context, actorID int, input Settings
 				return err
 			}
 		}
+		if err := lockAuthUser(ctx, tx, actorID); err != nil {
+			return err
+		}
 		actor, err := tx.User.Query().Where(user.IDEQ(actorID), user.ActiveEQ(true), user.RoleEQ(SystemRoleAdmin)).Only(ctx)
 		if ent.IsNotFound(err) {
 			return ErrForbidden
 		}
 		if err != nil {
+			return err
+		}
+		if err := checkExternalActor(ctx, actor); err != nil {
 			return err
 		}
 		before, err := readSettings(ctx, tx)
@@ -155,8 +171,15 @@ func (s *SettingsService) Patch(ctx context.Context, actorID int, input Settings
 			}
 		}
 		if input.RegistrationEnabled != nil && before.RegistrationEnabled != *input.RegistrationEnabled {
+			_, revision, err := readRegistrationState(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if revision >= maxAuthVersion {
+				return ErrSettingsConflict
+			}
 			result.RegistrationEnabled = *input.RegistrationEnabled
-			if _, err := tx.SystemSetting.Update().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).SetValue(strconv.FormatBool(result.RegistrationEnabled)).Save(ctx); err != nil {
+			if _, err := tx.SystemSetting.Update().Where(systemsetting.KeyEQ(SettingRegistrationEnabled)).SetValue(strconv.FormatBool(result.RegistrationEnabled)).AddRevision(1).Save(ctx); err != nil {
 				return err
 			}
 			if err := recordAuditEvent(ctx, tx, AuditEvent{ActorUserID: actor.ID, Action: "admin.settings.update", ResourceType: "system_settings", Metadata: map[string]any{"before_registration_enabled": before.RegistrationEnabled, "after_registration_enabled": result.RegistrationEnabled}}); err != nil {

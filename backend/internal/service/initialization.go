@@ -2,19 +2,16 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/instanceinitialization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
@@ -78,20 +75,21 @@ func (s *InitializationService) Initialize(ctx context.Context, mode string, inp
 	var username, email, passwordHash string
 	var inputErr error
 	if wantMode == instanceinitialization.ModeLocal {
-		var secret [32]byte
-		if _, err := rand.Read(secret[:]); err != nil {
-			return nil, err
+		username, inputErr = accountidentity.NormalizeUsername("local")
+		if inputErr == nil {
+			inputErr = accountidentity.ValidateAllocation(username, accountidentity.Local)
 		}
-		passwordHash, err = hashPassword(hex.EncodeToString(secret[:]))
-		if err != nil {
-			return nil, err
-		}
-		username, email = "local", "local@linguaflow.local"
 	} else if input.Admin == nil {
 		inputErr = errors.New("uninitialized serve instance requires bootstrap.admin or admin initialize with administrator inputs")
 	} else {
-		username, email = normalizeIdentity(input.Admin.Username), normalizeIdentity(input.Admin.Email)
-		if username == "" || !strings.Contains(email, "@") {
+		username, inputErr = accountidentity.NormalizeUsername(input.Admin.Username)
+		if inputErr == nil {
+			inputErr = accountidentity.ValidateAllocation(username, accountidentity.Administrator)
+		}
+		if inputErr == nil {
+			email, inputErr = accountidentity.NormalizeEmail(input.Admin.Email)
+		}
+		if inputErr != nil {
 			inputErr = ErrInvalidInput
 		} else if err := validateNewPassword(input.Admin.Password); err != nil {
 			inputErr = err
@@ -129,7 +127,17 @@ func (s *InitializationService) Initialize(ctx context.Context, mode string, inp
 		if err := tx.SystemSetting.Create().SetKey(SettingTaskRetention).SetValue(string(retention)).Exec(ctx); err != nil {
 			return err
 		}
-		account, err := tx.User.Create().SetUsername(username).SetEmail(email).SetPasswordHash(passwordHash).SetRole(SystemRoleAdmin).SetActive(true).Save(ctx)
+		if err := initializePasswordConnection(ctx, tx); err != nil {
+			return err
+		}
+		create := tx.User.Create().SetUsername(username).SetRole(SystemRoleAdmin).SetActive(true)
+		if email != "" {
+			create.SetEmail(email)
+		}
+		if passwordHash != "" {
+			create.SetPasswordHash(passwordHash)
+		}
+		account, err := create.Save(ctx)
 		if err != nil {
 			return err
 		}
@@ -168,6 +176,9 @@ func (s *InitializationService) Validate(ctx context.Context, mode string) (*ent
 	if _, err := NewSettingsService(s.client).RegistrationEnabled(ctx); err != nil {
 		return nil, err
 	}
+	if _, err := readPasswordPolicy(ctx, s.client); err != nil {
+		return nil, err
+	}
 	if wantMode == instanceinitialization.ModeServe {
 		if rows[0].LocalUserID != nil {
 			return nil, ErrInstanceIncomplete
@@ -193,7 +204,22 @@ func (s *InitializationService) Validate(ctx context.Context, mode string) (*ent
 // 保持此清单与 ent/migrate.Tables 同步；其完整性有测试保障。
 func initializationBusinessChecks(c *ent.Client) map[string]func(context.Context) (bool, error) {
 	return map[string]func(context.Context) (bool, error){
+		"auth_connections":           c.AuthConnection.Query().Exist,
+		"auth_connection_revisions":  c.AuthConnectionRevision.Query().Exist,
+		"auth_channel_policies":      c.AuthChannelPolicy.Query().Exist,
+		"local_account_policies":     c.LocalAccountPolicy.Query().Exist,
+		"authentication_recoveries":  c.AuthenticationRecovery.Query().Exist,
+		"auth_connection_secrets":    c.AuthConnectionSecret.Query().Exist,
+		"auth_transactions":          c.AuthTransaction.Query().Exist,
+		"reauthentication_proofs":    c.ReauthenticationProof.Query().Exist,
+		"external_identities":        c.ExternalIdentity.Query().Exist,
+		"login_bindings":             c.LoginBinding.Query().Exist,
+		"refresh_sessions":           c.RefreshSession.Query().Exist,
 		"storage_connections":        c.StorageConnection.Query().Exist,
+		"storage_retirements":        c.StorageRetirement.Query().Exist,
+		"storage_retirement_entries": c.StorageRetirementEntry.Query().Exist,
+		"storage_path_claims":        c.StoragePathClaim.Query().Exist,
+		"storage_namespaces":         c.StorageNamespace.Query().Exist,
 		"storage_spaces":             c.StorageSpace.Query().Exist,
 		"storage_auth_versions":      c.StorageAuthVersion.Query().Exist,
 		"blobs":                      c.Blob.Query().Exist,
@@ -235,9 +261,19 @@ func initializationBusinessChecks(c *ent.Client) map[string]func(context.Context
 // MaintainAdministrator 是显式的部署侧操作。它不能认领
 // 未初始化的实例，也不能更改其注册策略。
 func (s *InitializationService) MaintainAdministrator(ctx context.Context, input AdminCreateUserInput, recoverExisting bool) (*ent.User, error) {
-	username, email := normalizeIdentity(input.Username), normalizeIdentity(input.Email)
-	if username == "" || (!recoverExisting && !strings.Contains(email, "@")) {
+	username, err := accountidentity.NormalizeUsername(input.Username)
+	if err != nil {
 		return nil, ErrInvalidInput
+	}
+	var email string
+	if !recoverExisting {
+		if err := accountidentity.ValidateAllocation(username, accountidentity.Administrator); err != nil {
+			return nil, ErrInvalidInput
+		}
+		email, err = accountidentity.NormalizeEmail(input.Email)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
 	}
 	if err := validateNewPassword(input.Password); err != nil {
 		return nil, err
@@ -249,6 +285,9 @@ func (s *InitializationService) MaintainAdministrator(ctx context.Context, input
 	var result *ent.User
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		// 串行化维护操作，并建立 SQLite 的写快照。
+		if err := lockAuthenticationConfiguration(ctx, tx); err != nil {
+			return err
+		}
 		if _, err := tx.InstanceInitialization.Update().Where(instanceinitialization.IDEQ(1)).SetUpdatedAt(timeutil.NowUTC()).Save(ctx); err != nil {
 			return err
 		}
@@ -261,17 +300,24 @@ func (s *InitializationService) MaintainAdministrator(ctx context.Context, input
 			if err != nil {
 				return err
 			}
-			result, err = tx.User.UpdateOneID(existing.ID).SetPasswordHash(passwordHash).SetRole(SystemRoleAdmin).SetActive(true).Save(ctx)
-			if err != nil {
+			if err := lockAuthUser(ctx, tx, existing.ID); err != nil {
 				return err
 			}
-			if _, err := tx.RefreshToken.Update().Where(refreshtoken.HasUserWith(user.IDEQ(existing.ID)), refreshtoken.RevokedAtIsNil()).SetRevokedAt(timeutil.NowUTC()).Save(ctx); err != nil {
+			if err := revokeUserSessions(ctx, tx, existing.ID, timeutil.NowUTC()); err != nil {
+				return err
+			}
+			result, err = tx.User.UpdateOneID(existing.ID).SetPasswordHash(passwordHash).SetRole(SystemRoleAdmin).SetActive(true).Save(ctx)
+			if err != nil {
 				return err
 			}
 			action = "admin.recover"
 		} else {
 			var err error
-			result, err = tx.User.Create().SetUsername(username).SetEmail(email).SetPasswordHash(passwordHash).SetRole(SystemRoleAdmin).SetActive(true).Save(ctx)
+			create := tx.User.Create().SetUsername(username).SetPasswordHash(passwordHash).SetRole(SystemRoleAdmin).SetActive(true)
+			if email != "" {
+				create.SetEmail(email)
+			}
+			result, err = create.Save(ctx)
 			if ent.IsConstraintError(err) {
 				return ErrUserExists
 			}

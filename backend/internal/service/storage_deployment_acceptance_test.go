@@ -172,6 +172,92 @@ func TestStorageDeploymentS3AuthorizationRevocation(t *testing.T) {
 	}
 }
 
+// Uses only the explicitly provisioned acceptance namespace. A released prefix
+// is verified under a fresh identity before checking that the old driver is fenced.
+func TestStorageDeploymentS3RetirementReleasesExactMarker(t *testing.T) {
+	remote := storageacceptance.NewS3(t)
+	ctx, client, resources, _, owner, _ := storageLifecycleFixture(t)
+	cfg := config.DefaultStorageConfig()
+	cfg.Enabled = true
+	connections := NewStorageConnectionService(client, credentialTestKeyring(t, "one", "one"), cfg, func(_ context.Context, _ *ent.StorageConnection, _ *ent.StorageSpace, p storageauth.S3Payload) (storage.Driver, error) {
+		opts := remote.Options
+		opts.Credentials = aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+			return aws.Credentials{AccessKeyID: p.AccessKeyID, SecretAccessKey: p.SecretAccessKey, SessionToken: p.SessionToken}, nil
+		})
+		d, err := s3store.New(opts)
+		if err != nil {
+			return nil, err
+		}
+		return &deploymentTrackingDriver{d, remote}, nil
+	})
+	endpoint := remote.Options.Endpoint
+	if endpoint == "" {
+		endpoint = "https://s3." + remote.Options.Region + ".amazonaws.com"
+	}
+	conn, err := connections.Create(ctx, owner.ID, CreateStorageConnectionInput{Name: "retirement", Scope: ScopeUser, OwnerID: owner.ID, Endpoint: endpoint, Region: remote.Options.Region, PathStyle: remote.Options.PathStyle})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := CreateStorageSpaceInput{Name: "retirement", Bucket: remote.Options.Bucket, Prefix: remote.Options.Prefix}
+	sp, err := connections.CreateSpace(ctx, owner.ID, conn.ID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retire, err := NewStorageRetirementService(resources.storage, connections)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := remote.Options.Credentials.Retrieve(ctx)
+	if err != nil {
+		t.Fatal("test credentials unavailable")
+	}
+	authorize := func() {
+		current, e := connections.Get(ctx, owner.ID, conn.ID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		_, e = connections.Authorize(ctx, owner.ID, conn.ID, AuthorizeStorageInput{Payload: storageauth.S3Payload{Version: 1, AccessKeyID: credential.AccessKeyID, SecretAccessKey: credential.SecretAccessKey, SessionToken: credential.SessionToken}, WriteCheck: true, ExpectedManagementGeneration: current.ManagementGeneration})
+		if e != nil {
+			t.Fatal(e)
+		}
+	}
+	authorize()
+	old, err := connections.ResolveDriver(ctx, sp.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := retire.Preview(ctx, owner.ID, RetirementPreviewInput{TargetKind: "space", TargetID: sp.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := retire.Create(ctx, owner.ID, "real-s3-retirement", RetirementCreateInput{PreviewRevision: preview.PreviewRevision, ConfirmedScope: preview.Target, Plan: []RetirementProjectPlan{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 4 {
+		if err = retire.ProcessOne(ctx, r.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if client.StorageRetirement.GetX(ctx, r.ID).Status != "completed" {
+		t.Fatal("real marker removal did not complete")
+	}
+	if _, err = remote.Stat(ctx, storage.Object{Key: storageMarkerKey}); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("old marker remained: %v", err)
+	}
+	newSpace, err := connections.CreateSpace(ctx, owner.ID, conn.ID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorize()
+	if _, err = old.Stat(ctx, storage.Object{Key: storageMarkerKey}); !errors.Is(err, ErrStorageRemoved) {
+		t.Fatalf("old driver read new identity: %v", err)
+	}
+	if err = VerifyStorageSpaceMarker(ctx, remote, client.StorageSpace.GetX(ctx, newSpace.ID)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type deploymentDeleteGate struct {
 	*storageacceptance.S3
 	blocked bool

@@ -1,0 +1,18 @@
+LocalAccountPreviewRequest:
+  type: object
+  additionalProperties: false
+  required: [expected_revision]
+  properties:
+    expected_revision:
+      type: integer
+      format: int64
+      minimum: 1
+    policy:
+      $ref: './auth.yaml#/LocalAccountPolicyInput'
+    registration:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          nullable: true

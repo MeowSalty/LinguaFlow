@@ -100,3 +100,13 @@ func TestInvalidReadLimitsCannotOverflow(t *testing.T) {
 		}
 	}
 }
+
+func TestPreflightDirectory_EnforcesEntryLimitWithEOCDTrailingData(t *testing.T) {
+	raw := makeTestZip(t, map[string][]byte{"a": nil, "b": nil, "c": nil})
+	raw = append(raw, make([]byte, 31)...)
+	limits := Limits{MaxEntries: 2, MaxExpandedBytes: 100, MaxOutputBytes: 1000}
+	_, err := OpenZipContext(WithLimits(context.Background(), limits), bytes.NewReader(raw), 1000)
+	if !errors.Is(err, ErrArchiveEntriesExceeded) {
+		t.Fatalf("trailing EOCD bytes bypassed entry limit: %v", err)
+	}
+}

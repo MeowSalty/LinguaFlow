@@ -39,6 +39,7 @@ func TestRubyCLIStagedHTTPConcurrencyAndCancellation(t *testing.T) {
 			twoAlignments := make(chan struct{})
 			bothCanceled := make(chan struct{})
 			release := make(chan struct{})
+			handlerDone := make(chan struct{}, 6)
 			var releaseOnce sync.Once
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var payload struct {
@@ -89,12 +90,13 @@ func TestRubyCLIStagedHTTPConcurrencyAndCancellation(t *testing.T) {
 				mu.Unlock()
 				defer func() {
 					mu.Lock()
-					defer mu.Unlock()
 					if alignment {
 						alignmentActive--
 					} else {
 						mainActive--
 					}
+					mu.Unlock()
+					handlerDone <- struct{}{}
 				}()
 				var content any
 				if alignment {
@@ -222,12 +224,19 @@ func TestRubyCLIStagedHTTPConcurrencyAndCancellation(t *testing.T) {
 			} else if strings.Count(string(actual), target) != 4 {
 				t.Fatalf("CLI did not export four finalized candidates: %s", actual)
 			}
-			mu.Lock()
-			defer mu.Unlock()
 			wantAlignmentCalls := 4
 			if cancelAlignment {
 				wantAlignmentCalls = 2
 			}
+			for range 2 + wantAlignmentCalls {
+				select {
+				case <-handlerDone:
+				case <-time.After(10 * time.Second):
+					t.Fatal("HTTP handlers did not finish")
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
 			if mainCalls != 2 || alignmentCalls != wantAlignmentCalls || mainPeak != 1 || alignmentPeak != 2 || mainActive != 0 || alignmentActive != 0 {
 				t.Fatal(fmt.Sprintf("calls main/alignment=%d/%d; peaks=%d/%d; active=%d/%d", mainCalls, alignmentCalls, mainPeak, alignmentPeak, mainActive, alignmentActive))
 			}

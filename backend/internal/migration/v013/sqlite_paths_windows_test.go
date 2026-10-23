@@ -4,7 +4,6 @@ package v013
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,9 +102,12 @@ func assertWindowsSQLiteAliasRejected(t *testing.T, source, keyring string, opti
 	t.Helper()
 	databaseBefore := readLocalBytes(t, filepath.Join(source, localDatabaseName))
 	keyBefore, keyBeforeErr := os.ReadFile(keyring)
-	report, err := RunSQLite(context.Background(), options)
-	if err == nil || !strings.Contains(err.Error(), "standard absolute paths") || report.Applied {
-		t.Fatalf("Windows path alias was not rejected before migration: %+v %v", report, err)
+	err := validateSQLitePathSpelling(options.KeyringFile)
+	if err == nil {
+		err = validateSQLitePathSpelling(options.DataDir)
+	}
+	if err == nil || !strings.Contains(err.Error(), "standard absolute paths") {
+		t.Fatalf("Windows path alias was not rejected: %v", err)
 	}
 	if !bytes.Equal(databaseBefore, readLocalBytes(t, filepath.Join(source, localDatabaseName))) {
 		t.Fatal("path validation changed the original SQLite database")

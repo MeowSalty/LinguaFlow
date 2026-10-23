@@ -9,6 +9,7 @@ import {
   organizationRoles,
 } from '@/utils/organization-scope'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 import { isAccessDenied } from '@/api/utils'
 
 export const useOrganizationsStore = defineStore('organizations', () => {
@@ -54,7 +55,7 @@ export const useOrganizationsStore = defineStore('organizations', () => {
       } catch (cause) {
         if (current()) {
           if (isAccessDenied(cause)) replace([])
-          error.value = cause instanceof Error ? cause.message : t('team.errors.load')
+          error.value = extractErrorMessage(cause, t('team.errors.load'))
         }
       } finally {
         if (current()) {

@@ -27,6 +27,7 @@ import { usePrunePromptTemplatesStore } from '@/stores/prunePromptTemplates'
 import { DRAWER_WIDTH } from '@/components/common/uiConstants'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { isOrganizationDependency } from '@/utils/organization-scope'
+import { extractErrorMessage } from '@/utils/errors'
 
 type Suggestion = ApiSchemas['GlossaryPruneSuggestion']
 type Preview = ApiSchemas['GlossaryPrunePreview']
@@ -317,10 +318,10 @@ const createPreview = async (): Promise<void> => {
     })
     selectedKeys.value = preview.value.suggestions.map((item) => item.entry_id)
   } catch (error) {
-    message.error(
-      error instanceof Error ? error.message : t('workspace.glossary.prune.previewFailed'),
-      { duration: 0, closable: true },
-    )
+    message.error(extractErrorMessage(error, t('workspace.glossary.prune.previewFailed')), {
+      duration: 0,
+      closable: true,
+    })
   } finally {
     previewing.value = false
   }
@@ -368,10 +369,10 @@ const applySelected = async (): Promise<void> => {
       message.success(t('workspace.glossary.prune.applySuccess'))
     }
   } catch (error) {
-    message.error(
-      error instanceof Error ? error.message : t('workspace.glossary.prune.applyFailed'),
-      { duration: 0, closable: true },
-    )
+    message.error(extractErrorMessage(error, t('workspace.glossary.prune.applyFailed')), {
+      duration: 0,
+      closable: true,
+    })
   } finally {
     applying.value = false
   }

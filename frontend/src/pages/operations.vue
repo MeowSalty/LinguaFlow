@@ -190,6 +190,12 @@ const setDate = (value: [number, number] | null): void =>
     updated_before: value ? new Date(value[1]).toISOString() : undefined,
   })
 const open = (operation: Operation): void => {
+  if (
+    operation.task_type !== 'translation' &&
+    operation.task_type !== 'glossary_sync' &&
+    operation.task_type !== 'storage'
+  )
+    return
   void router.push({
     path: '/operations',
     query: {

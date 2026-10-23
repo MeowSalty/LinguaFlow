@@ -27,7 +27,7 @@ export const changeCurrentUserPassword = async (
     body: payload,
   })
 
-  if (error) {
+  if (!response.ok) {
     throw buildRequestFailureError(t('api.errors.changeCurrentUserPasswordFailed'), error, response)
   }
 }

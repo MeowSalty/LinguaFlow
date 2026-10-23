@@ -10,6 +10,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storageauth"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageguard"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storagenet"
 )
 
@@ -38,10 +39,23 @@ func (s *StorageConnectionService) setupSiteBackends(ctx context.Context, tx *en
 				if !s.cfg.Enabled || s.cfg.Maintenance {
 					return nil
 				}
-				c, err = tx.StorageConnection.Create().SetName(backend.ID).SetBackendID(backend.ID).SetDriver(storageconnection.DriverS3).SetOwnerKind(storageconnection.OwnerKindSite).SetOwnerID(0).SetAuthSource(storageconnection.AuthSourceDeployment).SetEndpoint(endpoint).SetRegion(backend.Region).SetPathStyle(backend.PathStyle).Save(ctx)
+				c, err = tx.StorageConnection.Create().SetRemoteUseState(storageconnection.RemoteUseStateNever).SetName(backend.ID).SetBackendID(backend.ID).SetDriver(storageconnection.DriverS3).SetOwnerKind(storageconnection.OwnerKindSite).SetOwnerID(0).SetAuthSource(storageconnection.AuthSourceDeployment).SetEndpoint(endpoint).SetRegion(backend.Region).SetPathStyle(backend.PathStyle).Save(ctx)
 			}
 			if err != nil {
 				return err
+			}
+			// 启动登记必须查询持久退出身份:removed 与旧 backend_id 留下防复活记录,
+			// 意外恢复旧配置时报告配置冲突,不重新登记也不访问旧位置。
+			if c.Lifecycle == storageconnection.LifecycleRemoved {
+				return ErrStorageRetirementConflict
+			}
+			// 旧 backend_id 在移除后回流不是新身份:必须显式冲突,不能当作首次登记。
+			if c.BackendID != "" && c.BackendID != backend.ID {
+				return ErrStorageRetirementConflict
+			}
+			// retiring 不重新启用、不创建替代空间,也不成为部署默认项。
+			if c.Lifecycle == storageconnection.LifecycleRetiring {
+				return nil
 			}
 			if c.Driver != storageconnection.DriverS3 || c.AuthSource != storageconnection.AuthSourceDeployment || c.Endpoint != endpoint || c.Region != backend.Region || c.PathStyle != backend.PathStyle {
 				return ErrStorageConflict
@@ -50,6 +64,10 @@ func (s *StorageConnectionService) setupSiteBackends(ctx context.Context, tx *en
 			if ent.IsNotFound(err) {
 				if !s.cfg.Enabled || s.cfg.Maintenance {
 					return nil
+				}
+				// 命名空间分配与最终移除共用同一把锁,避免并发登记同一 bucket。
+				if e := storageguard.LockNamespace(ctx, tx, backend.Bucket); e != nil {
+					return e
 				}
 				others, e := tx.StorageSpace.Query().Where(storagespace.BucketEQ(backend.Bucket)).All(ctx)
 				if e != nil {
@@ -64,13 +82,21 @@ func (s *StorageConnectionService) setupSiteBackends(ctx context.Context, tx *en
 				if policyErr != nil {
 					return policyErr
 				}
-				sp, err = tx.StorageSpace.Create().SetConnectionID(c.ID).SetName(backend.ID).SetOwnerKind(storagespace.OwnerKindSite).SetOwnerID(0).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetBucket(backend.Bucket).SetPrefix(strings.TrimSuffix(backend.Prefix, "/")).SetNillableCapacityBytes(policy.DefaultSpaceCapacityBytes).Save(ctx)
+				sp, err = tx.StorageSpace.Create().SetRemoteUseState(storagespace.RemoteUseStateNever).SetConnectionID(c.ID).SetName(backend.ID).SetOwnerKind(storagespace.OwnerKindSite).SetOwnerID(0).SetIdentity(generateUniqueID()).SetMarkerNonce(generateUniqueID()).SetBucket(backend.Bucket).SetPrefix(strings.TrimSuffix(backend.Prefix, "/")).SetNillableCapacityBytes(policy.DefaultSpaceCapacityBytes).Save(ctx)
 			}
 			if err != nil {
 				return err
 			}
 			if sp == nil {
 				return nil
+			}
+			// 已退出或退出中的空间绝不能被重新登记为可用身份。
+			if sp.Lifecycle != storagespace.LifecycleAvailable {
+				return ErrStorageRetirementConflict
+			}
+			// 活跃路径占用与历史行分离:创建空间与最终移除共用同一占用规则。
+			if err = ensureStoragePathClaim(ctx, tx, sp); err != nil {
+				return err
 			}
 			if sp.Bucket != backend.Bucket || sp.Prefix != strings.TrimSuffix(backend.Prefix, "/") {
 				return ErrStorageConflict
@@ -150,7 +176,11 @@ func (s *StorageConnectionService) check(ctx context.Context, actor, id int, wri
 		if sp.Status == storagespace.StatusDisabled {
 			continue
 		}
-		d := &storageGuardedDriver{service: s, spaceID: sp.ID}
+		// 真实 IO 计数:检查期间的每次提供方调用都必须经过共享执行许可。
+		d, e := bindStorageGuard(ctx, s.client, s.ioGuard, sp.ID, &storageGuardedDriver{service: s, spaceID: sp.ID})
+		if e != nil {
+			return nil, s.sanitize(e)
+		}
 		caps, e := s.verifySpace(ctx, actor, c, sp, &ent.StorageAuthVersion{Generation: c.ActiveAuthGeneration}, d, write)
 		if e != nil {
 			return nil, s.sanitize(e)
@@ -164,7 +194,18 @@ func (s *StorageConnectionService) check(ctx context.Context, actor, id int, wri
 		if err := s.requireOwner(ctx, tx, actor, string(c.OwnerKind), c.OwnerID); err != nil {
 			return err
 		}
-		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), op, c)); err != nil {
+		// 与 finalizing 竞争时由事务内重读的当前事实判定,而不是检查期间的陈旧快照。
+		if err := storageguard.LockConnection(ctx, tx, c.ID); err != nil {
+			return err
+		}
+		current, err := tx.StorageConnection.Get(ctx, c.ID)
+		if err != nil {
+			return err
+		}
+		if current.ManagementGeneration != c.ManagementGeneration || current.ActiveAuthGeneration != c.ActiveAuthGeneration {
+			return ErrStorageConflict
+		}
+		if err := s.admitManagement(ctx, tx, current, op); err != nil {
 			return err
 		}
 		n, err := tx.StorageConnection.Update().Where(storageconnection.IDEQ(c.ID), storageconnection.ManagementGenerationEQ(c.ManagementGeneration), storageconnection.ActiveAuthGenerationEQ(c.ActiveAuthGeneration), storageconnection.StatusEQ(storageconnection.StatusEnabled)).SetHealth("available").SetCheckedAt(time.Now().UTC()).Save(ctx)

@@ -37,6 +37,9 @@ type Server struct {
 	mode                         string    // "server" | "local"
 	localUser                    *ent.User // 本地模式下非 nil
 	authService                  *service.AuthService
+	externalAuth                 *service.ExternalAuthService
+	authCleanupDone              chan struct{}
+	authLimiter                  authenticationLimiter
 	adminService                 *service.AdminService
 	settingsService              *service.SettingsService
 	taskLifecycle                *tasklife.Coordinator
@@ -66,6 +69,7 @@ type Server struct {
 	resourceSvc                  *service.ResourceService
 	storageSvc                   *service.StorageService
 	storageConnections           *service.StorageConnectionService
+	storageRetirements           *service.StorageRetirementService
 	storageRuntime               *storageRuntime
 	jobStore                     *filestore.LocalStore
 	dispatcher                   *worker.Dispatcher
@@ -160,6 +164,10 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	s.adminService = service.NewAdminService(client)
 	s.settingsService = service.NewSettingsService(client)
 	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(*cfg), s.settingsService)
+	s.externalAuth, err = service.NewExternalAuthService(client, s.authService, keys, cfg.Authentication, cfg.CORS)
+	if err != nil {
+		return nil, fmt.Errorf("initialize external authentication: %w", err)
+	}
 	s.userService = service.NewUserService(client, s.authService)
 
 	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool, s.httpClients)
@@ -294,10 +302,15 @@ func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	s.runCancel = cancel
 	s.taskHistoryDone = make(chan struct{})
+	s.authCleanupDone = make(chan struct{})
 	s.httpServer.BaseContext = func(net.Listener) context.Context { return runCtx }
 	s.runMu.Unlock()
 	defer cancel()
 	s.startStorage(runCtx)
+	go func() {
+		defer close(s.authCleanupDone)
+		s.runAuthenticationCleanup(runCtx)
+	}()
 	go func() {
 		defer close(s.taskHistoryDone)
 		if s.taskHistory != nil {
@@ -368,7 +381,22 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			if s.httpClients != nil {
 				s.httpClients.Shutdown()
 			}
-			results := make(chan error, 5)
+			results := make(chan error, 6)
+			go func() {
+				s.runMu.Lock()
+				authDone := s.authCleanupDone
+				s.runMu.Unlock()
+				if authDone == nil {
+					results <- nil
+					return
+				}
+				select {
+				case <-authDone:
+					results <- nil
+				case <-cleanupCtx.Done():
+					results <- cleanupCtx.Err()
+				}
+			}()
 			go func() {
 				s.runMu.Lock()
 				historyDone := s.taskHistoryDone
@@ -410,7 +438,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 					results <- nil
 				}
 			}()
-			for range 5 {
+			for range 6 {
 				select {
 				case err := <-results:
 					s.shutdownErr = errors.Join(s.shutdownErr, err)

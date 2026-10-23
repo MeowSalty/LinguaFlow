@@ -27,7 +27,10 @@ func newSQLiteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "sqlite", Args: cobra.NoArgs,
 		Short: "迁移 SQLite 数据目录，显式选择 serve 或 local 模式",
-		Long: `先停止旧服务，并保留独立备份。数据库须为 --data-dir 内的 linguaflow.db。
+		Long: `当前账号格式与 v0.13.0 迁移目标不兼容，本版本拒绝预演、提交和中断恢复。
+保留原数据；历史迁移与恢复须使用原迁移程序。以下仅保留历史参数说明。
+
+先停止旧服务，并保留独立备份。数据库须为 --data-dir 内的 linguaflow.db。
 必须显式指定 --mode serve 或 --mode local；数据库位于本机不代表 local 模式。
 serve 保留原账户、角色和服务端初始化语义，不要求名为 local 的管理员。
 serve 支持环境变量中的凭据主密钥、keyring 和 JWT；不读取 .env 或服务配置文件。

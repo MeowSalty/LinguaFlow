@@ -15,8 +15,9 @@ var ErrStorageDeploymentDisabled = errors.New("storage_deployment_disabled")
 // StorageRuntime reflects the configuration used by the running services,
 // including maintenance imposed at startup by unfinished offline recovery.
 type StorageRuntime struct {
-	DeploymentEnabled bool `json:"deployment_enabled"`
-	Maintenance       bool `json:"maintenance"`
+	DeploymentEnabled bool                          `json:"deployment_enabled"`
+	Maintenance       bool                          `json:"maintenance"`
+	Retirement        StorageRetirementCapabilities `json:"retirement"`
 }
 
 type StorageActionAvailability struct {
@@ -25,11 +26,23 @@ type StorageActionAvailability struct {
 }
 
 func storageRuntimeState(cfg config.StorageConfig) StorageRuntime {
-	return StorageRuntime{DeploymentEnabled: cfg.Enabled, Maintenance: cfg.Maintenance}
+	return StorageRuntime{DeploymentEnabled: cfg.Enabled, Maintenance: cfg.Maintenance, Retirement: storageRetirementCapabilities()}
 }
 
-func (s *StorageService) Runtime() StorageRuntime           { return storageRuntimeState(s.cfg) }
-func (s *StorageConnectionService) Runtime() StorageRuntime { return storageRuntimeState(s.cfg) }
+func (s *StorageService) Runtime() StorageRuntime {
+	r := storageRuntimeState(s.cfg)
+	if s.retirements != nil {
+		r.Retirement = s.retirements.capabilities()
+	}
+	return r
+}
+func (s *StorageConnectionService) Runtime() StorageRuntime {
+	r := storageRuntimeState(s.cfg)
+	if s.retirements != nil {
+		r.Retirement = s.retirements.capabilities()
+	}
+	return r
+}
 
 type storageOperation uint8
 
@@ -78,6 +91,8 @@ func storageOperationReasons(runtime StorageRuntime, op storageOperation, conn *
 func storageReasonPriority(code string) int {
 	switch code {
 	case "storage_maintenance":
+		return 0
+	case "storage_removed", "storage_retiring", "storage_retirement_conflict":
 		return 0
 	case "storage_deployment_disabled", "byos_disabled":
 		return 1
@@ -132,6 +147,18 @@ func storageAdmissionError(reasons []string) error {
 		return ErrStoragePolicy
 	case "storage_capability_unsupported":
 		return storage.ErrUnsupported
+	case "storage_retiring":
+		return ErrStorageRetiring
+	case "storage_removed":
+		return ErrStorageRemoved
+	case "storage_retirement_conflict":
+		return ErrStorageRetirementConflict
+	case "storage_retirement_preview_stale":
+		return ErrStorageRetirementPreviewStale
+	case "storage_retirement_dependencies_remaining":
+		return ErrStorageRetirementDependenciesRemaining
+	case "storage_retirement_configuration_pending":
+		return ErrStorageRetirementConfigurationPending
 	case "storage_space_required", "storage_check_space_limit_exceeded":
 		return ErrInvalidInput
 	case "storage_auth_required", "space_unverified":

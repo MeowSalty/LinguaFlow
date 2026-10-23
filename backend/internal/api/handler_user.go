@@ -11,12 +11,12 @@ import (
 )
 
 type userResponse struct {
-	ID          int    `json:"id"`
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name,omitempty"`
-	Role        string `json:"role"`
-	Active      bool   `json:"active"`
+	ID          int     `json:"id"`
+	Username    string  `json:"username"`
+	Email       *string `json:"email"`
+	DisplayName string  `json:"display_name,omitempty"`
+	Role        string  `json:"role"`
+	Active      bool    `json:"active"`
 }
 
 type organizationResponse struct {
@@ -302,11 +302,18 @@ func toUserResponse(account *ent.User) userResponse {
 	return userResponse{
 		ID:          account.ID,
 		Username:    account.Username,
-		Email:       account.Email,
+		Email:       nullableAccountEmail(account.Email),
 		DisplayName: account.DisplayName,
 		Role:        account.Role,
 		Active:      account.Active,
 	}
+}
+
+func nullableAccountEmail(email string) *string {
+	if email == "" {
+		return nil
+	}
+	return &email
 }
 
 func toOrganizationResponse(org *service.OrganizationView) organizationResponse {

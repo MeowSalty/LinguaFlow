@@ -34,6 +34,19 @@ Problem:
         Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses
         storage_disk_probe_failed (503). Neither signals automatic retry.
         Provider authorization, quota and availability retain their separate domain codes.
+        Retirement adds storage_retiring (409, new use rejected by the retirement barrier),
+        storage_removed (410, the identity is permanently retired),
+        storage_retirement_conflict (409, overlapping retirement or generation conflict),
+        storage_retirement_preview_stale (409, obtain and confirm a new preview),
+        storage_retirement_dependencies_remaining (409, authoritative dependencies remain),
+        and storage_retirement_configuration_pending (409, deployment configuration action required).
+        A retirement operation whose required capability stage is not enabled, or is blocked by
+        local mode, a disabled deployment or global maintenance, returns storage_capability_unsupported
+        (409) after authentication with no side effects. Existing domain errors keep their meanings.
+    retirement_id:
+      type: integer
+      minimum: 1
+      description: Related retirement visible to the caller, including an existing conflicting task; omitted when disclosure is not authorized.
     task_id:
       type: integer
     operation_id:
@@ -48,3 +61,31 @@ Problem:
       type: integer
     detail:
       type: string
+SignupEmailRequirement:
+  type: string
+  enum: [optional, required]
+SignupPasswordRequirement:
+  type: string
+  enum: [none, optional, required]
+SignupPolicyRequirements:
+  type: object
+  additionalProperties: false
+  required: [email_requirement, password_requirement]
+  properties:
+    email_requirement:
+      $ref: '#/SignupEmailRequirement'
+    password_requirement:
+      $ref: '#/SignupPasswordRequirement'
+AuthSignupRequirements:
+  type: object
+  additionalProperties: false
+  required: [signup, signup_requirements]
+  properties:
+    signup:
+      $ref: '#/SignupPolicyRequirements'
+    signup_requirements:
+      type: array
+      maxItems: 2
+      items:
+        type: string
+        enum: [email, local_password]

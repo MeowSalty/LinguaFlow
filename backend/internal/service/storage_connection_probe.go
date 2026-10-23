@@ -21,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storageauth"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageguard"
 )
 
 const storageMarkerKey = ".linguaflow/space.json"
@@ -152,6 +153,9 @@ func (s *StorageConnectionService) adoptMarker(ctx context.Context, c *ent.Stora
 func (s *StorageConnectionService) registerProbe(ctx context.Context, actor int, c *ent.StorageConnection, sp *ent.StorageSpace, a *ent.StorageAuthVersion, key string, data []byte, marker bool) (*ent.StorageWrite, error) {
 	var w *ent.StorageWrite
 	err := withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		if err := storageguard.Gate(ctx, tx, sp.ID, storageguard.NewUse); err != nil {
+			return err
+		}
 		current, err := tx.StorageConnection.Get(ctx, c.ID)
 		if err != nil {
 			return err
@@ -330,6 +334,9 @@ func (s *StorageConnectionService) recordProbeFailure(ctx context.Context, w *en
 
 func (s *StorageConnectionService) finishMarker(ctx context.Context, w *ent.StorageWrite) error {
 	return withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
+		if err := storageguard.Gate(ctx, tx, w.SpaceID, storageguard.NewUse); err != nil {
+			return err
+		}
 		sp, err := tx.StorageSpace.Get(ctx, w.SpaceID)
 		if err != nil {
 			return err
@@ -389,6 +396,15 @@ func (s *StorageConnectionService) cleanupProbe(ctx context.Context, w *ent.Stor
 	for _, o := range objects {
 		if o.Key != w.ObjectKey {
 			return storage.ErrInvalidKey
+		}
+		if w.ObjectKey == storageMarkerKey && !o.DeleteMarker {
+			sp, err := s.client.StorageSpace.Get(ctx, w.SpaceID)
+			if err != nil {
+				return err
+			}
+			if err = readStorageProbe(ctx, d, o, storageMarkerBytes(sp)); err != nil && !errors.Is(err, storage.ErrNotFound) {
+				return err
+			}
 		}
 		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpDelete, nil)); err != nil {
 			return err
@@ -454,15 +470,22 @@ func (s *StorageConnectionService) recoveryDriver(ctx context.Context, w *ent.St
 	if _, err := check(ctx, false); err != nil {
 		return nil, err
 	}
-	return &storageGuardedDriver{check: check, deleteCheck: func(ctx context.Context) (storage.Driver, error) {
+	return bindStorageGuard(ctx, s.client, s.ioGuard, w.SpaceID, &storageGuardedDriver{check: check, deleteCheck: func(ctx context.Context) (storage.Driver, error) {
 		if err := storageAdmissionError(storageOperationReasons(s.Runtime(), storageOpDelete, nil)); err != nil {
 			return nil, err
 		}
 		return check(ctx, false)
-	}}, nil
+	}})
 }
 
 func (s *StorageConnectionService) recoveryAttempt(ctx context.Context, w *ent.StorageWrite, write bool) (storage.Driver, error) {
+	mode := storageguard.Read
+	if write {
+		mode = storageguard.NewUse
+	}
+	if _, _, err := storageguard.Check(ctx, s.client, w.SpaceID, mode, 0); err != nil {
+		return nil, err
+	}
 	sp, err := s.client.StorageSpace.Get(ctx, w.SpaceID)
 	if err != nil {
 		return nil, err
@@ -480,10 +503,11 @@ func (s *StorageConnectionService) recoveryAttempt(ctx context.Context, w *ent.S
 	}
 	// 只要管理授权仍然有效，失败的候选就可以清理自身有界的尝试。
 	// 吊销与过期则永远是终态。
-	if c.Status != storageconnection.StatusEnabled || sp.Status == storagespace.StatusDisabled || c.ManagementGeneration != w.ConnectionGeneration || sp.ManagementGeneration != w.SpaceGeneration || w.ExpiresAt == nil || !w.ExpiresAt.After(time.Now()) {
+	retiring := !write && (c.Lifecycle == storageconnection.LifecycleRetiring || sp.Lifecycle == storagespace.LifecycleRetiring)
+	if c.Status != storageconnection.StatusEnabled || sp.Status == storagespace.StatusDisabled || (!retiring && (c.ManagementGeneration != w.ConnectionGeneration || sp.ManagementGeneration != w.SpaceGeneration)) || w.ExpiresAt == nil || !w.ExpiresAt.After(time.Now()) {
 		return nil, storage.ErrPermission
 	}
-	a, err := s.client.StorageAuthVersion.Query().Where(storageauthversion.ConnectionIDEQ(c.ID), storageauthversion.GenerationEQ(w.AuthGeneration), storageauthversion.StatusNEQ(storageauthversion.StatusRevoked)).Only(ctx)
+	a, err := s.client.StorageAuthVersion.Query().Where(storageauthversion.ConnectionIDEQ(c.ID), storageauthversion.GenerationEQ(w.AuthGeneration), storageauthversion.StatusNEQ(storageauthversion.StatusRevoked), storageauthversion.PurposeEQ(storageauthversion.PurposeBusiness), storageauthversion.RetirementIDIsNil(), storageauthversion.PurgedAtIsNil()).Only(ctx)
 	if err != nil {
 		return nil, storage.ErrAuthRequired
 	}
@@ -549,7 +573,11 @@ func (s *StorageConnectionService) Reconcile(ctx context.Context) error {
 					e = readStorageProbe(opctx, d, o, storageMarkerBytes(sp))
 					if e == nil {
 						w.ProviderVersion = o.Version
-						e = s.finishMarker(opctx, w)
+						if sp.Lifecycle == storagespace.LifecycleRetiring {
+							e = s.cleanupProbe(opctx, w, d)
+						} else {
+							e = s.finishMarker(opctx, w)
+						}
 					}
 					if e != nil {
 						s.recordProbeFailure(opctx, w, e)

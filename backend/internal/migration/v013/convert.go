@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
@@ -21,9 +22,26 @@ const (
 	targetInitializationVersion = 1
 	targetCredentialVersion     = 1
 	targetSQLiteVersion         = 1
+	targetAuthFormatVersion     = 0 // The historical converter predates account format 1.
 )
 
+var ErrTargetIncompatible = errors.New("v0.13.0 migration is unavailable for this account format; this release supports new instances only; preserve existing data and use the original migration executable for historical migration or interrupted recovery")
+
+// CheckTargetCompatibility must run before opening a database, reading secrets,
+// preparing files or recovering an interrupted directory switch. Keeping the
+// historical target frozen does not make it compatible with the current ORM.
+func CheckTargetCompatibility() error {
+	if database.AuthFormatVersion != targetAuthFormatVersion {
+		return ErrTargetIncompatible
+	}
+	return checkLegacyTargetCompatibility()
+}
+
 func checkTargetCompatibility() error {
+	return CheckTargetCompatibility()
+}
+
+func checkLegacyTargetCompatibility() error {
 	if execution.SchemaVersion != targetSchemaVersion || execution.DefaultsVersion != targetDefaultsVersion || service.InitializationVersion != targetInitializationVersion {
 		return errors.New("migration target format changed; explicitly update the v0.13.0 converter and compatibility fixtures before using it")
 	}

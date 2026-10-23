@@ -104,6 +104,11 @@ func ManagementGeneration(v int64) predicate.StorageConnection {
 	return predicate.StorageConnection(sql.FieldEQ(FieldManagementGeneration, v))
 }
 
+// RetirementID applies equality check predicate on the "retirement_id" field. It's identical to RetirementIDEQ.
+func RetirementID(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldRetirementID, v))
+}
+
 // Health applies equality check predicate on the "health" field. It's identical to HealthEQ.
 func Health(v string) predicate.StorageConnection {
 	return predicate.StorageConnection(sql.FieldEQ(FieldHealth, v))
@@ -112,6 +117,21 @@ func Health(v string) predicate.StorageConnection {
 // CheckedAt applies equality check predicate on the "checked_at" field. It's identical to CheckedAtEQ.
 func CheckedAt(v time.Time) predicate.StorageConnection {
 	return predicate.StorageConnection(sql.FieldEQ(FieldCheckedAt, v))
+}
+
+// RemovedAt applies equality check predicate on the "removed_at" field. It's identical to RemovedAtEQ.
+func RemovedAt(v time.Time) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldRemovedAt, v))
+}
+
+// RemovedBy applies equality check predicate on the "removed_by" field. It's identical to RemovedByEQ.
+func RemovedBy(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldRemovedBy, v))
+}
+
+// ExecutionGeneration applies equality check predicate on the "execution_generation" field. It's identical to ExecutionGenerationEQ.
+func ExecutionGeneration(v int64) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldExecutionGeneration, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -674,6 +694,76 @@ func StatusNotIn(vs ...Status) predicate.StorageConnection {
 	return predicate.StorageConnection(sql.FieldNotIn(FieldStatus, vs...))
 }
 
+// LifecycleEQ applies the EQ predicate on the "lifecycle" field.
+func LifecycleEQ(v Lifecycle) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldLifecycle, v))
+}
+
+// LifecycleNEQ applies the NEQ predicate on the "lifecycle" field.
+func LifecycleNEQ(v Lifecycle) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNEQ(FieldLifecycle, v))
+}
+
+// LifecycleIn applies the In predicate on the "lifecycle" field.
+func LifecycleIn(vs ...Lifecycle) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldIn(FieldLifecycle, vs...))
+}
+
+// LifecycleNotIn applies the NotIn predicate on the "lifecycle" field.
+func LifecycleNotIn(vs ...Lifecycle) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNotIn(FieldLifecycle, vs...))
+}
+
+// RetirementIDEQ applies the EQ predicate on the "retirement_id" field.
+func RetirementIDEQ(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldRetirementID, v))
+}
+
+// RetirementIDNEQ applies the NEQ predicate on the "retirement_id" field.
+func RetirementIDNEQ(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNEQ(FieldRetirementID, v))
+}
+
+// RetirementIDIn applies the In predicate on the "retirement_id" field.
+func RetirementIDIn(vs ...int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldIn(FieldRetirementID, vs...))
+}
+
+// RetirementIDNotIn applies the NotIn predicate on the "retirement_id" field.
+func RetirementIDNotIn(vs ...int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNotIn(FieldRetirementID, vs...))
+}
+
+// RetirementIDGT applies the GT predicate on the "retirement_id" field.
+func RetirementIDGT(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldGT(FieldRetirementID, v))
+}
+
+// RetirementIDGTE applies the GTE predicate on the "retirement_id" field.
+func RetirementIDGTE(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldGTE(FieldRetirementID, v))
+}
+
+// RetirementIDLT applies the LT predicate on the "retirement_id" field.
+func RetirementIDLT(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldLT(FieldRetirementID, v))
+}
+
+// RetirementIDLTE applies the LTE predicate on the "retirement_id" field.
+func RetirementIDLTE(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldLTE(FieldRetirementID, v))
+}
+
+// RetirementIDIsNil applies the IsNil predicate on the "retirement_id" field.
+func RetirementIDIsNil() predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldIsNull(FieldRetirementID))
+}
+
+// RetirementIDNotNil applies the NotNil predicate on the "retirement_id" field.
+func RetirementIDNotNil() predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNotNull(FieldRetirementID))
+}
+
 // HealthEQ applies the EQ predicate on the "health" field.
 func HealthEQ(v string) predicate.StorageConnection {
 	return predicate.StorageConnection(sql.FieldEQ(FieldHealth, v))
@@ -787,6 +877,166 @@ func CheckedAtIsNil() predicate.StorageConnection {
 // CheckedAtNotNil applies the NotNil predicate on the "checked_at" field.
 func CheckedAtNotNil() predicate.StorageConnection {
 	return predicate.StorageConnection(sql.FieldNotNull(FieldCheckedAt))
+}
+
+// RemovedAtEQ applies the EQ predicate on the "removed_at" field.
+func RemovedAtEQ(v time.Time) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldRemovedAt, v))
+}
+
+// RemovedAtNEQ applies the NEQ predicate on the "removed_at" field.
+func RemovedAtNEQ(v time.Time) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNEQ(FieldRemovedAt, v))
+}
+
+// RemovedAtIn applies the In predicate on the "removed_at" field.
+func RemovedAtIn(vs ...time.Time) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldIn(FieldRemovedAt, vs...))
+}
+
+// RemovedAtNotIn applies the NotIn predicate on the "removed_at" field.
+func RemovedAtNotIn(vs ...time.Time) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNotIn(FieldRemovedAt, vs...))
+}
+
+// RemovedAtGT applies the GT predicate on the "removed_at" field.
+func RemovedAtGT(v time.Time) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldGT(FieldRemovedAt, v))
+}
+
+// RemovedAtGTE applies the GTE predicate on the "removed_at" field.
+func RemovedAtGTE(v time.Time) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldGTE(FieldRemovedAt, v))
+}
+
+// RemovedAtLT applies the LT predicate on the "removed_at" field.
+func RemovedAtLT(v time.Time) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldLT(FieldRemovedAt, v))
+}
+
+// RemovedAtLTE applies the LTE predicate on the "removed_at" field.
+func RemovedAtLTE(v time.Time) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldLTE(FieldRemovedAt, v))
+}
+
+// RemovedAtIsNil applies the IsNil predicate on the "removed_at" field.
+func RemovedAtIsNil() predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldIsNull(FieldRemovedAt))
+}
+
+// RemovedAtNotNil applies the NotNil predicate on the "removed_at" field.
+func RemovedAtNotNil() predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNotNull(FieldRemovedAt))
+}
+
+// RemovedByEQ applies the EQ predicate on the "removed_by" field.
+func RemovedByEQ(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldRemovedBy, v))
+}
+
+// RemovedByNEQ applies the NEQ predicate on the "removed_by" field.
+func RemovedByNEQ(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNEQ(FieldRemovedBy, v))
+}
+
+// RemovedByIn applies the In predicate on the "removed_by" field.
+func RemovedByIn(vs ...int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldIn(FieldRemovedBy, vs...))
+}
+
+// RemovedByNotIn applies the NotIn predicate on the "removed_by" field.
+func RemovedByNotIn(vs ...int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNotIn(FieldRemovedBy, vs...))
+}
+
+// RemovedByGT applies the GT predicate on the "removed_by" field.
+func RemovedByGT(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldGT(FieldRemovedBy, v))
+}
+
+// RemovedByGTE applies the GTE predicate on the "removed_by" field.
+func RemovedByGTE(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldGTE(FieldRemovedBy, v))
+}
+
+// RemovedByLT applies the LT predicate on the "removed_by" field.
+func RemovedByLT(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldLT(FieldRemovedBy, v))
+}
+
+// RemovedByLTE applies the LTE predicate on the "removed_by" field.
+func RemovedByLTE(v int) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldLTE(FieldRemovedBy, v))
+}
+
+// RemovedByIsNil applies the IsNil predicate on the "removed_by" field.
+func RemovedByIsNil() predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldIsNull(FieldRemovedBy))
+}
+
+// RemovedByNotNil applies the NotNil predicate on the "removed_by" field.
+func RemovedByNotNil() predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNotNull(FieldRemovedBy))
+}
+
+// ExecutionGenerationEQ applies the EQ predicate on the "execution_generation" field.
+func ExecutionGenerationEQ(v int64) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldExecutionGeneration, v))
+}
+
+// ExecutionGenerationNEQ applies the NEQ predicate on the "execution_generation" field.
+func ExecutionGenerationNEQ(v int64) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNEQ(FieldExecutionGeneration, v))
+}
+
+// ExecutionGenerationIn applies the In predicate on the "execution_generation" field.
+func ExecutionGenerationIn(vs ...int64) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldIn(FieldExecutionGeneration, vs...))
+}
+
+// ExecutionGenerationNotIn applies the NotIn predicate on the "execution_generation" field.
+func ExecutionGenerationNotIn(vs ...int64) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNotIn(FieldExecutionGeneration, vs...))
+}
+
+// ExecutionGenerationGT applies the GT predicate on the "execution_generation" field.
+func ExecutionGenerationGT(v int64) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldGT(FieldExecutionGeneration, v))
+}
+
+// ExecutionGenerationGTE applies the GTE predicate on the "execution_generation" field.
+func ExecutionGenerationGTE(v int64) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldGTE(FieldExecutionGeneration, v))
+}
+
+// ExecutionGenerationLT applies the LT predicate on the "execution_generation" field.
+func ExecutionGenerationLT(v int64) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldLT(FieldExecutionGeneration, v))
+}
+
+// ExecutionGenerationLTE applies the LTE predicate on the "execution_generation" field.
+func ExecutionGenerationLTE(v int64) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldLTE(FieldExecutionGeneration, v))
+}
+
+// RemoteUseStateEQ applies the EQ predicate on the "remote_use_state" field.
+func RemoteUseStateEQ(v RemoteUseState) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldEQ(FieldRemoteUseState, v))
+}
+
+// RemoteUseStateNEQ applies the NEQ predicate on the "remote_use_state" field.
+func RemoteUseStateNEQ(v RemoteUseState) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNEQ(FieldRemoteUseState, v))
+}
+
+// RemoteUseStateIn applies the In predicate on the "remote_use_state" field.
+func RemoteUseStateIn(vs ...RemoteUseState) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldIn(FieldRemoteUseState, vs...))
+}
+
+// RemoteUseStateNotIn applies the NotIn predicate on the "remote_use_state" field.
+func RemoteUseStateNotIn(vs ...RemoteUseState) predicate.StorageConnection {
+	return predicate.StorageConnection(sql.FieldNotIn(FieldRemoteUseState, vs...))
 }
 
 // And groups predicates with the AND operator between them.

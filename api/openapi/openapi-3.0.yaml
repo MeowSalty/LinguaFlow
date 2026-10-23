@@ -15,6 +15,1252 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /auth/reauthenticate:
+    post:
+      operationId: ReauthenticateCurrentUser
+      summary: 验证当前登录方式并获得操作证明
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReauthenticationRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ReauthenticationProofResponse'
+                  - $ref: '#/components/schemas/ExternalStartResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/external/{connectionId}/start:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: StartExternalAuthentication
+      summary: 开始已发布外部渠道登录
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExternalBrowserInput'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalStartResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/external/{connectionId}/callback:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: ExternalAuthenticationCallback
+      summary: 接收固定外部认证回调
+      description: Claims the transaction before contacting the provider. Invalid state never redirects. Valid success/failure redirects only to the stored trusted completion URL with a one-use ticket.
+      security: []
+      responses:
+        '303':
+          description: Trusted completion URL; no access or refresh token in the URL
+          headers:
+            Location:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/external/exchange:
+    post:
+      operationId: ExchangeExternalAuthentication
+      summary: 交换浏览器绑定的一次性票据
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. An associated user flow additionally requires the same valid Bearer identity; anonymous signup/login uses the browser verifier.'
+      security:
+        - {}
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExternalExchangeRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalExchangeResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/external/complete:
+    post:
+      operationId: CompleteExternalAuthentication
+      summary: 原子确认注册或绑定
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. An associated user flow additionally requires the same valid Bearer identity; anonymous signup/login uses the browser verifier.'
+      security:
+        - {}
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExternalCompleteRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalCompleteResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/external/cancel:
+    post:
+      operationId: CancelExternalAuthentication
+      summary: 取消尚未完成的流程
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. An associated user flow additionally requires the same valid Bearer identity; anonymous signup/login uses the browser verifier.'
+      security:
+        - {}
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExternalCancelRequest'
+      responses:
+        '204':
+          description: Completed
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/connections/{connectionId}/logo:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: GetPublicAuthConnectionLogo
+      summary: 读取已发布连接的站内Logo
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security: []
+      responses:
+        '200':
+          description: Validated PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /users/me/login-methods:
+    get:
+      operationId: GetCurrentUserLoginMethods
+      summary: 读取当前账号可用登录与维护方式
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginMethodsResponse'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /users/me/login-bindings/{connectionId}/start:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: StartCurrentUserLoginBinding
+      summary: 消费重新认证证明并开始绑定
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExternalLinkStartRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalStartResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /users/me/login-bindings/{bindingId}:
+    parameters:
+      - name: bindingId
+        in: path
+        required: true
+        schema:
+          type: integer
+    delete:
+      operationId: DeleteCurrentUserLoginBinding
+      summary: 安全解绑并撤销旧会话
+      description: '仅 server 模式。必须使用另一登录方式的近期认证证明；目标绑定不能证明自身的删除操作。不满足证明要求返回 403，无可靠后备方式返回 409。成功撤销旧会话及相关认证事务，最后一个绑定移除后释放外部身份归属；审计保留。响应使用 Cache-Control: no-store。'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SensitiveOperationRequest'
+      responses:
+        '204':
+          description: Completed
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections:
+    get:
+      operationId: ListAuthConnections
+      summary: 管理员列出认证连接
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionsResponse'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateAuthConnection
+      summary: 创建进入 configuring 状态的新连接
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAuthConnectionRequest'
+      responses:
+        '201':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionRecord'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: GetAuthConnection
+      summary: 管理员读取连接当前配置
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionRecord'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: UpdateAuthConnection
+      summary: 原子保存连接配置变更
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAuthConnectionRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionRecord'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/attributes:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: GetAuthConnectionAttributes
+      summary: 获取指定版本的受信属性目录和可用运算符
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: expected_revision
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: purpose
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - login
+              - signup
+              - link
+      responses:
+        '200':
+          description: Attribute catalogue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAttributeCatalog'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: PreviewAuthConnectionAttributes
+      summary: 获取候选版本的受信属性目录和可用运算符（不访问第三方）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - expected_revision
+                - purpose
+              properties:
+                expected_revision:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                purpose:
+                  type: string
+                  enum:
+                    - login
+                    - signup
+                    - link
+                changes:
+                  $ref: '#/components/schemas/AuthConnectionChanges'
+      responses:
+        '200':
+          description: Attribute catalogue for the candidate configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAttributeCatalog'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/preview:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: PreviewAuthConnectionRules
+      summary: 使用模拟数据预览候选规则，不创建认证证据
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRulesPreviewRequest'
+      responses:
+        '200':
+          description: Simulated diagnostics only
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthRulesPreview'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/check:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: CheckAuthConnection
+      summary: 本地检查连接候选配置（不访问第三方）
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthConnectionCandidateRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionCheck'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/test:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: TestAuthConnection
+      summary: 以管理员身份对候选配置发起真实认证测试
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthConnectionTestRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalStartResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/impact:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: GetAuthConnectionImpact
+      summary: 评估保存候选配置对现有用户的影响
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. Disabled and archived connections block this operation.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthConnectionCandidateRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionImpactResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/configure:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: ConfigureAuthConnection
+      summary: 退出服务并回到 configuring 状态
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503. Disabling formal use revokes dependent sessions in the same transaction.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthConnectionActionRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionRecord'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/enable:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: EnableAuthConnection
+      summary: 启用连接并开放正式用途
+      description: 'Server mode only. Requires complete configuration, fresh matching validation bound to the current admin session and browser proof, purpose switches, and fallback protection. Authentication secrets and flow results use Cache-Control: no-store.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthConnectionActionRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionRecord'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: Revision conflict, incomplete configuration, missing/expired/mismatched test evidence, state conflict, or users without a verified fallback.
+          content:
+            application/problem+json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/AuthConnectionErrorProblem'
+                  - $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/disable:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: DisableAuthConnection
+      summary: 停用连接并撤销正式用途
+      description: Server mode only. Stops all formal use, blocks new external requests, and revokes dependent sessions in one transaction. Disabled requires an explicit configure step before testing again.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthConnectionActionRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionRecord'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/archive:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: ArchiveAuthConnection
+      summary: 管理员 archive 连接
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthConnectionActionRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionRecord'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/restore:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: RestoreAuthConnection
+      summary: 管理员 restore 连接
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthConnectionActionRequest'
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionRecord'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/auth-connections/{connectionId}/logo:
+    parameters:
+      - name: connectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: GetAuthConnectionLogo
+      summary: 管理员读取当前配置Logo
+      description: 'Server mode only. Sensitive artefacts use Cache-Control: no-store.'
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Validated PNG
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: UploadAuthConnectionLogo
+      summary: 上传256KiB以内PNG/WebP并解码重编码
+      description: 'Server mode only. Sensitive artefacts use Cache-Control: no-store.'
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: expected_revision
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionRecord'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/webp:
+            schema:
+              type: string
+              format: binary
+  /admin/local-account:
+    get:
+      operationId: GetLocalAccount
+      summary: 读取本地账号固定政策
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Local account policy, capabilities and diagnostic issues
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - policy
+                  - revision
+                  - capabilities
+                  - issues
+                properties:
+                  policy:
+                    $ref: '#/components/schemas/LocalAccountPolicyInput'
+                  revision:
+                    type: integer
+                    format: int64
+                    minimum: 1
+                  capabilities:
+                    $ref: '#/components/schemas/LocalAccountCapabilities'
+                  issues:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuthConfigurationIssue'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: UpdateLocalAccount
+      summary: 保存完整本地账号政策
+      description: Uses expected_revision and requires all policy fields; identical effective input does not allocate a new revision.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - expected_revision
+                - policy
+              properties:
+                expected_revision:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                policy:
+                  $ref: '#/components/schemas/LocalAccountPolicyInput'
+      responses:
+        '200':
+          description: Saved local account policy
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - policy
+                  - revision
+                  - capabilities
+                  - issues
+                properties:
+                  policy:
+                    $ref: '#/components/schemas/LocalAccountPolicyInput'
+                  revision:
+                    type: integer
+                    format: int64
+                    minimum: 1
+                  capabilities:
+                    $ref: '#/components/schemas/LocalAccountCapabilities'
+                  issues:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuthConfigurationIssue'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/local-account/attributes:
+    get:
+      operationId: GetLocalAccountAttributes
+      summary: 读取本地注册属性目录
+      description: Signup-purpose registration fields only; fixed purpose is returned in the payload.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: expected_revision
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: Local signup attribute catalogue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthAttributeCatalog'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/local-account/preview:
+    post:
+      operationId: PreviewLocalAccount
+      summary: 模拟本地注册规则结果
+      description: Read-only preview; registration input is not authentication evidence.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalAccountPreviewRequest'
+      responses:
+        '200':
+          description: Simulated local signup result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - revision
+                  - simulated
+                  - attributes
+                  - signup
+                properties:
+                  revision:
+                    type: integer
+                    format: int64
+                    minimum: 1
+                  simulated:
+                    type: boolean
+                    enum:
+                      - true
+                  attributes:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/AuthAttributeValue'
+                  signup:
+                    $ref: '#/components/schemas/AuthRuleResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/local-account/impact:
+    post:
+      operationId: GetLocalAccountImpact
+      summary: 评估本地政策对现有用户的登录与维护影响
+      description: Read-only impact evaluation; saving still performs final dependency checks.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - expected_revision
+              properties:
+                expected_revision:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                policy:
+                  $ref: '#/components/schemas/LocalAccountPolicyInput'
+      responses:
+        '200':
+          description: Local account impact
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConnectionImpactResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /admin/task-retention/preview:
     post:
       operationId: PreviewTaskRetention
@@ -151,6 +1397,461 @@ paths:
           $ref: '#/components/responses/Problem'
         '404':
           $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/retirement-previews:
+    post:
+      operationId: CreateStorageRetirementPreview
+      summary: Preview the normalized storage retirement scope
+      description: Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. The issued preview_revision expires five minutes after issue and is bound to the actor; a service restart invalidates issued revisions, so the caller must re-preview instead of confirming a stale revision. Read-only metadata snapshot; never a remote capability guarantee. Site space entry expands visibly to the whole backend before confirmation. Management authority does not grant project migration permission. Dependencies and project checks are redacted using current permissions. Dependency paging is in the body so this operation has no generated params argument. No state or remote writes occur.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageRetirementPreviewRequest'
+      responses:
+        '200':
+          description: Read-only metadata snapshot; never a remote capability guarantee.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageRetirementPreview'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: 'Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                title: Storage retiring
+                status: 409
+                error_code: storage_retiring
+                retirement_id: 42
+        '410':
+          description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/retirements:
+    post:
+      operationId: CreateStorageRetirement
+      summary: Confirm a storage retirement
+      description: Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Acceptance atomically rechecks preview_revision, the complete normalized scope and its management/execution generations, policy/defaults and per-project plans before establishing barriers. Connection and child-space retirements cannot overlap; failed parents retain exclusivity. Idempotency is scoped to ownership, immutable normalized target identity and operation kind. Same key with different input conflicts; an accepted idempotent result is replayed first, authenticated and returned as the original retirement_id, including after removal. Acceptance and replay both return 202 with the same Location header. Immediate completion returns the same queryable resource.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageRetirementCreateRequest'
+      responses:
+        '202':
+          description: Accepted retirement task; immediate completion returns the same queryable resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageRetirement'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: 'Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                title: Storage retiring
+                status: 409
+                error_code: storage_retiring
+                retirement_id: 42
+        '410':
+          description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListStorageRetirements
+      summary: List retirements by management ownership
+      description: Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. User scope requires the current user as owner_id; org scope requires organization owner/admin membership and its ID; platform admin status does not bypass organization membership. Site scope requires a platform administrator and owner_id=0. Includes recoverable failed tasks and authorized removed-target history. Order by descending retirement_id; cursor is the last ID of the previous page. No provider I/O. Responses are private and must not be cached.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - user
+              - org
+              - site
+        - name: owner_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Read-only metadata snapshot; never a remote capability guarantee.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageRetirementList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: 'Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                title: Storage retiring
+                status: 409
+                error_code: storage_retiring
+                retirement_id: 42
+        '410':
+          description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/retirements/{retirementId}:
+    parameters:
+      - name: retirementId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: GetStorageRetirement
+      summary: Read retirement progress and paginated dependencies
+      description: Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Reads use the target's management ownership, with independent visibility checks for each project and child task. Cursor pages the sanitized dependency projection; missing or hidden details never prove safe removal. The response reports parent generation, state/phase, durable waiting, cleanup/configuration results and current allowed_actions. Removed identities remain queryable as history. Responses are private and must not be cached.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Read-only metadata snapshot; never a remote capability guarantee.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageRetirementDetail'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: 'Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                title: Storage retiring
+                status: 409
+                error_code: storage_retiring
+                retirement_id: 42
+        '410':
+          description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/retirements/{retirementId}/plan:
+    parameters:
+      - name: retirementId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    patch:
+      operationId: UpdateStorageRetirementPlan
+      summary: Update unaccepted project migration destinations
+      description: Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Update requires the parent expected_generation and a fresh preview_revision confirming the same complete source scope; a revision older than five minutes, or one invalidated by a service restart, returns storage_retirement_preview_stale. Recheck each project's migration authority and destination. Change only unaccepted child inputs; already accepted migrations resume through their original tasks. Never expand scope or bypass failed-task ownership.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageRetirementPlanRequest'
+      responses:
+        '200':
+          description: Read-only metadata snapshot; never a remote capability guarantee.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageRetirement'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: 'Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                title: Storage retiring
+                status: 409
+                error_code: storage_retiring
+                retirement_id: 42
+        '410':
+          description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/retirements/{retirementId}/resume:
+    parameters:
+      - name: retirementId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: ResumeStorageRetirement
+      summary: Resume the same storage retirement
+      description: Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Resume checks expected_generation, current ownership permissions and allowed_actions. Continue the original parent and child identities; never create a replacement task, reset lifecycle or bypass disable, revocation or maintenance. A repeated resume with the same expected_generation replays the accepted result instead of creating a second task.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageRetirementActionRequest'
+      responses:
+        '202':
+          description: Accepted retirement task; immediate completion returns the same queryable resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageRetirement'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: 'Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                title: Storage retiring
+                status: 409
+                error_code: storage_retiring
+                retirement_id: 42
+        '410':
+          description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/retirements/{retirementId}/cancel:
+    parameters:
+      - name: retirementId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: CancelStorageRetirement
+      summary: Request safe cancellation before finalizing
+      description: Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Cancellation checks expected_generation, current permissions and allowed_actions. Stop accepting children and wait for accepted cutovers to reach safe results. Already migrated projects remain at their destinations and registered cleanup remains tracked. Release only this retirement barrier once safe, preserving later disable or revocation. Reject cancellation from finalizing onward, including partial marker cleanup. An accepted request is not a claim that cancellation has already completed.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageRetirementActionRequest'
+      responses:
+        '202':
+          description: Accepted retirement task; immediate completion returns the same queryable resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageRetirement'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: 'Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                title: Storage retiring
+                status: 409
+                error_code: storage_retiring
+                retirement_id: 42
+        '410':
+          description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /storage/retirements/{retirementId}/recover-authorization:
+    parameters:
+      - name: retirementId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      operationId: RecoverStorageRetirementAuthorization
+      summary: Recover restricted authorization for finalization
+      description: Contract version 1. Availability is discovered through the independent unused_removal and in_use_retirement capabilities. Local mode and a service without a retirement coordinator report storage_capability_unsupported. Authorized metadata previews and history remain readable during maintenance; previews report current availability without provider I/O. New mutations enforce maintenance and current permissions, while accepted idempotent results remain replayable after authorization. Recovery requires connection management permission, expected_generation, expected_management_generation and Idempotency-Key, scoped to ownership, normalized immutable target and this recovery operation. Same key with different input conflicts; an accepted idempotent result is replayed first, authenticated and preserves the same retirement. Only stored connections blocked in finalizing accept writeOnly candidate credentials through authorization versions restricted to exact verification/cleanup for this task. No ordinary business authorization is activated, no removed marker is recreated and no secret is returned. Deployment sources reject credential uploads and report storage_retirement_configuration_pending with sanitized deployment recovery guidance.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageRetirementRecoverAuthorizationRequest'
+      responses:
+        '202':
+          description: Accepted retirement task; immediate completion returns the same queryable resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageRetirement'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: 'Conflicts keep specific domain reasons: the retiring barrier, overlap or generation conflict, stale preview, remaining dependencies and pending deployment configuration. An unopened capability stage returns storage_capability_unsupported without side effects.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                title: Storage retiring
+                status: 409
+                error_code: storage_retiring
+                retirement_id: 42
+        '410':
+          description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         default:
           $ref: '#/components/responses/Problem'
   /storage/options:
@@ -433,6 +2134,9 @@ paths:
     get:
       operationId: ListSiteStorageConnections
       summary: List configured site storage connections
+      description: 列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
+      parameters:
+        - $ref: '#/components/parameters/storageLifecycleFilter'
       security:
         - bearerAuth: []
       responses:
@@ -454,7 +2158,9 @@ paths:
     get:
       operationId: ListStorageConnections
       summary: ListStorageConnections
-      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
+      parameters:
+        - $ref: '#/components/parameters/storageLifecycleFilter'
       security:
         - bearerAuth: []
       responses:
@@ -510,7 +2216,9 @@ paths:
     get:
       operationId: ListOrgStorageConnections
       summary: ListOrgStorageConnections
-      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
+      parameters:
+        - $ref: '#/components/parameters/storageLifecycleFilter'
       security:
         - bearerAuth: []
       responses:
@@ -601,7 +2309,9 @@ paths:
     get:
       operationId: ListStorageConnectionSpaces
       summary: ListStorageConnectionSpaces
-      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。
+      description: 文件存储领域操作；使用预期代次和持久任务，凭据仅写，错误返回稳定脱敏代码。列表支持按 lifecycle 筛选，省略时只返回 available 与 retiring，removed 需显式筛选或 all。
+      parameters:
+        - $ref: '#/components/parameters/storageLifecycleFilter'
       security:
         - bearerAuth: []
       responses:
@@ -1628,6 +3338,23 @@ paths:
                 $ref: '#/components/schemas/ModeResponse'
         default:
           $ref: '#/components/responses/Problem'
+  /auth/capabilities:
+    get:
+      operationId: GetAuthCapabilities
+      summary: 获取当前实例可用认证入口
+      description: 仅公开已实现且有效的入口能力，不披露用户或私有政策。读取失败不能解释为允许注册。local 不提供登录入口。
+      security: []
+      responses:
+        '200':
+          description: 当前能力快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthCapabilities'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /auth/register:
     post:
       operationId: RegisterAuth
@@ -1661,6 +3388,7 @@ paths:
     post:
       operationId: LoginAuth
       summary: 用户登录
+      description: 仅接受 identifier/password。字段错误返回 400；无效标识、关闭的标识入口、不存在或停用账号、未设密码及密码错误统一返回 401。政策不可用返回 503。
       security: []
       requestBody:
         required: true
@@ -1681,6 +3409,7 @@ paths:
     post:
       operationId: RefreshAuth
       summary: 刷新访问令牌
+      description: 原子轮换同一刷新会话链。已消费 token 重放会撤销整条链，无重试宽限期；并发刷新至多一次签发且成功方后继也可能被重放撤销。绝对期限从首次登录计算，轮换不延长。失效后重新登录。
       security: []
       requestBody:
         required: true
@@ -1702,7 +3431,7 @@ paths:
       operationId: LogoutAuth
       summary: 登出并撤销刷新令牌
       description: |
-        只撤销当前认证用户提交的 refresh token，不影响其他会话。本人已撤销的 token 再次提交返回 204；
+        撤销当前认证用户提交的 refresh token 所属整条会话链，包含已轮换后继，不影响其他独立登录会话。本人已撤销的 token 再次提交返回 204；
         他人的 token（包括已撤销的 token）返回 403 且不修改。未知 token 保持 401 token-invalid 错误，
         响应不包含 token 所属信息。数据库中仍存在的本人过期 refresh token 也可撤销。
         已签发的 access token 在到期前仍可能有效，不承诺全设备退出或即时撤销 access token。
@@ -1748,7 +3477,7 @@ paths:
       operationId: UpdateCurrentUser
       summary: 更新当前用户资料
       description: |
-        省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400，邮箱冲突返回 409；失败不部分更新。
+        省略字段保持原值，空对象不修改资料。邮箱校验失败返回 400；已验证邮箱禁止直接替换（409）。未验证邮箱允许重复；失败不部分更新。
         服务器模式要求 bearer 认证；本地模式仍允许通过本地身份调用，页面只读不代表后端禁止写入。
       security:
         - bearerAuth: []
@@ -1774,11 +3503,73 @@ paths:
         default:
           $ref: '#/components/responses/Problem'
   /users/me/password:
+    post:
+      operationId: SetCurrentUserInitialPassword
+      summary: 首次设置本地密码并撤销旧会话
+      description: 'Server mode only. Authentication secrets and flow results use Cache-Control: no-store. Invalid or consumed flows return 400; reauthentication proofs 403; policy/revision conflicts 409; upstream failures 503.'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitialPasswordRequest'
+      responses:
+        '204':
+          description: Completed
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteCurrentUserPassword
+      summary: 删除密码并保留可靠后备方式
+      description: '仅 server 模式。要求另一登录方式的近期认证证明，不能使用待删除密码生成的证明；证明不符合要求返回 403，无可靠后备方式或最后密码管理员保护冲突返回 409。成功后撤销旧会话，响应使用 Cache-Control: no-store。'
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SensitiveOperationRequest'
+      responses:
+        '204':
+          description: Completed
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
     put:
       operationId: ChangeCurrentUserPassword
       summary: 修改当前用户密码
       description: |
-        只更新密码，已有 access/refresh token 继续沿用各自有效期。
+        核验当前密码后原子更新密码、递增账号认证版本并撤销全部刷新会话。旧 access 在后续鉴权失效；已连接 SSE 有界中止。成功后须重新登录，不在改密响应中签发替代会话。
         缺失、空值、非法类型或新密码长度不合法返回 400；非空旧密码错误返回专用
         urn:linguaflow:current-password-mismatch Problem（400），不会被当作认证失效。
         401 仅表示请求认证缺失或失效。本地模式沿用现有本地身份授权，页面不提供密码表单。
@@ -1800,6 +3591,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '401':
+          $ref: '#/components/responses/Problem'
+        '409':
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
@@ -3596,13 +5389,14 @@ paths:
   /operations:
     get:
       operationId: ListOperations
-      summary: 按项目权限发现翻译、术语同步与存储任务
+      summary: 按项目权限发现翻译、术语同步、存储与退出任务
       description: |
-        只读投影，不新增通用任务实体。默认返回三类活动任务，组织成员可看到同项目其他成员的任务。
-        未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限。
+        只读投影，不新增通用任务实体。默认返回四类活动任务，组织成员可看到同项目其他成员的任务。
+        storage_retirement 为跨项目退出父任务，没有 project_id，只按管理归属与项目权限投影；显式传入 project_id 时父任务被排除。
+        未授权或不存在的显式 project_id 返回空列表，系统管理员无额外跨项目权限，也不因此获得跨项目退出父任务的读取权。
         state 默认 active，与 status 互斥；翻译活动状态包含 pending、running、pausing、paused。
-        同步和存储没有 pausing、paused。trigger_type 仅允许显式 task_type=translation。
-        存储任务的 waiting_retry、needs_action 属于活动状态；其实际可控制动作以存储任务详情为准。
+        同步、存储和退出没有 pausing、paused。trigger_type 仅允许显式 task_type=translation。
+        存储任务的 waiting_retry、needs_action 属于活动状态；其实际可控制动作以存储任务详情为准。退出父任务的可控制动作以 supported_actions 与退出详情为准。
         updated_at 区间为 [updated_from, updated_before)，按 updated_at DESC, task_type DESC, 整数 task_id DESC 排序。
         独立版本化游标绑定规范化筛选（不含 limit）；不可使用 Job 游标。每页重新鉴权，不提供跨请求快照。
         刷新从第一页开始并处理全部续页，客户端以 (task_type,task_id) 去重，单页缺失不代表任务结束。
@@ -3668,11 +5462,11 @@ paths:
   /operations/summary:
     get:
       operationId: GetOperationsSummary
-      summary: 获取三类任务的独立数量摘要
+      summary: 获取四类任务的独立数量摘要
       description: |
-        只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。
+        只允许 task_type、project_id、trigger_type；trigger_type 仅允许显式 task_type=translation。显式 project_id 排除没有 project_id 的退出父任务。
         未知、重复、空或非法参数返回 400。权限与列表一致，无权项目返回零。
-        by_type 固定返回三类，未选类型计零，同步和存储 pausing、paused 恒为零；total 为逐字段求和。
+        by_type 固定返回四类，未选类型计零，同步、存储和退出的 pausing、paused 恒为零；被排除的退出父任务计零；total 为逐字段求和。
         pausing 为必返的非负计数，无符合任务时返回零。
         waiting_retry、needs_action 分开统计，翻译与术语同步的这两个计数恒为零。
         recent_failed 只数当前 failed 且 updated_at 位于 [recent_failed_since,as_of) 的记录，窗口为连续七天。
@@ -4745,6 +6539,18 @@ components:
       schema:
         type: integer
         minimum: 1
+    storageLifecycleFilter:
+      name: lifecycle
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+          - available
+          - retiring
+          - removed
+          - all
+      description: Lifecycle filter for connection and space lists. Omitted returns available and retiring only; removed rows are hidden by default and need this explicit filter or all. available, retiring and removed return their own lifecycle; all includes removed history. Removed history keeps management-ownership authorization, never revives the identity and never relaxes admission, migration or configuration gates.
     jobProjectFilter:
       name: project_id
       in: query
@@ -4770,6 +6576,8 @@ components:
           - translation
           - glossary_sync
           - storage
+          - storage_retirement
+        description: 四类任务投影。storage_retirement 为跨项目退出父任务，没有 project_id； 显式传入 project_id 时父任务被排除，只返回该项目可见的子任务。 未传 project_id 时按调用者管理归属与项目权限过滤父任务。
   responses:
     Problem:
       description: 错误响应
@@ -4778,6 +6586,980 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
   schemas:
+    OIDCConnectionConfig:
+      type: object
+      additionalProperties: false
+      description: Saved or candidate OIDC configuration; issuer and client_id may be missing or empty while configuring or disabled. Populated issuer values must be absolute allowed URLs.
+      properties:
+        issuer:
+          type: string
+          maxLength: 2048
+        client_id:
+          type: string
+          maxLength: 1024
+        client_auth_method:
+          type: string
+          enum:
+            - client_secret_basic
+            - client_secret_post
+          default: client_secret_basic
+        scopes:
+          type: array
+          items:
+            type: string
+          default:
+            - openid
+            - profile
+        userinfo_enabled:
+          type: boolean
+          default: true
+    AuthConnectionPolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - login_enabled
+        - signup_enabled
+        - link_enabled
+        - login_rules
+        - signup_rules
+        - link_rules
+      properties:
+        login_enabled:
+          type: boolean
+        signup_enabled:
+          type: boolean
+        link_enabled:
+          type: boolean
+        login_rules:
+          $ref: '#/components/schemas/AuthRuleSet'
+        signup_rules:
+          $ref: '#/components/schemas/AuthRuleSet'
+        link_rules:
+          $ref: '#/components/schemas/AuthRuleSet'
+        signup:
+          $ref: '#/components/schemas/SignupPolicyRequirements'
+    ExternalBrowserInput:
+      type: object
+      additionalProperties: false
+      required:
+        - browser_challenge
+        - completion_url
+      properties:
+        browser_challenge:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE.
+        completion_url:
+          type: string
+          format: uri
+        return_to:
+          type: string
+          default: /
+          description: Validated application-relative path.
+    ExternalLinkStartRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - browser_challenge
+        - completion_url
+        - reauthentication_proof
+      properties:
+        browser_challenge:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE.
+        completion_url:
+          type: string
+          format: uri
+        return_to:
+          type: string
+          default: /
+          description: Validated application-relative path.
+        reauthentication_proof:
+          type: string
+    ExternalStartResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - transaction_id
+        - authorization_url
+        - expires_at
+      properties:
+        transaction_id:
+          type: string
+        authorization_url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+        test_id:
+          type: string
+          description: Transaction ID of the originating administrator connection test; empty for ordinary login flows.
+    ExternalExchangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - ticket
+        - verifier
+      properties:
+        ticket:
+          type: string
+        verifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+    ExternalCompleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - confirmation_token
+        - verifier
+      properties:
+        confirmation_token:
+          type: string
+        verifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+        initial_password:
+          type: string
+          writeOnly: true
+          description: Required only for a signup confirmation requiring local_password; never accepted for an existing account or binding.
+        username:
+          $ref: '#/components/schemas/UsernameInput'
+        display_name:
+          type: string
+        email:
+          type: string
+          nullable: true
+          description: Signup-only platform email; omitted, null, and after trimming an empty value are missing when signup.email_requirement is required.
+    ExternalCancelRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - transaction_id
+        - verifier
+      properties:
+        transaction_id:
+          type: string
+        verifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+    ReauthenticationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - method
+        - action
+        - target_id
+      properties:
+        method:
+          type: string
+          enum:
+            - password
+            - oidc
+        password:
+          type: string
+        binding_id:
+          type: integer
+          minimum: 1
+        action:
+          type: string
+          enum:
+            - link
+            - password_set
+            - password_delete
+            - unlink
+        target_id:
+          type: string
+        browser_challenge:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE.
+        completion_url:
+          type: string
+          format: uri
+        return_to:
+          type: string
+          default: /
+          description: Validated application-relative path.
+    ReauthenticationProofResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - reauthentication_proof
+        - expires_at
+      properties:
+        reauthentication_proof:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    ExternalProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - connection_id
+        - connection_name
+        - external_display
+      properties:
+        connection_id:
+          type: string
+        connection_name:
+          type: string
+        external_display:
+          type: string
+    ExternalConfirmationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - confirmation_token
+        - transaction_id
+        - expires_at
+        - profile
+        - signup_requirements
+      properties:
+        kind:
+          type: string
+          enum:
+            - signup_confirmation
+            - link_confirmation
+        confirmation_token:
+          type: string
+        transaction_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        signup_requirements:
+          type: array
+          maxItems: 2
+          items:
+            type: string
+            enum:
+              - email
+              - local_password
+          description: Empty for linking and signup with fresh authentication support.
+        profile:
+          $ref: '#/components/schemas/ExternalProfile'
+        username_candidate:
+          type: string
+          readOnly: true
+          description: Normalized candidate username proposed for signup confirmation; empty for link confirmation.
+        email:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Normalized external email proposal only; never grants ownership or a verified email key.
+        signup:
+          allOf:
+            - $ref: '#/components/schemas/SignupPolicyRequirements'
+          readOnly: true
+    ExternalSessionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - session
+      properties:
+        kind:
+          type: string
+          enum:
+            - session
+        session:
+          $ref: '#/components/schemas/AuthSession'
+    ExternalProofResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - reauthentication_proof
+        - expires_at
+      properties:
+        kind:
+          type: string
+          enum:
+            - reauthentication_proof
+        reauthentication_proof:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    ExternalTestResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - fresh_supported
+        - connection_id
+        - revision
+        - attributes
+        - rules
+      properties:
+        attributes:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AuthAttributeValue'
+        rules:
+          $ref: '#/components/schemas/AuthRulesDiagnostics'
+        kind:
+          type: string
+          enum:
+            - test_result
+        fresh_supported:
+          type: boolean
+        connection_id:
+          type: string
+        revision:
+          type: integer
+          format: int64
+        test_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+          description: Transaction expiry at which the matching test evidence lapses;; the saved configuration capability persists independently.
+    ExternalExchangeResponse:
+      oneOf:
+        - $ref: '#/components/schemas/ExternalSessionResponse'
+        - $ref: '#/components/schemas/ExternalConfirmationResponse'
+        - $ref: '#/components/schemas/ExternalProofResponse'
+        - $ref: '#/components/schemas/ExternalTestResponse'
+      discriminator:
+        propertyName: kind
+    ExternalLinkedResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - binding_id
+      properties:
+        kind:
+          type: string
+          enum:
+            - linked
+        binding_id:
+          type: integer
+    ExternalCompleteResponse:
+      oneOf:
+        - $ref: '#/components/schemas/ExternalSessionResponse'
+        - $ref: '#/components/schemas/ExternalLinkedResponse'
+      discriminator:
+        propertyName: kind
+    InitialPasswordRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reauthentication_proof
+        - new_password
+      properties:
+        reauthentication_proof:
+          type: string
+        new_password:
+          $ref: '#/components/schemas/password'
+    SensitiveOperationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reauthentication_proof
+      properties:
+        reauthentication_proof:
+          type: string
+    PublicAuthConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - connection_id
+        - display_name
+        - description
+        - display_order
+        - can_login
+        - can_signup
+        - signup
+        - signup_requirements
+      properties:
+        connection_id:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        display_order:
+          type: integer
+        logo_url:
+          type: string
+          nullable: true
+        can_login:
+          type: boolean
+        can_signup:
+          type: boolean
+        signup_requirements:
+          type: array
+          maxItems: 2
+          items:
+            type: string
+            enum:
+              - email
+              - local_password
+        signup:
+          $ref: '#/components/schemas/SignupPolicyRequirements'
+    CreateAuthConnectionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - display_name
+      properties:
+        kind:
+          type: string
+          enum:
+            - oidc
+            - generic_oauth2
+        display_name:
+          type: string
+        description:
+          type: string
+        display_order:
+          type: integer
+        oidc:
+          $ref: '#/components/schemas/OIDCConnectionConfig'
+        oauth2:
+          $ref: '#/components/schemas/OAuth2ConnectionConfig'
+        client_secret:
+          type: string
+          writeOnly: true
+    UpdateAuthConnectionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+        test_id:
+          type: string
+          description: ID of the administrator connection test matching these parameter changes.
+        verifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+          writeOnly: true
+          description: Browser-held verifier bound to the referenced test.
+        attribute_mappings:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/AuthAttributeMapping'
+        evidence_max_age_seconds:
+          type: integer
+          minimum: 1
+          maximum: 31536000
+          default: 3600
+          description: Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
+        display_name:
+          type: string
+        description:
+          type: string
+        display_order:
+          type: integer
+        oidc:
+          $ref: '#/components/schemas/OIDCConnectionConfig'
+        oauth2:
+          $ref: '#/components/schemas/OAuth2ConnectionConfig'
+        client_secret:
+          type: string
+          nullable: true
+          writeOnly: true
+          description: Omitted keeps the current secret; null clears it; a nonempty string creates a new encrypted version.
+        policy:
+          $ref: '#/components/schemas/AuthConnectionPolicy'
+    AuthConnectionCandidateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+        changes:
+          $ref: '#/components/schemas/AuthConnectionChanges'
+    AuthConnectionActionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+        test_id:
+          type: string
+        verifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+          writeOnly: true
+    AuthConnectionTestRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - browser_challenge
+        - completion_url
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+        changes:
+          $ref: '#/components/schemas/AuthConnectionChanges'
+        browser_challenge:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE.
+        completion_url:
+          type: string
+          format: uri
+        return_to:
+          type: string
+          default: /
+          description: Validated application-relative path.
+    AuthConnectionChanges:
+      type: object
+      additionalProperties: false
+      properties:
+        attribute_mappings:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/AuthAttributeMapping'
+        evidence_max_age_seconds:
+          type: integer
+          minimum: 1
+          maximum: 31536000
+          default: 3600
+        display_name:
+          type: string
+        description:
+          type: string
+        display_order:
+          type: integer
+        oidc:
+          $ref: '#/components/schemas/OIDCConnectionConfig'
+        oauth2:
+          $ref: '#/components/schemas/OAuth2ConnectionConfig'
+        client_secret:
+          type: string
+          nullable: true
+          writeOnly: true
+          description: Omitted keeps the current secret; null clears it; a nonempty string creates a new encrypted version.
+        policy:
+          $ref: '#/components/schemas/AuthConnectionPolicy'
+    AuthConnectionSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - display_name
+        - description
+        - display_order
+        - login_policy_revision
+        - signup_policy_revision
+        - link_policy_revision
+        - attribute_mappings
+        - evidence_max_age_seconds
+        - policy
+        - has_client_secret
+      properties:
+        login_policy_revision:
+          type: integer
+          format: int64
+        signup_policy_revision:
+          type: integer
+          format: int64
+        link_policy_revision:
+          type: integer
+          format: int64
+        attribute_mappings:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/AuthAttributeMapping'
+        evidence_max_age_seconds:
+          type: integer
+          minimum: 1
+          maximum: 31536000
+          default: 3600
+          description: Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
+        display_name:
+          type: string
+        description:
+          type: string
+        display_order:
+          type: integer
+        oidc:
+          $ref: '#/components/schemas/OIDCConnectionConfig'
+        oauth2:
+          $ref: '#/components/schemas/OAuth2ConnectionConfig'
+        policy:
+          $ref: '#/components/schemas/AuthConnectionPolicy'
+        has_client_secret:
+          type: boolean
+        logo_url:
+          type: string
+          nullable: true
+    AuthConnectionValidationResult:
+      type: object
+      additionalProperties: false
+      required:
+        - fresh_supported
+        - tested_at
+      properties:
+        fresh_supported:
+          type: boolean
+        tested_at:
+          type: string
+          format: date-time
+          nullable: true
+        applied_test_id:
+          type: string
+          description: AuthTransaction that produced the applied validation; empty before a persisted first test.
+    AuthConnectionRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - aggregate_revision
+        - state
+        - archived
+        - configuration
+        - configuration_complete
+        - capabilities
+        - validation
+        - setup
+      properties:
+        identity_authority_id:
+          type: string
+          readOnly: true
+          description: Server-assigned immutable namespace for a generic OAuth connection.
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - oidc
+            - generic_oauth2
+        aggregate_revision:
+          type: integer
+          format: int64
+          description: Change-detection revision for optimistic concurrency; distinct from the login policy revision.
+        state:
+          type: string
+          enum:
+            - configuring
+            - enabled
+            - disabled
+          description: Lifecycle state; omitted only for the built-in password connection, which never enters configuring.
+        archived:
+          type: boolean
+        configuration:
+          $ref: '#/components/schemas/AuthConnectionSnapshot'
+        configuration_complete:
+          type: boolean
+        capabilities:
+          $ref: '#/components/schemas/AuthConnectionCapabilities'
+        validation:
+          $ref: '#/components/schemas/AuthConnectionValidationResult'
+        setup:
+          $ref: '#/components/schemas/AuthConnectionSetup'
+    AuthConnectionCapabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - can_login
+        - can_signup
+        - can_link
+        - can_test
+      properties:
+        can_login:
+          type: boolean
+        can_signup:
+          type: boolean
+        can_link:
+          type: boolean
+        can_test:
+          type: boolean
+    AuthConnectionSetup:
+      type: object
+      additionalProperties: false
+      required:
+        - callback_url
+        - completion_urls
+        - configuration_complete
+        - issues
+        - protocol
+      properties:
+        callback_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Backend-determined callback to register at the identity provider; null when the deployment base URL or protocol cannot produce one yet.
+        completion_urls:
+          type: array
+          items:
+            type: string
+            format: uri
+        configuration_complete:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthConfigurationIssue'
+        protocol:
+          $ref: '#/components/schemas/AuthConnectionProtocolSetup'
+    AuthConnectionProtocolSetup:
+      type: object
+      additionalProperties: false
+      required:
+        - required_fields
+        - client_auth_methods
+        - scope_guidance
+      properties:
+        required_fields:
+          type: array
+          items:
+            type: string
+        client_auth_methods:
+          type: array
+          items:
+            type: string
+        scope_guidance:
+          type: string
+    AuthConfigurationIssue:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - field
+        - message
+      properties:
+        code:
+          type: string
+        field:
+          type: string
+        message:
+          type: string
+    AuthConnectionErrorProblem:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - status
+        - issues
+      properties:
+        type:
+          type: string
+          description: urn:linguaflow:auth-connection-<code>; see AuthConnectionErrorCode for values.
+        title:
+          type: string
+        status:
+          type: integer
+          enum:
+            - 409
+        detail:
+          type: string
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthConfigurationIssue'
+        impact:
+          $ref: '#/components/schemas/AuthConnectionImpactResult'
+    AuthConnectionErrorCode:
+      type: string
+      enum:
+        - configuration-incomplete
+        - deployment-incomplete
+        - test-required
+        - test-expired
+        - test-mismatch
+        - state-conflict
+        - revision-conflict
+        - fallback-required
+    AuthConnectionsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthConnectionRecord'
+    AuthConnectionCheck:
+      type: object
+      additionalProperties: false
+      required:
+        - valid
+        - fresh_supported
+        - issues
+        - revision
+        - rules
+      properties:
+        revision:
+          type: integer
+          format: int64
+        rules:
+          $ref: '#/components/schemas/AuthRulesDiagnostics'
+        valid:
+          type: boolean
+        fresh_supported:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthConfigurationIssue'
+    AuthConnectionImpactResult:
+      type: object
+      additionalProperties: false
+      required:
+        - affected_users
+        - blocked_users
+        - affected_sessions
+        - can_save
+      properties:
+        revision:
+          type: integer
+          format: int64
+        evaluated_at:
+          type: string
+          format: date-time
+        remediation:
+          type: string
+        pass_users:
+          type: array
+          items:
+            type: integer
+        fail_users:
+          type: array
+          items:
+            type: integer
+        unknown_users:
+          type: array
+          items:
+            type: integer
+        administrator_users:
+          type: array
+          items:
+            type: integer
+        affected_users:
+          type: array
+          items:
+            type: integer
+        blocked_users:
+          type: array
+          items:
+            type: integer
+        affected_sessions:
+          type: integer
+        can_save:
+          type: boolean
+        affects_signup:
+          type: boolean
+    LoginMethod:
+      type: object
+      additionalProperties: false
+      required:
+        - binding_id
+        - connection_id
+        - display_name
+        - can_login
+        - can_reauthenticate
+        - can_unlink
+        - verified
+        - archived
+      properties:
+        login_rule_status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - unknown
+        evidence_expires_at:
+          type: string
+          format: date-time
+        binding_id:
+          type: integer
+        connection_id:
+          type: string
+        display_name:
+          type: string
+        can_login:
+          type: boolean
+        can_reauthenticate:
+          type: boolean
+        can_unlink:
+          type: boolean
+        verified:
+          type: boolean
+        archived:
+          type: boolean
+    LoginMethodsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - password
+        - email
+        - bindings
+        - available_connections
+      properties:
+        password:
+          type: object
+          additionalProperties: false
+          required:
+            - is_set
+            - can_login
+            - can_set
+            - can_delete
+            - verified
+          properties:
+            verified:
+              type: boolean
+              description: Current password has been used successfully for login or reauthentication under an enabled password policy.
+            is_set:
+              type: boolean
+            can_login:
+              type: boolean
+            can_set:
+              type: boolean
+            can_delete:
+              type: boolean
+        email:
+          type: object
+          additionalProperties: false
+          required:
+            - address
+            - verified
+            - can_recover
+          properties:
+            address:
+              type: string
+              nullable: true
+            verified:
+              type: boolean
+            can_recover:
+              type: boolean
+        bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoginMethod'
+        available_connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailableLoginConnection'
     TaskRetentionPolicy:
       type: object
       additionalProperties: false
@@ -4924,7 +7706,11 @@ components:
       properties:
         error_code:
           type: string
-          description: Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses storage_disk_probe_failed (503). Neither signals automatic retry. Provider authorization, quota and availability retain their separate domain codes.
+          description: Stable domain error code; required on storage domain failures. Storage deployment rejection uses storage_deployment_disabled (409, no Retry-After, no automatic retry), maintenance uses storage_maintenance (409), policy restrictions use storage_policy_violation (403), and actor authorization uses forbidden (403). Local disk exhaustion uses storage_disk_insufficient (507); a failed local probe uses storage_disk_probe_failed (503). Neither signals automatic retry. Provider authorization, quota and availability retain their separate domain codes. Retirement adds storage_retiring (409, new use rejected by the retirement barrier), storage_removed (410, the identity is permanently retired), storage_retirement_conflict (409, overlapping retirement or generation conflict), storage_retirement_preview_stale (409, obtain and confirm a new preview), storage_retirement_dependencies_remaining (409, authoritative dependencies remain), and storage_retirement_configuration_pending (409, deployment configuration action required). A retirement operation whose required capability stage is not enabled, or is blocked by local mode, a disabled deployment or global maintenance, returns storage_capability_unsupported (409) after authentication with no side effects. Existing domain errors keep their meanings.
+        retirement_id:
+          type: integer
+          minimum: 1
+          description: Related retirement visible to the caller, including an existing conflicting task; omitted when disclosure is not authorized.
         task_id:
           type: integer
         operation_id:
@@ -4963,6 +7749,52 @@ components:
           x-enum-varnames:
             - ModeLocal
             - ModeServer
+    UsernameInput:
+      type: string
+      maxLength: 128
+      description: |
+        原始输入最多 128 ASCII 字节；先拒绝非 ASCII、控制字符和 DEL，再移除首尾普通空格并仅将 A-Z 转为小写。
+        规范值须为 3–32 字符，以字母开头、字母或数字结尾，仅允许 a-z、0-9 及不相邻的中间 -/_。
+        保留名按服务端创建用途限制，登录和成员定位不重新检查分配用途。创建后不可改名。
+    Username:
+      type: string
+      minLength: 3
+      maxLength: 32
+      pattern: ^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$
+      description: 实例唯一且不可改名的规范用户名；停用后继续占用。
+    AuthCapabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+        - local_account
+        - connections
+        - email_verification_enabled
+        - password_reset_enabled
+      properties:
+        mode:
+          type: string
+          enum:
+            - local
+            - server
+          x-enum-varnames:
+            - AuthCapabilitiesModeLocal
+            - AuthCapabilitiesModeServer
+        local_account:
+          $ref: '#/components/schemas/LocalAccountCapabilities'
+        connections:
+          type: array
+          description: 已发布且具备有效用途的 OIDC 连接；不暴露绑定、私有规则或配置。local 始终为空。
+          items:
+            $ref: '#/components/schemas/PublicAuthConnection'
+        email_verification_enabled:
+          type: boolean
+          enum:
+            - false
+        password_reset_enabled:
+          type: boolean
+          enum:
+            - false
     User:
       type: object
       required:
@@ -4975,10 +7807,11 @@ components:
         id:
           type: integer
         username:
-          type: string
+          $ref: '#/components/schemas/Username'
         email:
           type: string
           format: email
+          nullable: true
         display_name:
           type: string
         role:
@@ -4987,35 +7820,39 @@ components:
           type: boolean
     RegisterRequest:
       type: object
+      additionalProperties: false
       required:
         - username
         - password
-        - email
       properties:
         username:
-          type: string
+          $ref: '#/components/schemas/UsernameInput'
         password:
           type: string
           minLength: 8
           description: 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。
         email:
           type: string
-          format: email
+          nullable: true
+          description: 可省略、为 null 或空字符串；非空值去除首尾空白并转小写后校验单个纯邮箱地址。填写地址仅作为未验证资料，不占用唯一登录归属。
         display_name:
           type: string
     LoginRequest:
       type: object
+      additionalProperties: false
       required:
-        - username
+        - identifier
         - password
       properties:
-        username:
+        identifier:
           type: string
+          description: 按是否含 ASCII @ 选择唯一的用户名或已验证邮箱定位路径。阶段 A 仅开放用户名入口；邮箱路径统一认证失败，不回退查询用户名。不接受 username 或 identifier_type 别名。
         password:
           type: string
           description: 原样验证密码，不施加注册或改密时的新密码长度规则，以兼容历史密码。
     RefreshRequest:
       type: object
+      additionalProperties: false
       required:
         - refresh_token
       properties:
@@ -5029,7 +7866,7 @@ components:
       properties:
         refresh_token:
           type: string
-          description: 当前认证用户本人持有的 refresh token；只撤销此 token，不影响其他会话。
+          description: 当前认证用户本人持有的 refresh token；撤销其整条刷新会话链，包括已轮换后继，不影响其他独立登录会话。
     AuthSession:
       type: object
       required:
@@ -5054,12 +7891,131 @@ components:
           format: date-time
         user:
           $ref: '#/components/schemas/User'
+    LocalAccountPolicyInput:
+      type: object
+      additionalProperties: false
+      required:
+        - password_login_enabled
+        - username_login_enabled
+        - email_login_enabled
+        - password_enrollment_enabled
+        - signup
+      properties:
+        password_login_enabled:
+          type: boolean
+        username_login_enabled:
+          type: boolean
+        email_login_enabled:
+          type: boolean
+        password_enrollment_enabled:
+          type: boolean
+        signup:
+          type: object
+          additionalProperties: false
+          required:
+            - enabled
+            - email_requirement
+            - rules
+          properties:
+            enabled:
+              type: boolean
+            email_requirement:
+              $ref: '#/components/schemas/SignupEmailRequirement'
+            rules:
+              $ref: '#/components/schemas/AuthRuleSet'
+    LocalAccountCapabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - can_login
+        - can_signup
+        - can_enroll_password
+        - password_login_enabled
+        - username_login_enabled
+        - email_login_enabled
+        - password_enrollment_enabled
+        - signup
+        - signup_requirements
+      properties:
+        can_login:
+          type: boolean
+          description: Effective local password login, including the required stable and currently active locator policy.
+        can_signup:
+          type: boolean
+          description: Effective signup only; global registration and local signup prerequisites still apply.
+        can_enroll_password:
+          type: boolean
+        password_login_enabled:
+          type: boolean
+        username_login_enabled:
+          type: boolean
+        email_login_enabled:
+          type: boolean
+        password_enrollment_enabled:
+          type: boolean
+        signup:
+          $ref: '#/components/schemas/SignupPolicyRequirements'
+        signup_requirements:
+          type: array
+          maxItems: 2
+          items:
+            type: string
+            enum:
+              - email
+              - local_password
+    LocalAccountPreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        policy:
+          $ref: '#/components/schemas/LocalAccountPolicyInput'
+        registration:
+          type: object
+          additionalProperties: false
+          properties:
+            email:
+              type: string
+              nullable: true
+    SignupPolicyRequirements:
+      type: object
+      additionalProperties: false
+      required:
+        - email_requirement
+        - password_requirement
+      properties:
+        email_requirement:
+          $ref: '#/components/schemas/SignupEmailRequirement'
+        password_requirement:
+          $ref: '#/components/schemas/SignupPasswordRequirement'
+    AuthSignupRequirements:
+      type: object
+      additionalProperties: false
+      required:
+        - signup
+        - signup_requirements
+      properties:
+        signup:
+          $ref: '#/components/schemas/SignupPolicyRequirements'
+        signup_requirements:
+          type: array
+          maxItems: 2
+          items:
+            type: string
+            enum:
+              - email
+              - local_password
     UpdateCurrentUserRequest:
       type: object
       additionalProperties: false
       description: |
         仅更新提供的字段，省略字段保持原值；空对象返回当前资料且不修改更新时间。
-        字段不可为 null，用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
+        仅 email 可为 null（清空）；用户名、系统角色和账号状态不可修改。所有字段校验成功后原子更新。
       properties:
         display_name:
           type: string
@@ -5067,9 +8023,8 @@ components:
           description: 去除首尾空白；空字符串允许清空显示名。
         email:
           type: string
-          format: email
-          nullable: false
-          description: 去除首尾空白并转小写后校验单个纯邮箱地址；拒绝空值、内部空白、显示名及地址包装。
+          nullable: true
+          description: null 或空字符串清空未验证邮箱；非空值去除首尾空白并转小写后校验单个纯邮箱地址。未验证邮箱可重复；已有验证状态的邮箱禁止通过资料接口变更（409）。
     ChangePasswordRequest:
       type: object
       additionalProperties: false
@@ -5173,9 +8128,7 @@ components:
         - username
       properties:
         username:
-          type: string
-          minLength: 1
-          description: 精确匹配已有账号用户名；不发送邀请。
+          $ref: '#/components/schemas/UsernameInput'
         role:
           type: string
           enum:
@@ -7668,19 +10621,20 @@ components:
           type: integer
     AdminCreateUserRequest:
       type: object
+      additionalProperties: false
       required:
         - username
         - password
-        - email
       properties:
         username:
-          type: string
+          $ref: '#/components/schemas/UsernameInput'
         password:
           type: string
           minLength: 8
         email:
           type: string
-          format: email
+          nullable: true
+          description: 可省略、为 null 或空字符串；非空值去除首尾空白并转小写后校验单个纯邮箱地址。管理员录入不代表已验证所有权。
         display_name:
           type: string
         role:
@@ -7691,12 +10645,14 @@ components:
           default: user
     AdminUpdateUserRequest:
       type: object
+      additionalProperties: false
       properties:
         display_name:
           type: string
         email:
           type: string
-          format: email
+          nullable: true
+          description: 省略保持原值；null 或空串清空未验证邮箱；非空值去除首尾空白并转小写后校验单个纯邮箱地址。已有验证状态的邮箱禁止直接变更（409）。
         role:
           type: string
           enum:
@@ -7706,6 +10662,7 @@ components:
           type: boolean
     AdminResetPasswordRequest:
       type: object
+      additionalProperties: false
       required:
         - new_password
       properties:
@@ -8102,6 +11059,405 @@ components:
           type: integer
           description: 占用该资源的未完成任务 ID
       additionalProperties: false
+    SignupEmailRequirement:
+      type: string
+      enum:
+        - optional
+        - required
+    SignupPasswordRequirement:
+      type: string
+      enum:
+        - none
+        - optional
+        - required
+    AuthAttributeValue:
+      type: object
+      required:
+        - status
+        - fingerprint
+      properties:
+        value: {}
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - unknown
+        reason:
+          type: string
+        fingerprint:
+          type: string
+    AuthRuleResult:
+      type: object
+      required:
+        - status
+        - retryable
+        - conditions
+      properties:
+        status:
+          type: string
+          enum:
+            - pass
+            - fail
+            - unknown
+        retryable:
+          type: boolean
+        conditions:
+          type: array
+          items:
+            type: object
+            required:
+              - field_id
+              - operator
+              - status
+            properties:
+              field_id:
+                type: string
+              operator:
+                type: string
+              status:
+                type: string
+                enum:
+                  - pass
+                  - fail
+                  - unknown
+              reason:
+                type: string
+    AuthRulesDiagnostics:
+      type: object
+      required:
+        - login
+        - signup
+        - link
+      properties:
+        login:
+          $ref: '#/components/schemas/AuthRuleResult'
+        signup:
+          $ref: '#/components/schemas/AuthRuleResult'
+        link:
+          $ref: '#/components/schemas/AuthRuleResult'
+    AvailableLoginConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - connection_id
+        - display_name
+        - can_link
+      properties:
+        connection_id:
+          type: string
+        display_name:
+          type: string
+        can_link:
+          type: boolean
+        logo_url:
+          type: string
+          nullable: true
+    AuthAttributeMapping:
+      type: object
+      additionalProperties: false
+      description: Client-provided attribute mapping input. Server-owned field metadata is not accepted here.
+      required:
+        - field_id
+        - label
+        - type
+        - source
+        - pointer
+      properties:
+        field_id:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum:
+            - string
+            - boolean
+            - integer
+            - number
+            - datetime
+            - string_list
+        source:
+          type: string
+          enum:
+            - oidc_id_token
+            - oidc_userinfo
+            - oauth2_profile
+        pointer:
+          type: string
+        required_scopes:
+          type: array
+          items:
+            type: string
+        optional:
+          type: boolean
+        user_editable:
+          type: boolean
+          default: false
+          description: Administrator-declared property of the upstream field; never grants trust or platform permissions.
+    OAuth2ConnectionConfig:
+      type: object
+      additionalProperties: false
+      description: Saved or candidate OAuth configuration; fields may be missing or empty while configuring or disabled. Test and enable require all protocol inputs.
+      properties:
+        authorization_endpoint:
+          type: string
+          maxLength: 2048
+        token_endpoint:
+          type: string
+          maxLength: 2048
+        profile_endpoint:
+          type: string
+          maxLength: 2048
+        client_id:
+          type: string
+          maxLength: 1024
+        client_auth_method:
+          type: string
+          enum:
+            - client_secret_basic
+            - client_secret_post
+          default: client_secret_basic
+        scopes:
+          type: array
+          maxItems: 32
+          default: []
+          items:
+            type: string
+        subject_mapping:
+          type: object
+          additionalProperties: false
+          properties:
+            pointer:
+              type: string
+              maxLength: 1024
+            type:
+              type: string
+              enum:
+                - string
+                - integer
+              default: string
+    AuthRuleCondition:
+      type: object
+      additionalProperties: false
+      required:
+        - field_id
+        - operator
+        - value
+      properties:
+        field_id:
+          type: string
+        operator:
+          type: string
+          enum:
+            - eq
+            - ne
+            - in
+            - not_in
+            - gt
+            - gte
+            - lt
+            - lte
+            - contains
+            - not_contains
+            - starts_with
+            - not_starts_with
+            - ends_with
+            - not_ends_with
+            - contains_any
+            - contains_all
+        value:
+          description: Strictly typed against the referenced field. Strings are case-sensitive; integers retain precision; datetimes require RFC3339 with timezone. No coercion or null values.
+          oneOf:
+            - type: string
+            - type: boolean
+            - type: number
+            - type: array
+              items:
+                type: string
+    AuthRuleSet:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - mode
+          properties:
+            mode:
+              type: string
+              enum:
+                - unrestricted
+        - type: object
+          additionalProperties: false
+          required:
+            - mode
+            - match
+            - conditions
+          properties:
+            mode:
+              type: string
+              enum:
+                - conditions
+            match:
+              type: string
+              enum:
+                - all
+                - any
+            conditions:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: '#/components/schemas/AuthRuleCondition'
+    AuthFieldTrustPair:
+      type: object
+      additionalProperties: false
+      properties:
+        peer_field_id:
+          type: string
+        peer_source:
+          type: string
+    AuthAttributeField:
+      type: object
+      additionalProperties: false
+      required:
+        - field_id
+        - label
+        - type
+        - source
+        - pointer
+        - user_editable
+        - allowed_operators
+      properties:
+        field_id:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum:
+            - string
+            - boolean
+            - integer
+            - number
+            - datetime
+            - string_list
+        source:
+          type: string
+          enum:
+            - oidc_id_token
+            - oidc_userinfo
+            - oauth2_profile
+            - derived
+            - registration
+        pointer:
+          type: string
+        required_scopes:
+          type: array
+          items:
+            type: string
+        optional:
+          type: boolean
+        user_editable:
+          type: boolean
+        derived_from:
+          readOnly: true
+          type: array
+          items:
+            type: string
+        allowed_operators:
+          readOnly: true
+          type: array
+          items:
+            type: string
+        semantic_format:
+          readOnly: true
+          type: string
+        normalization_version:
+          readOnly: true
+          type: string
+        trust_pair:
+          $ref: '#/components/schemas/AuthFieldTrustPair'
+        dependency_fingerprint:
+          readOnly: true
+          type: string
+    AuthAttributeCatalog:
+      type: object
+      required:
+        - revision
+        - purpose
+        - fields
+        - operators
+      properties:
+        revision:
+          type: integer
+          format: int64
+        purpose:
+          type: string
+          enum:
+            - login
+            - signup
+            - link
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthAttributeField'
+        operators:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    AuthRulesPreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - sources
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        changes:
+          $ref: '#/components/schemas/AuthConnectionChanges'
+        registration:
+          type: object
+          additionalProperties: false
+          properties:
+            email:
+              type: string
+              nullable: true
+        sources:
+          type: object
+          additionalProperties: false
+          properties:
+            oidc_id_token:
+              type: object
+              additionalProperties: true
+            oidc_userinfo:
+              type: object
+              additionalProperties: true
+    AuthRulesPreview:
+      type: object
+      required:
+        - revision
+        - simulated
+        - attributes
+        - rules
+      properties:
+        revision:
+          type: integer
+          format: int64
+        simulated:
+          type: boolean
+          enum:
+            - true
+        attributes:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AuthAttributeValue'
+        rules:
+          $ref: '#/components/schemas/AuthRulesDiagnostics'
     RetentionCount:
       type: integer
       format: int64
@@ -8311,19 +11667,6 @@ components:
             - blocked
             - deferred
             - failed
-    StorageRuntime:
-      type: object
-      readOnly: true
-      additionalProperties: false
-      required:
-        - deployment_enabled
-        - maintenance
-      description: Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate.
-      properties:
-        deployment_enabled:
-          type: boolean
-        maintenance:
-          type: boolean
     StorageActionReasonCode:
       type: string
       enum:
@@ -8341,6 +11684,12 @@ components:
         - storage_disk_probe_failed
         - storage_quota_exceeded
         - storage_unavailable
+        - storage_retiring
+        - storage_removed
+        - storage_retirement_conflict
+        - storage_retirement_preview_stale
+        - storage_retirement_dependencies_remaining
+        - storage_retirement_configuration_pending
     StorageActionAvailability:
       type: object
       readOnly: true
@@ -8357,6 +11706,51 @@ components:
           uniqueItems: true
           items:
             $ref: '#/components/schemas/StorageActionReasonCode'
+    StorageRetirementCapabilities:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - contract_version
+        - unused_removal
+        - in_use_retirement
+      description: 'Independent retirement contract. Support for S3, project migration or connection disable does not imply that complete connection removal is available; clients must read this contract instead of inferring it. Contract version 1 exposes two independent stages: unused_removal for targets with no remote use facts, and in_use_retirement for targets that still need project migration, cleanup and marker recovery. Each stage is computed from the running service configuration, so a stage that is not enabled, or is blocked by local mode, a disabled deployment or global maintenance, reports storage_capability_unsupported or the matching availability reason.'
+      properties:
+        contract_version:
+          type: integer
+          enum:
+            - 1
+          description: Retirement contract version; version 1 covers preview, acceptance, plan update, resume, cancel and restricted authorization recovery.
+        unused_removal:
+          $ref: '#/components/schemas/StorageActionAvailability'
+        in_use_retirement:
+          $ref: '#/components/schemas/StorageActionAvailability'
+      example:
+        contract_version: 1
+        unused_removal:
+          allowed: false
+          reason_codes:
+            - storage_capability_unsupported
+        in_use_retirement:
+          allowed: false
+          reason_codes:
+            - storage_capability_unsupported
+    StorageRuntime:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - deployment_enabled
+        - maintenance
+        - retirement
+      description: Current service configuration. Maintenance includes startup protection for unfinished offline recovery; per-project migration barriers remain separate. retirement carries the independent retirement contract version and staged action availability.
+      properties:
+        deployment_enabled:
+          type: boolean
+        maintenance:
+          type: boolean
+        retirement:
+          $ref: '#/components/schemas/StorageRetirementCapabilities'
     StorageCapabilities:
       type: object
       additionalProperties: false
@@ -8391,11 +11785,640 @@ components:
         runtime:
           deployment_enabled: false
           maintenance: false
+          retirement:
+            contract_version: 1
+            unused_removal:
+              allowed: false
+              reason_codes:
+                - storage_capability_unsupported
+            in_use_retirement:
+              allowed: false
+              reason_codes:
+                - storage_capability_unsupported
         management_actions:
           create_connection:
             allowed: false
             reason_codes:
               - storage_deployment_disabled
+    StorageRetirementTargetKind:
+      type: string
+      enum:
+        - connection
+        - space
+    StorageRetirementGeneration:
+      type: integer
+      format: int64
+      minimum: 0
+      maximum: 9007199254740991
+    StorageRetirementProjectPlan:
+      type: object
+      additionalProperties: false
+      required:
+        - project_id
+        - target_space_id
+        - expected_storage_generation
+        - expected_target_management_generation
+        - expected_target_execution_generation
+      description: One destination per project. Project migration authority is checked separately from connection/space management, at preview, acceptance and child acceptance. A destination must be outside the complete retiring source set and pass existing policy, capacity, authorization and lifecycle checks. Already accepted child input is immutable; updating a plan cannot enlarge the retirement scope.
+      properties:
+        project_id:
+          type: integer
+          minimum: 1
+        target_space_id:
+          type: integer
+          minimum: 1
+        expected_storage_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+        expected_target_management_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+        expected_target_execution_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+    StorageRetirementPreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - target_kind
+        - target_id
+      properties:
+        target_kind:
+          $ref: '#/components/schemas/StorageRetirementTargetKind'
+        target_id:
+          type: integer
+          minimum: 1
+        plan:
+          type: array
+          description: Optional per-project destinations; omitted projects may remain blocked for their authorized managers.
+          items:
+            $ref: '#/components/schemas/StorageRetirementProjectPlan'
+        cursor:
+          type: integer
+          minimum: 0
+          description: Dependency page cursor; when present, preview_revision is required to retain the same snapshot.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        preview_revision:
+          type: string
+          minLength: 1
+          description: Required with cursor; an expired or changed snapshot returns storage_retirement_preview_stale.
+    StorageRetirementScope:
+      type: string
+      enum:
+        - user
+        - org
+        - site
+    StorageConfigurationSource:
+      type: string
+      enum:
+        - stored
+        - deployment
+      description: Stored configuration is managed through the service; deployment configuration requires operator action and never accepts uploaded retirement credentials.
+    StorageRetirementSpaceScope:
+      type: object
+      additionalProperties: false
+      required:
+        - space_id
+        - space_identity
+        - connection_id
+        - management_generation
+        - execution_generation
+      properties:
+        space_id:
+          type: integer
+          minimum: 1
+        space_identity:
+          type: string
+          minLength: 1
+        connection_id:
+          type: integer
+          minimum: 1
+        management_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+        execution_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+    StorageRetirementTarget:
+      type: object
+      additionalProperties: false
+      required:
+        - target_kind
+        - target_id
+        - target_identity
+        - scope
+        - owner_id
+        - configuration_source
+        - backend_id
+        - management_generation
+        - execution_generation
+        - spaces
+      description: Complete normalized confirmation scope, never paginated. A site space entry normalizes to its entire backend connection and all non-removed child spaces; BYOS space retirement covers only that space. Connection retirement freezes all non-removed children. The caller must echo this entire object unchanged. target_identity is an opaque immutable identity, never a provider path. Management generations protect configuration; execution generations fence I/O. Neither generations nor preview revisions grant authority.
+      properties:
+        target_kind:
+          $ref: '#/components/schemas/StorageRetirementTargetKind'
+        target_id:
+          type: integer
+          minimum: 1
+        target_identity:
+          type: string
+          minLength: 1
+        scope:
+          $ref: '#/components/schemas/StorageRetirementScope'
+        owner_id:
+          type: integer
+          minimum: 0
+          description: Current user ID for user, organization ID for org, and 0 for site.
+        configuration_source:
+          $ref: '#/components/schemas/StorageConfigurationSource'
+        backend_id:
+          type: string
+          nullable: true
+          minLength: 1
+          description: Required in every normalized target and confirmed scope. For deployment configuration, the actual non-empty backend_id from the loaded deployment configuration, displayed explicitly so the operator can identify the backend configuration to remove and echoed unchanged on confirmation. Never substitute a connection ID or opaque target_identity. For stored configuration, always null.
+        management_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+        execution_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+        spaces:
+          type: array
+          uniqueItems: true
+          description: Complete covered space set; an unused connection may have none.
+          items:
+            $ref: '#/components/schemas/StorageRetirementSpaceScope'
+    StorageRetirementAssessmentReasonCode:
+      type: string
+      description: Retirement-only permission and destination assessment reasons. forbidden denotes the caller lacking the required project or management permission; storage_permission_denied denotes provider permission failure. Preserve existing destination discovery reasons such as policy_disallowed and space_unverified. This enum does not expand the reason vocabulary or semantics of management actions.
+      enum:
+        - forbidden
+        - policy_disallowed
+        - selection_required
+        - byos_disabled
+        - storage_policy_violation
+        - storage_permission_denied
+        - space_unverified
+        - storage_operation_in_progress
+        - project_not_empty
+        - storage_generation_conflict
+        - storage_maintenance
+        - storage_deployment_disabled
+        - storage_capability_unsupported
+        - connection_disabled
+        - storage_space_required
+        - storage_check_space_limit_exceeded
+        - space_disabled
+        - space_read_only
+        - storage_auth_required
+        - storage_crypto_unavailable
+        - storage_disk_insufficient
+        - storage_disk_probe_failed
+        - storage_quota_exceeded
+        - storage_unavailable
+        - storage_retiring
+        - storage_removed
+        - storage_retirement_conflict
+        - storage_retirement_preview_stale
+        - storage_retirement_dependencies_remaining
+        - storage_retirement_configuration_pending
+    StorageRetirementAssessment:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - allowed
+        - reason_codes
+      description: Metadata-only retirement assessment of current actor permissions or destination eligibility, not a management action or guarantee of provider I/O success. Allowed assessments have no reasons; denied assessments have at least one stable, sanitized reason. Connection management never implies project migration permission.
+      properties:
+        allowed:
+          type: boolean
+        reason_codes:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/StorageRetirementAssessmentReasonCode'
+    StorageRetirementProjectAssessment:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - project_id
+        - permissions
+        - target_check
+        - accepted
+      description: Only returned for a project the caller may view; hidden projects appear solely in redacted dependency aggregates.
+      properties:
+        project_id:
+          type: integer
+          minimum: 1
+        plan:
+          $ref: '#/components/schemas/StorageRetirementProjectPlan'
+        permissions:
+          type: object
+          additionalProperties: false
+          required:
+            - view
+            - migrate
+            - update_plan
+          properties:
+            view:
+              $ref: '#/components/schemas/StorageRetirementAssessment'
+            migrate:
+              $ref: '#/components/schemas/StorageRetirementAssessment'
+            update_plan:
+              $ref: '#/components/schemas/StorageRetirementAssessment'
+        target_check:
+          $ref: '#/components/schemas/StorageRetirementAssessment'
+        accepted:
+          type: boolean
+        migration_task_id:
+          type: integer
+          minimum: 1
+          description: Included only when the caller may view this child task.
+    StorageRetirementStatus:
+      type: string
+      enum:
+        - pending
+        - running
+        - waiting_retry
+        - needs_action
+        - completed
+        - failed
+        - cancelled
+    StorageRetirementDependency:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - kind
+        - status
+        - redacted
+        - count
+        - reason_codes
+      description: Metadata-only projection. No credentials, ciphertext, object keys, provider versions, bucket/prefix, leases or signed URLs. Without project visibility, aggregate by kind, set redacted=true and omit project_id, space_id, migration_task_id and protected_bytes. Reason codes remain sanitized.
+      properties:
+        kind:
+          type: string
+          enum:
+            - project_binding
+            - active_location
+            - candidate
+            - probe
+            - reservation
+            - unknown_write
+            - deletion
+            - execution_reference
+            - backup_pin
+            - default_policy
+            - configuration
+            - marker
+        status:
+          $ref: '#/components/schemas/StorageRetirementStatus'
+        redacted:
+          type: boolean
+        count:
+          type: integer
+          minimum: 1
+        project_id:
+          type: integer
+          minimum: 1
+        space_id:
+          type: integer
+          minimum: 1
+        migration_task_id:
+          type: integer
+          minimum: 1
+        protected_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9007199254740991
+        next_check_at:
+          type: string
+          format: date-time
+          nullable: true
+        reason_codes:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+          description: Stable domain codes; permission, capacity, maintenance and missing-object reasons remain distinct.
+    StorageRetirementDependencyPage:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - items
+        - next_cursor
+        - has_more
+      description: Stable cursor pagination of the authorized projection. Never infer safe removal from an empty page, redacted details, a failed page load or incomplete pagination. Completion depends on authoritative inventory, not this projection.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageRetirementDependency'
+        next_cursor:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Opaque numeric continuation; null exactly when has_more is false.
+        has_more:
+          type: boolean
+    StorageRetirementPreview:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - contract_version
+        - target
+        - preview_revision
+        - expires_at
+        - required_capability
+        - availability
+        - projects
+        - dependencies
+        - impact
+      description: Read-only metadata snapshot only, never a remote capability guarantee. Revision covers normalized target, complete scope/generations, bindings/objects, defaults, policy and confirmed destinations. Acceptance rechecks all facts transactionally.
+      properties:
+        contract_version:
+          type: integer
+          enum:
+            - 1
+        target:
+          $ref: '#/components/schemas/StorageRetirementTarget'
+        preview_revision:
+          type: string
+          minLength: 1
+          description: Signed preview revision; valid for five minutes and bound to the requesting actor. A service restart rotates the signing key, so revisions issued before a restart are stale and the caller must re-preview. An expired, restarted or changed snapshot returns storage_retirement_preview_stale.
+        expires_at:
+          type: string
+          format: date-time
+        required_capability:
+          type: string
+          enum:
+            - unused_removal
+            - in_use_retirement
+        availability:
+          $ref: '#/components/schemas/StorageRetirementAssessment'
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageRetirementProjectAssessment'
+        dependencies:
+          $ref: '#/components/schemas/StorageRetirementDependencyPage'
+        impact:
+          type: object
+          additionalProperties: false
+          required:
+            - space_count
+            - project_count
+            - hidden_project_count
+            - configuration_action_required
+          properties:
+            space_count:
+              type: integer
+              minimum: 0
+            project_count:
+              type: integer
+              minimum: 0
+            hidden_project_count:
+              type: integer
+              minimum: 0
+            configuration_action_required:
+              type: boolean
+    StorageRetirementPhase:
+      type: string
+      enum:
+        - draining
+        - migrating
+        - waiting_cleanup
+        - finalizing
+        - waiting_configuration
+        - completed
+    StorageRetirementAllowedActions:
+      type: array
+      uniqueItems: true
+      description: Recomputed using current actor permissions and durable state. Connection management never grants project migration authority. Cancel is absent from finalizing onward. Resume continues the same task. Merely viewing progress does not require permission to migrate every project. update_plan, resume, cancel and recover_authorization are recomputed per request; cancel disappears from finalizing onward and resume only continues the same durable task.
+      items:
+        type: string
+        enum:
+          - update_plan
+          - resume
+          - cancel
+          - recover_authorization
+    StorageRetirementResult:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - cleanup_status
+        - configuration_source
+        - configuration_status
+        - configuration_actions
+      properties:
+        cleanup_status:
+          type: string
+          enum:
+            - pending
+            - running
+            - blocked
+            - completed
+        configuration_source:
+          $ref: '#/components/schemas/StorageConfigurationSource'
+        configuration_status:
+          type: string
+          enum:
+            - not_required
+            - pending
+            - completed
+        configuration_actions:
+          type: array
+          uniqueItems: true
+          description: Sanitized operator guidance; completion requires actual loaded configuration verification, never a client acknowledgement.
+          items:
+            type: string
+            enum:
+              - change_default
+              - restore_deployment_authorization
+              - remove_backend_configuration
+              - reload_configuration
+    StorageRetirement:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - retirement_id
+        - contract_version
+        - target
+        - status
+        - phase
+        - generation
+        - cancel_requested
+        - next_check_at
+        - reason_codes
+        - allowed_actions
+        - created_at
+        - updated_at
+        - result
+      description: Dedicated cross-project parent, with no fabricated project_id. Failed retains lifecycle=retiring and exclusive ownership; resume uses this same identity. Completed means the target and every covered space are removed, with cleanup and configuration obligations satisfied. Cancellation does not roll back migrated projects or override subsequent disable/revocation. Historical results remain queryable under management ownership permissions.
+      properties:
+        retirement_id:
+          type: integer
+          minimum: 1
+        contract_version:
+          type: integer
+          enum:
+            - 1
+        target:
+          $ref: '#/components/schemas/StorageRetirementTarget'
+        status:
+          $ref: '#/components/schemas/StorageRetirementStatus'
+        phase:
+          $ref: '#/components/schemas/StorageRetirementPhase'
+        generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+        cancel_requested:
+          type: boolean
+        next_check_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Durable retention/pin waiting does not consume failure retry attempts.
+        reason_codes:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        allowed_actions:
+          $ref: '#/components/schemas/StorageRetirementAllowedActions'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        result:
+          $ref: '#/components/schemas/StorageRetirementResult'
+    StorageRetirementList:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - items
+        - next_cursor
+        - has_more
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageRetirement'
+        next_cursor:
+          type: integer
+          minimum: 1
+          nullable: true
+        has_more:
+          type: boolean
+    StorageRetirementCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - preview_revision
+        - confirmed_scope
+        - plan
+      description: Echo the full normalized target as confirmed_scope, including management and execution generations. No omitted or additional source spaces. An explicit empty plan is permitted only as evaluated by preview and actual capability. Same idempotency key with different confirmed input conflicts; an accepted idempotent result is replayed first, reauthorized and returned as the original identity, even after removal.
+      properties:
+        preview_revision:
+          type: string
+          minLength: 1
+          description: Signed preview revision; valid for five minutes and bound to the requesting actor. A service restart rotates the signing key, so revisions issued before a restart are stale and the caller must re-preview. An expired, restarted or changed snapshot returns storage_retirement_preview_stale.
+        confirmed_scope:
+          $ref: '#/components/schemas/StorageRetirementTarget'
+        plan:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageRetirementProjectPlan'
+    StorageRetirementDetail:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required:
+        - retirement
+        - projects
+        - dependencies
+      properties:
+        retirement:
+          $ref: '#/components/schemas/StorageRetirement'
+        projects:
+          type: array
+          description: Authorized project/child projections for this dependency page; never include hidden project identities.
+          items:
+            $ref: '#/components/schemas/StorageRetirementProjectAssessment'
+        dependencies:
+          $ref: '#/components/schemas/StorageRetirementDependencyPage'
+    StorageRetirementPlanRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_generation
+        - preview_revision
+        - confirmed_scope
+        - plan
+      properties:
+        expected_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+        preview_revision:
+          type: string
+          minLength: 1
+          description: Signed preview revision; valid for five minutes and bound to the requesting actor. A service restart rotates the signing key, so revisions issued before a restart are stale and the caller must re-preview. An expired, restarted or changed snapshot returns storage_retirement_preview_stale.
+        confirmed_scope:
+          $ref: '#/components/schemas/StorageRetirementTarget'
+        plan:
+          type: array
+          description: Replace only unaccepted project destinations; never rewrite accepted child inputs or expand the source scope.
+          items:
+            $ref: '#/components/schemas/StorageRetirementProjectPlan'
+    StorageRetirementActionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_generation
+      properties:
+        expected_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+    StorageRetirementRecoverAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_generation
+        - expected_management_generation
+        - credentials
+      description: Stored connections only, with connection management permission, while the same retirement is blocked in finalizing. Save candidate credentials through an authorization version restricted to this retirement's exact verification/cleanup. Never activate ordinary business authorization, recreate removed markers, enable the connection or unlock ordinary I/O. Deployment sources reject uploaded credentials and return configuration recovery guidance. Never echo secrets.
+      properties:
+        expected_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+        expected_management_generation:
+          $ref: '#/components/schemas/StorageRetirementGeneration'
+        credentials:
+          type: object
+          writeOnly: true
+          additionalProperties: false
+          required:
+            - access_key_id
+            - secret_access_key
+          properties:
+            access_key_id:
+              type: string
+              minLength: 1
+              writeOnly: true
+            secret_access_key:
+              type: string
+              minLength: 1
+              writeOnly: true
+            session_token:
+              type: string
+              writeOnly: true
+            expires_at:
+              type: string
+              format: date-time
+              nullable: true
     StorageOption:
       type: object
       additionalProperties: false
@@ -8440,6 +12463,9 @@ components:
               - storage_quota_exceeded
               - storage_operation_in_progress
               - project_not_empty
+              - storage_retiring
+              - storage_removed
+              - storage_retirement_conflict
     StorageOptions:
       type: object
       additionalProperties: false
@@ -8509,6 +12535,8 @@ components:
             - storage_quota_exceeded
             - storage_operation_in_progress
             - project_not_empty
+            - storage_removed
+            - storage_retirement_conflict
         items:
           type: array
           items:
@@ -8803,6 +12831,16 @@ components:
         runtime:
           deployment_enabled: false
           maintenance: false
+          retirement:
+            contract_version: 1
+            unused_removal:
+              allowed: false
+              reason_codes:
+                - storage_capability_unsupported
+            in_use_retirement:
+              allowed: false
+              reason_codes:
+                - storage_capability_unsupported
         allowed_policy_modes:
           - site_only
         policy_restriction_codes:
@@ -8846,11 +12884,19 @@ components:
           nullable: true
           maximum: 9007199254740991
           minimum: 1
+    StorageLifecycle:
+      type: string
+      enum:
+        - available
+        - retiring
+        - removed
+      description: Independent of administrative status, health and authorization. Existing identities start available, including disabled ones. Retiring rejects new bindings, incoming migrations and ordinary writes; finalizing also denies ordinary reads. Failed retirement retains the barrier. Removed permanently denies I/O for this identity. Admission, migration and configuration gates all read this same lifecycle fact.
     StorageConnectionManagementActions:
       type: object
       readOnly: true
       additionalProperties: false
       required:
+        - retire
         - create_space
         - authorize_read
         - authorize_write
@@ -8858,7 +12904,10 @@ components:
         - check_write
         - revoke_auth
         - set_status
+      description: Retire enters the retirement workflow and is gated by the retirement contract plus the connection's current lifecycle, permissions and maintenance state. Other actions retain their existing behavior.
       properties:
+        retire:
+          $ref: '#/components/schemas/StorageActionAvailability'
         create_space:
           $ref: '#/components/schemas/StorageActionAvailability'
         authorize_read:
@@ -8890,7 +12939,19 @@ components:
         - management_generation
         - auth_generation
         - management_actions
+        - lifecycle
+        - retirement_id
+        - configuration_source
       properties:
+        lifecycle:
+          $ref: '#/components/schemas/StorageLifecycle'
+        retirement_id:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Owning retirement, including failed tasks that still hold the barrier; null when none.
+        configuration_source:
+          $ref: '#/components/schemas/StorageConfigurationSource'
         management_actions:
           $ref: '#/components/schemas/StorageConnectionManagementActions'
         id:
@@ -8940,6 +13001,7 @@ components:
           nullable: true
     StorageConnectionList:
       type: object
+      description: Lifecycle-filtered connection projection. The default list hides removed rows; available, retiring, removed and all select one lifecycle explicitly. A removed row keeps its tombstone identity for authorized history but no longer serves storage I/O.
       required:
         - items
       properties:
@@ -8992,9 +13054,13 @@ components:
       readOnly: true
       additionalProperties: false
       required:
+        - retire
         - set_status
         - set_quota
+      description: Retire enters the retirement workflow and is gated by the retirement contract plus the connection's current lifecycle, permissions and maintenance state. Other actions retain their existing behavior.
       properties:
+        retire:
+          $ref: '#/components/schemas/StorageActionAvailability'
         set_quota:
           $ref: '#/components/schemas/StorageActionAvailability'
         set_status:
@@ -9016,7 +13082,19 @@ components:
         - live_bytes
         - pending_delete_bytes
         - management_actions
+        - lifecycle
+        - retirement_id
+        - configuration_source
       properties:
+        lifecycle:
+          $ref: '#/components/schemas/StorageLifecycle'
+        retirement_id:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Owning retirement, including a connection retirement covering this space; null when none.
+        configuration_source:
+          $ref: '#/components/schemas/StorageConfigurationSource'
         available_bytes:
           type: integer
           format: int64
@@ -9074,6 +13152,7 @@ components:
           maximum: 9007199254740991
     StorageSpaceList:
       type: object
+      description: Lifecycle-filtered space projection. The default list hides removed rows; a space may be retiring because of its own retirement or the covering connection retirement.
       required:
         - items
       properties:
@@ -9259,6 +13338,8 @@ components:
               - storage_quota_exceeded
               - storage_operation_in_progress
               - project_not_empty
+              - storage_removed
+              - storage_retirement_conflict
     StorageBindingRequest:
       type: object
       additionalProperties: false
@@ -9802,6 +13883,10 @@ components:
         version:
           type: integer
           minimum: 1
+    password:
+      type: string
+      minLength: 8
+      description: 至少 8 个 Unicode 码点、最多 72 个 UTF-8 字节；原样校验和哈希，不去除空白或截断。字节上限不能用按字符计数的 maxLength 代替。
     ResponseFormat:
       type: string
       enum:
@@ -10357,17 +14442,108 @@ components:
                   - view
                   - cancel
                   - retry
+    StorageRetirementOperation:
+      type: object
+      additionalProperties: false
+      required:
+        - task_type
+        - task_id
+        - scope
+        - owner_id
+        - target_kind
+        - target_id
+        - name
+        - status
+        - phase
+        - error_code
+        - next_check_at
+        - created_at
+        - updated_at
+        - started_at
+        - finished_at
+        - can_delete
+        - supported_actions
+      description: 专用跨项目退出父任务投影。父任务没有虚构的 project_id，因此不继承带 project_id 的 OperationBase；显式 project_id 筛选必须排除父任务。只投影任务中心需要的稳定字段， 不返回凭据、对象键、bucket/prefix、租约、内部 CAS 或依赖明细。历史结果按管理归属 权限可查，移除完成后保留 tombstone 与已完成的幂等结果。
+      properties:
+        task_type:
+          type: string
+          enum:
+            - storage_retirement
+        task_id:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: 退出任务标识；与项目任务一致以字符串返回，避免大整数精度损失。
+        scope:
+          $ref: '#/components/schemas/StorageRetirementScope'
+        owner_id:
+          type: integer
+          minimum: 0
+          description: user 为当前用户 ID，org 为组织 ID，site 为 0，与退出任务归属一致。
+        target_kind:
+          $ref: '#/components/schemas/StorageRetirementTargetKind'
+        target_id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          description: 目标显示名，来自连接或空间；不含 provider 路径、凭据或对象键。
+        status:
+          $ref: '#/components/schemas/StorageRetirementStatus'
+        phase:
+          $ref: '#/components/schemas/StorageRetirementPhase'
+        error_code:
+          type: string
+          description: 脱敏的稳定领域错误码；空字符串表示无错误，不返回错误正文。
+        next_check_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 持久等待（保留期、pin、部署配置）的下一次检查时间；纯等待不消耗失败重试次数。
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        can_delete:
+          type: boolean
+          enum:
+            - false
+          readOnly: true
+          x-go-type-skip-optional-pointer: true
+          x-omitempty: false
+          description: 退出父任务承担屏障与恢复依据，本功能不可删除，始终为 false。
+        supported_actions:
+          type: array
+          uniqueItems: true
+          description: 类型能力，不是当前状态或用户权限许可；执行时必须再次鉴权。
+          items:
+            type: string
+            enum:
+              - view
+              - resume
+              - cancel
     OperationSummary:
       oneOf:
         - $ref: '#/components/schemas/TranslationOperation'
         - $ref: '#/components/schemas/GlossarySyncOperation'
         - $ref: '#/components/schemas/StorageOperation'
+        - $ref: '#/components/schemas/StorageRetirementOperation'
       discriminator:
         propertyName: task_type
         mapping:
           translation: '#/components/schemas/TranslationOperation'
           glossary_sync: '#/components/schemas/GlossarySyncOperation'
           storage: '#/components/schemas/StorageOperation'
+          storage_retirement: '#/components/schemas/StorageRetirementOperation'
     OperationListResponse:
       type: object
       required:
@@ -10427,12 +14603,15 @@ components:
             - translation
             - glossary_sync
             - storage
+            - storage_retirement
           properties:
             translation:
               $ref: '#/components/schemas/OperationCounts'
             glossary_sync:
               $ref: '#/components/schemas/OperationCounts'
             storage:
+              $ref: '#/components/schemas/OperationCounts'
+            storage_retirement:
               $ref: '#/components/schemas/OperationCounts'
         recent_failed_since:
           type: string

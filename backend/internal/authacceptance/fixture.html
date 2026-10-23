@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="referrer" content="no-referrer">
+<title>LinguaFlow backend authentication acceptance</title>
+<h1>Backend authentication acceptance</h1><p id="status">Ready</p>
+<script>
+// This deliberately small test page is independent of the production frontend.
+// Flow state is scoped to the exact API instance, tab and transaction generation.
+const apiBase = __API_BASE__;
+const instanceKey = 'lf-b1:' + apiBase;
+const flowKey = instanceKey + ':flow';
+const sessionKey = instanceKey + ':session';
+const base64url = bytes => btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+window.auth = {
+  session() { return JSON.parse(sessionStorage.getItem(sessionKey) || 'null'); },
+  adopt(value) { if (value) sessionStorage.setItem(sessionKey, JSON.stringify(value)); else sessionStorage.removeItem(sessionKey); },
+  async request(path, data, method = 'POST', actor = undefined) {
+    const token = actor === undefined ? this.session()?.access_token : actor;
+    const response = await fetch(apiBase + '/api/v1' + path, {
+      method, headers: { ...(data === undefined ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+      ...(data === undefined ? {} : { body: JSON.stringify(data) }), cache: 'no-store', referrerPolicy: 'no-referrer', credentials: 'omit'
+    });
+    const body = response.status === 204 ? null : await response.json();
+    return { status: response.status, body, cache: response.headers.get('cache-control'), referrer: response.headers.get('referrer-policy') };
+  },
+  async begin(path, input = {}, anonymous = false) {
+    const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
+    const challenge = base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+    const actor = anonymous ? null : this.session()?.access_token;
+    const response = await this.request(path, { ...input, browser_challenge: challenge, completion_url: location.origin + '/complete', return_to: '/settings' }, 'POST', actor);
+    if (response.status !== 200) return response;
+    sessionStorage.setItem(flowKey, JSON.stringify({ instance: apiBase, verifier, actor, transactionID: response.body.transaction_id }));
+    window.result = null;
+    return response;
+  },
+  async complete(input = {}) {
+    const flow = JSON.parse(sessionStorage.getItem(flowKey));
+    const response = await this.request('/auth/external/complete', { confirmation_token: window.result.body.confirmation_token, verifier: flow.verifier, ...input }, 'POST', flow.actor);
+    if (response.status === 200) {
+      if (response.body.session) this.adopt(response.body.session);
+      sessionStorage.removeItem(flowKey);
+    }
+    return response;
+  },
+  async cancel() {
+    const flow = JSON.parse(sessionStorage.getItem(flowKey));
+    const response = await this.request('/auth/external/cancel', { transaction_id: flow.transactionID, verifier: flow.verifier }, 'POST', flow.actor);
+    sessionStorage.removeItem(flowKey);
+    return response;
+  }
+};
+(async () => {
+  const ticket = new URL(location.href).searchParams.get('ticket');
+  if (!ticket) return;
+  // Remove the ticket before any fetch or asynchronous work.
+  history.replaceState(null, '', location.pathname);
+  const flow = JSON.parse(sessionStorage.getItem(flowKey) || 'null');
+  if (!flow || flow.instance !== apiBase) {
+    window.result = { status: 400, body: { code: 'missing_instance_flow' } };
+  } else {
+    window.result = await auth.request('/auth/external/exchange', { ticket, verifier: flow.verifier }, 'POST', flow.actor);
+    if (window.result.body?.session) auth.adopt(window.result.body.session);
+  }
+  document.querySelector('#status').textContent = 'Result: ' + window.result.status;
+})().catch(() => { window.result = { status: 0 }; document.querySelector('#status').textContent = 'Failed'; });
+</script></html>

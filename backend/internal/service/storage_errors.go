@@ -6,21 +6,23 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/diskspace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storage"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storageauth"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/storageguard"
 	"strings"
 )
 
 var (
 	ErrStorageExpired    = errors.New("storage_intent_expired")
-	ErrStorageInProgress = errors.New("storage_operation_in_progress")
+	ErrStorageInProgress = storageguard.ErrBusy
 )
 
 // StorageOperationError carries only authorized, durable operation identities.
 // Callers must obtain the operation through the actor's project authorization.
 type StorageOperationError struct {
-	Err         error
-	TaskID      int
-	OperationID string
-	CheckID     int
+	Err          error
+	TaskID       int
+	OperationID  string
+	CheckID      int
+	RetirementID int
 }
 
 func (e *StorageOperationError) Error() string { return StorageErrorCode(e.Err) }
@@ -40,6 +42,18 @@ func StorageErrorCode(err error) string {
 		return ""
 	}
 	switch {
+	case errors.Is(err, ErrStorageRetiring):
+		return "storage_retiring"
+	case errors.Is(err, ErrStorageRemoved):
+		return "storage_removed"
+	case errors.Is(err, ErrStorageRetirementConflict):
+		return "storage_retirement_conflict"
+	case errors.Is(err, ErrStorageRetirementPreviewStale):
+		return "storage_retirement_preview_stale"
+	case errors.Is(err, ErrStorageRetirementDependenciesRemaining):
+		return "storage_retirement_dependencies_remaining"
+	case errors.Is(err, ErrStorageRetirementConfigurationPending):
+		return "storage_retirement_configuration_pending"
 	case errors.Is(err, ErrStorageExpired):
 		return "storage_intent_expired"
 	case errors.Is(err, ErrStorageInProgress):

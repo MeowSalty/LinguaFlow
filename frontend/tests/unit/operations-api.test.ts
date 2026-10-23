@@ -14,6 +14,15 @@ const counts = (pausing = 0): OperationsSummary['total'] => ({
   needs_action: 6,
   recent_failed: 99,
 })
+const zeroCounts = (): OperationsSummary['total'] => ({
+  pending: 0,
+  running: 0,
+  pausing: 0,
+  paused: 0,
+  waiting_retry: 0,
+  needs_action: 0,
+  recent_failed: 0,
+})
 const summary = (): OperationsSummary => ({
   total: counts(7),
   by_type: { translation: counts(7), glossary_sync: counts(), storage: counts() },
@@ -24,23 +33,35 @@ const summary = (): OperationsSummary => ({
 beforeEach(() => get.mockReset())
 
 describe('Operations wire boundary', () => {
-  it('normalizes only the missing legacy pausing bucket for totals and every task type', async () => {
+  it('normalizes missing legacy pausing and missing retirement buckets without erasing unknowns', async () => {
     const data = summary()
-    for (const bucket of [data.total, ...Object.values(data.by_type)]) {
+    for (const bucket of [
+      data.total,
+      data.by_type.translation,
+      data.by_type.glossary_sync,
+      data.by_type.storage,
+    ]) {
       delete (bucket as Partial<typeof bucket>).pausing
     }
     get.mockResolvedValue({ data, response: new Response() })
     const result = await fetchOperationsSummary()
-    for (const bucket of [result.total, ...Object.values(result.by_type)]) {
+    for (const bucket of [
+      result.total,
+      result.by_type.translation,
+      result.by_type.glossary_sync,
+      result.by_type.storage,
+    ]) {
       expect(bucket).toEqual(counts())
     }
+    expect(result.by_type.storage_retirement).toEqual(zeroCounts())
     expect(result.as_of).toBe(data.as_of)
     expect(result.recent_failed_since).toBe(data.recent_failed_since)
     expect(data.total).not.toHaveProperty('pausing')
   })
 
-  it('preserves independent pausing counts and forwards supported dimensions and cancellation', async () => {
+  it('preserves independent pausing and retirement counts and forwards cancellation', async () => {
     const data = summary()
+    data.by_type.storage_retirement = counts(8)
     get.mockResolvedValue({ data, response: new Response() })
     const signal = new AbortController().signal
     const query = {
@@ -61,9 +82,19 @@ describe('Operations wire boundary', () => {
   })
 
   it('forwards the pausing filter without a state filter and preserves real pagination cursors', async () => {
-    const data = { items: [], next_cursor: 'next-real-cursor' }
+    const translation = { task_type: 'translation', task_id: '1', project_id: 7 }
+    const storage = { task_type: 'storage', task_id: '2', project_id: 7 }
+    const retirement = { task_type: 'storage_retirement', task_id: '3' }
+    const future = { task_type: 'future_unsupported', task_id: '4' } as never
+    const data = {
+      items: [retirement, translation, future, storage],
+      next_cursor: 'next-real-cursor',
+    }
     get.mockResolvedValue({ data, response: new Response() })
-    expect(await listOperations({ status: 'pausing', limit: 50 })).toEqual(data)
+    expect(await listOperations({ status: 'pausing', limit: 50 })).toEqual({
+      items: [translation, storage],
+      next_cursor: 'next-real-cursor',
+    })
     expect(get).toHaveBeenCalledWith('/operations', {
       params: { query: { status: 'pausing', limit: 50 } },
       signal: undefined,

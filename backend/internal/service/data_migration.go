@@ -12,7 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
-const CurrentDataVersion = 2
+const CurrentDataVersion = 3
 
 var ErrDataMigrationRequired = errors.New("database data migration required; start a compatible server version with auto_migrate enabled")
 

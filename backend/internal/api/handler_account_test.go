@@ -9,12 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
+	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const accountTestPassword = "original-password"
@@ -22,7 +21,10 @@ const accountTestPassword = "original-password"
 func accountTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	t.Helper()
 	s, client, account := authTestServer(t)
+	client.InstanceInitialization.Create().SetID(1).SetVersion(service.InitializationVersion).SetDataVersion(service.CurrentDataVersion).SetMode("serve").ExecX(t.Context())
 	client.SystemSetting.Create().SetKey(service.SettingRegistrationEnabled).SetValue("true").SaveX(context.Background())
+	client.AuthConnection.Create().SetID(service.PasswordConnectionID).SetKind("password").SetCurrentRevision(1).ExecX(t.Context())
+	client.LocalAccountPolicy.Create().SetID(1).SetSignupRules(authrules.Unrestricted()).ExecX(t.Context())
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(accountTestPassword), bcrypt.MinCost)
 	if err != nil {
 		t.Fatal(err)
@@ -36,6 +38,7 @@ func accountTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 		AccessTokenTTL: time.Hour, RefreshTokenTTL: 24 * time.Hour,
 	}, service.NewSettingsService(client))
 	s.userService = service.NewUserService(client, s.authService)
+	s.adminService = service.NewAdminService(client)
 	return s, client, account
 }
 
@@ -83,7 +86,7 @@ func accountAssertProblem(t *testing.T, w *httptest.ResponseRecorder, want int, 
 
 func accountLogin(t *testing.T, router http.Handler, username, password string) authSessionResponse {
 	t.Helper()
-	w := accountRequest(router, http.MethodPost, "/auth/login", "", accountJSON(t, map[string]string{"username": username, "password": password}))
+	w := accountRequest(router, http.MethodPost, "/auth/login", "", accountJSON(t, map[string]string{"identifier": username, "password": password}))
 	accountAssertStatus(t, w, http.StatusOK)
 	var session authSessionResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &session); err != nil {
@@ -113,6 +116,8 @@ func TestRouter_AccountProfilePartialUpdates(t *testing.T) {
 		{"clear display name", `{"display_name":""}`, "", "test@test.com"},
 		{"whitespace display name", `{"display_name":" \t "}`, "", "test@test.com"},
 		{"empty object", `{}`, "Original Name", "test@test.com"},
+		{"clear email with null", `{"email":null}`, "Original Name", ""},
+		{"clear email with empty string", `{"email":""}`, "Original Name", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -124,8 +129,11 @@ func TestRouter_AccountProfilePartialUpdates(t *testing.T) {
 			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 				t.Fatal(err)
 			}
-			if response.DisplayName != tc.displayName || response.Email != tc.email || response.Username != account.Username || response.Role != account.Role || response.Active != account.Active {
+			if response.DisplayName != tc.displayName || organizationStringField(response.Email) != tc.email || response.Username != account.Username || response.Role != account.Role || response.Active != account.Active {
 				t.Fatalf("unexpected updated user: %+v", response)
+			}
+			if tc.email == "" && response.Email != nil {
+				t.Fatalf("empty email must be JSON null: %s", w.Body.String())
 			}
 			stored, err := client.User.Get(context.Background(), account.ID)
 			if err != nil {
@@ -148,14 +156,12 @@ func TestRouter_AccountProfileRejectsInvalidUpdatesAtomically(t *testing.T) {
 	cases := map[string]string{
 		"empty body": "", "null object": `null`, "array": `[]`, "string": `"profile"`,
 		"malformed": `{"email":`, "trailing object": `{} {}`, "trailing null": `{} null`, "trailing garbage": `{} x`,
-		"display null": `{"display_name":null}`, "email null": `{"email":null}`,
+		"display null":                  `{"display_name":null}`,
 		"duplicate field":               `{"display_name":"First","display_name":"Second"}`,
 		"null overwritten by duplicate": `{"email":null,"email":"new@example.com"}`,
 		"display number":                `{"display_name":123}`, "email bool": `{"email":true}`, "email array": `{"email":[]}`,
 		"email object": `{"email":{}}`, "username readonly": `{"username":"other"}`, "role readonly": `{"role":"admin"}`,
 		"active readonly": `{"active":false}`, "unknown field": `{"other":"value"}`, "wrong case": `{"Email":"new@example.com"}`,
-		"empty email":         `{"display_name":"Must Not Save","email":""}`,
-		"whitespace email":    `{"display_name":"Must Not Save","email":" \t "}`,
 		"bare at":             `{"display_name":"Must Not Save","email":"@"}`,
 		"internal whitespace": `{"display_name":"Must Not Save","email":"first last@example.com"}`,
 		"unicode whitespace":  `{"display_name":"Must Not Save","email":"first\u00a0last@example.com"}`,
@@ -174,9 +180,12 @@ func TestRouter_AccountProfileRejectsInvalidUpdatesAtomically(t *testing.T) {
 	if _, err := client.User.Create().SetUsername("other").SetEmail("other@example.com").SetPasswordHash(account.PasswordHash).Save(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	w := accountRequest(router, http.MethodPut, "/users/me", token, `{"display_name":"Must Not Save","email":" OTHER@EXAMPLE.COM "}`)
-	accountAssertProblem(t, w, http.StatusConflict, "urn:linguaflow:conflict")
-	accountAssertUnchanged(t, client, account)
+	w := accountRequest(router, http.MethodPut, "/users/me", token, `{"display_name":"Shared Email","email":" OTHER@EXAMPLE.COM "}`)
+	accountAssertStatus(t, w, http.StatusOK)
+	stored := client.User.GetX(context.Background(), account.ID)
+	if stored.Email != "other@example.com" || stored.EmailVerifiedAt != nil || stored.VerifiedEmailKey != "" {
+		t.Fatalf("unverified email must not claim ownership: %+v", stored)
+	}
 }
 
 func TestRouter_AccountPasswordRequestValidation(t *testing.T) {
@@ -253,7 +262,7 @@ func TestRouter_AccountNewPasswordBoundaries(t *testing.T) {
 			accountLogin(t, router, account.Username, tc.password)
 			if strings.TrimSpace(tc.password) != tc.password {
 				w := accountRequest(router, http.MethodPost, "/auth/login", "", accountJSON(t, map[string]string{
-					"username": account.Username, "password": strings.TrimSpace(tc.password),
+					"identifier": account.Username, "password": strings.TrimSpace(tc.password),
 				}))
 				accountAssertProblem(t, w, http.StatusUnauthorized, "urn:linguaflow:invalid-credentials")
 			}
@@ -261,7 +270,7 @@ func TestRouter_AccountNewPasswordBoundaries(t *testing.T) {
 	}
 }
 
-func TestRouter_AccountLegacyPasswordChangePreservesSessions(t *testing.T) {
+func TestRouter_AccountPasswordChangeRevokesSessions(t *testing.T) {
 	s, client, account := accountTestServer(t)
 	legacyPassword := "旧密码"
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(legacyPassword), bcrypt.MinCost)
@@ -281,85 +290,57 @@ func TestRouter_AccountLegacyPasswordChangePreservesSessions(t *testing.T) {
 	if w.Body.Len() != 0 {
 		t.Fatalf("204 response has a body: %s", w.Body.String())
 	}
-	accountAssertStatus(t, accountRequest(router, http.MethodGet, "/users/me", session.AccessToken, ""), http.StatusOK)
-	oldLogin := accountRequest(router, http.MethodPost, "/auth/login", "", accountJSON(t, map[string]string{"username": account.Username, "password": legacyPassword}))
+	accountAssertProblem(t, accountRequest(router, http.MethodGet, "/users/me", session.AccessToken, ""), http.StatusUnauthorized, "urn:linguaflow:token-invalid")
+	oldLogin := accountRequest(router, http.MethodPost, "/auth/login", "", accountJSON(t, map[string]string{"identifier": account.Username, "password": legacyPassword}))
 	accountAssertProblem(t, oldLogin, http.StatusUnauthorized, "urn:linguaflow:invalid-credentials")
 	accountLogin(t, router, account.Username, newPassword)
 	refresh := accountRequest(router, http.MethodPost, "/auth/refresh", "", accountJSON(t, map[string]string{"refresh_token": session.RefreshToken}))
-	accountAssertStatus(t, refresh, http.StatusOK)
+	accountAssertProblem(t, refresh, http.StatusUnauthorized, "")
 }
 
 func TestRouter_AccountLogoutOwnershipAndIdempotency(t *testing.T) {
 	s, client, account := accountTestServer(t)
-	ctx := context.Background()
-	other, err := client.User.Create().SetUsername("other").SetEmail("other@example.com").SetPasswordHash(account.PasswordHash).Save(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	createRefresh := func(raw string, ownerID int, revoked bool) *ent.RefreshToken {
-		t.Helper()
-		create := client.RefreshToken.Create().SetTokenHash(hash.Full(raw)).SetUserID(ownerID).SetExpiresAt(time.Now().Add(time.Hour))
-		if revoked {
-			create.SetRevokedAt(time.Now().Add(-time.Minute))
-		}
-		record, err := create.Save(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return record
-	}
-	owned := createRefresh("owned-token", account.ID, false)
-	otherSession := createRefresh("other-session-token", account.ID, false)
-	foreign := createRefresh("foreign-token", other.ID, false)
-	foreignRevoked := createRefresh("foreign-revoked-token", other.ID, true)
-	token := authTestToken(t, account, time.Now().Add(time.Hour), []byte(authTestSecret))
+	other := client.User.Create().SetUsername("other").SetEmail("other@example.com").SetPasswordHash(account.PasswordHash).SaveX(t.Context())
 	router := s.newRouter()
-	for _, raw := range []string{"foreign-token", "foreign-revoked-token"} {
-		w := accountRequest(router, http.MethodPost, "/auth/logout", token, accountJSON(t, map[string]string{"refresh_token": raw}))
-		accountAssertProblem(t, w, http.StatusForbidden, "urn:linguaflow:forbidden")
+	owned := accountLogin(t, router, account.Username, accountTestPassword)
+	otherSession := accountLogin(t, router, account.Username, accountTestPassword)
+	foreign := accountLogin(t, router, other.Username, accountTestPassword)
+	foreignRevoked := accountLogin(t, router, other.Username, accountTestPassword)
+	logout := func(access, refresh string) *httptest.ResponseRecorder {
+		return accountRequest(router, http.MethodPost, "/auth/logout", access, accountJSON(t, map[string]string{"refresh_token": refresh}))
 	}
-	foreignAfter, err := client.RefreshToken.Get(ctx, foreign.ID)
-	if err != nil || foreignAfter.RevokedAt != nil {
-		t.Fatalf("foreign token was changed: record=%+v, error=%v", foreignAfter, err)
+	refresh := func(raw string) *httptest.ResponseRecorder {
+		return accountRequest(router, http.MethodPost, "/auth/refresh", "", accountJSON(t, map[string]string{"refresh_token": raw}))
 	}
-	foreignRevokedAfter, err := client.RefreshToken.Get(ctx, foreignRevoked.ID)
-	if err != nil || foreignRevokedAfter.RevokedAt == nil || !foreignRevokedAfter.RevokedAt.Equal(*foreignRevoked.RevokedAt) {
-		t.Fatalf("foreign revoked token was changed: record=%+v, error=%v", foreignRevokedAfter, err)
+	accountAssertStatus(t, logout(foreign.AccessToken, foreignRevoked.RefreshToken), http.StatusNoContent)
+	for _, raw := range []string{foreign.RefreshToken, foreignRevoked.RefreshToken} {
+		accountAssertProblem(t, logout(owned.AccessToken, raw), http.StatusForbidden, "urn:linguaflow:forbidden")
 	}
-	w := accountRequest(router, http.MethodPost, "/auth/logout", token, `{"refresh_token":"unknown-token"}`)
-	accountAssertProblem(t, w, http.StatusUnauthorized, "urn:linguaflow:token-invalid")
-	for i := 0; i < 2; i++ {
-		w = accountRequest(router, http.MethodPost, "/auth/logout", token, `{"refresh_token":"owned-token"}`)
+	accountAssertProblem(t, logout(owned.AccessToken, "unknown-token"), http.StatusUnauthorized, "urn:linguaflow:token-invalid")
+	for range 2 {
+		w := logout(owned.AccessToken, owned.RefreshToken)
 		accountAssertStatus(t, w, http.StatusNoContent)
 		if w.Body.Len() != 0 {
 			t.Fatalf("logout 204 response has a body: %s", w.Body.String())
 		}
 	}
-	ownedAfter, err := client.RefreshToken.Get(ctx, owned.ID)
-	if err != nil || ownedAfter.RevokedAt == nil {
-		t.Fatalf("own token was not revoked: record=%+v, error=%v", ownedAfter, err)
-	}
-	otherSessionAfter, err := client.RefreshToken.Get(ctx, otherSession.ID)
-	if err != nil || otherSessionAfter.RevokedAt != nil {
-		t.Fatalf("other session token was changed: record=%+v, error=%v", otherSessionAfter, err)
-	}
-	accountAssertStatus(t, accountRequest(router, http.MethodGet, "/users/me", token, ""), http.StatusOK)
-	accountAssertStatus(t, accountRequest(router, http.MethodPost, "/auth/refresh", "", `{"refresh_token":"other-session-token"}`), http.StatusOK)
-	accountAssertProblem(t, accountRequest(router, http.MethodPost, "/auth/refresh", "", `{"refresh_token":"owned-token"}`), http.StatusUnauthorized, "urn:linguaflow:refresh-token-revoked")
+	accountAssertStatus(t, accountRequest(router, http.MethodGet, "/users/me", owned.AccessToken, ""), http.StatusOK)
+	accountAssertStatus(t, refresh(otherSession.RefreshToken), http.StatusOK)
+	accountAssertStatus(t, refresh(foreign.RefreshToken), http.StatusOK)
+	accountAssertProblem(t, refresh(owned.RefreshToken), http.StatusUnauthorized, "urn:linguaflow:refresh-token-revoked")
+	accountAssertProblem(t, refresh(foreignRevoked.RefreshToken), http.StatusUnauthorized, "urn:linguaflow:refresh-token-revoked")
 }
 
 func TestRouter_AccountAuthenticationAndLocalMode(t *testing.T) {
 	s, client, account := accountTestServer(t)
-	refresh, err := client.RefreshToken.Create().SetTokenHash(hash.Full("test-token")).SetUserID(account.ID).SetExpiresAt(time.Now().Add(time.Hour)).Save(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
 	router := s.newRouter()
+	session := accountLogin(t, router, account.Username, accountTestPassword)
+	account = client.User.GetX(t.Context(), account.ID)
 	paths := []struct{ method, path, body string }{
 		{http.MethodGet, "/users/me", ""},
 		{http.MethodPut, "/users/me", `{"display_name":"Denied"}`},
 		{http.MethodPut, "/users/me/password", `{"current_password":"original-password","new_password":"new-password"}`},
-		{http.MethodPost, "/auth/logout", `{"refresh_token":"test-token"}`},
+		{http.MethodPost, "/auth/logout", accountJSON(t, map[string]string{"refresh_token": session.RefreshToken})},
 	}
 	expired := authTestToken(t, account, time.Now().Add(-time.Hour), []byte(authTestSecret))
 	for _, path := range paths {
@@ -367,10 +348,7 @@ func TestRouter_AccountAuthenticationAndLocalMode(t *testing.T) {
 		accountAssertProblem(t, accountRequest(router, path.method, path.path, expired, path.body), http.StatusUnauthorized, "urn:linguaflow:token-expired")
 	}
 	accountAssertUnchanged(t, client, account)
-	refreshAfter, err := client.RefreshToken.Get(context.Background(), refresh.ID)
-	if err != nil || refreshAfter.RevokedAt != nil {
-		t.Fatalf("unauthenticated request changed the refresh token: record=%+v, error=%v", refreshAfter, err)
-	}
+	accountAssertStatus(t, accountRequest(router, http.MethodPost, "/auth/refresh", "", accountJSON(t, map[string]string{"refresh_token": session.RefreshToken})), http.StatusOK)
 	s.mode, s.localUser = config.ModeLocal, account
 	localRouter := s.newRouter()
 	get := accountRequest(localRouter, http.MethodGet, "/users/me", "", "")

@@ -101,7 +101,7 @@ func TestStorageEPolicyDeploymentMatrixAndRestart(t *testing.T) {
 					if err != nil || got.Mode != saved.Mode || got.DefaultChoice != saved.DefaultChoice || got.Generation != saved.Generation || !storageTestQuotaEqual(got.LogicalLimitBytes, saved.LogicalLimitBytes) || got.ConfigurationNeedsUpdate {
 						t.Fatalf("restart changed policy: %+v %v", got, err)
 					}
-					if got.Runtime != (StorageRuntime{DeploymentEnabled: enabled, Maintenance: maintenance}) {
+					if got.Runtime.DeploymentEnabled != enabled || got.Runtime.Maintenance != maintenance {
 						t.Fatalf("runtime does not reflect restart: %+v", got.Runtime)
 					}
 					wantModes := []string{"site_only"}
@@ -119,7 +119,7 @@ func TestStorageEPolicyDeploymentMatrixAndRestart(t *testing.T) {
 						t.Fatalf("policy restrictions: %v, want %v", got.PolicyRestrictionCodes, wantRestrictions)
 					}
 					options, err := restarted.Options(ctx, owner.ID, "user", 0)
-					if err != nil || options.Runtime != got.Runtime {
+					if err != nil || !reflect.DeepEqual(options.Runtime, got.Runtime) {
 						t.Fatalf("options runtime: %+v %v", options, err)
 					}
 					if mode.mode == "user_required" && !enabled {
@@ -148,7 +148,7 @@ func TestStorageEPolicyDeploymentMatrixAndRestart(t *testing.T) {
 						request.Mode, request.DefaultChoice = "site_only", "site"
 						updated, err = restarted.SetPolicy(ctx, owner.ID, request)
 					}
-					if err != nil || updated.Generation != saved.Generation+1 || !storageTestQuotaEqual(updated.LogicalLimitBytes, request.LogicalLimitBytes) || updated.Runtime != got.Runtime {
+					if err != nil || updated.Generation != saved.Generation+1 || !storageTestQuotaEqual(updated.LogicalLimitBytes, request.LogicalLimitBytes) || !reflect.DeepEqual(updated.Runtime, got.Runtime) {
 						t.Fatalf("legal save: %+v %v", updated, err)
 					}
 					persisted := client.SystemSetting.Query().Where(systemsetting.KeyEQ(storagePolicyKey)).OnlyX(ctx).Value

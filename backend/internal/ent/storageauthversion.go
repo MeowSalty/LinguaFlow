@@ -38,8 +38,14 @@ type StorageAuthVersion struct {
 	Ciphertext []byte `json:"-"`
 	// Status holds the value of the "status" field.
 	Status storageauthversion.Status `json:"status,omitempty"`
+	// Purpose holds the value of the "purpose" field.
+	Purpose storageauthversion.Purpose `json:"purpose,omitempty"`
+	// RetirementID holds the value of the "retirement_id" field.
+	RetirementID *int `json:"retirement_id,omitempty"`
 	// ExpiresAt holds the value of the "expires_at" field.
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	// PurgedAt holds the value of the "purged_at" field.
+	PurgedAt *time.Time `json:"purged_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the StorageAuthVersionQuery when eager-loading is set.
 	Edges        StorageAuthVersionEdges `json:"edges"`
@@ -73,11 +79,11 @@ func (*StorageAuthVersion) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case storageauthversion.FieldNonce, storageauthversion.FieldCiphertext:
 			values[i] = new([]byte)
-		case storageauthversion.FieldID, storageauthversion.FieldConnectionID, storageauthversion.FieldGeneration, storageauthversion.FieldPayloadVersion, storageauthversion.FieldAadVersion:
+		case storageauthversion.FieldID, storageauthversion.FieldConnectionID, storageauthversion.FieldGeneration, storageauthversion.FieldPayloadVersion, storageauthversion.FieldAadVersion, storageauthversion.FieldRetirementID:
 			values[i] = new(sql.NullInt64)
-		case storageauthversion.FieldKeyID, storageauthversion.FieldStatus:
+		case storageauthversion.FieldKeyID, storageauthversion.FieldStatus, storageauthversion.FieldPurpose:
 			values[i] = new(sql.NullString)
-		case storageauthversion.FieldCreatedAt, storageauthversion.FieldUpdatedAt, storageauthversion.FieldExpiresAt:
+		case storageauthversion.FieldCreatedAt, storageauthversion.FieldUpdatedAt, storageauthversion.FieldExpiresAt, storageauthversion.FieldPurgedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -160,12 +166,32 @@ func (_m *StorageAuthVersion) assignValues(columns []string, values []any) error
 			} else if value.Valid {
 				_m.Status = storageauthversion.Status(value.String)
 			}
+		case storageauthversion.FieldPurpose:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field purpose", values[i])
+			} else if value.Valid {
+				_m.Purpose = storageauthversion.Purpose(value.String)
+			}
+		case storageauthversion.FieldRetirementID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field retirement_id", values[i])
+			} else if value.Valid {
+				_m.RetirementID = new(int)
+				*_m.RetirementID = int(value.Int64)
+			}
 		case storageauthversion.FieldExpiresAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field expires_at", values[i])
 			} else if value.Valid {
 				_m.ExpiresAt = new(time.Time)
 				*_m.ExpiresAt = value.Time
+			}
+		case storageauthversion.FieldPurgedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field purged_at", values[i])
+			} else if value.Valid {
+				_m.PurgedAt = new(time.Time)
+				*_m.PurgedAt = value.Time
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -236,8 +262,21 @@ func (_m *StorageAuthVersion) String() string {
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))
 	builder.WriteString(", ")
+	builder.WriteString("purpose=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Purpose))
+	builder.WriteString(", ")
+	if v := _m.RetirementID; v != nil {
+		builder.WriteString("retirement_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
 	if v := _m.ExpiresAt; v != nil {
 		builder.WriteString("expires_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.PurgedAt; v != nil {
+		builder.WriteString("purged_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteByte(')')

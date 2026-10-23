@@ -175,7 +175,11 @@ func preflightDirectory(reader io.ReaderAt, size int64, maxEntries int) error {
 	}
 	end := -1
 	for i := len(tail) - 22; i >= 0; i-- {
-		if binary.LittleEndian.Uint32(tail[i:i+4]) == 0x06054b50 && i+22+int(binary.LittleEndian.Uint16(tail[i+20:i+22])) == len(tail) {
+		commentLen := int(binary.LittleEndian.Uint16(tail[i+20 : i+22]))
+		// 标准 ZIP 读取器允许 EOCD 后存在 trailing bytes；若要求注释必须
+		// 精确延续到文件末尾，会拒绝这类本来可正常读取的文件。
+		// 选中的中央目录仍会完整扫描并计入预算，因此不会绕过条目限制。
+		if binary.LittleEndian.Uint32(tail[i:i+4]) == 0x06054b50 && i+22+commentLen <= len(tail) {
 			end = i
 			break
 		}

@@ -1,8 +1,13 @@
 import type { LocationQuery, LocationQueryRaw } from 'vue-router'
-import type { Operation, OperationsQuery, SummaryQuery } from '@/api/operations'
+import type {
+  Operation,
+  OperationsQuery,
+  SummaryQuery,
+  SupportedOperationType,
+} from '@/api/operations'
 
 export type OperationLocator = {
-  task_type: Operation['task_type']
+  task_type: SupportedOperationType
   task_id: string
   project_id?: number
 }

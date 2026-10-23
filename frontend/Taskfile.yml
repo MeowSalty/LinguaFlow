@@ -8,7 +8,7 @@ tasks:
     desc: 读取已同步的 OpenAPI bundle，仅生成前端 TypeScript 类型
     deps: [openapi:verify]
     cmds:
-      - pnpm exec openapi-typescript ../api/openapi/openapi-3.0.yaml --default-non-nullable false -o src/api/types.d.ts
+      - node --import jiti/register scripts/generate-openapi-types.ts
   openapi:verify:
     desc: 校验 OpenAPI 源文件与已同步 bundle 的类型合同一致
     cmds: [pnpm exec vitest run tests/unit/openapi-contract.test.ts]
@@ -38,6 +38,14 @@ tasks:
   test:e2e:
     desc: 执行前端端到端测试
     cmds: ['pnpm exec playwright test {{.CLI_ARGS}}']
+  test:authentication-product:
+    desc: 使用独立后端、隔离 SQLite、受控 OAuth 与产品前端验证同源和跨域认证
+    deps: [build]
+    cmds: ['node tests/integration/authentication-product.mjs']
+  test:authentication-b5-product:
+    desc: 构建生产前端并按四格隔离运行 B5 认证产品联调
+    deps: [build]
+    cmds: ['node tests/integration/authentication-b5-product.mjs']
   test:storage-visual:
     desc: 对已运行的生产预览采集存储页面视觉证据（CLI_ARGS=before 或 after）
     cmds: ['node --experimental-strip-types tests/e2e/capture-storage-visual.mjs {{.CLI_ARGS}}']

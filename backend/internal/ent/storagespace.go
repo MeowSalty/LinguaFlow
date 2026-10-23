@@ -42,6 +42,10 @@ type StorageSpace struct {
 	ManagementGeneration int64 `json:"management_generation,omitempty"`
 	// Status holds the value of the "status" field.
 	Status storagespace.Status `json:"status,omitempty"`
+	// Lifecycle holds the value of the "lifecycle" field.
+	Lifecycle storagespace.Lifecycle `json:"lifecycle,omitempty"`
+	// RetirementID holds the value of the "retirement_id" field.
+	RetirementID *int `json:"retirement_id,omitempty"`
 	// Verified holds the value of the "verified" field.
 	Verified bool `json:"verified,omitempty"`
 	// Versioned holds the value of the "versioned" field.
@@ -56,6 +60,14 @@ type StorageSpace struct {
 	LiveBytes int64 `json:"live_bytes,omitempty"`
 	// PendingDeleteBytes holds the value of the "pending_delete_bytes" field.
 	PendingDeleteBytes int64 `json:"pending_delete_bytes,omitempty"`
+	// RemovedAt holds the value of the "removed_at" field.
+	RemovedAt *time.Time `json:"removed_at,omitempty"`
+	// RemovedBy holds the value of the "removed_by" field.
+	RemovedBy *int `json:"removed_by,omitempty"`
+	// ExecutionGeneration holds the value of the "execution_generation" field.
+	ExecutionGeneration int64 `json:"execution_generation,omitempty"`
+	// RemoteUseState holds the value of the "remote_use_state" field.
+	RemoteUseState storagespace.RemoteUseState `json:"remote_use_state,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the StorageSpaceQuery when eager-loading is set.
 	Edges        StorageSpaceEdges `json:"edges"`
@@ -89,11 +101,11 @@ func (*StorageSpace) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case storagespace.FieldVerified, storagespace.FieldVersioned:
 			values[i] = new(sql.NullBool)
-		case storagespace.FieldID, storagespace.FieldConnectionID, storagespace.FieldOwnerID, storagespace.FieldManagementGeneration, storagespace.FieldCapacityBytes, storagespace.FieldReservedBytes, storagespace.FieldCandidateBytes, storagespace.FieldLiveBytes, storagespace.FieldPendingDeleteBytes:
+		case storagespace.FieldID, storagespace.FieldConnectionID, storagespace.FieldOwnerID, storagespace.FieldManagementGeneration, storagespace.FieldRetirementID, storagespace.FieldCapacityBytes, storagespace.FieldReservedBytes, storagespace.FieldCandidateBytes, storagespace.FieldLiveBytes, storagespace.FieldPendingDeleteBytes, storagespace.FieldRemovedBy, storagespace.FieldExecutionGeneration:
 			values[i] = new(sql.NullInt64)
-		case storagespace.FieldName, storagespace.FieldIdentity, storagespace.FieldMarkerNonce, storagespace.FieldBucket, storagespace.FieldPrefix, storagespace.FieldOwnerKind, storagespace.FieldStatus:
+		case storagespace.FieldName, storagespace.FieldIdentity, storagespace.FieldMarkerNonce, storagespace.FieldBucket, storagespace.FieldPrefix, storagespace.FieldOwnerKind, storagespace.FieldStatus, storagespace.FieldLifecycle, storagespace.FieldRemoteUseState:
 			values[i] = new(sql.NullString)
-		case storagespace.FieldCreatedAt, storagespace.FieldUpdatedAt:
+		case storagespace.FieldCreatedAt, storagespace.FieldUpdatedAt, storagespace.FieldRemovedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -188,6 +200,19 @@ func (_m *StorageSpace) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Status = storagespace.Status(value.String)
 			}
+		case storagespace.FieldLifecycle:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field lifecycle", values[i])
+			} else if value.Valid {
+				_m.Lifecycle = storagespace.Lifecycle(value.String)
+			}
+		case storagespace.FieldRetirementID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field retirement_id", values[i])
+			} else if value.Valid {
+				_m.RetirementID = new(int)
+				*_m.RetirementID = int(value.Int64)
+			}
 		case storagespace.FieldVerified:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field verified", values[i])
@@ -230,6 +255,32 @@ func (_m *StorageSpace) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field pending_delete_bytes", values[i])
 			} else if value.Valid {
 				_m.PendingDeleteBytes = value.Int64
+			}
+		case storagespace.FieldRemovedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field removed_at", values[i])
+			} else if value.Valid {
+				_m.RemovedAt = new(time.Time)
+				*_m.RemovedAt = value.Time
+			}
+		case storagespace.FieldRemovedBy:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field removed_by", values[i])
+			} else if value.Valid {
+				_m.RemovedBy = new(int)
+				*_m.RemovedBy = int(value.Int64)
+			}
+		case storagespace.FieldExecutionGeneration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field execution_generation", values[i])
+			} else if value.Valid {
+				_m.ExecutionGeneration = value.Int64
+			}
+		case storagespace.FieldRemoteUseState:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field remote_use_state", values[i])
+			} else if value.Valid {
+				_m.RemoteUseState = storagespace.RemoteUseState(value.String)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -308,6 +359,14 @@ func (_m *StorageSpace) String() string {
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))
 	builder.WriteString(", ")
+	builder.WriteString("lifecycle=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Lifecycle))
+	builder.WriteString(", ")
+	if v := _m.RetirementID; v != nil {
+		builder.WriteString("retirement_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
 	builder.WriteString("verified=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Verified))
 	builder.WriteString(", ")
@@ -330,6 +389,22 @@ func (_m *StorageSpace) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("pending_delete_bytes=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PendingDeleteBytes))
+	builder.WriteString(", ")
+	if v := _m.RemovedAt; v != nil {
+		builder.WriteString("removed_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.RemovedBy; v != nil {
+		builder.WriteString("removed_by=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("execution_generation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExecutionGeneration))
+	builder.WriteString(", ")
+	builder.WriteString("remote_use_state=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RemoteUseState))
 	builder.WriteByte(')')
 	return builder.String()
 }

@@ -1,0 +1,588 @@
+# Eight operations on seven paths. Contract version 1; availability is runtime-gated per stage.
+storageRetirementPreviews:
+  post:
+    operationId: CreateStorageRetirementPreview
+    summary: Preview the normalized storage retirement scope
+    description: >-
+      Contract version 1. Availability is discovered through the independent
+      unused_removal and in_use_retirement capabilities. Local mode and a service
+      without a retirement coordinator report storage_capability_unsupported.
+      Authorized metadata previews and history remain readable during maintenance;
+      previews report current availability without provider I/O. New mutations
+      enforce maintenance and current permissions, while accepted idempotent results
+      remain replayable after authorization.
+      The issued preview_revision expires five minutes after issue and is bound to the actor;
+      a service restart invalidates issued revisions, so the caller must re-preview instead of
+      confirming a stale revision.
+      Read-only metadata snapshot; never a remote capability guarantee. Site space
+      entry expands visibly to the whole backend before confirmation. Management authority
+      does not grant project migration permission. Dependencies and project checks are
+      redacted using current permissions. Dependency paging is in the body so this
+      operation has no generated params argument. No state or remote writes occur.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirementPreviewRequest'
+    responses:
+      '200':
+        description: Read-only metadata snapshot; never a remote capability guarantee.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirementPreview'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        description: >-
+          Conflicts keep specific domain reasons: the retiring barrier, overlap or generation
+          conflict, stale preview, remaining dependencies and pending deployment configuration.
+          An unopened capability stage returns storage_capability_unsupported without side effects.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+            example:
+              title: Storage retiring
+              status: 409
+              error_code: storage_retiring
+              retirement_id: 42
+      '410':
+        description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageRetirements:
+  post:
+    operationId: CreateStorageRetirement
+    summary: Confirm a storage retirement
+    description: >-
+      Contract version 1. Availability is discovered through the independent
+      unused_removal and in_use_retirement capabilities. Local mode and a service
+      without a retirement coordinator report storage_capability_unsupported.
+      Authorized metadata previews and history remain readable during maintenance;
+      previews report current availability without provider I/O. New mutations
+      enforce maintenance and current permissions, while accepted idempotent results
+      remain replayable after authorization.
+      Acceptance atomically rechecks preview_revision, the complete normalized
+      scope and its management/execution generations, policy/defaults and per-project
+      plans before establishing barriers. Connection and child-space retirements cannot
+      overlap; failed parents retain exclusivity. Idempotency is scoped to ownership,
+      immutable normalized target identity and operation kind. Same key with different
+      input conflicts; an accepted idempotent result is replayed first, authenticated and
+      returned as the original retirement_id, including after removal. Acceptance and replay both return 202 with
+      the same Location header. Immediate completion returns
+      the same queryable resource.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirementCreateRequest'
+    responses:
+      '202':
+        description: Accepted retirement task; immediate completion returns the same queryable resource.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirement'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        description: >-
+          Conflicts keep specific domain reasons: the retiring barrier, overlap or generation
+          conflict, stale preview, remaining dependencies and pending deployment configuration.
+          An unopened capability stage returns storage_capability_unsupported without side effects.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+            example:
+              title: Storage retiring
+              status: 409
+              error_code: storage_retiring
+              retirement_id: 42
+      '410':
+        description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  get:
+    operationId: ListStorageRetirements
+    summary: List retirements by management ownership
+    description: >-
+      Contract version 1. Availability is discovered through the independent
+      unused_removal and in_use_retirement capabilities. Local mode and a service
+      without a retirement coordinator report storage_capability_unsupported.
+      Authorized metadata previews and history remain readable during maintenance;
+      previews report current availability without provider I/O. New mutations
+      enforce maintenance and current permissions, while accepted idempotent results
+      remain replayable after authorization.
+      User scope requires the current user as owner_id; org scope requires
+      organization owner/admin membership and its ID; platform admin status does not
+      bypass organization membership. Site scope requires a platform administrator and
+      owner_id=0. Includes recoverable failed tasks and authorized removed-target history.
+      Order by descending retirement_id; cursor is the last ID of the previous page.
+      No provider I/O. Responses are private and must not be cached.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: scope
+        in: query
+        required: true
+        schema:
+          type: string
+          enum: [user, org, site]
+      - name: owner_id
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 0
+      - name: cursor
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+    responses:
+      '200':
+        description: Read-only metadata snapshot; never a remote capability guarantee.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirementList'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        description: >-
+          Conflicts keep specific domain reasons: the retiring barrier, overlap or generation
+          conflict, stale preview, remaining dependencies and pending deployment configuration.
+          An unopened capability stage returns storage_capability_unsupported without side effects.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+            example:
+              title: Storage retiring
+              status: 409
+              error_code: storage_retiring
+              retirement_id: 42
+      '410':
+        description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageRetirement:
+  parameters:
+    - name: retirementId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  get:
+    operationId: GetStorageRetirement
+    summary: Read retirement progress and paginated dependencies
+    description: >-
+      Contract version 1. Availability is discovered through the independent
+      unused_removal and in_use_retirement capabilities. Local mode and a service
+      without a retirement coordinator report storage_capability_unsupported.
+      Authorized metadata previews and history remain readable during maintenance;
+      previews report current availability without provider I/O. New mutations
+      enforce maintenance and current permissions, while accepted idempotent results
+      remain replayable after authorization.
+      Reads use the target's management ownership, with independent visibility
+      checks for each project and child task. Cursor pages the sanitized dependency
+      projection; missing or hidden details never prove safe removal. The response reports
+      parent generation, state/phase, durable waiting, cleanup/configuration results and
+      current allowed_actions. Removed identities remain queryable as history.
+      Responses are private and must not be cached.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: cursor
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+    responses:
+      '200':
+        description: Read-only metadata snapshot; never a remote capability guarantee.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirementDetail'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        description: >-
+          Conflicts keep specific domain reasons: the retiring barrier, overlap or generation
+          conflict, stale preview, remaining dependencies and pending deployment configuration.
+          An unopened capability stage returns storage_capability_unsupported without side effects.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+            example:
+              title: Storage retiring
+              status: 409
+              error_code: storage_retiring
+              retirement_id: 42
+      '410':
+        description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+storageRetirementPlan:
+  parameters:
+    - name: retirementId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  patch:
+    operationId: UpdateStorageRetirementPlan
+    summary: Update unaccepted project migration destinations
+    description: >-
+      Contract version 1. Availability is discovered through the independent
+      unused_removal and in_use_retirement capabilities. Local mode and a service
+      without a retirement coordinator report storage_capability_unsupported.
+      Authorized metadata previews and history remain readable during maintenance;
+      previews report current availability without provider I/O. New mutations
+      enforce maintenance and current permissions, while accepted idempotent results
+      remain replayable after authorization.
+      Update requires the parent expected_generation and a fresh preview_revision
+      confirming the same complete source scope; a revision older than five minutes, or one
+      invalidated by a service restart, returns storage_retirement_preview_stale. Recheck each
+      project's migration authority
+      and destination. Change only unaccepted child inputs; already accepted migrations
+      resume through their original tasks. Never expand scope or bypass failed-task ownership.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirementPlanRequest'
+    responses:
+      '200':
+        description: Read-only metadata snapshot; never a remote capability guarantee.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirement'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        description: >-
+          Conflicts keep specific domain reasons: the retiring barrier, overlap or generation
+          conflict, stale preview, remaining dependencies and pending deployment configuration.
+          An unopened capability stage returns storage_capability_unsupported without side effects.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+            example:
+              title: Storage retiring
+              status: 409
+              error_code: storage_retiring
+              retirement_id: 42
+      '410':
+        description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+resumeStorageRetirement:
+  parameters:
+    - name: retirementId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: ResumeStorageRetirement
+    summary: Resume the same storage retirement
+    description: >-
+      Contract version 1. Availability is discovered through the independent
+      unused_removal and in_use_retirement capabilities. Local mode and a service
+      without a retirement coordinator report storage_capability_unsupported.
+      Authorized metadata previews and history remain readable during maintenance;
+      previews report current availability without provider I/O. New mutations
+      enforce maintenance and current permissions, while accepted idempotent results
+      remain replayable after authorization.
+      Resume checks expected_generation, current ownership permissions and
+      allowed_actions. Continue the original parent and child identities; never create a
+      replacement task, reset lifecycle or bypass disable, revocation or maintenance.
+      A repeated resume with the same expected_generation replays the accepted result instead
+      of creating a second task.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirementActionRequest'
+    responses:
+      '202':
+        description: Accepted retirement task; immediate completion returns the same queryable resource.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirement'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        description: >-
+          Conflicts keep specific domain reasons: the retiring barrier, overlap or generation
+          conflict, stale preview, remaining dependencies and pending deployment configuration.
+          An unopened capability stage returns storage_capability_unsupported without side effects.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+            example:
+              title: Storage retiring
+              status: 409
+              error_code: storage_retiring
+              retirement_id: 42
+      '410':
+        description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+cancelStorageRetirement:
+  parameters:
+    - name: retirementId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: CancelStorageRetirement
+    summary: Request safe cancellation before finalizing
+    description: >-
+      Contract version 1. Availability is discovered through the independent
+      unused_removal and in_use_retirement capabilities. Local mode and a service
+      without a retirement coordinator report storage_capability_unsupported.
+      Authorized metadata previews and history remain readable during maintenance;
+      previews report current availability without provider I/O. New mutations
+      enforce maintenance and current permissions, while accepted idempotent results
+      remain replayable after authorization.
+      Cancellation checks expected_generation, current permissions and allowed_actions.
+      Stop accepting children and wait for accepted cutovers to reach safe results.
+      Already migrated projects remain at their destinations and registered cleanup remains
+      tracked. Release only this retirement barrier once safe, preserving later disable or
+      revocation. Reject cancellation from finalizing onward, including partial marker cleanup.
+      An accepted request is not a claim that cancellation has already completed.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirementActionRequest'
+    responses:
+      '202':
+        description: Accepted retirement task; immediate completion returns the same queryable resource.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirement'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        description: >-
+          Conflicts keep specific domain reasons: the retiring barrier, overlap or generation
+          conflict, stale preview, remaining dependencies and pending deployment configuration.
+          An unopened capability stage returns storage_capability_unsupported without side effects.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+            example:
+              title: Storage retiring
+              status: 409
+              error_code: storage_retiring
+              retirement_id: 42
+      '410':
+        description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+recoverStorageRetirementAuthorization:
+  parameters:
+    - name: retirementId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  post:
+    operationId: RecoverStorageRetirementAuthorization
+    summary: Recover restricted authorization for finalization
+    description: >-
+      Contract version 1. Availability is discovered through the independent
+      unused_removal and in_use_retirement capabilities. Local mode and a service
+      without a retirement coordinator report storage_capability_unsupported.
+      Authorized metadata previews and history remain readable during maintenance;
+      previews report current availability without provider I/O. New mutations
+      enforce maintenance and current permissions, while accepted idempotent results
+      remain replayable after authorization.
+      Recovery requires connection management permission, expected_generation,
+      expected_management_generation and Idempotency-Key, scoped to ownership, normalized
+      immutable target and this recovery operation. Same key with different input conflicts;
+      an accepted idempotent result is replayed first, authenticated and preserves the same retirement. Only stored connections
+      blocked in finalizing accept writeOnly candidate credentials through authorization
+      versions restricted to exact verification/cleanup for this task. No ordinary business
+      authorization is activated, no removed marker is recreated and no secret is returned.
+      Deployment sources reject credential uploads and report
+      storage_retirement_configuration_pending with sanitized deployment recovery guidance.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirementRecoverAuthorizationRequest'
+    responses:
+      '202':
+        description: Accepted retirement task; immediate completion returns the same queryable resource.
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/storage-retirement.yaml#/StorageRetirement'
+      '400':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '401':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '403':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '404':
+        $ref: '../base.yaml#/components/responses/Problem'
+      '409':
+        description: >-
+          Conflicts keep specific domain reasons: the retiring barrier, overlap or generation
+          conflict, stale preview, remaining dependencies and pending deployment configuration.
+          An unopened capability stage returns storage_capability_unsupported without side effects.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+            example:
+              title: Storage retiring
+              status: 409
+              error_code: storage_retiring
+              retirement_id: 42
+      '410':
+        description: storage_removed; new storage I/O for this identity is rejected while authorized history queries and idempotent replay stay available.
+        content:
+          application/problem+json:
+            schema:
+              $ref: '../components/schemas/common.yaml#/Problem'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

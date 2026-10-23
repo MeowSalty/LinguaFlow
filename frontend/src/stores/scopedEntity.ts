@@ -7,6 +7,7 @@ import {
   organizationRoles,
 } from '@/utils/organization-scope'
 import { t } from '@/i18n'
+import { extractErrorMessage } from '@/utils/errors'
 
 export interface ScopedEntity {
   id: number
@@ -124,7 +125,7 @@ export function createScopedEntityState<T extends ScopedEntity, Create, Update>(
             items.value = []
             cache.delete(scope)
           }
-          error.value = cause instanceof Error ? cause.message : t('team.errors.loadResource')
+          error.value = extractErrorMessage(cause, t('team.errors.loadResource'))
         }
       } finally {
         if (current()) {
@@ -178,7 +179,7 @@ export function createScopedEntityState<T extends ScopedEntity, Create, Update>(
         if (cause && typeof cause === 'object' && 'status' in cause && cause.status === 409)
           await load(orgId.value)
         if (!current()) throw cause
-        error.value = cause instanceof Error ? cause.message : t('team.errors.saveResource')
+        error.value = extractErrorMessage(cause, t('team.errors.saveResource'))
       }
       throw cause
     } finally {

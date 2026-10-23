@@ -70,9 +70,24 @@ func TokenHash(v string) predicate.RefreshToken {
 	return predicate.RefreshToken(sql.FieldEQ(FieldTokenHash, v))
 }
 
+// SessionID applies equality check predicate on the "session_id" field. It's identical to SessionIDEQ.
+func SessionID(v int) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldEQ(FieldSessionID, v))
+}
+
+// Generation applies equality check predicate on the "generation" field. It's identical to GenerationEQ.
+func Generation(v int64) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldEQ(FieldGeneration, v))
+}
+
 // ExpiresAt applies equality check predicate on the "expires_at" field. It's identical to ExpiresAtEQ.
 func ExpiresAt(v time.Time) predicate.RefreshToken {
 	return predicate.RefreshToken(sql.FieldEQ(FieldExpiresAt, v))
+}
+
+// ConsumedAt applies equality check predicate on the "consumed_at" field. It's identical to ConsumedAtEQ.
+func ConsumedAt(v time.Time) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldEQ(FieldConsumedAt, v))
 }
 
 // RevokedAt applies equality check predicate on the "revoked_at" field. It's identical to RevokedAtEQ.
@@ -225,6 +240,66 @@ func TokenHashContainsFold(v string) predicate.RefreshToken {
 	return predicate.RefreshToken(sql.FieldContainsFold(FieldTokenHash, v))
 }
 
+// SessionIDEQ applies the EQ predicate on the "session_id" field.
+func SessionIDEQ(v int) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldEQ(FieldSessionID, v))
+}
+
+// SessionIDNEQ applies the NEQ predicate on the "session_id" field.
+func SessionIDNEQ(v int) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldNEQ(FieldSessionID, v))
+}
+
+// SessionIDIn applies the In predicate on the "session_id" field.
+func SessionIDIn(vs ...int) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldIn(FieldSessionID, vs...))
+}
+
+// SessionIDNotIn applies the NotIn predicate on the "session_id" field.
+func SessionIDNotIn(vs ...int) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldNotIn(FieldSessionID, vs...))
+}
+
+// GenerationEQ applies the EQ predicate on the "generation" field.
+func GenerationEQ(v int64) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldEQ(FieldGeneration, v))
+}
+
+// GenerationNEQ applies the NEQ predicate on the "generation" field.
+func GenerationNEQ(v int64) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldNEQ(FieldGeneration, v))
+}
+
+// GenerationIn applies the In predicate on the "generation" field.
+func GenerationIn(vs ...int64) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldIn(FieldGeneration, vs...))
+}
+
+// GenerationNotIn applies the NotIn predicate on the "generation" field.
+func GenerationNotIn(vs ...int64) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldNotIn(FieldGeneration, vs...))
+}
+
+// GenerationGT applies the GT predicate on the "generation" field.
+func GenerationGT(v int64) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldGT(FieldGeneration, v))
+}
+
+// GenerationGTE applies the GTE predicate on the "generation" field.
+func GenerationGTE(v int64) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldGTE(FieldGeneration, v))
+}
+
+// GenerationLT applies the LT predicate on the "generation" field.
+func GenerationLT(v int64) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldLT(FieldGeneration, v))
+}
+
+// GenerationLTE applies the LTE predicate on the "generation" field.
+func GenerationLTE(v int64) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldLTE(FieldGeneration, v))
+}
+
 // ExpiresAtEQ applies the EQ predicate on the "expires_at" field.
 func ExpiresAtEQ(v time.Time) predicate.RefreshToken {
 	return predicate.RefreshToken(sql.FieldEQ(FieldExpiresAt, v))
@@ -263,6 +338,56 @@ func ExpiresAtLT(v time.Time) predicate.RefreshToken {
 // ExpiresAtLTE applies the LTE predicate on the "expires_at" field.
 func ExpiresAtLTE(v time.Time) predicate.RefreshToken {
 	return predicate.RefreshToken(sql.FieldLTE(FieldExpiresAt, v))
+}
+
+// ConsumedAtEQ applies the EQ predicate on the "consumed_at" field.
+func ConsumedAtEQ(v time.Time) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldEQ(FieldConsumedAt, v))
+}
+
+// ConsumedAtNEQ applies the NEQ predicate on the "consumed_at" field.
+func ConsumedAtNEQ(v time.Time) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldNEQ(FieldConsumedAt, v))
+}
+
+// ConsumedAtIn applies the In predicate on the "consumed_at" field.
+func ConsumedAtIn(vs ...time.Time) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldIn(FieldConsumedAt, vs...))
+}
+
+// ConsumedAtNotIn applies the NotIn predicate on the "consumed_at" field.
+func ConsumedAtNotIn(vs ...time.Time) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldNotIn(FieldConsumedAt, vs...))
+}
+
+// ConsumedAtGT applies the GT predicate on the "consumed_at" field.
+func ConsumedAtGT(v time.Time) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldGT(FieldConsumedAt, v))
+}
+
+// ConsumedAtGTE applies the GTE predicate on the "consumed_at" field.
+func ConsumedAtGTE(v time.Time) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldGTE(FieldConsumedAt, v))
+}
+
+// ConsumedAtLT applies the LT predicate on the "consumed_at" field.
+func ConsumedAtLT(v time.Time) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldLT(FieldConsumedAt, v))
+}
+
+// ConsumedAtLTE applies the LTE predicate on the "consumed_at" field.
+func ConsumedAtLTE(v time.Time) predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldLTE(FieldConsumedAt, v))
+}
+
+// ConsumedAtIsNil applies the IsNil predicate on the "consumed_at" field.
+func ConsumedAtIsNil() predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldIsNull(FieldConsumedAt))
+}
+
+// ConsumedAtNotNil applies the NotNil predicate on the "consumed_at" field.
+func ConsumedAtNotNil() predicate.RefreshToken {
+	return predicate.RefreshToken(sql.FieldNotNull(FieldConsumedAt))
 }
 
 // RevokedAtEQ applies the EQ predicate on the "revoked_at" field.
@@ -313,6 +438,29 @@ func RevokedAtIsNil() predicate.RefreshToken {
 // RevokedAtNotNil applies the NotNil predicate on the "revoked_at" field.
 func RevokedAtNotNil() predicate.RefreshToken {
 	return predicate.RefreshToken(sql.FieldNotNull(FieldRevokedAt))
+}
+
+// HasSession applies the HasEdge predicate on the "session" edge.
+func HasSession() predicate.RefreshToken {
+	return predicate.RefreshToken(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, SessionTable, SessionColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasSessionWith applies the HasEdge predicate on the "session" edge with a given conditions (other predicates).
+func HasSessionWith(preds ...predicate.RefreshSession) predicate.RefreshToken {
+	return predicate.RefreshToken(func(s *sql.Selector) {
+		step := newSessionStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
 }
 
 // HasUser applies the HasEdge predicate on the "user" edge.

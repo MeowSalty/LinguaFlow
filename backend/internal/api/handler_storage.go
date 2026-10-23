@@ -19,6 +19,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/storageauth"
 )
 
+func lifecycleParam[T ~string](v *T) string {
+	if v == nil {
+		return ""
+	}
+	return string(*v)
+}
+
 func (s *Server) storageRequest(w http.ResponseWriter, r *http.Request, admin bool, handle func(http.ResponseWriter, *http.Request, int)) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +129,18 @@ func (s *Server) writeStorageError(w http.ResponseWriter, r *http.Request, err e
 	code := service.StorageErrorCode(err)
 	status, detail := http.StatusServiceUnavailable, "存储暂不可用，请查看原操作状态"
 	switch code {
+	case "storage_removed":
+		status, detail = http.StatusGone, "存储接入已移除，请查看原退出记录"
+	case "storage_retiring":
+		status, detail = http.StatusConflict, "存储正在退出，不能接受新增使用"
+	case "storage_retirement_conflict":
+		status, detail = http.StatusConflict, "退出范围或代次发生冲突，请查看原退出记录"
+	case "storage_retirement_preview_stale":
+		status, detail = http.StatusConflict, "退出预检已失效，请重新查看影响并确认"
+	case "storage_retirement_dependencies_remaining":
+		status, detail = http.StatusConflict, "存储仍有引用或清理未完成，请继续原退出任务"
+	case "storage_retirement_configuration_pending":
+		status, detail = http.StatusConflict, "退出仍需完成部署配置操作，请查看原退出任务"
 	case "source_revision_conflict", "storage_generation_conflict", "storage_idempotency_conflict":
 		status, detail = http.StatusConflict, "请求与原操作或当前基线不一致，请核对原操作"
 	case "storage_operation_in_progress":
@@ -220,12 +239,12 @@ func (s *Server) SetStoragePolicy(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) listStorageConnections(w http.ResponseWriter, r *http.Request, scope string, owner int, admin bool) {
+func (s *Server) listStorageConnections(w http.ResponseWriter, r *http.Request, scope string, owner int, admin bool, lifecycle string) {
 	s.storageRequest(w, r, admin, func(w http.ResponseWriter, r *http.Request, actor int) {
 		if scope == "user" {
 			owner = actor
 		}
-		rows, err := s.storageConnections.List(r.Context(), actor, scope, owner)
+		rows, err := s.storageConnections.List(r.Context(), actor, scope, owner, lifecycle)
 		if err != nil {
 			s.writeStorageError(w, r, err)
 			return
@@ -233,14 +252,17 @@ func (s *Server) listStorageConnections(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusOK, map[string]any{"items": rows})
 	})
 }
-func (s *Server) ListStorageConnections(w http.ResponseWriter, r *http.Request) {
-	s.listStorageConnections(w, r, "user", 0, false)
+func (s *Server) ListStorageConnections(w http.ResponseWriter, r *http.Request, params ListStorageConnectionsParams) {
+	lifecycle := lifecycleParam(params.Lifecycle)
+	s.listStorageConnections(w, r, "user", 0, false, lifecycle)
 }
-func (s *Server) ListOrgStorageConnections(w http.ResponseWriter, r *http.Request, orgID int) {
-	s.listStorageConnections(w, r, "org", orgID, false)
+func (s *Server) ListOrgStorageConnections(w http.ResponseWriter, r *http.Request, orgID int, params ListOrgStorageConnectionsParams) {
+	lifecycle := lifecycleParam(params.Lifecycle)
+	s.listStorageConnections(w, r, "org", orgID, false, lifecycle)
 }
-func (s *Server) ListSiteStorageConnections(w http.ResponseWriter, r *http.Request) {
-	s.listStorageConnections(w, r, "site", 0, true)
+func (s *Server) ListSiteStorageConnections(w http.ResponseWriter, r *http.Request, params ListSiteStorageConnectionsParams) {
+	lifecycle := lifecycleParam(params.Lifecycle)
+	s.listStorageConnections(w, r, "site", 0, true, lifecycle)
 }
 func (s *Server) createStorageConnection(w http.ResponseWriter, r *http.Request, scope string, owner int) {
 	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
@@ -271,9 +293,9 @@ func (s *Server) CreateStorageConnection(w http.ResponseWriter, r *http.Request)
 func (s *Server) CreateOrgStorageConnection(w http.ResponseWriter, r *http.Request, orgID int) {
 	s.createStorageConnection(w, r, "org", orgID)
 }
-func (s *Server) ListStorageConnectionSpaces(w http.ResponseWriter, r *http.Request, id int) {
+func (s *Server) ListStorageConnectionSpaces(w http.ResponseWriter, r *http.Request, id int, params ListStorageConnectionSpacesParams) {
 	s.storageRequest(w, r, false, func(w http.ResponseWriter, r *http.Request, actor int) {
-		rows, err := s.storageConnections.Spaces(r.Context(), actor, id)
+		rows, err := s.storageConnections.Spaces(r.Context(), actor, id, lifecycleParam(params.Lifecycle))
 		if err != nil {
 			s.writeStorageError(w, r, err)
 			return

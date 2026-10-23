@@ -265,7 +265,7 @@ func (s *smoke) login(baseURL, password string) (string, error) {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
 	}
-	if err := request(baseURL, "POST", "/api/v1/auth/login", "", map[string]string{"username": "smoke-admin", "password": password}, http.StatusOK, &session); err != nil {
+	if err := request(baseURL, "POST", "/api/v1/auth/login", "", map[string]string{"identifier": "smoke-admin", "password": password}, http.StatusOK, &session); err != nil {
 		return "", err
 	}
 	if session.AccessToken == "" {

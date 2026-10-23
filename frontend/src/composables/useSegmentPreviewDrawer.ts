@@ -8,6 +8,7 @@ import {
 } from '@/api/projects'
 import type { ApiSchemas } from '@/api/client'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
+import { extractErrorMessage } from '@/utils/errors'
 
 type Segment = ApiSchemas['Segment']
 
@@ -184,8 +185,7 @@ export function useSegmentPreviewDrawer<TPreview extends SegmentPreviewShared>(
       retryAfterSeconds.value = isSegmentTranslationPreviewError(error)
         ? (error.retryAfterSeconds ?? null)
         : null
-      errorMessage.value =
-        error instanceof Error ? error.message : t(options.previewFallbackErrorKey)
+      errorMessage.value = extractErrorMessage(error, t(options.previewFallbackErrorKey))
       state.value = 'failed'
     } finally {
       if (sequence === requestSequence.value) {
@@ -223,10 +223,10 @@ export function useSegmentPreviewDrawer<TPreview extends SegmentPreviewShared>(
     } catch (error) {
       const knownError = isSegmentTranslationPreviewError(error) ? error : null
       errorStatus.value = knownError?.status ?? null
-      errorMessage.value =
-        error instanceof Error
-          ? error.message
-          : t('api.errors.applySegmentTranslationPreviewFailed')
+      errorMessage.value = extractErrorMessage(
+        error,
+        t('api.errors.applySegmentTranslationPreviewFailed'),
+      )
       if (knownError?.status === 409 || knownError?.status === 410) {
         preview.value = preview.value ? { ...preview.value, apply_token: undefined } : null
       }

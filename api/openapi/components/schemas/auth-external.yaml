@@ -1,0 +1,989 @@
+OAuth2ConnectionConfig:
+  type: object
+  additionalProperties: false
+  description: Saved or candidate OAuth configuration; fields may be missing or empty while configuring or disabled. Test and enable require all protocol inputs.
+  properties:
+    authorization_endpoint: {type: string, maxLength: 2048}
+    token_endpoint: {type: string, maxLength: 2048}
+    profile_endpoint: {type: string, maxLength: 2048}
+    client_id: {type: string, maxLength: 1024}
+    client_auth_method:
+      type: string
+      enum: [client_secret_basic, client_secret_post]
+      default: client_secret_basic
+    scopes:
+      type: array
+      maxItems: 32
+      default: []
+      items: {type: string}
+    subject_mapping:
+      type: object
+      additionalProperties: false
+      properties:
+        pointer: {type: string, maxLength: 1024}
+        type: {type: string, enum: [string, integer], default: string}
+OIDCConnectionConfig:
+  type: "object"
+  additionalProperties: false
+  description: Saved or candidate OIDC configuration; issuer and client_id may be missing or empty while configuring or disabled. Populated issuer values must be absolute allowed URLs.
+  properties:
+    issuer:
+      type: "string"
+      maxLength: 2048
+    client_id:
+      type: "string"
+      maxLength: 1024
+    client_auth_method:
+      type: "string"
+      enum:
+        - "client_secret_basic"
+        - "client_secret_post"
+      default: "client_secret_basic"
+    scopes:
+      type: "array"
+      items:
+        type: "string"
+      default:
+        - "openid"
+        - "profile"
+    userinfo_enabled:
+      type: "boolean"
+      default: true
+AuthConnectionPolicy:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "login_enabled"
+    - "signup_enabled"
+    - "link_enabled"
+    - "login_rules"
+    - "signup_rules"
+    - "link_rules"
+  properties:
+    login_enabled:
+      type: "boolean"
+    signup_enabled:
+      type: "boolean"
+    link_enabled:
+      type: "boolean"
+    login_rules:
+      $ref: "./auth-rules.yaml#/AuthRuleSet"
+    signup_rules:
+      $ref: "./auth-rules.yaml#/AuthRuleSet"
+    link_rules:
+      $ref: "./auth-rules.yaml#/AuthRuleSet"
+    signup:
+      $ref: "./common.yaml#/SignupPolicyRequirements"
+ExternalBrowserInput:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "browser_challenge"
+    - "completion_url"
+  properties:
+    browser_challenge:
+      type: "string"
+      pattern: "^[A-Za-z0-9_-]{43}$"
+      description: "SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE."
+    completion_url:
+      type: "string"
+      format: "uri"
+    return_to:
+      type: "string"
+      default: "/"
+      description: "Validated application-relative path."
+ExternalLinkStartRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "browser_challenge"
+    - "completion_url"
+    - "reauthentication_proof"
+  properties:
+    browser_challenge:
+      type: "string"
+      pattern: "^[A-Za-z0-9_-]{43}$"
+      description: "SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE."
+    completion_url:
+      type: "string"
+      format: "uri"
+    return_to:
+      type: "string"
+      default: "/"
+      description: "Validated application-relative path."
+    reauthentication_proof:
+      type: "string"
+ExternalStartResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "transaction_id"
+    - "authorization_url"
+    - "expires_at"
+  properties:
+    transaction_id:
+      type: "string"
+    authorization_url:
+      type: "string"
+      format: "uri"
+    expires_at:
+      type: "string"
+      format: "date-time"
+    test_id:
+      type: "string"
+      description: "Transaction ID of the originating administrator connection test; empty for ordinary login flows."
+ExternalExchangeRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "ticket"
+    - "verifier"
+  properties:
+    ticket:
+      type: "string"
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+ExternalCompleteRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "confirmation_token"
+    - "verifier"
+  properties:
+    confirmation_token:
+      type: "string"
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+    initial_password:
+      type: string
+      writeOnly: true
+      description: Required only for a signup confirmation requiring local_password; never accepted for an existing account or binding.
+    username:
+      $ref: "./auth.yaml#/UsernameInput"
+    display_name:
+      type: "string"
+    email:
+      type: string
+      nullable: true
+      description: "Signup-only platform email; omitted, null, and after trimming an empty value are missing when signup.email_requirement is required."
+ExternalCancelRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "transaction_id"
+    - "verifier"
+  properties:
+    transaction_id:
+      type: "string"
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+ReauthenticationRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "method"
+    - "action"
+    - "target_id"
+  properties:
+    method:
+      type: "string"
+      enum:
+        - "password"
+        - "oidc"
+    password:
+      type: "string"
+    binding_id:
+      type: "integer"
+      minimum: 1
+    action:
+      type: "string"
+      enum:
+        - "link"
+        - "password_set"
+        - "password_delete"
+        - "unlink"
+    target_id:
+      type: "string"
+    browser_challenge:
+      type: "string"
+      pattern: "^[A-Za-z0-9_-]{43}$"
+      description: "SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE."
+    completion_url:
+      type: "string"
+      format: "uri"
+    return_to:
+      type: "string"
+      default: "/"
+      description: "Validated application-relative path."
+ReauthenticationProofResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "reauthentication_proof"
+    - "expires_at"
+  properties:
+    reauthentication_proof:
+      type: "string"
+    expires_at:
+      type: "string"
+      format: "date-time"
+ExternalProfile:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "connection_id"
+    - "connection_name"
+    - "external_display"
+  properties:
+    connection_id:
+      type: "string"
+    connection_name:
+      type: "string"
+    external_display:
+      type: "string"
+ExternalConfirmationResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "confirmation_token"
+    - "transaction_id"
+    - "expires_at"
+    - "profile"
+    - "signup_requirements"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "signup_confirmation"
+        - "link_confirmation"
+    confirmation_token:
+      type: "string"
+    transaction_id:
+      type: "string"
+    expires_at:
+      type: "string"
+      format: "date-time"
+    signup_requirements:
+      type: array
+      maxItems: 2
+      items: {type: string, enum: [email, local_password]}
+      description: Empty for linking and signup with fresh authentication support.
+    profile:
+      $ref: "#/ExternalProfile"
+    username_candidate:
+      type: "string"
+      readOnly: true
+      description: "Normalized candidate username proposed for signup confirmation; empty for link confirmation."
+    email:
+      type: "string"
+      nullable: true
+      readOnly: true
+      description: "Normalized external email proposal only; never grants ownership or a verified email key."
+    signup:
+      allOf:
+        - $ref: "./common.yaml#/SignupPolicyRequirements"
+      readOnly: true
+ExternalSessionResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "session"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "session"
+    session:
+      $ref: "./auth.yaml#/AuthSession"
+ExternalProofResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "reauthentication_proof"
+    - "expires_at"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "reauthentication_proof"
+    reauthentication_proof:
+      type: "string"
+    expires_at:
+      type: "string"
+      format: "date-time"
+ExternalTestResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "fresh_supported"
+    - "connection_id"
+    - "revision"
+    - "attributes"
+    - "rules"
+  properties:
+    attributes:
+      type: object
+      additionalProperties:
+        $ref: "./auth-rules.yaml#/AuthAttributeValue"
+    rules:
+      $ref: "./auth-rules.yaml#/AuthRulesDiagnostics"
+    kind:
+      type: "string"
+      enum:
+        - "test_result"
+    fresh_supported:
+      type: "boolean"
+    connection_id:
+      type: "string"
+    revision:
+      type: "integer"
+      format: "int64"
+    test_id:
+      type: "string"
+    expires_at:
+      type: "string"
+      format: "date-time"
+      description: "Transaction expiry at which the matching test evidence lapses;; the saved configuration capability persists independently."
+ExternalExchangeResponse:
+  oneOf:
+    -
+      $ref: "#/ExternalSessionResponse"
+    -
+      $ref: "#/ExternalConfirmationResponse"
+    -
+      $ref: "#/ExternalProofResponse"
+    -
+      $ref: "#/ExternalTestResponse"
+  discriminator:
+    propertyName: "kind"
+ExternalLinkedResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "binding_id"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "linked"
+    binding_id:
+      type: "integer"
+ExternalCompleteResponse:
+  oneOf:
+    -
+      $ref: "#/ExternalSessionResponse"
+    -
+      $ref: "#/ExternalLinkedResponse"
+  discriminator:
+    propertyName: "kind"
+InitialPasswordRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "reauthentication_proof"
+    - "new_password"
+  properties:
+    reauthentication_proof:
+      type: "string"
+    new_password:
+      $ref: "./auth.yaml#/RegisterRequest/properties/password"
+SensitiveOperationRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "reauthentication_proof"
+  properties:
+    reauthentication_proof:
+      type: "string"
+PublicAuthConnection:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "connection_id"
+    - "display_name"
+    - "description"
+    - "display_order"
+    - "can_login"
+    - "can_signup"
+    - "signup"
+    - "signup_requirements"
+  properties:
+    connection_id:
+      type: "string"
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    logo_url:
+      type: "string"
+      nullable: true
+    can_login:
+      type: "boolean"
+    can_signup:
+      type: "boolean"
+    signup_requirements:
+      type: "array"
+      maxItems: 2
+      items:
+        type: "string"
+        enum:
+          - "email"
+          - "local_password"
+    signup:
+      $ref: "./common.yaml#/SignupPolicyRequirements"
+CreateAuthConnectionRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "kind"
+    - "display_name"
+  properties:
+    kind:
+      type: "string"
+      enum:
+        - "oidc"
+        - "generic_oauth2"
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    oidc:
+      $ref: "#/OIDCConnectionConfig"
+    oauth2:
+      $ref: "#/OAuth2ConnectionConfig"
+    client_secret:
+      type: "string"
+      writeOnly: true
+UpdateAuthConnectionRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "expected_revision"
+  properties:
+    expected_revision:
+      type: "integer"
+      format: "int64"
+    test_id:
+      type: "string"
+      description: "ID of the administrator connection test matching these parameter changes."
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+      writeOnly: true
+      description: "Browser-held verifier bound to the referenced test."
+    attribute_mappings:
+      type: array
+      maxItems: 64
+      items:
+        $ref: "./auth-rules.yaml#/AuthAttributeMapping"
+    evidence_max_age_seconds:
+      type: integer
+      minimum: 1
+      maximum: 31536000
+      default: 3600
+      description: Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    oidc:
+      $ref: "#/OIDCConnectionConfig"
+    oauth2:
+      $ref: "#/OAuth2ConnectionConfig"
+    client_secret:
+      type: "string"
+      nullable: true
+      writeOnly: true
+      description: "Omitted keeps the current secret; null clears it; a nonempty string creates a new encrypted version."
+    policy:
+      $ref: "#/AuthConnectionPolicy"
+AuthConnectionCandidateRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "expected_revision"
+  properties:
+    expected_revision:
+      type: "integer"
+      format: "int64"
+    changes:
+      $ref: "#/AuthConnectionChanges"
+AuthConnectionActionRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "expected_revision"
+  properties:
+    expected_revision:
+      type: "integer"
+      format: "int64"
+    test_id:
+      type: "string"
+    verifier:
+      type: "string"
+      minLength: 43
+      maxLength: 128
+      writeOnly: true
+AuthConnectionTestRequest:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "expected_revision"
+    - "browser_challenge"
+    - "completion_url"
+  properties:
+    expected_revision:
+      type: "integer"
+      format: "int64"
+    changes:
+      $ref: "#/AuthConnectionChanges"
+    browser_challenge:
+      type: "string"
+      pattern: "^[A-Za-z0-9_-]{43}$"
+      description: "SHA-256 base64url challenge of a browser-held random verifier; independent of upstream PKCE."
+    completion_url:
+      type: "string"
+      format: "uri"
+    return_to:
+      type: "string"
+      default: "/"
+      description: "Validated application-relative path."
+AuthConnectionChanges:
+  type: "object"
+  additionalProperties: false
+  properties:
+    attribute_mappings:
+      type: array
+      maxItems: 64
+      items:
+        $ref: "./auth-rules.yaml#/AuthAttributeMapping"
+    evidence_max_age_seconds:
+      type: integer
+      minimum: 1
+      maximum: 31536000
+      default: 3600
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    oidc:
+      $ref: "#/OIDCConnectionConfig"
+    oauth2:
+      $ref: "#/OAuth2ConnectionConfig"
+    client_secret:
+      type: "string"
+      nullable: true
+      writeOnly: true
+      description: "Omitted keeps the current secret; null clears it; a nonempty string creates a new encrypted version."
+    policy:
+      $ref: "#/AuthConnectionPolicy"
+AuthConnectionSnapshot:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "display_name"
+    - "description"
+    - "display_order"
+    - "login_policy_revision"
+    - "signup_policy_revision"
+    - "link_policy_revision"
+    - "attribute_mappings"
+    - "evidence_max_age_seconds"
+    - "policy"
+    - "has_client_secret"
+  properties:
+    login_policy_revision: {type: integer, format: int64}
+    signup_policy_revision: {type: integer, format: int64}
+    link_policy_revision: {type: integer, format: int64}
+    attribute_mappings:
+      type: array
+      maxItems: 64
+      items:
+        $ref: './auth-rules.yaml#/AuthAttributeMapping'
+    evidence_max_age_seconds:
+      type: integer
+      minimum: 1
+      maximum: 31536000
+      default: 3600
+      description: Attribute evidence lifetime; applies to sessions only when login rules use attributes. Rotation never extends this deadline.
+    display_name:
+      type: "string"
+    description:
+      type: "string"
+    display_order:
+      type: "integer"
+    oidc:
+      $ref: "#/OIDCConnectionConfig"
+    oauth2:
+      $ref: "#/OAuth2ConnectionConfig"
+    policy:
+      $ref: "#/AuthConnectionPolicy"
+    has_client_secret:
+      type: "boolean"
+    logo_url:
+      type: "string"
+      nullable: true
+AuthConnectionValidationResult:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "fresh_supported"
+    - "tested_at"
+  properties:
+    fresh_supported:
+      type: "boolean"
+    tested_at:
+      type: "string"
+      format: "date-time"
+      nullable: true
+    applied_test_id:
+      type: "string"
+      description: "AuthTransaction that produced the applied validation; empty before a persisted first test."
+AuthConnectionRecord:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "id"
+    - "kind"
+    - "aggregate_revision"
+    - "state"
+    - "archived"
+    - "configuration"
+    - "configuration_complete"
+    - "capabilities"
+    - "validation"
+    - "setup"
+  properties:
+    identity_authority_id:
+      type: string
+      readOnly: true
+      description: Server-assigned immutable namespace for a generic OAuth connection.
+    id:
+      type: "string"
+    kind:
+      type: "string"
+      enum:
+        - "oidc"
+        - "generic_oauth2"
+    aggregate_revision:
+      type: "integer"
+      format: "int64"
+      description: Change-detection revision for optimistic concurrency; distinct from the login policy revision.
+    state:
+      type: "string"
+      enum:
+        - "configuring"
+        - "enabled"
+        - "disabled"
+      description: Lifecycle state; omitted only for the built-in password connection, which never enters configuring.
+    archived:
+      type: "boolean"
+    configuration:
+      $ref: "#/AuthConnectionSnapshot"
+    configuration_complete:
+      type: "boolean"
+    capabilities:
+      $ref: "#/AuthConnectionCapabilities"
+    validation:
+      $ref: "#/AuthConnectionValidationResult"
+    setup:
+      $ref: "#/AuthConnectionSetup"
+AuthConnectionCapabilities:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "can_login"
+    - "can_signup"
+    - "can_link"
+    - "can_test"
+  properties:
+    can_login:
+      type: "boolean"
+    can_signup:
+      type: "boolean"
+    can_link:
+      type: "boolean"
+    can_test:
+      type: "boolean"
+AuthConnectionSetup:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "callback_url"
+    - "completion_urls"
+    - "configuration_complete"
+    - "issues"
+    - "protocol"
+  properties:
+    callback_url:
+      type: "string"
+      format: "uri"
+      nullable: true
+      description: "Backend-determined callback to register at the identity provider; null when the deployment base URL or protocol cannot produce one yet."
+    completion_urls:
+      type: "array"
+      items:
+        type: "string"
+        format: "uri"
+    configuration_complete:
+      type: "boolean"
+    issues:
+      type: "array"
+      items:
+        $ref: "#/AuthConfigurationIssue"
+    protocol:
+      $ref: "#/AuthConnectionProtocolSetup"
+AuthConfigurationIssue:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "code"
+    - "field"
+    - "message"
+  properties:
+    code:
+      type: "string"
+    field:
+      type: "string"
+    message:
+      type: "string"
+AuthConnectionProtocolSetup:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "required_fields"
+    - "client_auth_methods"
+    - "scope_guidance"
+  properties:
+    required_fields:
+      type: "array"
+      items:
+        type: "string"
+    client_auth_methods:
+      type: "array"
+      items:
+        type: "string"
+    scope_guidance:
+      type: "string"
+AuthConnectionErrorProblem:
+  type: object
+  additionalProperties: false
+  required:
+    - "type"
+    - "status"
+    - "issues"
+  properties:
+    type:
+      type: string
+      description: "urn:linguaflow:auth-connection-<code>; see AuthConnectionErrorCode for values."
+    title:
+      type: string
+    status:
+      type: integer
+      enum: [409]
+    detail:
+      type: string
+    issues:
+      type: array
+      items:
+        $ref: "#/AuthConfigurationIssue"
+    impact:
+      $ref: "#/AuthConnectionImpactResult"
+AuthConnectionErrorCode:
+  type: string
+  enum:
+    - "configuration-incomplete"
+    - "deployment-incomplete"
+    - "test-required"
+    - "test-expired"
+    - "test-mismatch"
+    - "state-conflict"
+    - "revision-conflict"
+    - "fallback-required"
+AuthConnectionsResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "items"
+  properties:
+    items:
+      type: "array"
+      items:
+        $ref: "#/AuthConnectionRecord"
+AuthConnectionCheck:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "valid"
+    - "fresh_supported"
+    - "issues"
+    - "revision"
+    - "rules"
+  properties:
+    revision: {type: integer, format: int64}
+    rules:
+      $ref: "./auth-rules.yaml#/AuthRulesDiagnostics"
+    valid:
+      type: "boolean"
+    fresh_supported:
+      type: "boolean"
+    issues:
+      type: "array"
+      items:
+        $ref: "#/AuthConfigurationIssue"
+AuthConnectionImpactResult:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "affected_users"
+    - "blocked_users"
+    - "affected_sessions"
+    - "can_save"
+  properties:
+    revision: {type: integer, format: int64}
+    evaluated_at: {type: string, format: date-time}
+    remediation: {type: string}
+    pass_users:
+      type: array
+      items: {type: integer}
+    fail_users:
+      type: array
+      items: {type: integer}
+    unknown_users:
+      type: array
+      items: {type: integer}
+    administrator_users:
+      type: array
+      items: {type: integer}
+    affected_users:
+      type: "array"
+      items:
+        type: "integer"
+    blocked_users:
+      type: "array"
+      items:
+        type: "integer"
+    affected_sessions:
+      type: "integer"
+    can_save:
+      type: "boolean"
+    affects_signup:
+      type: boolean
+LoginMethod:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "binding_id"
+    - "connection_id"
+    - "display_name"
+    - "can_login"
+    - "can_reauthenticate"
+    - "can_unlink"
+    - "verified"
+    - "archived"
+  properties:
+    login_rule_status: {type: string, enum: [pass, fail, unknown]}
+    evidence_expires_at: {type: string, format: date-time}
+    binding_id:
+      type: "integer"
+    connection_id:
+      type: "string"
+    display_name:
+      type: "string"
+    can_login:
+      type: "boolean"
+    can_reauthenticate:
+      type: "boolean"
+    can_unlink:
+      type: "boolean"
+    verified:
+      type: "boolean"
+    archived:
+      type: "boolean"
+LoginMethodsResponse:
+  type: "object"
+  additionalProperties: false
+  required:
+    - "password"
+    - "email"
+    - "bindings"
+    - "available_connections"
+  properties:
+    password:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "is_set"
+        - "can_login"
+        - "can_set"
+        - "can_delete"
+        - "verified"
+      properties:
+        verified:
+          type: boolean
+          description: Current password has been used successfully for login or reauthentication under an enabled password policy.
+        is_set:
+          type: "boolean"
+        can_login:
+          type: "boolean"
+        can_set:
+          type: "boolean"
+        can_delete:
+          type: "boolean"
+    email:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "address"
+        - "verified"
+        - "can_recover"
+      properties:
+        address:
+          type: "string"
+          nullable: true
+        verified:
+          type: "boolean"
+        can_recover:
+          type: "boolean"
+    bindings:
+      type: "array"
+      items:
+        $ref: "#/LoginMethod"
+    available_connections:
+      type: "array"
+      items:
+        $ref: "#/AvailableLoginConnection"
+AvailableLoginConnection:
+  type: "object"
+  additionalProperties: false
+  required: [connection_id, display_name, can_link]
+  properties:
+    connection_id:
+      type: "string"
+    display_name:
+      type: "string"
+    can_link:
+      type: "boolean"
+    logo_url:
+      type: "string"
+      nullable: true

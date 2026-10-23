@@ -1,22 +1,23 @@
 package v013
 
 import (
-	"bytes"
-	"context"
 	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
 const localOldTimestamp = "2026-09-29 11:00:00.123456789 +0800 CST"
+
+func TestLocalPathsRejectsVolumeRoot(t *testing.T) {
+	root := filepath.VolumeName(t.TempDir()) + string(os.PathSeparator)
+	if _, _, err := localPaths(root); err == nil {
+		t.Fatal("volume root accepted as a local data directory")
+	}
+}
 
 func localFixture(t *testing.T, business bool) string {
 	t.Helper()
@@ -88,134 +89,6 @@ func readLocalBytes(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return data
-}
-
-func TestLocalMigrationRehearsalApplyAndPublishedRecovery(t *testing.T) {
-	dir := localFixture(t, true)
-	oldDatabase := readLocalBytes(t, filepath.Join(dir, localDatabaseName))
-	oldSecret, err := config.PrepareLocalSecret(filepath.Join(dir, "instance-secret"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	rehearsal, err := RunLocal(context.Background(), LocalOptions{DataDir: dir})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rehearsal.Applied || rehearsal.CredentialsCreated != 2 || rehearsal.Profiles != 1 || rehearsal.Jobs != 1 {
-		t.Fatalf("rehearsal: %+v", rehearsal)
-	}
-	if !bytes.Equal(oldDatabase, readLocalBytes(t, filepath.Join(dir, localDatabaseName))) {
-		t.Fatal("rehearsal changed original database")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "credentials-keyring.json")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("rehearsal published a keyring")
-	}
-	stages, _ := filepath.Glob(filepath.Join(filepath.Dir(dir), ".LinguaFlow.v013-stage-*"))
-	if len(stages) != 0 {
-		t.Fatalf("rehearsal left stages: %v", stages)
-	}
-	result, err := RunLocal(context.Background(), LocalOptions{DataDir: dir, Apply: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result.Applied || result.BackupDir == "" {
-		t.Fatalf("apply: %+v", result)
-	}
-	if !bytes.Equal(oldDatabase, readLocalBytes(t, filepath.Join(result.BackupDir, localDatabaseName))) {
-		t.Fatal("backup differs from old database")
-	}
-	if secret, err := config.ReadLocalSecret(filepath.Join(dir, "instance-secret")); err != nil || secret != oldSecret {
-		t.Fatal("existing local secret was changed", err)
-	}
-	for path, expected := range map[string]string{"jobs/resources/test.txt": "original input", "jobs/outputs/result.txt": "saved output", "custom/settings.txt": "unknown user file"} {
-		if string(readLocalBytes(t, filepath.Join(dir, filepath.FromSlash(path)))) != expected {
-			t.Fatalf("file %s changed", path)
-		}
-		if string(readLocalBytes(t, filepath.Join(result.BackupDir, filepath.FromSlash(path)))) != expected {
-			t.Fatalf("backup file %s changed", path)
-		}
-	}
-	cfg := config.DefaultServerConfig()
-	cfg.DataDir = dir
-	cfg.AutoMigrate = false
-	db, client, err := database.Open(context.Background(), cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	local, err := service.NewInitializationService(client).Validate(context.Background(), config.ModeLocal)
-	if err != nil || local.ID != 5 || local.PasswordHash != "unchanged-local-password-hash" {
-		t.Fatalf("local identity: %v %v", local, err)
-	}
-	var stored string
-	if err := db.QueryRow(`SELECT CAST(created_at AS TEXT) FROM users WHERE id=5`).Scan(&stored); err != nil || stored != "2026-09-29T03:00:00.123456789Z" {
-		t.Fatalf("time=%s err=%v", stored, err)
-	}
-	var status, snapshot string
-	var total, completed int
-	if err := db.QueryRow("SELECT status,progress_total,progress_completed,execution_config FROM jobs WHERE id=1").Scan(&status, &total, &completed, &snapshot); err != nil {
-		t.Fatal(err)
-	}
-	if status != "paused" || total != 40 || completed != 17 || strings.Contains(snapshot, "job-original-key") || !strings.Contains(snapshot, "old custom prompt") {
-		t.Fatalf("job not preserved: %s", snapshot)
-	}
-	keys, err := credential.LoadKeyring(filepath.Join(dir, "credentials-keyring.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := service.NewCredentialService(client, keys, nil).ValidateKeys(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if err := client.Close(); err != nil {
-		t.Fatal(err)
-	}
-	// A published directory may already be receiving new work when recovery
-	// runs. The persisted receipt, not a database hash, identifies publication.
-	if err := os.WriteFile(filepath.Join(dir, "new-work.txt"), []byte("keep new work"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	again, err := RunLocal(context.Background(), LocalOptions{DataDir: dir, Apply: true})
-	if err != nil || !again.Applied || again.Recovery != "published" || again.BackupDir != result.BackupDir {
-		t.Fatalf("published recovery=%+v err=%v", again, err)
-	}
-	if string(readLocalBytes(t, filepath.Join(dir, "new-work.txt"))) != "keep new work" {
-		t.Fatal("recovery rolled back published data")
-	}
-}
-
-func TestLocalMigrationFailurePreservesOriginal(t *testing.T) {
-	for _, kind := range []string{"invalid-time", "missing-local", "inactive-local", "non-admin-local", "missing-resource", "unsafe-resource", "mixed-schema"} {
-		t.Run(kind, func(t *testing.T) {
-			dir := localFixture(t, true)
-			db := openLocalFixture(t, dir)
-			statement := map[string]string{
-				"invalid-time":     `UPDATE users SET created_at='2026-01-01 00:00:00' WHERE id=5`,
-				"missing-local":    `UPDATE users SET username='renamed-local' WHERE id=5`,
-				"inactive-local":   `UPDATE users SET active=false WHERE id=5`,
-				"non-admin-local":  `UPDATE users SET role='user' WHERE id=5`,
-				"missing-resource": `UPDATE resources SET storage_path='resources/missing.txt'`,
-				"unsafe-resource":  `UPDATE resources SET storage_path='../outside.txt'`,
-				"mixed-schema":     `CREATE TABLE credentials(id INTEGER PRIMARY KEY)`,
-			}[kind]
-			if _, err := db.Exec(statement); err != nil {
-				t.Fatal(err)
-			}
-			if err := db.Close(); err != nil {
-				t.Fatal(err)
-			}
-			before := readLocalBytes(t, filepath.Join(dir, localDatabaseName))
-			result, err := RunLocal(context.Background(), LocalOptions{DataDir: dir, Apply: true})
-			if err == nil || result.Applied {
-				t.Fatalf("accepted %s", kind)
-			}
-			if !bytes.Equal(before, readLocalBytes(t, filepath.Join(dir, localDatabaseName))) {
-				t.Fatal("failure changed source")
-			}
-			backups, _ := filepath.Glob(dir + ".v013-backup-*")
-			if len(backups) != 0 {
-				t.Fatalf("published backup before validation: %v", backups)
-			}
-		})
-	}
 }
 
 func preparedLocalSwitch(t *testing.T) (localJournal, string) {
@@ -334,22 +207,6 @@ func TestLocalSwitchFailureAndExplicitRecovery(t *testing.T) {
 	result, _, err := recoverLocal(j.SourceDir, path, true)
 	if err != nil || result.Recovery != "restored" {
 		t.Fatalf("%+v %v", result, err)
-	}
-}
-
-func TestLocalMigrationLockAndUnsafePaths(t *testing.T) {
-	dir := localFixture(t, false)
-	lockPath := filepath.Join(filepath.Dir(dir), ".LinguaFlow.v013-migration.lock")
-	unlock, err := acquireLocalLock(lockPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer unlock()
-	if _, err := RunLocal(context.Background(), LocalOptions{DataDir: dir}); err == nil {
-		t.Fatal("concurrent migration acquired lock")
-	}
-	if _, _, err := localPaths(filepath.VolumeName(dir) + string(os.PathSeparator)); err == nil {
-		t.Fatal("volume root accepted")
 	}
 }
 

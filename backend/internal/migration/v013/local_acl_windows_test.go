@@ -11,11 +11,10 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"golang.org/x/sys/windows"
 )
 
-func TestLocalMigrationUnderModifyOnlyParent(t *testing.T) {
+func TestLocalMigrationRejectedUnderModifyOnlyParent(t *testing.T) {
 	if windows.GetCurrentProcessToken().IsElevated() {
 		t.Skip("the Modify-only migration regression requires a non-elevated token")
 	}
@@ -63,37 +62,14 @@ func TestLocalMigrationUnderModifyOnlyParent(t *testing.T) {
 	}
 
 	original := readLocalBytes(t, filepath.Join(dir, localDatabaseName))
-	rehearsal, err := RunLocal(context.Background(), LocalOptions{DataDir: dir})
-	if err != nil {
-		t.Fatalf("rehearse under Modify-only parent: %v", err)
-	}
-	if rehearsal.Applied || rehearsal.CredentialsCreated != 2 {
-		t.Fatalf("unexpected rehearsal result: %+v", rehearsal)
+	for _, apply := range []bool{false, true} {
+		result, err := RunLocal(context.Background(), LocalOptions{DataDir: dir, Apply: apply})
+		if !errors.Is(err, ErrTargetIncompatible) || result.Applied {
+			t.Fatalf("unsupported migration was not refused: %+v %v", result, err)
+		}
 	}
 	if !bytes.Equal(original, readLocalBytes(t, filepath.Join(dir, localDatabaseName))) {
-		t.Fatal("rehearsal changed the original database")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "credentials-keyring.json")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("rehearsal published a keyring: %v", err)
-	}
-	stages, err := filepath.Glob(filepath.Join(parent, ".LinguaFlow.v013-stage-*"))
-	if err != nil || len(stages) != 0 {
-		t.Fatalf("rehearsal left staging directories: %v (%v)", stages, err)
-	}
-
-	result, err := RunLocal(context.Background(), LocalOptions{DataDir: dir, Apply: true})
-	if err != nil {
-		t.Fatalf("apply under Modify-only parent: %v", err)
-	}
-	if !result.Applied || result.BackupDir == "" || result.CredentialsCreated != 2 {
-		t.Fatalf("unexpected apply result: %+v", result)
-	}
-	if !bytes.Equal(original, readLocalBytes(t, filepath.Join(result.BackupDir, localDatabaseName))) {
-		t.Fatal("backup did not preserve the original database")
-	}
-	keys, err := credential.LoadKeyring(filepath.Join(dir, "credentials-keyring.json"))
-	if err != nil || keys.ActiveKeyID() == "" {
-		t.Fatalf("published private keyring is not usable: %v", err)
+		t.Fatal("rejection changed original data")
 	}
 	after, err := windows.GetNamedSecurityInfo(parent, windows.SE_FILE_OBJECT,
 		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)

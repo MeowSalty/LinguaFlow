@@ -14,6 +14,12 @@ import (
 
 const organizationMutationAttempts = 5
 
+const (
+	organizationTransactionRetryBudget  = 5 * time.Second
+	organizationTransactionRetryInitial = 10 * time.Millisecond
+	organizationTransactionRetryMaximum = 250 * time.Millisecond
+)
+
 // withOrganizationMutation serializes writes against the organization before
 // reading any authorization. PostgreSQL takes a row write lock; SQLite takes a
 // database write lock before establishing a read snapshot. Callbacks must use
@@ -35,7 +41,8 @@ func withOrganizationMutation(ctx context.Context, client *ent.Client, orgID int
 }
 
 func withOrganizationTransaction(ctx context.Context, client *ent.Client, mutate func(*ent.Client) error) error {
-	for attempt := 0; attempt < organizationMutationAttempts; attempt++ {
+	retryDeadline := time.Now().Add(organizationTransactionRetryBudget)
+	for attempt := 0; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -46,18 +53,48 @@ func withOrganizationTransaction(ctx context.Context, client *ent.Client, mutate
 			// while reporting cancellation and never retrying the operation.
 			return errors.Join(ctx.Err(), err)
 		}
-		if err == nil || !isOrganizationTransactionConflict(err) || attempt == organizationMutationAttempts-1 {
+		if err == nil || !isOrganizationTransactionConflict(err) {
 			return err
 		}
-		timer := time.NewTimer(time.Duration(10*(1<<attempt)) * time.Millisecond)
+		remaining := time.Until(retryDeadline)
+		if deadline, ok := ctx.Deadline(); ok {
+			contextRemaining := time.Until(deadline)
+			if contextRemaining < remaining {
+				remaining = contextRemaining
+			}
+		}
+		if remaining <= 0 {
+			return err
+		}
+		delay := organizationTransactionRetryDelay(attempt)
+		if delay > remaining {
+			delay = remaining
+		}
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()
 		case <-timer.C:
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !time.Now().Before(retryDeadline) {
+			return err
+		}
 	}
-	return nil
+}
+
+func organizationTransactionRetryDelay(attempt int) time.Duration {
+	delay := organizationTransactionRetryInitial
+	for i := 0; i < attempt && delay < organizationTransactionRetryMaximum; i++ {
+		delay *= 2
+	}
+	if delay > organizationTransactionRetryMaximum {
+		return organizationTransactionRetryMaximum
+	}
+	return delay
 }
 
 func organizationTransactionAttempt(ctx context.Context, client *ent.Client, mutate func(*ent.Client) error) error {
@@ -73,8 +110,21 @@ func organizationTransactionAttempt(ctx context.Context, client *ent.Client, mut
 		}
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		// database/sql marks the transaction done even when Commit fails. Its
+		// Rollback cannot confirm whether the driver's cleanup succeeded, so a
+		// conflict code at this boundary is insufficient evidence for replay.
+		return &organizationCommitError{cause: err}
+	}
+	return nil
 }
+
+type organizationCommitError struct{ cause error }
+
+func (e *organizationCommitError) Error() string {
+	return "organization transaction commit failed: " + e.cause.Error()
+}
+func (e *organizationCommitError) Unwrap() error { return e.cause }
 
 type organizationRollbackError struct {
 	cause    error
@@ -86,6 +136,10 @@ func (e *organizationRollbackError) Error() string {
 }
 
 func isOrganizationTransactionConflict(err error) bool {
+	var commitErr *organizationCommitError
+	if errors.As(err, &commitErr) {
+		return false
+	}
 	// Do not replay network errors or ambiguous commit outcomes. These codes
 	// specifically identify transactions that did not successfully commit.
 	var pgErr *pgconn.PgError

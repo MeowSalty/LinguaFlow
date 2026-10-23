@@ -13,11 +13,14 @@ import {
   logout as logoutApi,
   registerAndLogin,
   setLocalMode,
+  setAuthSession,
   setUnauthorizedHandler,
   updateCurrentUser,
 } from '@/api/client'
 import type { ServiceMode } from '@/stores/service'
 import { useServiceStore } from '@/stores/service'
+import { extractErrorMessage } from '@/utils/errors'
+import { t } from '@/i18n'
 import {
   assertSessionCurrent,
   captureSession,
@@ -63,6 +66,12 @@ export const useAuthStore = defineStore('auth', () => {
     refreshToken.value = null
   }
 
+  const acceptExternalSession = (session: AuthSession, context: SessionSnapshot): void => {
+    assertSessionCurrent(context)
+    setAuthSession(session)
+    applySession(session)
+  }
+
   const login = async (credentials: LoginPayload): Promise<void> => {
     clearAuthTokens()
     changeSessionContext(captureSession().baseUrl, null, true)
@@ -93,7 +102,10 @@ export const useAuthStore = defineStore('auth', () => {
       return fresh
     } catch (error) {
       if (isSessionCurrent(context))
-        initializationError.value = error instanceof Error ? error.message : String(error)
+        initializationError.value = extractErrorMessage(
+          error,
+          t('api.errors.fetchCurrentUserFailed'),
+        )
       throw error
     }
   }
@@ -226,5 +238,6 @@ export const useAuthStore = defineStore('auth', () => {
     bootstrap,
     bootstrapForMode,
     clearSession,
+    acceptExternalSession,
   }
 })

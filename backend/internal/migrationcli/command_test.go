@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/v013"
 )
 
 func clearDeploymentEnvironment(t *testing.T) {
@@ -48,7 +49,7 @@ func TestMigrationHelpDoesNotPrepareInstance(t *testing.T) {
 	}
 }
 
-func TestMigrationLocalInputValidation(t *testing.T) {
+func TestLegacyMigrationRejectsBeforeLocalInputValidation(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		args        []string
@@ -73,7 +74,7 @@ func TestMigrationLocalInputValidation(t *testing.T) {
 			root := NewCommand()
 			root.SetArgs(args)
 			err := root.Execute()
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
+			if err == nil || !errors.Is(err, v013.ErrTargetIncompatible) {
 				t.Fatalf("error=%v, want %s", err, tc.want)
 			}
 			if strings.Contains(err.Error(), "private-input") {
@@ -140,7 +141,7 @@ func TestLocalMigrationRejectsEmptyMasterKeySources(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "not-created")
 			root := NewCommand()
 			root.SetArgs([]string{"v013", "local", "--data-dir", dir})
-			if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "unset "+name) {
+			if err := root.Execute(); err == nil || !errors.Is(err, v013.ErrTargetIncompatible) {
 				t.Fatalf("local migration silently ignored external master-key configuration: %v", err)
 			}
 			if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
@@ -150,7 +151,7 @@ func TestLocalMigrationRejectsEmptyMasterKeySources(t *testing.T) {
 	}
 }
 
-func TestPostgresMasterKeyInputValidation(t *testing.T) {
+func TestLegacyMigrationRejectsBeforeMasterKeyInputValidation(t *testing.T) {
 	master := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{42}, 32))
 	for _, tc := range []struct {
 		name        string
@@ -181,7 +182,7 @@ func TestPostgresMasterKeyInputValidation(t *testing.T) {
 			root.SetErr(&output)
 			root.SetArgs(append([]string{"v013", "postgres", "--data-dir", dir}, tc.flags...))
 			err := root.Execute()
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
+			if err == nil || !errors.Is(err, v013.ErrTargetIncompatible) {
 				t.Fatalf("error=%v, want %s", err, tc.want)
 			}
 			for _, value := range []string{master, "private-invalid-input", "unused-private-dsn"} {
@@ -212,7 +213,7 @@ func TestPostgresMasterKeyStartupInstructions(t *testing.T) {
 	}
 }
 
-func TestPostgresSecretSourceValidation(t *testing.T) {
+func TestLegacyMigrationRejectsBeforeSecretSourceValidation(t *testing.T) {
 	for _, tc := range []struct{ name, direct, filename, contents, want string }{
 		{"conflict", "", "dsn", "sensitive-dsn", "conflicts"},
 		{"empty file", "", "dsn", "", "empty"},
@@ -235,7 +236,7 @@ func TestPostgresSecretSourceValidation(t *testing.T) {
 			root := NewCommand()
 			root.SetArgs([]string{"v013", "postgres", "--data-dir", dir})
 			err := root.Execute()
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
+			if err == nil || !errors.Is(err, v013.ErrTargetIncompatible) {
 				t.Fatalf("error=%v, want %s", err, tc.want)
 			}
 			if strings.Contains(err.Error(), "sensitive-dsn") {
@@ -262,7 +263,7 @@ func TestServiceDependenciesExcludeMigration(t *testing.T) {
 	}
 }
 
-func TestMigrateV013InputValidation(t *testing.T) {
+func TestLegacyMigrationRejectsBeforePostgresInputValidation(t *testing.T) {
 	for _, tc := range []struct{ name, driver, dsn, jwt, want string }{
 		{"missing connection", "", "", "", "DATABASE_DSN"},
 		{"SQLite rejected", "sqlite", "secret-dsn", "", "only supports PostgreSQL"},
@@ -281,7 +282,7 @@ func TestMigrateV013InputValidation(t *testing.T) {
 			root.SetErr(&output)
 			root.SetArgs([]string{"v013", "postgres", "--data-dir", dir})
 			err := root.Execute()
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
+			if err == nil || !errors.Is(err, v013.ErrTargetIncompatible) {
 				t.Fatalf("error=%v, want %s", err, tc.want)
 			}
 			if strings.Contains(output.String(), "secret-dsn") || strings.Contains(output.String(), "short-private-value") {

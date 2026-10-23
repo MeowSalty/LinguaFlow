@@ -58,7 +58,7 @@ describe('bootstrap authentication races', () => {
         access_token: 'second-access',
         refresh_token: 'second-refresh',
       })
-      await auth.login({ username: 'second', password: 'password' })
+      await auth.login({ identifier: 'second', password: 'password' })
       if (outcome === 'success')
         resolve({
           id: 1,

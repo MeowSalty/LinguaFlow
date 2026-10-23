@@ -30,6 +30,8 @@ import {
   type OrganizationRole,
 } from '@/utils/organization-scope'
 import { formatDateTime } from '@/utils/datetime'
+import { normalizeUsername, validateUsername } from '@/utils/username'
+import { extractErrorMessage } from '@/utils/errors'
 import StorageManager from '@/components/storage/StorageManager.vue'
 
 const { t } = useI18n()
@@ -129,13 +131,12 @@ async function refreshDetails() {
           store.remove(id)
           preferences.setSelectedOrg(null)
           await select(null)
-        } else
-          activityError.value = cause instanceof Error ? cause.message : t('team.errors.activity')
+        } else activityError.value = extractErrorMessage(cause, t('team.errors.activity'))
       }
     }
   } catch (cause) {
     if (!current()) return
-    error.value = cause instanceof Error ? cause.message : t('team.errors.load')
+    error.value = extractErrorMessage(cause, t('team.errors.load'))
     if (isAccessDenied(cause)) {
       members.value = []
       activities.value = []
@@ -192,7 +193,7 @@ async function save() {
     await select(org.id)
   } catch (cause) {
     if (isSessionCurrent(session) && request === generation)
-      message.error(cause instanceof Error ? cause.message : t('team.errors.save'))
+      message.error(extractErrorMessage(cause, t('team.errors.save')))
   } finally {
     if (isSessionCurrent(session) && request === generation) busy.value = false
   }
@@ -217,7 +218,7 @@ async function memberAction(action: (id: number) => Promise<unknown>, leaving = 
     await refresh()
   } catch (cause) {
     if (!isSessionCurrent(session) || request !== generation) return
-    const detail = cause instanceof Error ? cause.message : t('team.errors.memberSave')
+    const detail = extractErrorMessage(cause, t('team.errors.memberSave'))
     await refresh()
     if (isSessionCurrent(session) && orgId.value === id) message.error(detail)
   } finally {
@@ -225,8 +226,16 @@ async function memberAction(action: (id: number) => Promise<unknown>, leaving = 
   }
 }
 function submitAddMember() {
+  const issue = validateUsername(username.value, 'lookup')
+  if (issue) {
+    message.error(t(`accountInput.username.${issue}`))
+    return
+  }
   memberAction((id) =>
-    api.addOrganizationMember(id, { username: username.value.trim(), role: role.value }),
+    api.addOrganizationMember(id, {
+      username: normalizeUsername(username.value),
+      role: role.value,
+    }),
   )
 }
 function confirmRole(member: ApiSchemas['OrganizationMember'], value: OrganizationRole) {
@@ -328,11 +337,7 @@ onUnmounted(() => {
         </div></NCard
       >
       <NCard :title="t('team.members')" size="small">
-        <form
-          v-if="canWrite"
-          class="mb-5 flex flex-wrap gap-3"
-          @submit.prevent="submitAddMember"
-        >
+        <form v-if="canWrite" class="mb-5 flex flex-wrap gap-3" @submit.prevent="submitAddMember">
           <NInput
             v-model:value="username"
             class="min-w-48 flex-1!"

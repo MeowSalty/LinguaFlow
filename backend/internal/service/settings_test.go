@@ -14,6 +14,9 @@ func TestSettingsFailClosedAndTyped(t *testing.T) {
 	for _, value := range []string{"", "true", "false", "TRUE", "0", "invalid"} {
 		t.Run(value, func(t *testing.T) {
 			c := testClient(t)
+			if err := initializePasswordConnection(ctx, c); err != nil {
+				t.Fatal(err)
+			}
 			if value != "" {
 				c.SystemSetting.Create().SetKey(SettingRegistrationEnabled).SetValue(value).SaveX(ctx)
 			}
@@ -50,6 +53,9 @@ func TestSettingsReadFailureNeverOpensRegistration(t *testing.T) {
 func TestSettingsAuditFailureRollsBackPolicy(t *testing.T) {
 	ctx := context.Background()
 	c := testClient(t)
+	if err := initializePasswordConnection(ctx, c); err != nil {
+		t.Fatal(err)
+	}
 	c.SystemSetting.Create().SetKey(SettingRegistrationEnabled).SetValue("true").SaveX(ctx)
 	c.SystemSetting.Create().SetKey(SettingTaskRetention).SetValue(`{"enabled":false,"retention_days":30,"revision":1}`).SaveX(ctx)
 	u := c.User.Create().SetUsername("admin").SetEmail("admin@test.invalid").SetPasswordHash("unused").SetRole(SystemRoleAdmin).SaveX(ctx)
@@ -63,5 +69,25 @@ func TestSettingsAuditFailureRollsBackPolicy(t *testing.T) {
 	settings, err := NewSettingsService(c).Get(ctx)
 	if err != nil || !settings.RegistrationEnabled {
 		t.Fatalf("policy partially committed: %+v %v", settings, err)
+	}
+}
+
+func TestSettingsRejectsRevokedAdministratorGeneration(t *testing.T) {
+	ctx := context.Background()
+	c := testClient(t)
+	c.SystemSetting.Create().SetKey(SettingRegistrationEnabled).SetValue("true").SaveX(ctx)
+	c.SystemSetting.Create().SetKey(SettingTaskRetention).SetValue(`{"enabled":false,"retention_days":30,"revision":1}`).SaveX(ctx)
+	admin := c.User.Create().SetUsername("settings-generation-admin").SetRole(SystemRoleAdmin).SaveX(ctx)
+	stale := WithExternalActor(ctx, admin.ID, admin.AuthVersion)
+	c.User.UpdateOneID(admin.ID).AddAuthVersion(1).ExecX(ctx)
+	off := false
+	if _, err := NewSettingsService(c).Patch(stale, admin.ID, SettingsPatch{RegistrationEnabled: &off}); !errors.Is(err, ErrTokenInvalid) {
+		t.Fatalf("revoked administrator saved settings: %v", err)
+	}
+	if enabled, err := NewSettingsService(c).RegistrationEnabled(ctx); err != nil || !enabled {
+		t.Fatal("rejected administrator changed registration")
+	}
+	if c.ActivityLog.Query().CountX(ctx) != 0 {
+		t.Fatal("rejected administrator committed audit")
 	}
 }

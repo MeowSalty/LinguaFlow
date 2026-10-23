@@ -235,6 +235,13 @@ func (s *Server) initStorage(ctx context.Context, keys *credential.Keyring) erro
 	}
 	store.Configure(cfg, database.DialectFor(s.serverCfg.Database.Driver), defaultID)
 	s.resourceSvc.SetStorage(store)
+	s.storageRetirements, err = service.NewStorageRetirementService(store, s.storageConnections, s.serverCfg.IsLocal())
+	if err != nil {
+		return err
+	}
+	if err = s.storageRetirements.ReconcilePathClaims(ctx); err != nil {
+		return err
+	}
 	if _, err = s.storageConnections.ValidateCurrentKeys(ctx); err != nil {
 		return err
 	}
@@ -289,7 +296,13 @@ func maintenanceAuthorizedOperation(r *http.Request) bool {
 		"PUT /api/v1/storage/spaces/{spaceId}/quota",
 		"POST /api/v1/storage/connections/{connectionId}/authorize",
 		"POST /api/v1/storage/connections/{connectionId}/check",
-		"POST /api/v1/storage/connections/{connectionId}/revoke":
+		"POST /api/v1/storage/connections/{connectionId}/revoke",
+		"POST /api/v1/storage/retirement-previews",
+		"POST /api/v1/storage/retirements",
+		"PATCH /api/v1/storage/retirements/{retirementId}/plan",
+		"POST /api/v1/storage/retirements/{retirementId}/resume",
+		"POST /api/v1/storage/retirements/{retirementId}/cancel",
+		"POST /api/v1/storage/retirements/{retirementId}/recover-authorization":
 		return true
 	default:
 		return false
