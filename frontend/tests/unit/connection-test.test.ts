@@ -152,13 +152,16 @@ beforeEach(() => {
   vi.stubGlobal('crypto', webcrypto)
   vi.stubGlobal('BroadcastChannel', FakeChannel)
   vi.stubGlobal('location', { origin: 'https://frontend.example' })
-  vi.stubGlobal('window', {
-    open: (url: string, name: string, features?: string) => {
-      opened.push({ url, name, features })
-      return popup
-    },
-    close: vi.fn(),
-  })
+  vi.stubGlobal(
+    'window',
+    Object.assign(new EventTarget(), {
+      open: (url: string, name: string, features?: string) => {
+        opened.push({ url, name, features })
+        return popup
+      },
+      close: vi.fn(),
+    }),
+  )
   changeSessionContext('https://service.example/api/v1', 42, true)
 })
 
@@ -505,6 +508,24 @@ describe('administrator connection test relay', () => {
       transactionId: 'tx-test',
       ticket: 'ticket-one',
     })
+    const channel = channels[0]!
+    channel.onmessage?.({
+      origin: 'https://wrong.example',
+      data: { type: 'complete', transactionId: 'tx-test' },
+    } as MessageEvent)
+    channel.onmessage?.({
+      origin: location.origin,
+      data: { type: 'complete', transactionId: 'wrong' },
+    } as MessageEvent)
+    expect(channel.close).not.toHaveBeenCalled()
+    window.dispatchEvent(new Event('pagehide'))
+    expect(channel.close).toHaveBeenCalledOnce()
+    channel.onmessage?.({
+      origin: location.origin,
+      data: { type: 'complete', transactionId: 'tx-test' },
+    } as MessageEvent)
+    expect(window.close).not.toHaveBeenCalled()
+    expect(relayConnectionTestTicket('ticket-one')).toBe(false)
   })
 
   it('bounds evidence fields to the live authenticated memory context', async () => {

@@ -18,13 +18,9 @@ import {
   stableJson,
 } from '@/components/admin/authentication/auth-connection-model'
 import { clearExternalBrowserStorage, createBrowserChallenge } from './external-browser'
+import { CONNECTION_TEST_RELAY_KEY, type RelayMarker } from './connection-test-relay'
 
-export const CONNECTION_TEST_RELAY_KEY = 'linguaflow.connection-test-relay.v1'
-interface RelayMarker {
-  channel: string
-  transactionId: string
-  expiresAt: string
-}
+export { CONNECTION_TEST_RELAY_KEY, relayConnectionTestTicket } from './connection-test-relay'
 export interface ConnectionTestEvidence {
   result: ApiSchemas['ExternalTestResponse']
   revision: number
@@ -298,55 +294,6 @@ export function startConnectionTest(
     }
   })()
   return { result, cancel: () => cancel() }
-}
-
-/** The completion window relays a ticket, never a proof or a formal session. */
-export function relayConnectionTestTicket(ticket?: string): boolean {
-  let marker: RelayMarker | null = null
-  try {
-    const raw = sessionStorage.getItem(CONNECTION_TEST_RELAY_KEY)
-    if (!raw) return false
-    sessionStorage.removeItem(CONNECTION_TEST_RELAY_KEY)
-    marker = JSON.parse(raw) as RelayMarker
-  } catch {
-    return false
-  }
-  if (
-    !marker ||
-    typeof marker.channel !== 'string' ||
-    !marker.channel.startsWith('linguaflow-auth-test-') ||
-    typeof marker.transactionId !== 'string' ||
-    !marker.transactionId ||
-    typeof marker.expiresAt !== 'string' ||
-    !validDeadline(marker.expiresAt)
-  )
-    return false
-  let channel: BroadcastChannel
-  try {
-    channel = new BroadcastChannel(marker.channel)
-  } catch {
-    return false
-  }
-  const transactionId = marker.transactionId
-  const timeout = setTimeout(
-    () => {
-      channel.close()
-    },
-    Math.min(30_000, Date.parse(marker.expiresAt) - Date.now()),
-  )
-  channel.onmessage = (event: MessageEvent) => {
-    if (
-      event.origin !== location.origin ||
-      event.data?.type !== 'complete' ||
-      event.data?.transactionId !== transactionId
-    )
-      return
-    clearTimeout(timeout)
-    channel.close()
-    window.close()
-  }
-  channel.postMessage({ type: 'ticket', transactionId, ticket: ticket ?? '' })
-  return true
 }
 
 export function matchConnectionTest(
