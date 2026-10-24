@@ -75,6 +75,18 @@ tasks:
     desc: 验证前端开发和生产环境启动
     deps: [build]
     cmds: ['pnpm exec playwright test --config=playwright.startup.config.ts {{.CLI_ARGS}}']
+  test:auth-callback:
+    desc: 验证轻量认证完成页的构建预算、主包阻塞和开发/生产接续
+    deps: [build]
+    cmds:
+      - node tests/integration/auth-callback-budget.mjs
+      - pnpm exec playwright test --config=playwright.startup.config.ts auth-callback-startup.spec.ts {{.CLI_ARGS}}
+  test:auth-callback-performance:
+    desc: 测量生产完成页在冷缓存和 128kbps/300ms 网络下的首屏与交接
+    deps: [build]
+    cmds:
+      - node tests/integration/auth-callback-budget.mjs
+      - node tests/integration/auth-callback-performance.mjs
   test:serve-dev:
     desc: 为启动测试运行开发服务器
     cmds: [pnpm exec vite --host 127.0.0.1 --port 5187 --strictPort]
