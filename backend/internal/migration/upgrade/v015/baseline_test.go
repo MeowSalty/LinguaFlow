@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +106,51 @@ func TestBaselineStablePrimaryKeysAndTampering(t *testing.T) {
 			}
 			if _, err := VerifyBaseline(ctx, db, p, false); err == nil {
 				t.Fatal("accepted a missing stable primary key")
+			}
+		})
+	}
+}
+
+func TestBaselineNumericPrimaryKeyRange(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		id        int64
+		outside32 bool
+	}{
+		{name: "min-int64", id: math.MinInt64, outside32: true},
+		{name: "below-min-int32", id: math.MinInt32 - 1, outside32: true},
+		{name: "min-int32", id: math.MinInt32},
+		{name: "zero", id: 0},
+		{name: "max-int32", id: math.MaxInt32},
+		{name: "above-max-int32", id: math.MaxInt32 + 1, outside32: true},
+		{name: "max-int64", id: math.MaxInt64, outside32: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := baselineTestDB(t)
+			if _, err := db.Exec("CREATE TABLE business(id INTEGER PRIMARY KEY,payload TEXT NOT NULL)"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec("INSERT INTO business(id,payload) VALUES(?,?)", tc.id, "preserved"); err != nil {
+				t.Fatal(err)
+			}
+			p := &operation.Plan{Kind: "storage", Source: operation.Endpoint{Driver: "sqlite"}}
+			table := baselineTable{name: "business", columns: []string{"id", "payload"}, primary: []string{"id"}, numeric: true}
+			evidence, changes, err := captureTableBaseline(t.Context(), db, p, table, time.Now().UTC())
+			if strconv.IntSize == 32 && tc.outside32 {
+				var classified *operation.Error
+				if !errors.As(err, &classified) || classified.Code != operation.UnsupportedSource {
+					t.Fatalf("out-of-range primary key: got %v, want %s", err, operation.UnsupportedSource)
+				}
+				if evidence.Count != 0 || len(changes) != 0 {
+					t.Fatal("out-of-range primary key entered baseline evidence")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if evidence.Count != 1 || evidence.MaxID != max(int64(0), tc.id) || len(changes) != 0 {
+				t.Fatalf("primary key %d: unexpected evidence %+v or changes %v", tc.id, evidence, changes)
 			}
 		})
 	}

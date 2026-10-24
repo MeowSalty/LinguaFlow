@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -191,11 +192,11 @@ func captureTableBaseline(ctx context.Context, q baselineQueryer, p *operation.P
 			id := 0
 			if table.numeric {
 				keyID := int64Value(row[table.primary[0]])
-				id = int(keyID)
-				if int64(id) != keyID {
+				if keyID < math.MinInt || keyID > math.MaxInt {
 					rows.Close()
 					return evidence, nil, operation.Fail(operation.UnsupportedSource, "numeric primary key is outside the receipt range")
 				}
+				id = int(keyID)
 			}
 			batch = append(batch, capturedRow{values: values, row: row, id: id, key: key})
 		}
