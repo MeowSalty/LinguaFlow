@@ -481,7 +481,7 @@ func matchTables(actual []actualTable, expected []*schema.Table, driver string) 
 				if i.Annotation != nil {
 					where = i.Annotation.Where
 				}
-				if strings.Join(index.Columns, "\x00") == strings.Join(names, "\x00") && normalSQL(index.Where) == normalSQL(where) {
+				if strings.Join(index.Columns, "\x00") == strings.Join(names, "\x00") && predicatesMatch(index.Where, where, driver) {
 					declared = true
 				}
 			}
@@ -490,7 +490,7 @@ func matchTables(actual []actualTable, expected []*schema.Table, driver string) 
 			}
 		}
 		for _, c := range want.Columns {
-			if c.Unique && !uniqueIndex(t, []string{c.Name}, "") {
+			if c.Unique && !uniqueIndex(t, []string{c.Name}, "", driver) {
 				return operation.Fail(operation.UnsupportedSource, "source uniqueness contract is incomplete")
 			}
 		}
@@ -503,7 +503,7 @@ func matchTables(actual []actualTable, expected []*schema.Table, driver string) 
 			if i.Annotation != nil {
 				where = i.Annotation.Where
 			}
-			if i.Unique && !uniqueIndex(t, names, where) {
+			if i.Unique && !uniqueIndex(t, names, where, driver) {
 				return operation.Fail(operation.UnsupportedSource, "source index contract is incomplete")
 			}
 		}
@@ -540,39 +540,51 @@ func matchTables(actual []actualTable, expected []*schema.Table, driver string) 
 	return nil
 }
 
-func uniqueIndex(t actualTable, names []string, where string) bool {
+func uniqueIndex(t actualTable, names []string, where, driver string) bool {
 	for _, i := range t.Indexes {
-		if i.Unique && strings.Join(i.Columns, "\x00") == strings.Join(names, "\x00") && normalSQL(i.Where) == normalSQL(where) {
+		if i.Unique && strings.Join(i.Columns, "\x00") == strings.Join(names, "\x00") && predicatesMatch(i.Where, where, driver) {
 			return true
 		}
 	}
 	return false
 }
-func normalSQL(s string) string {
-	r := strings.NewReplacer(" ", "", "\n", "", "\r", "", "\t", "", "\"", "", "`", "", "(", "", ")", "")
-	return strings.ToLower(r.Replace(s))
+func predicatesMatch(actual, declared, driver string) bool {
+	if strings.TrimSpace(actual) == "" || strings.TrimSpace(declared) == "" {
+		return strings.TrimSpace(actual) == "" && strings.TrimSpace(declared) == ""
+	}
+	got, err := canonicalCheck(actual, driver)
+	if err != nil {
+		return false
+	}
+	want, err := canonicalCheck(declared, driver)
+	return err == nil && got == want
 }
 
 func defaultMatches(actual *string, c *schema.Column) bool {
 	if actual == nil {
 		return false
 	}
-	v := strings.TrimSpace(*actual)
-	// PostgreSQL exposes SQL casts in catalog defaults.
-	if index := strings.Index(v, "::"); index >= 0 {
-		v = v[:index]
+	tokens, err := checkTokens(*actual)
+	if err != nil {
+		return false
 	}
-	v = strings.Trim(v, "()")
+	// Catalog defaults must be one fixed scalar, including PostgreSQL's
+	// supported literal casts. Never discard an arbitrary expression suffix.
+	parser := checkParser{tokens: tokens, postgres: true}
+	value := parser.atom()
+	if parser.err != nil || parser.pos != len(tokens) || value == nil || len(value.args) != 0 {
+		return false
+	}
 	switch want := c.Default.(type) {
 	case string:
-		return v == "'"+strings.ReplaceAll(want, "'", "''")+"'"
+		return value.op == "string" && value.value == want
 	case bool:
 		if want {
-			return v == "true" || v == "1"
+			return value.op == "id" && value.value == "true" || value.op == "integer" && value.value == "1"
 		}
-		return v == "false" || v == "0"
+		return value.op == "id" && value.value == "false" || value.op == "integer" && value.value == "0"
 	default:
-		return v == fmt.Sprint(want)
+		return value.op == "integer" && value.value == fmt.Sprint(want)
 	}
 }
 func compatibleType(actual string, c *schema.Column, driver string) bool {

@@ -218,9 +218,12 @@ func (p *checkParser) atom() *checkNode {
 					p.err = errors.New("CHECK cast requires a fixed array")
 				}
 			}
-		case p.take("bigint"):
+		case p.take("bigint"), p.take("integer"), p.take("smallint"):
+			if node.op == "integer" {
+				continue
+			}
 			if node.op != "string" {
-				p.err = errors.New("CHECK bigint cast requires a fixed integer literal")
+				p.err = errors.New("CHECK integer cast requires a fixed integer literal")
 				break
 			}
 			integer, err := strconv.ParseInt(node.value, 10, 64)
