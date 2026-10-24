@@ -306,7 +306,7 @@ linguaflow admin authentication-recovery revoke --config ./server.yaml \
 
 ## linguaflow-migrate 命令
 
-版本升级的**离线迁移工具**（与主程序一同分发的独立二进制，有意不挂在 `linguaflow` 命令树上）。覆盖两类场景：
+版本升级的**离线迁移工具**（独立二进制，有意不挂在 `linguaflow` 命令树上）。覆盖两类场景：
 
 - **版本升级**（`upgrade`）— 把 v0.15.0 的数据库与账号数据离线转换到当前版本
 - **旧存储导入**（`storage`）— 把旧版文件存储（`data/jobs` 目录）迁入当前的对象存储体系，产品背景见 [存储管理](/zh/guide/storage)
@@ -318,6 +318,32 @@ linguaflow admin authentication-recovery revoke --config ./server.yaml \
 ::: warning v0.13 / v0.14 历史数据不在支持范围
 本工具只支持从 **v0.15.0** 升级。v0.13.0 / v0.14 的历史数据请使用**发布对应版本的原版迁移程序**做一次性迁移——不带账号库格式标记的旧数据库（含 v0.13.0）启动时会被直接拒绝，当前版本不提供旧账户自动转换。
 :::
+
+::: warning v0.16 遗留操作目录只能识别、不能接管
+迁移操作文件的格式已升至 v2。此前版本（v0.16）创建的迁移操作目录（v1 格式）只会被 `status` 只读识别并显示当年的构建号，`resume` / `verify` / `rollback` 一律拒绝执行——请改用**当年执行该操作的构建**对应的迁移二进制完成或回退那批操作，新工具不会接手中途的旧操作。
+:::
+
+### 获取与编译
+
+::: warning 迁移工具不随 Release 与 Docker 镜像分发
+GitHub Release 产物与 Docker 镜像目前**只包含主程序** `linguaflow`。`linguaflow-migrate` 需要从**要升级到的那个版本**（tag 或 commit）的源码自行编译——Go 静态编译，可在本地交叉编译后上传服务器。
+:::
+
+```bash
+# 推荐：Taskfile 构建，自动注入版本与提交信息（在仓库根目录执行）
+# 为 Linux amd64 服务器交叉编译，按服务器实际架构调整 GOARCH
+task -t backend/Taskfile.yml migrate:build GOOS=linux GOARCH=amd64
+# 产物：backend/bin/linguaflow-migrate
+
+# 不用 Task 时的等价手工构建
+cd backend
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o linguaflow-migrate ./cmd/linguaflow-migrate
+```
+
+两个约束：
+
+- **同一个构建跑全程** — `upgrade plan` 会把工具的构建身份冻结进计划，`apply` / `resume` / `verify` 都会校验执行二进制与之一致。编译一次、上传同一份文件，中途不要重新编译替换。
+- **工具与主程序同版本** — 迁移完成后，用**同一版本源码**编译的主程序（或该版本的官方 Release 主程序）启动服务。
 
 ### 迁移前准备
 
@@ -331,7 +357,14 @@ linguaflow admin authentication-recovery revoke --config ./server.yaml \
 
 同时用 `--mode serve|local` 声明实例模式，必须与实际实例一致。迁移工具只读取数据库位置相关的输入，不会加载 JWT、密钥环等凭据。
 
-SQLite 升级会把转换结果发布到一个**全新的目标数据目录**（`--target-data-dir`，必须不存在），绝不覆盖源数据；PostgreSQL 升级改用 `--target-config` 指向独立空目标库的部署文档。演练（`rehearse`）则用 `--rehearsal-config` 指定另一个独立演练库。
+升级策略由 `--strategy inplace|clone` 决定，缺省自动推断：不指定目标参数时为 `inplace`，给出目标参数时自动切到 `clone`；显式指定的策略与目标参数冲突会被拒绝。
+
+| 策略 | 行为 | 目标参数 |
+| --- | --- | --- |
+| `inplace`（默认） | 直接在源库上转换并发布：SQLite 沿用原数据库路径（发布中断可续跑恢复），PostgreSQL 原地升级 schema | 无 |
+| `clone` | 在独立目标上转换，源数据保持不动：SQLite 发布到一个**完全不存在的新数据目录**，PostgreSQL 写入独立空目标库 | SQLite 用 `--target-data-dir`；PostgreSQL 用 `--target-config` |
+
+数据库保护由 `--database-backup auto|external` 控制，缺省自动：SQLite 与 clone 策略固定为 `auto`（工具自行留存恢复材料）；**PostgreSQL 原地升级默认 `external`**，要求你先自行备份数据库，并在首次 `apply` 时用 `--backup-reference <备份标识>` 声明备份出处（如备份文件路径或备份系统中的任务号），续跑时沿用计划中的记录。PostgreSQL 的 clone 升级与演练还依赖与主版本匹配的 `pg_dump` / `pg_restore`，不在 PATH 时用环境变量 `LINGUAFLOW_MIGRATION_POSTGRES_BIN` 指定包含它们的目录。演练（`rehearse`）用 `--rehearsal-config` 指定独立演练库（仅 PostgreSQL）。
 
 ### 命令速查
 
@@ -349,7 +382,7 @@ SQLite 升级会把转换结果发布到一个**全新的目标数据目录**（
 | `storage plan` | 清点旧版 `data/jobs` 文件并生成导入计划 |
 | `storage apply` | 执行旧存储导入（需 `--offline`） |
 
-计划冻结后，`apply` / `resume` / `verify` 都会校验执行二进制与计划中的构建摘要一致——生产操作请固定使用 `migrate:build` 构建出的同一个二进制，不要混用不同版本的工具。
+执行写操作前，工具会先获取**源库迁移锁**（SQLite 是数据库文件旁的 `<数据库名>.migration.lock` 文件锁，PostgreSQL 是 advisory 锁），确认没有并发写入者。计划冻结后，`apply` / `resume` / `verify` 都会校验执行二进制与计划中的构建摘要一致，并核对操作目录中的保护收据（`protection-binding.json`）与基线证据（`baseline.json`）——生产操作请固定使用 `migrate:build` 构建出的同一个二进制，不要混用不同版本的工具，也不要手工改动操作目录里的任何文件；收据缺失或不匹配被拒绝时，按错误提示保留数据库与操作材料原样，用 `status` 排查。
 
 ### 版本升级示例
 
@@ -358,6 +391,8 @@ SQLite 升级会把转换结果发布到一个**全新的目标数据目录**（
 linguaflow-migrate inspect --mode serve --config server.yaml
 
 # 2. 生成升级计划（冻结源、账号映射与目标）
+#    给出 --target-data-dir 即选择 clone 策略（发布到全新目录）；
+#    不给目标参数则默认 inplace 原地升级
 linguaflow-migrate upgrade plan --mode serve --config server.yaml \
   --operation-dir /var/linguaflow/upgrade-op \
   --target-data-dir /var/linguaflow/new-data \
@@ -399,7 +434,10 @@ task -t backend/Taskfile.yml migrate:list
 task -t backend/Taskfile.yml migrate:inspect 'CLI_ARGS=--mode serve --config /abs/server.yaml'
 task -t backend/Taskfile.yml migrate:build      # 构建唯一离线工具二进制
 task -t backend/Taskfile.yml migrate:plan 'CLI_ARGS=... '   # 等价于 upgrade plan
+task -t backend/Taskfile.yml migrate:rehearse 'CLI_ARGS=--operation-dir /abs/op --offline'
 task -t backend/Taskfile.yml migrate:apply 'CLI_ARGS=--operation-dir /abs/op --offline'
+task -t backend/Taskfile.yml migrate:status 'CLI_ARGS=--operation-dir /abs/op'
+task -t backend/Taskfile.yml migrate:resume 'CLI_ARGS=--operation-dir /abs/op --offline'
 ```
 
 `CLI_ARGS` 中的文件路径必须使用绝对路径。生产操作固定使用 `migrate:build` 产物（`backend/bin/linguaflow-migrate`）。
