@@ -5,12 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/catalog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/operation"
@@ -23,6 +23,7 @@ import (
 type storagePlanOptions struct {
 	Inputs                                           config.ServerInputs
 	Directory, LegacyRoot, Manifest, ExternalReceipt string
+	Strategy, DatabaseBackup                         string
 }
 
 func newStorageCommand() *cobra.Command {
@@ -42,17 +43,21 @@ func newStorageCommand() *cobra.Command {
 	plan.Flags().StringVar(&options.LegacyRoot, "legacy-root", "", "absolute original legacy files root")
 	plan.Flags().StringVar(&options.Manifest, "manifest", "", "explicit published ManifestVersion=1 file to take over read-only")
 	plan.Flags().StringVar(&options.ExternalReceipt, "external-backup-receipt", "", "exact independent S3 recovery evidence")
+	plan.Flags().StringVar(&options.Strategy, "strategy", "", "storage import strategy: inplace")
+	plan.Flags().StringVar(&options.DatabaseBackup, "database-backup", "", "database protection: auto or external")
 	root.AddCommand(plan)
 	var directory string
 	var offline bool
+	var reference string
 	apply := &cobra.Command{Use: "apply", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		r, err := runStorageOperation(cmd.Context(), directory, "resume", offline, nil)
+		r, err := runStorageOperation(cmd.Context(), directory, "resume", offline, nil, reference)
 		if err != nil {
 			return err
 		}
 		return printJSON(cmd.OutOrStdout(), r)
 	}}
 	operationFlags(apply, &directory, &offline)
+	apply.Flags().StringVar(&reference, "backup-reference", "", "operator declaration identifying the external database backup")
 	root.AddCommand(apply)
 	return root
 }
@@ -89,6 +94,22 @@ func planStorage(ctx context.Context, options storagePlanOptions) (*operation.Pl
 	resolved, err := v015.ResolveProbedInputs(options.Inputs, narrow)
 	if err != nil {
 		return nil, err
+	}
+	strategy, err := operation.ResolveStrategy(operation.Strategy(options.Strategy), false)
+	if err != nil {
+		return nil, err
+	}
+	if strategy != operation.Inplace {
+		return nil, operation.Fail(operation.UnsupportedTarget, "storage import only supports inplace")
+	}
+	backupMode, err := operation.ResolveBackup(operation.DatabaseBackupMode(options.DatabaseBackup), narrow.Database.Driver, strategy)
+	if err != nil {
+		return nil, err
+	}
+	if backupMode == operation.BackupAuto && narrow.Database.Driver == "postgres" {
+		if _, err := snapshot.InspectPostgresDump(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if !filepath.IsAbs(options.Directory) {
 		return nil, operation.Fail(operation.Incompatible, "operation directory must be an absolute new path")
@@ -141,7 +162,7 @@ func planStorage(ctx context.Context, options storagePlanOptions) (*operation.Pl
 	if err != nil {
 		return nil, err
 	}
-	p := &operation.Plan{Version: 1, ID: id, Kind: "storage", Route: "storage-legacy-import", Build: catalog.Build(), CreatedAt: time.Now().UTC(), Source: operation.Endpoint{ConfigPath: resolved.ConfigPath, DataDir: resolved.Config.DataDir, Driver: narrow.Database.Driver, Mode: inspection.Mode, Identity: identity, InputDigest: v015.InputDigest(resolved)}, SourceFingerprint: inspection.Fingerprint, SourceSchema: inspection.SchemaDigest, TargetSignature: catalog.TargetSignature(), LegacyRoot: manifest.LegacyRoot, StorageManifest: filepath.Join(options.Directory, "storage-plan.json"), StorageDigest: operation.Digest(manifest)}
+	p := &operation.Plan{Version: operation.Version, Strategy: strategy, DatabaseBackup: backupMode, ID: id, Kind: "storage", Route: "storage-legacy-import", Build: catalog.Build(), CreatedAt: time.Now().UTC(), Source: operation.Endpoint{ConfigPath: resolved.ConfigPath, DataDir: resolved.Config.DataDir, Driver: narrow.Database.Driver, Mode: inspection.Mode, Identity: identity, InputDigest: v015.InputDigest(resolved)}, SourceFingerprint: inspection.Fingerprint, SourceSchema: inspection.SchemaDigest, TargetSignature: catalog.TargetSignature(), LegacyRoot: manifest.LegacyRoot, StorageManifest: filepath.Join(options.Directory, "storage-plan.json"), StorageDigest: operation.Digest(manifest)}
 	if p.Source.Driver == "sqlite" {
 		p.Source.DatabaseDSN = narrow.DatabaseDSN()
 		path, err := snapshot.SQLitePath(narrow.DatabaseDSN())
@@ -223,7 +244,20 @@ func loadStorageManifest(ctx context.Context, p *operation.Plan, directory strin
 	return m, nil
 }
 
-func runStorageOperation(ctx context.Context, directory, action string, offline bool, fault func(string) error) (report *operation.Report, err error) {
+func runStorageOperation(ctx context.Context, directory, action string, offline bool, fault func(string) error, references ...string) (report *operation.Report, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	fault = operation.ContextCheckpoint(ctx, fault)
+	defer func() {
+		if err != nil && ctx.Err() != nil {
+			err = errors.Join(ctx.Err(), err)
+		}
+	}()
+	reference := ""
+	if len(references) > 0 {
+		reference = strings.TrimSpace(references[0])
+	}
 	mutate := action != "verify"
 	if mutate && !offline {
 		return nil, operation.Fail(operation.NeedsAction, "declare --offline after stopping writers, workers and GC")
@@ -255,13 +289,8 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 		return nil, operation.Fail(operation.BaselineChanged, "selected database input changed")
 	}
 	probeCfg := config.ServerConfig{DataDir: narrow.DataDir, Database: narrow.Database}
-	if mutate && p.Source.Driver == "postgres" {
-		leaseDB, _, e := snapshot.Open(ctx, &probeCfg, false)
-		if e != nil {
-			return nil, e
-		}
-		defer leaseDB.Close()
-		unlockDB, e := database.AcquireMigrationLock(ctx, leaseDB, p.Source.Driver)
+	if mutate {
+		unlockDB, e := snapshot.LockDatabase(ctx, &probeCfg)
 		if e != nil {
 			return nil, e
 		}
@@ -279,8 +308,25 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 		db.Close()
 		return nil, err
 	}
-	steps, state, reservationErr := operation.Steps(ctx, db, p)
-	reserved := reservationErr == nil
+	reserved, reservationErr := operation.Owned(ctx, db, p)
+	if reservationErr != nil {
+		db.Close()
+		return nil, reservationErr
+	}
+	var steps []string
+	var state string
+	if reserved {
+		if err := operation.LoadBaseline(directory, p, j); err != nil {
+			db.Close()
+			return nil, err
+		}
+		steps, state, err = operation.Steps(ctx, db, p)
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+		j.Steps = steps
+	}
 	if !reserved && (inspection.Fingerprint != p.SourceFingerprint || inspection.SchemaDigest != p.SourceSchema) {
 		db.Close()
 		return nil, operation.Fail(operation.BaselineChanged, "storage source changed before reservation")
@@ -304,11 +350,27 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 		db.Close()
 		return nil, operation.Fail(operation.BaselineChanged, "business rows changed outside the declared import")
 	}
+	if mutate && action == "resume" {
+		if err := v015.PrepareBaseline(ctx, db, p, j, directory, reserved, reference); err != nil {
+			db.Close()
+			return nil, err
+		}
+	} else if p.Baseline == nil {
+		if err := operation.LoadBaseline(directory, p, j); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+	bound, err := operation.LoadProtectionBinding(directory, p, j)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
 	var receipt *v015.BackupReceipt
 	if j.BackupDirectory != "" {
 		receipt, err = v015.LoadBackupReceipt(ctx, j.BackupDirectory, p)
 		if err != nil {
-			if _, e := os.Lstat(filepath.Join(j.BackupDirectory, "receipt.json")); e == nil {
+			if _, e := os.Lstat(filepath.Join(j.BackupDirectory, "receipt.json")); e == nil || bound {
 				db.Close()
 				return nil, err
 			}
@@ -333,13 +395,26 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 			db.Close()
 			return nil, err
 		}
-		receipt, err = v015.CaptureSourceBackup(ctx, db, resolved, p, j.BackupDirectory)
+		if reference == "" && p.DatabaseBackup == operation.BackupExternal {
+			reference = p.Baseline.Facts["backup_reference"]
+		}
+		receipt, err = v015.CaptureSourceBackup(ctx, db, resolved, p, j.BackupDirectory, reference)
 	}
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
-	if err := v015.VerifyExternalBackup(ctx, db, resolved.Config, resolved.CredentialKeys, p, receipt.Objects); err != nil {
+	if reference != "" && reference != receipt.Reference {
+		db.Close()
+		return nil, operation.Fail(operation.Incompatible, "external backup reference differs from the original declaration")
+	}
+	if mutate && !bound {
+		if err := operation.BindProtection(directory, p, j); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+	if err := v015.VerifyOriginalReferences(ctx, p, receipt); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -365,9 +440,16 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 		if err := migrator.Verify(ctx, manifest); err != nil {
 			return nil, err
 		}
-		fp, err := v015.Fingerprint(ctx, db, p.Source.Driver)
-		if err != nil || j.TargetFingerprint != "" && fp != j.TargetFingerprint {
+		fp, err := v015.BusinessFingerprint(ctx, db, p.Source.Driver)
+		result, resultErr := operation.ResultDigest(ctx, db, p)
+		if err != nil || resultErr != nil || fp != result || j.TargetFingerprint != "" && result != j.TargetFingerprint {
 			return nil, operation.Fail(operation.BaselineChanged, "storage target changed after verification")
+		}
+		if _, err := v015.VerifyBaseline(ctx, db, p, true); err != nil {
+			return nil, err
+		}
+		if err := v015.VerifySourceKeys(ctx, db, resolved.CredentialKeys); err != nil {
+			return nil, err
 		}
 		return storageReport(p, j, manifest, receipt, true), nil
 	}
@@ -387,6 +469,11 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 	}
 	if !reserved {
 		if err := operation.ReserveStorage(ctx, db, p); err != nil {
+			return nil, err
+		}
+	}
+	if fault != nil {
+		if err := fault("preparing"); err != nil {
 			return nil, err
 		}
 	}
@@ -420,8 +507,13 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 			if err := migrator.Verify(ctx, manifest); err != nil {
 				return nil, err
 			}
-			if err := operation.Step(ctx, db, p.Source.Driver, p, "storage", func(*ent.Client) error { return nil }); err != nil {
+			if err := operation.Step(ctx, db, p.Source.Driver, p, "storage", func(c *ent.Client) error { return v015.NormalizeBaselineTimestamps(ctx, c, p) }); err != nil {
 				return nil, err
+			}
+			if fault != nil {
+				if err := fault("storage_commit"); err != nil {
+					return nil, err
+				}
 			}
 		}
 		if !hasStep(steps, "ready") {
@@ -433,20 +525,33 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 					return nil, err
 				}
 			}
-			if err := operation.Step(ctx, db, p.Source.Driver, p, "ready", func(c *ent.Client) error {
+			if err := operation.StepWithResult(ctx, db, p.Source.Driver, p, "ready", func(c *ent.Client) (string, error) {
 				storage, err := service.NewStorageService(c, nil, filepath.Join(directory, "work"))
 				if err != nil {
-					return err
+					return "", err
 				}
 				connections := service.NewStorageConnectionService(c, resolved.CredentialKeys, resolved.Config.Storage, nil)
 				retirements, err := service.NewStorageRetirementService(storage, connections, p.Source.Mode == "local")
 				if err != nil {
-					return err
+					return "", err
 				}
 				if err := retirements.ReconcilePathClaims(ctx); err != nil {
-					return err
+					return "", err
 				}
-				return operation.MarkReady(ctx, c, p)
+				if err := v015.NormalizeBaselineTimestamps(ctx, c, p); err != nil {
+					return "", err
+				}
+				if err := v015.VerifyBaselineClient(ctx, c, p, true); err != nil {
+					return "", err
+				}
+				if err := v015.VerifyAllocationBaselineClient(ctx, c, p); err != nil {
+					return "", err
+				}
+				result, err := v015.BusinessFingerprintClient(ctx, c, p.Source.Driver)
+				if err != nil {
+					return "", err
+				}
+				return result, operation.MarkReady(ctx, c, p)
 			}); err != nil {
 				return nil, err
 			}
@@ -456,7 +561,7 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 				}
 			}
 		}
-		j.TargetFingerprint, err = v015.Fingerprint(ctx, db, p.Source.Driver)
+		j.TargetFingerprint, err = operation.ResultDigest(ctx, db, p)
 		if err != nil {
 			return nil, err
 		}
@@ -470,6 +575,11 @@ func runStorageOperation(ctx context.Context, directory, action string, offline 
 		return nil, err
 	}
 	report = storageReport(p, j, manifest, receipt, action != "rollback")
+	if fault != nil {
+		if err := fault("before_report"); err != nil {
+			return nil, err
+		}
+	}
 	path := filepath.Join(directory, "report.json")
 	_, e := os.Lstat(path)
 	return report, operation.Write(path, report, errors.Is(e, os.ErrNotExist))
@@ -484,5 +594,9 @@ func hasStep(steps []string, step string) bool {
 	return false
 }
 func storageReport(p *operation.Plan, j *operation.Journal, m *storagemigrate.Manifest, r *v015.BackupReceipt, verified bool) *operation.Report {
-	return &operation.Report{Version: 1, ID: p.ID, Phase: j.Phase, Verified: verified, SourceFingerprint: p.SourceFingerprint, BackupTime: r.CreatedAt, Counts: map[string]int64{"legacy_resources": int64(len(m.Entries)), "unknown_objects": int64(m.UnknownObjects)}, Next: []string{"Preserve the original legacy backend identity and exact file root; review missing or unproven source facts before allowing retries and GC.", "Rollback retains database/keyring/object recovery materials; later edits, job snapshots and pins can refuse metadata reversal."}}
+	restoration := "not_run"
+	if j.Phase == "rolled_back" {
+		restoration = "metadata_reversed"
+	}
+	return &operation.Report{Version: operation.Version, ID: p.ID, Phase: j.Phase, Verified: verified, SourceFingerprint: p.SourceFingerprint, BackupTime: r.CreatedAt, Strategy: p.Strategy, DatabaseBackup: p.DatabaseBackup, Protection: r.State, BackupReference: r.Reference, BaselineDigest: operation.BaselineDigest(p), ResultDigest: j.TargetFingerprint, Rehearsal: "not_run", Restoration: restoration, Counts: map[string]int64{"legacy_resources": int64(len(m.Entries)), "unknown_objects": int64(m.UnknownObjects)}, Next: []string{"Preserve the original legacy backend identity and exact file root; review missing or unproven source facts before allowing retries and GC.", "Rollback retains database/keyring recovery materials; later edits, job snapshots and pins can refuse metadata reversal."}}
 }
