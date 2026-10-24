@@ -13,7 +13,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/operation"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/snapshot"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // The dedicated Task builds the shipped executable and invokes each operation
@@ -98,6 +100,82 @@ func TestBuiltCLIReleaseAcceptance(t *testing.T) {
 				t.Fatal("built CLI wrote source", err)
 			}
 		})
+	}
+	for _, mode := range []string{"serve", "local"} {
+		t.Run("inplace-"+mode, func(t *testing.T) { builtCLIInplaceAcceptance(t, binary, mode, run) })
+	}
+}
+
+func builtCLIInplaceAcceptance(t *testing.T, binary, mode string, run func(*testing.T, ...string) []byte) {
+	t.Helper()
+	configPath, _ := cliReleaseFixtureMode(t, mode)
+	opdir := filepath.Join(t.TempDir(), "operation")
+	configProof, err := operation.Hash(t.Context(), configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"upgrade", "plan", "--mode", mode, "--config", configPath, "--operation-dir", opdir}
+	var plan operation.Plan
+	if err := json.Unmarshal(run(t, args...), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.Version != 2 || plan.Strategy != operation.Inplace || plan.DatabaseBackup != operation.BackupAuto || plan.Target.DataDir != "" {
+		t.Fatal("built CLI did not select default inplace", plan.Strategy)
+	}
+	proof, err := operation.Hash(t.Context(), binary)
+	if err != nil || !strings.HasSuffix(plan.Build, ":"+proof.SHA256) {
+		t.Fatal("inplace plan omitted executing binary binding", err)
+	}
+	run(t, "upgrade", "rehearse", "--operation-dir", opdir, "--offline")
+	var report operation.Report
+	if err := json.Unmarshal(run(t, "upgrade", "apply", "--operation-dir", opdir, "--offline"), &report); err != nil {
+		t.Fatal(err)
+	}
+	if !report.Verified || report.Strategy != operation.Inplace || report.Protection != snapshot.Captured || report.BaselineDigest == "" || report.ResultDigest == "" || report.Rehearsal != "verified" {
+		t.Fatal("built inplace CLI omitted durable evidence", report)
+	}
+	run(t, "status", "--operation-dir", opdir)
+	run(t, "verify", "--operation-dir", opdir)
+	run(t, "resume", "--operation-dir", opdir, "--offline")
+	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &configPath, Environment: map[string]string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved.Config.AutoMigrate = false
+	db, client, err := database.Open(t.Context(), &resolved.Config)
+	if err != nil {
+		t.Fatal("startup of original upgraded path", err)
+	}
+	user, err := client.User.Get(t.Context(), 1)
+	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("original-password-123")) != nil {
+		t.Fatal("original password hash was lost", err)
+	}
+	if mode == "local" {
+		marker, err := client.InstanceInitialization.Get(t.Context(), 1)
+		if err != nil || marker.LocalUserID == nil || *marker.LocalUserID != 1 {
+			t.Fatal("original local identity changed", err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(run(t, "rollback", "--operation-dir", opdir, "--offline"), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Phase != "rolled_back" || report.Restoration != "verified" || report.Recovery == nil || report.Recovery.RestoredIdentity == "" {
+		t.Fatal("built rollback did not verify actual original restoration", report)
+	}
+	run(t, "rollback", "--operation-dir", opdir, "--offline")
+	var original struct{ Format, Fingerprint string }
+	if err := json.Unmarshal(run(t, "inspect", "--mode", mode, "--config", configPath), &original); err != nil {
+		t.Fatal(err)
+	}
+	if original.Format != "v015" || original.Fingerprint != plan.SourceFingerprint {
+		t.Fatal("built rollback did not restore original business baseline", original.Format)
+	}
+	actual, err := operation.Hash(t.Context(), configPath)
+	if err != nil || actual != configProof {
+		t.Fatal("built inplace flow changed original deployment file", err)
 	}
 }
 

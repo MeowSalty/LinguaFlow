@@ -126,7 +126,7 @@ tasks:
       - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate inspect {{.CLI_ARGS}}
 
   migrate:plan:
-    desc: 冻结 v0.15 源指纹、完整账号映射、独立目标及工具 build
+    desc: 冻结 v0.15 源指纹、账号映射、原地或独立目标策略及工具 build
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate upgrade plan {{.CLI_ARGS}}
@@ -138,7 +138,7 @@ tasks:
       - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate upgrade rehearse {{.CLI_ARGS}}
 
   migrate:apply:
-    desc: 按实际备份收据转换独立目标并无覆盖发布（需 --offline）
+    desc: 绑定升级前保护并执行原地转换或独立目标发布（需 --offline）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate upgrade apply {{.CLI_ARGS}}
@@ -156,7 +156,7 @@ tasks:
       - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate resume {{.CLI_ARGS}}
 
   migrate:verify:
-    desc: 只读复核转换目标、账号、业务及恢复字节
+    desc: 只读复核执行库、基线、账号、业务摘要及实际恢复
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go run -ldflags "{{.BACKEND_LDFLAGS}}" ./cmd/linguaflow-migrate verify {{.CLI_ARGS}}
@@ -185,11 +185,43 @@ tasks:
     cmds:
       - go build -ldflags "{{.BACKEND_LDFLAGS}}" -o "{{.MIGRATE_BINARY}}{{if eq .MIGRATE_GOOS "windows"}}.exe{{end}}" ./cmd/linguaflow-migrate
 
+  migrate:release:
+    desc: 通过 migrate:build 构建六平台离线迁移工具并生成 SHA-256 文件
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - pwsh -NoProfile -File ./scripts/migrate-release.ps1
+
   migrate:test:
     desc: 统一迁移专项及真实发布 schema 验收（外部环境缺失仍为 unverified）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - go test -count=1 {{default "./internal/migration/... ./internal/database ./internal/config" .CLI_ARGS}}
+
+  migrate:test:postgres:
+    desc: 使用临时隔离 PostgreSQL 18.6 验收升级和存储保护及 clone/rehearsal
+    dir: '{{.TASKFILE_DIR}}'
+    env:
+      LINGUAFLOW_MIGRATION_POSTGRES_TEST_PATTERN: '{{default "^TestPostgres(ServeReleaseDumpRestore|InplaceExternalRestore|AutoInplaceDumpOnly|StorageProtection)Acceptance$" .CLI_ARGS}}'
+    cmds:
+      - pwsh -NoProfile -File ./scripts/migrate-postgres-acceptance.ps1
+
+  migrate:test:postgres:run:
+    desc: 在临时启动器提供的专用九库与工具中运行 PostgreSQL 策略验收
+    dir: '{{.TASKFILE_DIR}}'
+    preconditions:
+      - sh: test -n "$LINGUAFLOW_MIGRATION_POSTGRES_BIN" && test -n "$LINGUAFLOW_MIGRATION_TEST_POSTGRES_SOURCE_INPLACE" && test -n "$LINGUAFLOW_MIGRATION_TEST_POSTGRES_SOURCE_AUTO" && test -n "$LINGUAFLOW_MIGRATION_TEST_POSTGRES_SOURCE_CLONE" && test -n "$LINGUAFLOW_MIGRATION_TEST_POSTGRES_TARGET_CLONE" && test -n "$LINGUAFLOW_MIGRATION_TEST_POSTGRES_REHEARSAL_CLONE"
+        msg: 必须由隔离 PostgreSQL 启动器提供专用数据库与 18.6 工具
+    env:
+      GOOS: '{{OS}}'
+      GOARCH: '{{ARCH}}'
+    cmds:
+      - go test -count=1 -timeout=15m ./internal/migration/upgrade/v015 ./internal/migration/cli -run '{{default "^TestPostgres(ServeReleaseDumpRestore|InplaceExternalRestore|AutoInplaceDumpOnly|StorageProtection)Acceptance$" .CLI_ARGS}}' -v
+
+  migrate:postgres:provision:
+    desc: 仅配置并清理 PostgreSQL 18.6 私有集群和九个验收数据库，不依赖 Go 编译
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - pwsh -NoProfile -File ./scripts/migrate-postgres-acceptance.ps1 -ProvisionOnly
 
   migrate:check-dependencies:
     desc: 验证正常服务依赖树不包含 internal/migration

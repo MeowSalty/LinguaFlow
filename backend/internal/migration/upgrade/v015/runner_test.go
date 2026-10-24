@@ -25,7 +25,9 @@ import (
 func fixtureDeployment(t *testing.T, mode string) (PlanOptions, string) {
 	t.Helper()
 	db, path, _ := releaseFixture(t, mode)
-	_ = db
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
 	directory := filepath.Dir(path)
 	configPath := filepath.Join(directory, "source.yml")
 	text := "kind: server\nversion: 1\nserver:\n  data_dir: " + filepath.ToSlash(directory) + "\n  jwt_secret: '12345678901234567890123456789012'\n"
@@ -46,9 +48,6 @@ func fixtureDeployment(t *testing.T, mode string) (PlanOptions, string) {
 		text += "  database:\n    driver: sqlite\n    dsn: " + filepath.ToSlash(path) + "\n"
 	} else {
 		// Local configuration always uses its standard file name.
-		if err := db.Close(); err != nil {
-			t.Fatal(err)
-		}
 		newPath := filepath.Join(directory, "linguaflow.db")
 		if err := os.Rename(path, newPath); err != nil {
 			t.Fatal(err)

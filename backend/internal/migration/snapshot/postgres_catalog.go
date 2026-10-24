@@ -60,7 +60,7 @@ SELECT EXISTS (
 	UNION ALL
 	SELECT 1 FROM pg_foreign_server
 	UNION ALL
-	SELECT 1 FROM pg_user_mapping
+	SELECT 1 FROM pg_user_mappings
 	UNION ALL
 	SELECT 1 FROM pg_event_trigger
 	UNION ALL

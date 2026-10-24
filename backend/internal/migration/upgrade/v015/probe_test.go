@@ -163,3 +163,58 @@ func TestPostgresReleasedCheckDecompilationPreservesLiteralsAndBounds(t *testing
 		}
 	}
 }
+
+func TestPostgresReleasedPartialIndexPreservesPredicateMeaning(t *testing.T) {
+	name := &schema.Column{Name: "name", Type: field.TypeString}
+	scope := &schema.Column{Name: "scope", Type: field.TypeString}
+	owner := &schema.Column{Name: "owner_id", Type: field.TypeInt64, Nullable: true}
+	predicate := "scope = 'User Case' AND owner_id IS NOT NULL"
+	want := []*schema.Table{{Name: "fixture", Columns: []*schema.Column{name, scope, owner}, Indexes: []*schema.Index{{Name: "fixture_owner", Unique: true, Columns: []*schema.Column{name, owner}, Annotation: &entsql.IndexAnnotation{Where: predicate}}}}}
+	got := []actualTable{{Name: "fixture", Columns: []actualColumn{{Name: "name", Type: "text"}, {Name: "scope", Type: "text"}, {Name: "owner_id", Type: "bigint", Nullable: true}}, Indexes: []actualIndex{{Name: "fixture_owner", Unique: true, Columns: []string{"name", "owner_id"}, Where: "(((scope)::text = 'User Case'::text) AND (owner_id IS NOT NULL))"}}}}
+	if err := matchTables(got, want, "postgres"); err != nil {
+		t.Fatal("equivalent catalog partial index rejected", err)
+	}
+	for _, changed := range []string{
+		"scope = 'user case' AND owner_id IS NOT NULL",
+		"scope = 'User Case' OR owner_id IS NOT NULL",
+		"scope = 'User Case' AND owner_id IS NOT NULL OR true",
+		"scope = 'User Case' AND owner_id IS NULL",
+	} {
+		got[0].Indexes[0].Where = changed
+		if err := matchTables(got, want, "postgres"); err == nil {
+			t.Fatal("changed partial index acquired released semantics", changed)
+		}
+	}
+}
+
+func TestPostgresReleasedNegativeDefaultPreservesNumericValue(t *testing.T) {
+	column := &schema.Column{Name: "profile_id", Type: field.TypeInt, Default: -1}
+	actual := "'-1'::integer"
+	if !defaultMatches(&actual, column) {
+		t.Fatal("equivalent negative integer default rejected")
+	}
+	for _, changed := range []string{"'-2'::integer", "'-1'::text", "'-1 OR 1=1'::integer", "'-1'::integer + 1", "(-1)::integer + 1", "((-1)::integer) + 1"} {
+		if defaultMatches(&changed, column) {
+			t.Fatal("changed numeric default accepted", changed)
+		}
+	}
+}
+
+func TestReleasedDefaultRejectsExpressionHiddenAfterCast(t *testing.T) {
+	for _, test := range []struct {
+		column  *schema.Column
+		actual  string
+		changed string
+	}{
+		{&schema.Column{Type: field.TypeBool, Default: false}, "false", "false::boolean OR true"},
+		{&schema.Column{Type: field.TypeString, Default: "user"}, "'user'::text", "'user'::text || 'changed'"},
+		{&schema.Column{Type: field.TypeInt, Default: 0}, "0::integer", "0::integer + 1"},
+	} {
+		if !defaultMatches(&test.actual, test.column) {
+			t.Fatal("released scalar default rejected", test.actual)
+		}
+		if defaultMatches(&test.changed, test.column) {
+			t.Fatal("expression suffix acquired the fixed released default", test.changed)
+		}
+	}
+}

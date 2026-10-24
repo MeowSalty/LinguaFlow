@@ -16,26 +16,41 @@ import (
 )
 
 type Route struct {
-	ID          string `json:"id"`
-	Source      string `json:"source"`
-	Target      string `json:"target"`
-	Database    string `json:"database"`
-	Mode        string `json:"mode"`
-	Status      string `json:"status"`
-	Instruction string `json:"instruction"`
+	ID             string `json:"id"`
+	Source         string `json:"source"`
+	Target         string `json:"target"`
+	Database       string `json:"database"`
+	Mode           string `json:"mode"`
+	Strategy       string `json:"strategy,omitempty"`
+	DatabaseBackup string `json:"database_backup,omitempty"`
+	Status         string `json:"status"`
+	Instruction    string `json:"instruction"`
 }
 
 func Routes() []Route {
 	return []Route{
-		{"upgrade-v015-auth1", "v0.15.0 / initialization=1 / data=2 / auth=absent", "auth=1 / data=3", "sqlite", "serve", "supported", "local objects; exact release and binary acceptance passed; perform deployment/business checks before enabling writers"},
-		{"upgrade-v015-auth1", "v0.15.0 / initialization=1 / data=2 / auth=absent", "auth=1 / data=3", "sqlite", "local", "supported", "local objects; isolated local identity, original passwords, rehearsal and recovery accepted"},
-		{"upgrade-v015-auth1", "v0.15.0 / initialization=1 / data=2 / auth=absent", "auth=1 / data=3", "postgres", "serve", "unverified", "requires matching pg_dump/pg_restore and an independent empty target"},
-		{"storage-legacy-import", "published legacy storage_path / manifest=1", "current source revisions", "sqlite", "serve", "supported", "local objects; manifest-v1 read-only takeover, resource commit recovery, repeated resume and constrained rollback accepted"},
-		{"storage-legacy-import", "published legacy storage_path / manifest=1", "current source revisions", "sqlite", "local", "supported", "local objects; local identity, account policy, source facts and rollback accepted separately"},
-		{"storage-legacy-import", "published legacy storage_path / manifest=1", "current source revisions", "postgres", "serve", "unverified", "real PostgreSQL import and constrained rollback acceptance are required"},
-		{"s3-object-recovery", "S3 references in upgrade/storage and retained backup facts", "exact object copies or immutable COMPLIANCE versions", "sqlite/postgres", "serve/local", "unverified", "SDK protocol tests passed; real provider recovery and retained versions are still unverified; an actual fingerprint-bound external receipt is mandatory"},
-		{"legacy-v013-v014", "v0.13.0", "fixed v0.14.0 tool target", "sqlite/postgres", "serve/local", "archived_unverified", "use the exact v0.14.0 tool tree at 4bc4577cd669d9ccbbc4980f19e259b5beff2b18; full upgrade chain and recovery artifacts are not yet certified"},
+		upgradeRoute("sqlite", "serve", "inplace", "auto", "supported", "Windows amd64: original-path conversion, committed WAL, baseline receipts and verified original restoration"),
+		upgradeRoute("sqlite", "local", "inplace", "auto", "supported", "Windows amd64: original local identity, independent rehearsal and verified original-path restoration"),
+		upgradeRoute("sqlite", "serve", "clone", "auto", "supported", "Windows amd64: local objects, independent target/rehearsal, source preservation and process recovery"),
+		upgradeRoute("sqlite", "local", "clone", "auto", "supported", "Windows amd64: independent target/rehearsal and original local identity retained"),
+		upgradeRoute("postgres", "serve", "inplace", "external", "supported", "PostgreSQL 18.6 Windows amd64: ordinary role, declaration without utilities, actual same-OID operator restore verified"),
+		upgradeRoute("postgres", "serve", "inplace", "auto", "supported", "PostgreSQL 18.6 Windows amd64: source-major pg_dump-only capture; original-database restoration remains an operator action"),
+		upgradeRoute("postgres", "serve", "clone", "auto", "supported", "PostgreSQL 18.6 Windows amd64: ordinary role, dump/restore and independent target/rehearsal databases"),
+		storageRoute("sqlite", "serve", "auto", "supported", "Windows amd64: metadata-only protection, manifest-v1 receipt recovery and constrained rollback"),
+		storageRoute("sqlite", "local", "auto", "supported", "Windows amd64: local policy/source identity, metadata-only protection and constrained rollback"),
+		storageRoute("postgres", "serve", "external", "supported", "PostgreSQL 18.6 Windows amd64: declaration, manifest-v1 import and journal-loss recovery; later generations block rollback"),
+		storageRoute("postgres", "serve", "auto", "supported", "PostgreSQL 18.6 Windows amd64: archive, manifest-v1 import, journal-loss recovery and constrained metadata rollback"),
+		{ID: "s3-object-recovery", Source: "S3 references in upgrade/storage and retained backup facts", Target: "exact object copies or immutable COMPLIANCE versions", Database: "sqlite/postgres", Mode: "serve/local", Status: "unverified", Instruction: "SDK protocol tests passed; real provider recovery and retained versions remain unverified; inplace metadata writes retain original references"},
+		{ID: "legacy-v013-v014", Source: "v0.13.0", Target: "fixed v0.14.0 tool target", Database: "sqlite/postgres", Mode: "serve/local", Status: "archived_unverified", Instruction: "use the exact v0.14.0 tool tree at 4bc4577cd669d9ccbbc4980f19e259b5beff2b18; full upgrade chain and recovery artifacts are not yet certified"},
 	}
+}
+
+func upgradeRoute(database, mode, strategy, backup, status, instruction string) Route {
+	return Route{ID: "upgrade-v015-auth1", Source: "v0.15.0 / initialization=1 / data=2 / auth=absent", Target: "auth=1 / data=3", Database: database, Mode: mode, Strategy: strategy, DatabaseBackup: backup, Status: status, Instruction: instruction}
+}
+
+func storageRoute(database, mode, backup, status, instruction string) Route {
+	return Route{ID: "storage-legacy-import", Source: "published legacy storage_path / manifest=1", Target: "current source revisions", Database: database, Mode: mode, Strategy: "inplace", DatabaseBackup: backup, Status: status, Instruction: instruction}
 }
 
 // Bind plans to the executing binary, including development builds with dirty

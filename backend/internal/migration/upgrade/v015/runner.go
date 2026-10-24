@@ -10,7 +10,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/catalog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/operation"
@@ -20,14 +19,24 @@ import (
 )
 
 type RunOptions struct {
-	Directory string
-	Offline   bool
-	Rehearse  bool
+	Directory       string
+	Offline         bool
+	Rehearse        bool
+	BackupReference string
 	// Fault is used by acceptance tests at durable phase boundaries.
 	Fault func(string) error
 }
 
 func Run(ctx context.Context, options RunOptions) (report *operation.Report, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	options.Fault = operation.ContextCheckpoint(ctx, options.Fault)
+	defer func() {
+		if err != nil && ctx.Err() != nil {
+			err = errors.Join(ctx.Err(), err)
+		}
+	}()
 	if !options.Offline {
 		return nil, operation.Fail(operation.NeedsAction, "declare --offline after stopping all service writers, workers and GC")
 	}
@@ -52,6 +61,19 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 	if j.Phase == "abandoned" || j.Phase == "rolled_back" {
 		return nil, operation.Fail(operation.Incompatible, "abandoned operation cannot resume; retained material is for restoration")
 	}
+	if j.Phase == "restoring" || j.Restore != nil {
+		return nil, operation.Fail(operation.NeedsAction, "recovery is in progress; use rollback to finish original-source restoration")
+	}
+	narrow, err := config.ResolveMigrationDatabase(PlannedInputs(p))
+	if err != nil {
+		return nil, err
+	}
+	lockCfg := config.ServerConfig{DataDir: narrow.DataDir, Database: narrow.Database}
+	unlockSource, err := snapshot.LockDatabase(ctx, &lockCfg)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, unlockSource()) }()
 	resolved, sourceDB, err := OpenPlannedSource(ctx, p)
 	if err != nil {
 		return nil, err
@@ -72,35 +94,45 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 	if j.Phase == "completed" {
 		return VerifyOperation(ctx, options.Directory)
 	}
+	owned, err := operation.Owned(ctx, sourceDB, p)
+	if err != nil {
+		return nil, err
+	}
+	if err := PrepareBaseline(ctx, sourceDB, p, j, options.Directory, owned, options.BackupReference); err != nil {
+		return nil, err
+	}
+	if err := fault(options, "baseline"); err != nil {
+		return nil, err
+	}
 	backup, err := ensureBackup(ctx, sourceDB, resolved, p, j, options)
 	if err != nil {
 		return nil, err
 	}
-	if err := VerifyExternalBackup(ctx, sourceDB, resolved.Config, resolved.CredentialKeys, p, backup.Objects); err != nil {
+	if err := verifyRouteProtection(ctx, sourceDB, resolved, p, backup); err != nil {
 		return nil, err
 	}
 	if err := fault(options, "backup"); err != nil {
 		return nil, err
 	}
-	if p.Source.Driver == "postgres" {
+	if p.Source.Driver == "postgres" && p.Strategy == operation.Clone {
 		cfg, e := ResolveTarget(p, false)
 		if e != nil {
 			return nil, e
 		}
-		leaseDB, _, e := snapshot.Open(ctx, &cfg, false)
-		if e != nil {
-			return nil, e
-		}
-		defer leaseDB.Close()
-		unlockDB, e := database.AcquireMigrationLock(ctx, leaseDB, p.Source.Driver)
+		unlockDB, e := snapshot.LockDatabase(ctx, &cfg)
 		if e != nil {
 			return nil, e
 		}
 		defer func() { err = errors.Join(err, unlockDB()) }()
 	}
-	targetCfg, err := prepareTarget(ctx, p, j, backup, options)
-	if err != nil {
-		return nil, err
+	targetCfg := resolved.Config
+	if p.Strategy == operation.Clone {
+		targetCfg, err = prepareTarget(ctx, p, j, backup, options)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		j.Staging = p.Source.DataDir
 	}
 	targetDB, targetClient, err := snapshot.Open(ctx, &targetCfg, false)
 	if err != nil {
@@ -118,6 +150,9 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 	if err := operation.Initialize(ctx, targetDB, p.Source.Driver, p); err != nil {
 		return nil, err
 	}
+	if err := fault(options, "preparing"); err != nil {
+		return nil, err
+	}
 	steps, state, err := operation.Steps(ctx, targetDB, p)
 	if err != nil {
 		return nil, err
@@ -126,6 +161,14 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 		return nil, operation.Fail(operation.Incompatible, "target was abandoned")
 	}
 	j.Steps = steps
+	if err := CheckProgress(ctx, targetDB, p, steps); err != nil {
+		return nil, err
+	}
+	if contains(steps, "accounts") {
+		if err := VerifyAccounts(ctx, targetClient, p, resolved.CredentialKeys, contains(steps, "ready")); err != nil {
+			return nil, err
+		}
+	}
 	if err := operation.SaveJournal(options.Directory, j); err != nil {
 		return nil, err
 	}
@@ -159,7 +202,10 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 			return nil, err
 		}
 		if err := operation.Step(ctx, targetDB, p.Source.Driver, p, "storage", func(c *ent.Client) error {
-			return reconcileClaims(ctx, c, resolved.Config, filepath.Join(options.Directory, "work"))
+			if err := reconcileClaims(ctx, c, resolved.Config, filepath.Join(options.Directory, "work")); err != nil {
+				return err
+			}
+			return NormalizeBaselineTimestamps(ctx, c, p)
 		}); err != nil {
 			return nil, err
 		}
@@ -175,7 +221,7 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 	if err := operation.SaveJournal(options.Directory, j); err != nil {
 		return nil, err
 	}
-	counts, err := VerifyPreserved(ctx, sourceDB, targetDB, p)
+	counts, err := VerifyBaseline(ctx, targetDB, p, contains(j.Steps, "ready"))
 	if err != nil {
 		return nil, err
 	}
@@ -188,14 +234,19 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 	if err := VerifySourceKeys(ctx, targetDB, resolved.CredentialKeys); err != nil {
 		return nil, err
 	}
-	if err := verifyTargetFiles(ctx, p, j, backup); err != nil {
+	if err := verifyExecutionFiles(ctx, p, j, backup); err != nil {
 		return nil, err
 	}
 	if !contains(j.Steps, "ready") {
 		if err := fault(options, "before_ready"); err != nil {
 			return nil, err
 		}
-		if err := Complete(ctx, targetDB, p, func(c *ent.Client) error { return VerifyAccounts(ctx, c, p, resolved.CredentialKeys, true) }); err != nil {
+		if err := Complete(ctx, targetDB, p, func(c *ent.Client) error {
+			if err := VerifyAccounts(ctx, c, p, resolved.CredentialKeys, true); err != nil {
+				return err
+			}
+			return VerifyAllocationBaselineClient(ctx, c, p)
+		}); err != nil {
 			return nil, err
 		}
 		if err := fault(options, "ready_commit"); err != nil {
@@ -203,7 +254,7 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 		}
 		j.Steps = append(j.Steps, "ready")
 	}
-	counts, err = VerifyPreserved(ctx, sourceDB, targetDB, p)
+	counts, err = VerifyBaseline(ctx, targetDB, p, true)
 	if err != nil {
 		return nil, err
 	}
@@ -211,12 +262,21 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 	if err != nil || current.Format != "current" {
 		return nil, operation.Fail(operation.NeedsAction, "final target format verification failed")
 	}
-	j.TargetFingerprint = current.Fingerprint
+	result, err := operation.ResultDigest(ctx, targetDB, p)
+	if err != nil {
+		return nil, err
+	}
+	actual, err := BusinessFingerprint(ctx, targetDB, p.Source.Driver)
+	if err != nil || actual != result {
+		return nil, operation.Fail(operation.BaselineChanged, "business data differs from the committed ready result")
+	}
+	j.TargetFingerprint = result
 	j.Phase = "ready"
 	if err := operation.SaveJournal(options.Directory, j); err != nil {
 		return nil, err
 	}
-	report = &operation.Report{Version: 1, ID: p.ID, Phase: "ready", Verified: true, SourceFingerprint: p.SourceFingerprint, Counts: counts, BackupTime: backup.CreatedAt, Next: []string{"Conversion verified. Select the generated maintenance deployment inputs and switch data directory or DSN explicitly.", "Use the original administrator password and verify projects, resources, task snapshots and credentials before enabling writers and GC."}}
+	report = upgradeReport(p, j, backup, counts)
+	report.Rehearsal = rehearsalStatus(options.Directory, p)
 	if err := fault(options, "before_report"); err != nil {
 		return nil, err
 	}
@@ -234,7 +294,7 @@ func Run(ctx context.Context, options RunOptions) (report *operation.Report, err
 	if err := fault(options, "before_publish"); err != nil {
 		return nil, err
 	}
-	if p.Source.Driver == "sqlite" && j.Staging != p.Target.DataDir {
+	if p.Strategy == operation.Clone && p.Source.Driver == "sqlite" && j.Staging != p.Target.DataDir {
 		if err := operation.PublishDirectory(j.Staging, p.Target.DataDir, j.StagingIdentity, p.Target.ParentIdentity); err != nil {
 			return nil, err
 		}
@@ -316,12 +376,21 @@ func OpenPlannedSource(ctx context.Context, p *operation.Plan) (*config.Resolved
 			db.Close()
 		}
 	}()
-	probe, err := Probe(ctx, db, p.Source.Driver)
+	owned, err := operation.Owned(ctx, db, p)
 	if err != nil {
 		return nil, nil, err
 	}
-	if probe.Fingerprint != p.SourceFingerprint || probe.SchemaDigest != p.SourceSchema || probe.Mode != p.Source.Mode {
-		return nil, nil, operation.Fail(operation.BaselineChanged, "source baseline changed; retain existing materials and create a new plan")
+	if owned && p.Strategy != operation.Inplace {
+		return nil, nil, operation.Fail(operation.Incompatible, "clone source is reserved by an operation")
+	}
+	if !owned {
+		probe, err := Probe(ctx, db, p.Source.Driver)
+		if err != nil {
+			return nil, nil, err
+		}
+		if probe.Fingerprint != p.SourceFingerprint || probe.SchemaDigest != p.SourceSchema || probe.Mode != p.Source.Mode {
+			return nil, nil, operation.Fail(operation.BaselineChanged, "source baseline changed; retain existing materials and create a new plan")
+		}
 	}
 	if p.Source.Driver == "sqlite" && narrow.DatabaseDSN() != p.Source.DatabaseDSN {
 		return nil, nil, operation.Fail(operation.BaselineChanged, "source database input changed")
@@ -356,13 +425,30 @@ func Environment() map[string]string {
 }
 
 func ensureBackup(ctx context.Context, db *sql.DB, resolved *config.ResolvedServer, p *operation.Plan, j *operation.Journal, options RunOptions) (*BackupReceipt, error) {
+	bound, err := operation.LoadProtectionBinding(options.Directory, p, j)
+	if err != nil {
+		return nil, err
+	}
 	if j.BackupDirectory != "" {
 		if r, err := LoadBackupReceipt(ctx, j.BackupDirectory, p); err == nil {
+			if strings.TrimSpace(options.BackupReference) != "" && strings.TrimSpace(options.BackupReference) != r.Reference {
+				return nil, operation.Fail(operation.Incompatible, "backup reference differs from the bound original declaration")
+			}
+			if err := operation.BindProtection(options.Directory, p, j); err != nil {
+				return nil, err
+			}
 			return r, nil
 		}
 		if _, err := os.Stat(filepath.Join(j.BackupDirectory, "receipt.json")); err == nil {
 			return nil, operation.Fail(operation.BackupIncomplete, "existing backup receipt failed verification")
 		}
+	}
+	owned, err := operation.Owned(ctx, db, p)
+	if err != nil {
+		return nil, err
+	}
+	if bound || owned {
+		return nil, operation.Fail(operation.BackupIncomplete, "bound original protection is incomplete; do not snapshot a partial format")
 	}
 	directory := filepath.Join(options.Directory, "backup")
 	if _, err := os.Lstat(directory); !errors.Is(err, os.ErrNotExist) {
@@ -377,7 +463,40 @@ func ensureBackup(ctx context.Context, db *sql.DB, resolved *config.ResolvedServ
 	if err := operation.SaveJournal(options.Directory, j); err != nil {
 		return nil, err
 	}
-	return CaptureSourceBackup(ctx, db, resolved, p, directory)
+	reference := strings.TrimSpace(options.BackupReference)
+	if reference == "" && p.DatabaseBackup == operation.BackupExternal {
+		reference = p.Baseline.Facts["backup_reference"]
+	}
+	r, err := CaptureSourceBackup(ctx, db, resolved, p, directory, reference)
+	if err != nil {
+		return nil, err
+	}
+	if err := operation.BindProtection(options.Directory, p, j); err != nil {
+		return nil, err
+	}
+	return r, operation.SaveJournal(options.Directory, j)
+}
+
+func verifyRouteProtection(ctx context.Context, db *sql.DB, resolved *config.ResolvedServer, p *operation.Plan, backup *BackupReceipt) error {
+	if p.Strategy == operation.Clone {
+		return VerifyExternalBackup(ctx, db, resolved.Config, resolved.CredentialKeys, p, backup.Objects)
+	}
+	return VerifyOriginalReferences(ctx, p, backup)
+}
+
+func verifyExecutionFiles(ctx context.Context, p *operation.Plan, j *operation.Journal, backup *BackupReceipt) error {
+	if p.Strategy == operation.Inplace {
+		return VerifyOriginalReferences(ctx, p, backup)
+	}
+	return verifyTargetFiles(ctx, p, j, backup)
+}
+
+func upgradeReport(p *operation.Plan, j *operation.Journal, b *BackupReceipt, counts map[string]int64) *operation.Report {
+	r := &operation.Report{Version: operation.Version, ID: p.ID, Phase: j.Phase, Verified: true, SourceFingerprint: p.SourceFingerprint, Counts: counts, BackupTime: b.CreatedAt, Strategy: p.Strategy, DatabaseBackup: p.DatabaseBackup, Protection: b.State, BackupReference: b.Reference, BaselineDigest: operation.BaselineDigest(p), ResultDigest: j.TargetFingerprint, Recovery: j.Restore, Rehearsal: "not_run", Next: []string{"Use the original administrator password and verify projects, resources, task snapshots and credentials before enabling writers and GC."}}
+	if p.Strategy == operation.Clone {
+		r.Next = append([]string{"Select the generated maintenance deployment inputs and switch data directory or DSN explicitly."}, r.Next...)
+	}
+	return r
 }
 
 func prepareTarget(ctx context.Context, p *operation.Plan, j *operation.Journal, backup *BackupReceipt, options RunOptions) (config.ServerConfig, error) {

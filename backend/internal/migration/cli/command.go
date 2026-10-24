@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -82,7 +83,7 @@ func newInspectCommand() *cobra.Command {
 }
 
 func newUpgradeCommand() *cobra.Command {
-	root := &cobra.Command{Use: "upgrade", Short: "Convert the exact v0.15 release into an independent target"}
+	root := &cobra.Command{Use: "upgrade", Short: "Convert the exact v0.15 release in place or into an independent target"}
 	var flags databaseFlags
 	var opts v015.PlanOptions
 	plan := &cobra.Command{Use: "plan", Args: cobra.NoArgs, Short: "Freeze source, complete account mapping, target schema and tool build", RunE: func(cmd *cobra.Command, _ []string) error {
@@ -95,6 +96,8 @@ func newUpgradeCommand() *cobra.Command {
 	}}
 	flags.bind(plan)
 	plan.Flags().StringVar(&opts.Directory, "operation-dir", "", "absolute new private operation directory")
+	plan.Flags().StringVar(&opts.Strategy, "strategy", "", "execution strategy: inplace or clone (default inferred from target arguments)")
+	plan.Flags().StringVar(&opts.DatabaseBackup, "database-backup", "", "database protection: auto or external (default depends on source and strategy)")
 	plan.Flags().StringVar(&opts.TargetDataDir, "target-data-dir", "", "absolute nonexistent SQLite target directory")
 	plan.Flags().StringVar(&opts.TargetConfig, "target-config", "", "explicit independent empty PostgreSQL deployment file")
 	plan.Flags().StringVar(&opts.RehearsalConfig, "rehearsal-config", "", "another independent PostgreSQL deployment for rehearsal")
@@ -105,14 +108,16 @@ func newUpgradeCommand() *cobra.Command {
 	for _, action := range []string{"rehearse", "apply"} {
 		var directory string
 		var offline bool
+		var backupReference string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-			r, err := v015.Run(cmd.Context(), v015.RunOptions{Directory: directory, Offline: offline, Rehearse: action == "rehearse"})
+			r, err := v015.Run(cmd.Context(), v015.RunOptions{Directory: directory, Offline: offline, Rehearse: action == "rehearse", BackupReference: backupReference})
 			if err != nil {
 				return err
 			}
 			return printJSON(cmd.OutOrStdout(), r)
 		}}
 		operationFlags(cmd, &directory, &offline)
+		cmd.Flags().StringVar(&backupReference, "backup-reference", "", "operator-declared PostgreSQL backup reference for inplace execution")
 		root.AddCommand(cmd)
 	}
 	return root
@@ -129,6 +134,31 @@ func newOperationCommand(action string) *cobra.Command {
 	var directory string
 	var offline bool
 	cmd := &cobra.Command{Use: action, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		version, err := operation.DocumentVersion(directory)
+		if err != nil {
+			return err
+		}
+		if version == 1 {
+			if action == "status" {
+				status, err := operation.ReadLegacyStatus(directory)
+				if err != nil {
+					return err
+				}
+				return printJSON(cmd.OutOrStdout(), status)
+			}
+			var document map[string]json.RawMessage
+			if err := operation.Read(filepath.Join(directory, "plan.json"), &document); err != nil {
+				return err
+			}
+			var expectedBuild string
+			if err := json.Unmarshal(document["build_commit"], &expectedBuild); err != nil || expectedBuild == "" {
+				return operation.Fail(operation.Incompatible, "v1 plan has no expected build; preserve it and use its original tool")
+			}
+			return operation.Fail(operation.Incompatible, "v1 operation is read-only in this tool; use the exact recorded build "+expectedBuild+" for recovery")
+		}
+		if version != operation.Version {
+			return operation.Fail(operation.Incompatible, "unsupported operation document version "+strconv.Itoa(version))
+		}
 		p, j, err := operation.Load(directory)
 		if err != nil {
 			return err

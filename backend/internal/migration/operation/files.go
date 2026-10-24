@@ -139,6 +139,7 @@ func Write(path string, value any, create bool) error {
 }
 
 func Create(directory string, p *Plan) (*Journal, error) {
+	p.Directory = directory
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
@@ -159,6 +160,24 @@ func Create(directory string, p *Plan) (*Journal, error) {
 }
 
 func Load(directory string) (*Plan, *Journal, error) {
+	version, err := DocumentVersion(directory)
+	if err != nil {
+		return nil, nil, err
+	}
+	if version == 1 {
+		var document map[string]json.RawMessage
+		if err := Read(filepath.Join(directory, "plan.json"), &document); err != nil {
+			return nil, nil, err
+		}
+		var build string
+		if err := json.Unmarshal(document["build_commit"], &build); err != nil || build == "" {
+			return nil, nil, Fail(Incompatible, "preserve this v1 operation and use its original binary")
+		}
+		return nil, nil, Fail(Incompatible, "v1 operation is read-only in this tool; use the exact recorded original binary "+build+" for resume or recovery")
+	}
+	if version != Version {
+		return nil, nil, Fail(Incompatible, "unsupported operation document version")
+	}
 	p := new(Plan)
 	if err := Read(filepath.Join(directory, "plan.json"), p); err != nil {
 		return nil, nil, err
@@ -166,9 +185,15 @@ func Load(directory string) (*Plan, *Journal, error) {
 	if err := p.Validate(); err != nil {
 		return nil, nil, err
 	}
+	p.Directory = directory
 	j := new(Journal)
 	if err := Read(filepath.Join(directory, "journal.json"), j); err != nil {
-		return nil, nil, err
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, nil, err
+		}
+		// A lost filesystem journal never erases committed database receipts.
+		// The runner must still prove ownership and load the original protection.
+		j = &Journal{Version: Version, ID: p.ID, Kind: p.Kind, PlanDigest: Digest(p), TargetSignature: p.TargetSignature, Build: p.Build, Phase: "planned", UpdatedAt: time.Now().UTC()}
 	}
 	if err := j.Bind(p); err != nil {
 		return nil, nil, err
@@ -178,7 +203,9 @@ func Load(directory string) (*Plan, *Journal, error) {
 
 func SaveJournal(directory string, j *Journal) error {
 	j.UpdatedAt = time.Now().UTC()
-	return Write(filepath.Join(directory, "journal.json"), j, false)
+	path := filepath.Join(directory, "journal.json")
+	_, err := os.Lstat(path)
+	return Write(path, j, errors.Is(err, os.ErrNotExist))
 }
 
 func ValidatePath(path string, directory bool) error {
@@ -229,6 +256,15 @@ func Lock(directory string) (func() error, error) {
 		return nil, err
 	}
 	path := filepath.Join(directory, "operation.lock")
+	return LockPath(path)
+}
+
+// LockPath serializes offline operations selecting the same SQLite database,
+// even when their operation directories differ. Read commands never call it.
+func LockPath(path string) (func() error, error) {
+	if err := ValidatePath(filepath.Dir(path), true); err != nil {
+		return nil, err
+	}
 	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
 		ok, publishErr := credential.PublishPrivateFile(path, []byte("migration operation lock\n"))
 		if publishErr != nil {
@@ -278,4 +314,26 @@ func PublishDirectory(staging, target, identity, parentIdentity string) error {
 		return err
 	}
 	return syncDir(filepath.Dir(target))
+}
+
+// MoveOwnedFile never replaces an occupied destination. Restoration uses it
+// after connections close, with an intent binding both file identities.
+func MoveOwnedFile(source, target, identity string) error {
+	if err := ValidatePath(source, false); err != nil {
+		return err
+	}
+	if err := ValidatePath(filepath.Dir(target), true); err != nil {
+		return err
+	}
+	actual, err := Identity(source)
+	if err != nil || actual != identity {
+		return Fail(BaselineChanged, "recovery file identity changed")
+	}
+	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
+		return Fail(TargetNotEmpty, "recovery destination is occupied")
+	}
+	if err := renameNoReplace(source, target); err != nil {
+		return err
+	}
+	return errors.Join(syncDir(filepath.Dir(source)), syncDir(filepath.Dir(target)))
 }

@@ -48,6 +48,9 @@ func TestS3PathConflictBlocksWholeTargetReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := operation.LoadBaseline(options.Directory, p, journal); err != nil {
+		t.Fatal(err)
+	}
 	cfg := resolved.Config
 	cfg.DataDir, cfg.Database.DSN = journal.Staging, filepath.Join(journal.Staging, "linguaflow.db")
 	target, _, err := snapshot.Open(ctx, &cfg, true)

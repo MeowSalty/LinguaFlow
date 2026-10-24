@@ -10,7 +10,17 @@ import (
 	"time"
 )
 
-const Version = 1
+const Version = 2
+
+type Strategy string
+type DatabaseBackupMode string
+
+const (
+	Inplace        Strategy           = "inplace"
+	Clone          Strategy           = "clone"
+	BackupAuto     DatabaseBackupMode = "auto"
+	BackupExternal DatabaseBackupMode = "external"
+)
 
 type Endpoint struct {
 	ConfigPath  string `json:"config_path,omitempty"`
@@ -46,32 +56,39 @@ type Target struct {
 	RehearsalIdentity    string `json:"rehearsal_identity,omitempty"`
 	RehearsalDataDir     string `json:"rehearsal_data_dir,omitempty"`
 	RehearsalInputDigest string `json:"rehearsal_input_digest,omitempty"`
+	RehearsalRestored    bool   `json:"rehearsal_restored,omitempty"`
 }
 
 type Plan struct {
-	Version           int              `json:"version"`
-	ID                string           `json:"operation_id"`
-	Kind              string           `json:"kind"`
-	Route             string           `json:"route"`
-	Build             string           `json:"build_commit"`
-	CreatedAt         time.Time        `json:"created_at"`
-	Source            Endpoint         `json:"source"`
-	SourceFingerprint string           `json:"source_fingerprint"`
-	SourceSchema      string           `json:"source_schema"`
-	ObjectsDigest     string           `json:"objects_digest,omitempty"`
-	TargetSignature   string           `json:"target_signature"`
-	Target            Target           `json:"target"`
-	Accounts          []Account        `json:"accounts,omitempty"`
-	LegacyRoot        string           `json:"legacy_root,omitempty"`
-	StorageManifest   string           `json:"storage_manifest,omitempty"`
-	StorageDigest     string           `json:"storage_digest,omitempty"`
-	ImportedManifest  string           `json:"imported_manifest,omitempty"`
-	ImportedDigest    string           `json:"imported_digest,omitempty"`
-	StorageBaseline   string           `json:"storage_baseline,omitempty"`
-	StorageMaxIDs     map[string]int64 `json:"storage_max_ids,omitempty"`
-	ExternalReceipt   string           `json:"external_receipt,omitempty"`
-	ExternalDigest    string           `json:"external_digest,omitempty"`
-	LocalRoots        []LocalRoot      `json:"local_roots,omitempty"`
+	Version           int                `json:"version"`
+	Strategy          Strategy           `json:"strategy"`
+	DatabaseBackup    DatabaseBackupMode `json:"database_backup"`
+	ID                string             `json:"operation_id"`
+	Kind              string             `json:"kind"`
+	Route             string             `json:"route"`
+	Build             string             `json:"build_commit"`
+	CreatedAt         time.Time          `json:"created_at"`
+	Source            Endpoint           `json:"source"`
+	SourceFingerprint string             `json:"source_fingerprint"`
+	SourceSchema      string             `json:"source_schema"`
+	ObjectsDigest     string             `json:"objects_digest,omitempty"`
+	TargetSignature   string             `json:"target_signature"`
+	Target            Target             `json:"target"`
+	Accounts          []Account          `json:"accounts,omitempty"`
+	LegacyRoot        string             `json:"legacy_root,omitempty"`
+	StorageManifest   string             `json:"storage_manifest,omitempty"`
+	StorageDigest     string             `json:"storage_digest,omitempty"`
+	ImportedManifest  string             `json:"imported_manifest,omitempty"`
+	ImportedDigest    string             `json:"imported_digest,omitempty"`
+	StorageBaseline   string             `json:"storage_baseline,omitempty"`
+	StorageMaxIDs     map[string]int64   `json:"storage_max_ids,omitempty"`
+	ExternalReceipt   string             `json:"external_receipt,omitempty"`
+	ExternalDigest    string             `json:"external_digest,omitempty"`
+	LocalRoots        []LocalRoot        `json:"local_roots,omitempty"`
+	// Baseline is loaded from the operation's independently bound private file.
+	// It must never change the immutable plan digest.
+	Baseline  *Baseline `json:"-"`
+	Directory string    `json:"-"`
 }
 
 type Journal struct {
@@ -90,18 +107,29 @@ type Journal struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 	TargetFingerprint string    `json:"target_fingerprint,omitempty"`
 	BackupDirectory   string    `json:"backup_directory,omitempty"`
+	BaselineDigest    string    `json:"baseline_digest,omitempty"`
+	Restore           *Restore  `json:"restore,omitempty"`
 }
 
 type Report struct {
-	Version           int              `json:"version"`
-	ID                string           `json:"operation_id"`
-	Phase             string           `json:"phase"`
-	Verified          bool             `json:"verified"`
-	SourceFingerprint string           `json:"source_fingerprint"`
-	Counts            map[string]int64 `json:"counts,omitempty"`
-	NeedsAction       []string         `json:"needs_action,omitempty"`
-	Next              []string         `json:"next,omitempty"`
-	BackupTime        time.Time        `json:"backup_time,omitempty"`
+	Version           int                `json:"version"`
+	ID                string             `json:"operation_id"`
+	Phase             string             `json:"phase"`
+	Verified          bool               `json:"verified"`
+	SourceFingerprint string             `json:"source_fingerprint"`
+	Counts            map[string]int64   `json:"counts,omitempty"`
+	NeedsAction       []string           `json:"needs_action,omitempty"`
+	Next              []string           `json:"next,omitempty"`
+	BackupTime        time.Time          `json:"backup_time,omitempty"`
+	Strategy          Strategy           `json:"strategy"`
+	DatabaseBackup    DatabaseBackupMode `json:"database_backup"`
+	Protection        string             `json:"protection,omitempty"`
+	BackupReference   string             `json:"backup_reference,omitempty"`
+	Rehearsal         string             `json:"rehearsal"`
+	Restoration       string             `json:"restoration,omitempty"`
+	BaselineDigest    string             `json:"baseline_digest,omitempty"`
+	ResultDigest      string             `json:"result_digest,omitempty"`
+	Recovery          *Restore           `json:"recovery,omitempty"`
 }
 
 func NewID() (string, error) {
@@ -133,6 +161,12 @@ func (p *Plan) Validate() error {
 	if p.Kind != "upgrade" && p.Kind != "storage" {
 		return Fail(Incompatible, "unknown operation kind")
 	}
+	if p.Strategy != Inplace && p.Strategy != Clone || p.Kind == "storage" && p.Strategy != Inplace {
+		return Fail(Incompatible, "invalid execution strategy")
+	}
+	if p.DatabaseBackup != BackupAuto && p.DatabaseBackup != BackupExternal || p.DatabaseBackup == BackupExternal && (p.Source.Driver != "postgres" || p.Strategy != Inplace) {
+		return Fail(Incompatible, "external database protection requires PostgreSQL inplace")
+	}
 	if (p.Kind == "upgrade" && p.Route != "upgrade-v015-auth1") || (p.Kind == "storage" && p.Route != "storage-legacy-import") {
 		return Fail(Incompatible, "unknown conversion route")
 	}
@@ -142,8 +176,11 @@ func (p *Plan) Validate() error {
 	if p.Source.ConfigPath != "" && !filepath.IsAbs(p.Source.ConfigPath) {
 		return Fail(Incompatible, "configuration paths must be absolute")
 	}
-	if p.Kind == "upgrade" && ((p.Source.Driver == "sqlite" && (!filepath.IsAbs(p.Target.DataDir) || p.Target.ParentIdentity == "")) || (p.Source.Driver == "postgres" && (!filepath.IsAbs(p.Target.ConfigPath) || p.Target.Identity == ""))) {
+	if p.Kind == "upgrade" && p.Strategy == Clone && ((p.Source.Driver == "sqlite" && (!filepath.IsAbs(p.Target.DataDir) || p.Target.ParentIdentity == "")) || (p.Source.Driver == "postgres" && (!filepath.IsAbs(p.Target.ConfigPath) || p.Target.Identity == ""))) {
 		return Fail(Incompatible, "invalid independent target")
+	}
+	if p.Strategy == Inplace && (p.Target.DataDir != "" || p.Target.ConfigPath != "" || p.Target.Identity != "" || p.Target.ParentIdentity != "") {
+		return Fail(Incompatible, "inplace has no independent deployment target")
 	}
 	if !ValidHex(p.Source.InputDigest, 64) || !ValidHex(p.ObjectsDigest, 64) || p.CreatedAt.IsZero() {
 		return Fail(Incompatible, "source inputs and object baseline must be bound")
@@ -183,7 +220,7 @@ func (j *Journal) Bind(p *Plan) error {
 	if j.Version != Version || j.ID != p.ID || j.Kind != p.Kind || j.PlanDigest != Digest(p) || j.TargetSignature != p.TargetSignature || j.Build != p.Build {
 		return Fail(Incompatible, "journal does not belong to this immutable plan")
 	}
-	valid := map[string]bool{"planned": true, "backing_up": true, "staging": true, "converting": true, "verifying": true, "ready": true, "publishing": true, "completed": true, "needs_action": true, "abandoned": true, "rolled_back": true}
+	valid := map[string]bool{"planned": true, "backing_up": true, "staging": true, "converting": true, "verifying": true, "ready": true, "publishing": true, "completed": true, "needs_action": true, "abandoned": true, "rolled_back": true, "restoring": true}
 	if !valid[j.Phase] {
 		return Fail(Incompatible, "unknown journal phase")
 	}

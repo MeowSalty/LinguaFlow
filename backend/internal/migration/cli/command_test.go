@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -72,6 +73,107 @@ func TestMigrationHelpAndListNeverPrepareInputs(t *testing.T) {
 	}
 	if _, err := os.Lstat(root); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("help or list prepared input directories")
+	}
+}
+
+func TestUpgradePlanFlagsAndDefaultInplacePlan(t *testing.T) {
+	configPath, sourceDir := cliReleaseFixture(t)
+	operationDir := filepath.Join(t.TempDir(), "inplace-operation")
+	before, err := operation.Hash(t.Context(), filepath.Join(sourceDir, "linguaflow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := execute(t, "upgrade", "plan", "--config", configPath, "--operation-dir", operationDir)
+	var plan operation.Plan
+	if err := json.Unmarshal([]byte(output), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.Strategy != operation.Inplace || plan.DatabaseBackup != operation.BackupAuto || plan.Target.DataDir != "" || plan.Target.ConfigPath != "" {
+		t.Fatalf("default CLI plan is not inplace: %+v", plan)
+	}
+	after, err := operation.Hash(t.Context(), filepath.Join(sourceDir, "linguaflow.db"))
+	if err != nil || after != before {
+		t.Fatal("planning changed source bytes", err)
+	}
+
+	for _, args := range [][]string{{"upgrade", "plan", "--help"}, {"upgrade", "apply", "--help"}, {"upgrade", "rehearse", "--help"}} {
+		var output bytes.Buffer
+		cmd := NewCommand()
+		cmd.SetArgs(args)
+		cmd.SetOut(&output)
+		cmd.SetErr(&output)
+		if err := cmd.ExecuteContext(t.Context()); err != nil {
+			t.Fatalf("help %v: %v", args, err)
+		}
+		wants := []string{"--strategy", "--database-backup"}
+		if args[1] != "plan" {
+			wants = []string{"--backup-reference"}
+		}
+		for _, want := range wants {
+			if !strings.Contains(output.String(), want) {
+				t.Fatalf("%v help omits %s: %s", args, want, output.String())
+			}
+		}
+	}
+}
+
+func TestLegacyStatusIsReadOnlyAndOtherActionsNameRecordedBuild(t *testing.T) {
+	directory := t.TempDir()
+	dataDir := filepath.Join(directory, "source")
+	targetDir := filepath.Join(directory, "target")
+	id, err := operation.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := &operation.Plan{
+		Version: operation.Version, Strategy: operation.Clone, DatabaseBackup: operation.BackupAuto,
+		ID: id, Kind: "upgrade", Route: "upgrade-v015-auth1", Build: "v0.16.0+recorded-build",
+		CreatedAt:         time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC),
+		Source:            operation.Endpoint{DataDir: dataDir, Driver: "sqlite", Mode: "serve", Identity: "source-id", InputDigest: operation.Digest("input")},
+		SourceFingerprint: operation.Digest("fingerprint"), SourceSchema: operation.Digest("schema"),
+		ObjectsDigest: operation.Digest("objects"), TargetSignature: operation.Digest("target"),
+		Target:   operation.Target{DataDir: targetDir, ParentIdentity: "parent-id"},
+		Accounts: []operation.Account{{UserID: 1, Username: "admin"}},
+	}
+	data, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	document["version"] = json.RawMessage("1")
+	delete(document, "strategy")
+	delete(document, "database_backup")
+	data, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(directory, "plan.json")
+	if err := os.WriteFile(planPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(planPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusOutput := execute(t, "status", "--operation-dir", directory)
+	if !strings.Contains(statusOutput, `"expected_build": "v0.16.0+recorded-build"`) || !strings.Contains(statusOutput, `"plan"`) || strings.Contains(statusOutput, `"journal": {`) {
+		t.Fatalf("legacy status omitted its plan/build or implied journal evidence: %s", statusOutput)
+	}
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"resume", "--operation-dir", directory, "--offline"})
+	err = cmd.ExecuteContext(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "v0.16.0+recorded-build") {
+		t.Fatalf("legacy resume guidance = %v", err)
+	}
+	after, err := os.ReadFile(planPath)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("legacy status/recovery routing changed the plan", err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, "journal.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("legacy action created a journal", err)
 	}
 }
 

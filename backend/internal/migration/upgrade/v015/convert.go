@@ -17,11 +17,19 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
-// ConvertSchema implements the finite v0.15 route on an isolated snapshot.
+// ConvertSchema implements the finite v0.15 route on the protected execution DB.
 // SQLite needs a full users rebuild: append-only schema creation would retain
 // the old email unique constraint. PostgreSQL uses explicit constraint DDL.
 func ConvertSchema(ctx context.Context, db *sql.DB, p *operation.Plan) error {
 	return operation.Step(ctx, db, p.Source.Driver, p, "schema", func(c *ent.Client) error {
+		var allocations []allocationEvidence
+		if p.Source.Driver == "sqlite" {
+			var err error
+			allocations, err = sqliteAllocations(ctx, c)
+			if err != nil {
+				return err
+			}
+		}
 		if _, err := c.ExecContext(ctx, "DELETE FROM refresh_tokens"); err != nil {
 			return err
 		}
@@ -36,7 +44,13 @@ func ConvertSchema(ctx context.Context, db *sql.DB, p *operation.Plan) error {
 		} else {
 			return operation.Fail(operation.UnsupportedTarget, "unsupported database driver")
 		}
-		return c.Schema.Create(ctx)
+		if err := c.Schema.Create(ctx); err != nil {
+			return err
+		}
+		if p.Source.Driver == "sqlite" {
+			return restoreSQLiteAllocations(ctx, c, allocations)
+		}
+		return nil
 	})
 }
 
@@ -211,20 +225,33 @@ func ConvertHistory(ctx context.Context, db *sql.DB, p *operation.Plan) error {
 // Complete performs the business version update and publishes all readiness
 // metadata in the same transaction, after the caller has verified the target.
 func Complete(ctx context.Context, db *sql.DB, p *operation.Plan, verify func(*ent.Client) error) error {
-	return operation.Step(ctx, db, p.Source.Driver, p, "ready", func(c *ent.Client) error {
+	return operation.StepWithResult(ctx, db, p.Source.Driver, p, "ready", func(c *ent.Client) (string, error) {
 		if err := service.MigrateData(ctx, c); err != nil {
-			return err
+			return "", err
 		}
 		if err := verify(c); err != nil {
-			return err
+			return "", err
+		}
+		if err := NormalizeBaselineTimestamps(ctx, c, p); err != nil {
+			return "", err
 		}
 		if _, err := c.ExecContext(ctx, "CREATE TABLE linguaflow_auth_format (id INTEGER NOT NULL PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL CHECK(version>0))"); err != nil {
-			return err
+			return "", err
 		}
 		if _, err := c.ExecContext(ctx, "INSERT INTO linguaflow_auth_format(id,version) VALUES(1,1)"); err != nil {
-			return err
+			return "", err
 		}
-		return operation.MarkReady(ctx, c, p)
+		if err := VerifyBaselineClient(ctx, c, p, true); err != nil {
+			return "", err
+		}
+		if err := service.ValidateDataVersion(ctx, c); err != nil {
+			return "", err
+		}
+		result, err := BusinessFingerprintClient(ctx, c, p.Source.Driver)
+		if err != nil {
+			return "", err
+		}
+		return result, operation.MarkReady(ctx, c, p)
 	})
 }
 

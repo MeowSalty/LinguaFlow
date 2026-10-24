@@ -22,6 +22,7 @@ import (
 )
 
 func postgresTool(name string) (string, error) {
+	toolName := name
 	root := os.Getenv("LINGUAFLOW_MIGRATION_POSTGRES_BIN")
 	if root == "" {
 		root = os.Getenv("LINGUAFLOW_AUTH_POSTGRES_BIN")
@@ -32,13 +33,13 @@ func postgresTool(name string) (string, error) {
 	if root != "" {
 		path := filepath.Join(root, name)
 		if err := operation.ValidatePath(path, false); err != nil {
-			return "", operation.Fail(operation.UnsupportedTarget, "configured PostgreSQL tools are unavailable")
+			return "", operation.Fail(operation.UnsupportedTarget, toolName+" is unavailable in the configured PostgreSQL tools directory")
 		}
 		return path, nil
 	}
 	path, err := exec.LookPath(name)
 	if err != nil {
-		return "", operation.Fail(operation.UnsupportedTarget, "install matching pg_dump and pg_restore or configure LINGUAFLOW_MIGRATION_POSTGRES_BIN")
+		return "", operation.Fail(operation.UnsupportedTarget, toolName+" is unavailable; install it or configure LINGUAFLOW_MIGRATION_POSTGRES_BIN")
 	}
 	return path, nil
 }
@@ -53,41 +54,78 @@ func parsePostgresToolVersion(output string) (string, bool) {
 	return match[1], true
 }
 
-func InspectPostgresTools(ctx context.Context) (string, error) {
-	version := ""
-	for _, name := range []string{"pg_dump", "pg_restore"} {
-		path, err := postgresTool(name)
-		if err != nil {
-			return "", err
-		}
-		out, err := exec.CommandContext(ctx, path, "--version").Output()
-		if err != nil {
-			return "", operation.Fail(operation.UnsupportedTarget, "cannot inspect PostgreSQL tools")
-		}
-		current, ok := parsePostgresToolVersion(string(out))
-		if !ok {
-			return "", operation.Fail(operation.UnsupportedTarget, "unknown PostgreSQL tool version")
-		}
-		if version != "" && version != current {
-			return "", operation.Fail(operation.UnsupportedTarget, "pg_dump and pg_restore complete versions must match")
-		}
-		version = current
+func inspectPostgresTool(ctx context.Context, name string) (string, error) {
+	path, err := postgresTool(name)
+	if err != nil {
+		return "", err
+	}
+	out, err := exec.CommandContext(ctx, path, "--version").Output()
+	if err != nil {
+		return "", operation.Fail(operation.UnsupportedTarget, "cannot inspect "+name+" version")
+	}
+	version, ok := parsePostgresToolVersion(string(out))
+	if !ok {
+		return "", operation.Fail(operation.UnsupportedTarget, "unknown "+name+" version")
 	}
 	return version, nil
 }
 
-func checkPostgresMajor(ctx context.Context, db *sql.DB) (string, error) {
-	version, err := InspectPostgresTools(ctx)
+func InspectPostgresDump(ctx context.Context) (string, error) {
+	return inspectPostgresTool(ctx, "pg_dump")
+}
+
+func InspectPostgresRestore(ctx context.Context) (string, error) {
+	return inspectPostgresTool(ctx, "pg_restore")
+}
+
+func postgresToolMajor(version string) string {
+	parts := strings.SplitN(version, ".", 3)
+	if len(parts) > 1 {
+		major, err := strconv.Atoi(parts[0])
+		if err == nil && major < 10 {
+			return parts[0] + "." + parts[1]
+		}
+	}
+	return parts[0]
+}
+
+func InspectPostgresTools(ctx context.Context) (string, error) {
+	dumpVersion, err := InspectPostgresDump(ctx)
 	if err != nil {
 		return "", err
 	}
-	major := strings.SplitN(version, ".", 2)[0]
+	restoreVersion, err := InspectPostgresRestore(ctx)
+	if err != nil {
+		return "", err
+	}
+	if postgresToolMajor(dumpVersion) != postgresToolMajor(restoreVersion) {
+		return "", operation.Fail(operation.UnsupportedTarget, "pg_dump and pg_restore major versions must match")
+	}
+	return dumpVersion, nil
+}
+
+func checkPostgresToolMajor(ctx context.Context, db *sql.DB, version, tool string) error {
 	var serverVersion int
 	if err := db.QueryRowContext(ctx, "SELECT current_setting('server_version_num')::integer").Scan(&serverVersion); err != nil {
-		return "", operation.Fail(operation.NeedsAction, "cannot inspect PostgreSQL server version")
+		return operation.Fail(operation.NeedsAction, "cannot inspect PostgreSQL server version")
 	}
-	if strconv.Itoa(serverVersion/10000) != major {
-		return "", operation.Fail(operation.UnsupportedTarget, "PostgreSQL server and dump/restore tools must use the same major version")
+	serverMajor := strconv.Itoa(serverVersion / 10000)
+	if serverVersion < 100000 {
+		serverMajor += "." + strconv.Itoa(serverVersion/100%100)
+	}
+	if serverMajor != postgresToolMajor(version) {
+		return operation.Fail(operation.UnsupportedTarget, "PostgreSQL server and "+tool+" must use the same major version")
+	}
+	return nil
+}
+
+func checkPostgresMajor(ctx context.Context, db *sql.DB) (string, error) {
+	version, err := InspectPostgresDump(ctx)
+	if err != nil {
+		return "", err
+	}
+	if err := checkPostgresToolMajor(ctx, db, version, "pg_dump"); err != nil {
+		return "", err
 	}
 	return version, nil
 }
@@ -405,7 +443,11 @@ func RestorePostgres(ctx context.Context, cfg *config.ServerConfig, path string)
 	if err := EmptyPostgres(ctx, db); err != nil {
 		return err
 	}
-	if _, err := checkPostgresMajor(ctx, db); err != nil {
+	restoreVersion, err := InspectPostgresRestore(ctx)
+	if err != nil {
+		return err
+	}
+	if err := checkPostgresToolMajor(ctx, db, restoreVersion, "pg_restore"); err != nil {
 		return err
 	}
 	tool, err := postgresTool("pg_restore")
