@@ -296,6 +296,8 @@ func newOperationFixture(t *testing.T) operationFixture {
 		root: root,
 		plan: &Plan{
 			Version:           Version,
+			Strategy:          Clone,
+			DatabaseBackup:    BackupAuto,
 			ID:                id,
 			Kind:              "upgrade",
 			Route:             "upgrade-v015-auth1",
