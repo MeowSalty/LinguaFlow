@@ -12,6 +12,7 @@ import {
 } from './authentication-b5-user-regression.mjs'
 import { recoverB5LocalLogin } from './authentication-b5-recovery.mjs'
 import { verifyB5ProductVisuals } from './authentication-b5-visual.mjs'
+import { assertExternalAuthMemory } from './external-auth-memory.mjs'
 
 const chromiumPath =
   process.env.LINGUAFLOW_TEST_CHROMIUM ||
@@ -219,13 +220,34 @@ async function expectAPI(page, app, pathname, options) {
 async function login(page, app, username, password) {
   await page.goto(`${app.origin}/login`)
   await expect(page.getByRole('button', { name: /登录/u }).first()).toBeVisible({ timeout: 30_000 })
-  await page.locator('input[autocomplete="username"]').fill(username)
-  await page.locator('input[autocomplete="current-password"]').fill(password)
-  await page
-    .getByRole('button', { name: /登录/u })
-    .first()
-    .click()
-  await expect(page).toHaveURL(`${app.origin}/`, { timeout: 30_000 })
+  const loginResponses = []
+  const loginRequests = []
+  const onRequest = (request) => {
+    if (new URL(request.url()).pathname.endsWith('/auth/login'))
+      loginRequests.push(request.method())
+  }
+  const onResponse = (response) => {
+    if (new URL(response.url()).pathname.endsWith('/auth/login'))
+      loginResponses.push(response.status())
+  }
+  page.on('request', onRequest)
+  page.on('response', onResponse)
+  try {
+    await page.locator('input[autocomplete="username"]').fill(username)
+    await page.locator('input[autocomplete="current-password"]').fill(password)
+    await page
+      .getByRole('button', { name: /登录/u })
+      .first()
+      .click()
+    await expect(page).toHaveURL(`${app.origin}/`, { timeout: 30_000 })
+  } catch {
+    throw new Error(
+      `Product password login did not reach home: route=${new URL(page.url()).pathname}; requests=${loginRequests.join(',') || 'none'}; statuses=${loginResponses.join(',') || 'none'}`,
+    )
+  } finally {
+    page.off('request', onRequest)
+    page.off('response', onResponse)
+  }
 }
 
 async function clickTestId(page, id, timeout = 25_000) {
@@ -638,6 +660,7 @@ async function completeExternalSignup(page, app, kind, provider, identity, optio
   assert.equal(exchanged.status(), 200, 'The external ticket exchange failed')
   const snapshot = await exchanged.json()
   assert.equal(snapshot.kind, 'signup_confirmation')
+  await assertExternalAuthMemory(page, [snapshot.confirmation_token])
   assert.equal(
     snapshot.signup?.password_requirement,
     options.passwordRequirement,
@@ -697,12 +720,14 @@ async function completeExternalSignup(page, app, kind, provider, identity, optio
   const methods = await expectAPI(page, app, '/users/me/login-methods')
   assert.equal(methods.password.is_set, includesInitialPassword)
   assert.ok(methods.bindings.some((binding) => binding.display_name === options.displayName))
+  const storageEvidence = await assertExternalAuthMemory(page, [snapshot.confirmation_token])
   return {
     id: account.id,
     username: account.username,
     password_set: methods.password.is_set,
     external_binding: options.displayName,
     complete_property_names: event.property_names,
+    external_auth_storage: storageEvidence,
     empty_selected_password_blocked: emptyPasswordBlocked,
   }
 }
