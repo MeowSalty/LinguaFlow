@@ -1,11 +1,52 @@
 package snapshot
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func init() {
+	if os.Getenv("LINGUAFLOW_TEST_POSTGRES_TOOL_HELPER") != "1" {
+		return
+	}
+	name := strings.TrimSuffix(strings.ToLower(filepath.Base(os.Args[0])), ".exe")
+	version := os.Getenv("LINGUAFLOW_TEST_" + strings.ToUpper(strings.ReplaceAll(name, "pg_", "PG_")) + "_VERSION")
+	if name != "pg_dump" && name != "pg_restore" || version == "" {
+		os.Exit(2)
+	}
+	_, _ = os.Stdout.WriteString(name + " (PostgreSQL) " + version + "\n")
+	os.Exit(0)
+}
+
+func installPostgresToolFixture(t *testing.T, names ...string) {
+	t.Helper()
+	root := t.TempDir()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal("locate PostgreSQL tool test helper")
+	}
+	contents, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatal("read PostgreSQL tool test helper")
+	}
+	for _, name := range names {
+		filename := name
+		if runtime.GOOS == "windows" {
+			filename += ".exe"
+		}
+		if err := os.WriteFile(filepath.Join(root, filename), contents, 0o700); err != nil {
+			t.Fatal("install simulated PostgreSQL tool")
+		}
+	}
+	t.Setenv("LINGUAFLOW_MIGRATION_POSTGRES_BIN", root)
+	t.Setenv("LINGUAFLOW_TEST_POSTGRES_TOOL_HELPER", "1")
+	t.Setenv("LINGUAFLOW_TEST_PG_DUMP_VERSION", "16.4")
+	t.Setenv("LINGUAFLOW_TEST_PG_RESTORE_VERSION", "16.4")
+}
 
 func TestParsePostgresToolVersionKeepsCompleteVersion(t *testing.T) {
 	for _, test := range []struct {
@@ -22,6 +63,55 @@ func TestParsePostgresToolVersionKeepsCompleteVersion(t *testing.T) {
 	}
 	if _, ok := parsePostgresToolVersion("pg_dump (PostgreSQL) development"); ok {
 		t.Fatal("accepted an unversioned PostgreSQL tool")
+	}
+}
+
+func TestPostgresToolMajorUsesPre10MajorMinor(t *testing.T) {
+	for version, want := range map[string]string{"9.6.24": "9.6", "10.23": "10", "16.4": "16"} {
+		if got := postgresToolMajor(version); got != want {
+			t.Fatalf("postgresToolMajor(%q)=%q, want %q", version, got, want)
+		}
+	}
+}
+
+func TestInspectPostgresDumpDoesNotRequireRestoreTool(t *testing.T) {
+	installPostgresToolFixture(t, "pg_dump")
+	version, err := InspectPostgresDump(context.Background())
+	if err != nil || version != "16.4" {
+		t.Fatalf("InspectPostgresDump()=(%q,%v), want 16.4,nil", version, err)
+	}
+	if _, err := InspectPostgresTools(context.Background()); err == nil || !strings.Contains(err.Error(), "pg_restore") {
+		t.Fatalf("InspectPostgresTools() error=%v, want missing pg_restore", err)
+	}
+}
+
+func TestInspectPostgresRestoreDoesNotRequireDumpTool(t *testing.T) {
+	installPostgresToolFixture(t, "pg_restore")
+	version, err := InspectPostgresRestore(context.Background())
+	if err != nil || version != "16.4" {
+		t.Fatalf("InspectPostgresRestore()=(%q,%v), want 16.4,nil", version, err)
+	}
+	if _, err := InspectPostgresDump(context.Background()); err == nil || !strings.Contains(err.Error(), "pg_dump") {
+		t.Fatalf("InspectPostgresDump() error=%v, want missing pg_dump", err)
+	}
+}
+
+func TestInspectPostgresToolsAllowsPatchVersionDifference(t *testing.T) {
+	installPostgresToolFixture(t, "pg_dump", "pg_restore")
+	t.Setenv("LINGUAFLOW_TEST_PG_DUMP_VERSION", "16.4")
+	t.Setenv("LINGUAFLOW_TEST_PG_RESTORE_VERSION", "16.9")
+	version, err := InspectPostgresTools(context.Background())
+	if err != nil || version != "16.4" {
+		t.Fatalf("InspectPostgresTools()=(%q,%v), want dump version 16.4,nil", version, err)
+	}
+}
+
+func TestInspectPostgresToolsRejectsDifferentMajorVersions(t *testing.T) {
+	installPostgresToolFixture(t, "pg_dump", "pg_restore")
+	t.Setenv("LINGUAFLOW_TEST_PG_DUMP_VERSION", "16.4")
+	t.Setenv("LINGUAFLOW_TEST_PG_RESTORE_VERSION", "17.1")
+	if _, err := InspectPostgresTools(context.Background()); err == nil || !strings.Contains(err.Error(), "major versions") {
+		t.Fatalf("InspectPostgresTools() error=%v, want major-version mismatch", err)
 	}
 }
 
