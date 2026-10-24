@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { authCapabilities } from './fixtures'
 
 type StartupState = 'first-visit' | 'signed-out' | 'signed-in' | 'local'
 type ApiRequest = { path: string; authorization: string | undefined }
@@ -84,6 +85,8 @@ async function mockStartup(page: Page, state: StartupState) {
         return respond({ mode: state === 'local' ? 'local' : 'server' })
       case '/users/me':
         return respond(user(authorization === 'Bearer access-2' ? 2 : 1))
+      case '/auth/capabilities':
+        return respond({ ...authCapabilities, mode: state === 'local' ? 'local' : 'server' })
       case '/auth/login':
         return respond(session(2))
       case '/auth/logout':

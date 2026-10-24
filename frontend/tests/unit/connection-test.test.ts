@@ -152,13 +152,16 @@ beforeEach(() => {
   vi.stubGlobal('crypto', webcrypto)
   vi.stubGlobal('BroadcastChannel', FakeChannel)
   vi.stubGlobal('location', { origin: 'https://frontend.example' })
-  vi.stubGlobal('window', {
-    open: (url: string, name: string, features?: string) => {
-      opened.push({ url, name, features })
-      return popup
-    },
-    close: vi.fn(),
-  })
+  vi.stubGlobal(
+    'window',
+    Object.assign(new EventTarget(), {
+      open: (url: string, name: string, features?: string) => {
+        opened.push({ url, name, features })
+        return popup
+      },
+      close: vi.fn(),
+    }),
+  )
   changeSessionContext('https://service.example/api/v1', 42, true)
 })
 
@@ -180,6 +183,13 @@ describe('administrator connection test relay', () => {
 
   it('opens a unique blank popup, removes opener, and starts with challenge plus memory changes', async () => {
     mocks.post.mockResolvedValue(startResponse())
+    const inheritedKeys = [
+      'linguaflow.external-flow.v1',
+      'linguaflow.external-flow.v2',
+      'linguaflow.external-flow.v2.probe',
+      'linguaflow.external-result.v1',
+    ]
+    for (const key of inheritedKeys) popupStorage.set(key, 'previous-external-auth')
     const changes = { oidc: { issuer: 'https://candidate.example' }, client_secret: 'secret' }
     const handle = begin(record(), changes)
     expect(opened[0]).toMatchObject({
@@ -187,6 +197,7 @@ describe('administrator connection test relay', () => {
       name: expect.stringMatching(/^linguaflow-auth-test-/),
     })
     expect(popup.opener).toBeNull()
+    for (const key of inheritedKeys) expect(popupStorage.has(key)).toBe(false)
     await waitForStart()
     const [path, options] = mocks.post.mock.calls[0]!
     expect(path).toBe('/admin/auth-connections/{connectionId}/test')
@@ -497,6 +508,24 @@ describe('administrator connection test relay', () => {
       transactionId: 'tx-test',
       ticket: 'ticket-one',
     })
+    const channel = channels[0]!
+    channel.onmessage?.({
+      origin: 'https://wrong.example',
+      data: { type: 'complete', transactionId: 'tx-test' },
+    } as MessageEvent)
+    channel.onmessage?.({
+      origin: location.origin,
+      data: { type: 'complete', transactionId: 'wrong' },
+    } as MessageEvent)
+    expect(channel.close).not.toHaveBeenCalled()
+    window.dispatchEvent(new Event('pagehide'))
+    expect(channel.close).toHaveBeenCalledOnce()
+    channel.onmessage?.({
+      origin: location.origin,
+      data: { type: 'complete', transactionId: 'tx-test' },
+    } as MessageEvent)
+    expect(window.close).not.toHaveBeenCalled()
+    expect(relayConnectionTestTicket('ticket-one')).toBe(false)
   })
 
   it('bounds evidence fields to the live authenticated memory context', async () => {

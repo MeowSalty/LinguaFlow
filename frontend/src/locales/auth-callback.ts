@@ -1,0 +1,22 @@
+/** Shared by the HTML status panel and the full application's authentication messages. */
+export const authCallbackMessages = {
+  callbackTitle: '完成认证',
+  callbackLoading: '正在确认认证结果…',
+  callbackVerified: '认证已验证，正在加载后续界面…',
+  callbackRelay: '正在交接认证结果…',
+  callbackRelayed: '认证结果已交接，可关闭此窗口。',
+  callbackRelayFailed: '未能确认原窗口已接收结果，请返回原窗口重新测试。',
+  callbackSlow: '连接较慢，请保持此页面打开。',
+  callbackUnavailable: '无法加载认证页面，请重新开始。',
+  callbackInterfaceFailed: '认证已验证，但后续界面加载失败。请返回登录或账号安全页面重新发起操作。',
+  callbackTimeout: '连接超时，认证结果未获确认，请重新发起。',
+  callbackNoScript: '请启用 JavaScript 后重新发起认证。',
+  callbackFailedTitle: '认证未完成',
+  closeWindow: '关闭窗口',
+  failed: '认证未完成，请重新发起。',
+  flowInvalid: '认证流程已失效或与当前服务、账号不匹配，请重新开始。',
+  restart: '返回登录',
+  returnSecurity: '返回账号安全',
+  resultUnknown: '结果未获确认，请重新登录；若在绑定账号，可返回安全设置检查登录方式。',
+  flowExpired: '确认已过期，请重新发起认证。',
+}

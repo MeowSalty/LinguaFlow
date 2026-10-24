@@ -1,5 +1,6 @@
 import { getDefaultTokenStorage } from '@/api/token-storage'
 import { createI18n } from 'vue-i18n'
+import { setRuntimeTranslator } from './i18n-runtime'
 
 import {
   DEFAULT_LOCALE,
@@ -64,3 +65,5 @@ export const setI18nLocale = (locale: SupportedLocale): void => {
 export const getInitialLocale = (): SupportedLocale => readStoredLocale()
 
 export const t = i18n.global.t
+
+setRuntimeTranslator((key, named) => (named ? t(key, named) : t(key)))

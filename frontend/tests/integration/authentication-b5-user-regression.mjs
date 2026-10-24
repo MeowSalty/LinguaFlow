@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { expect } from '@playwright/test'
+import { assertExternalAuthMemory } from './external-auth-memory.mjs'
 
 /** Auth/session keys are disposable; API origin config must survive a reset. */
 const PRESERVED_AUTH_KEYS = [
@@ -157,13 +158,14 @@ async function bindAlternativeWithCurrentSession({
     })
   }
   // Provider cookies could silently authenticate the primary subject instead
-  // of the dedicated secondary identity. The app's external flow lives in
-  // sessionStorage, so clearing cookies preserves the stored proof handshake.
+  // of the dedicated secondary identity. Clearing cookies preserves the app's
+  // in-memory proof while the current document remains open.
   await page.context().clearCookies()
   await page.getByRole('button', { name: '继续', exact: true }).click()
   await providerLogin(page, app, secondaryProvider, secondaryIdentity, { requirePrompt: true })
   const confirm = page.getByRole('button', { name: '确认绑定', exact: true })
   await expect(confirm).toBeVisible({ timeout: 30_000 })
+  await assertExternalAuthMemory(page)
   await confirm.click()
   await expect(page).toHaveURL(/\/settings\/security(?:$|\?)/u, { timeout: 30_000 })
   await page.unroute(completionRoute, observeCompletion)
@@ -257,6 +259,7 @@ export async function freshOidcProofAndMaintenance({
     await expect(page.getByText('身份已验证，请确认本次操作。', { exact: true })).toBeVisible({
       timeout: 30_000,
     })
+    const storageEvidence = await assertExternalAuthMemory(page)
     const oldAccess = await token(page)
     await page.getByRole('button', { name: '确认解绑', exact: true }).click()
     await expect(page).toHaveURL(/\/login(?:$|\?)/u, { timeout: 30_000 })
@@ -274,6 +277,7 @@ export async function freshOidcProofAndMaintenance({
       old_access_token_rejected: true,
       password_controls_hidden: true,
       exchange_property_names: exchangePropertyNames,
+      external_auth_storage: storageEvidence,
     }
   } finally {
     await context.close().catch(() => {})

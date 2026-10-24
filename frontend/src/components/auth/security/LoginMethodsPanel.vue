@@ -15,6 +15,7 @@ import {
   startExternalLink,
   startExternalReauthentication,
   takeExternalProof,
+  clearExternalProof,
 } from '@/auth/external-browser'
 import { useAuthStore } from '@/stores/auth'
 import { extractErrorMessage } from '@/utils/errors'
@@ -48,7 +49,10 @@ const password = ref('')
 const newPassword = ref('')
 const confirmation = ref('')
 let revision = 0
+let actionRevision = 0
 let disposed = false
+let returnedProof: LoginProof | null = null
+let proofDeadline: ReturnType<typeof setTimeout> | undefined
 const blocked = computed(() => busy.value || !!props.disabled)
 const passwordMaintenance = computed(() => !!methods.value?.password.can_login)
 const candidates = computed(() =>
@@ -103,13 +107,43 @@ watch(
   },
   { flush: 'sync' },
 )
+function dropProof(): void {
+  clearTimeout(proofDeadline)
+  proofDeadline = undefined
+  if (proof.value) proof.value.proof = ''
+  proof.value = null
+}
+function dropReturnedProof(): void {
+  clearTimeout(proofDeadline)
+  proofDeadline = undefined
+  if (returnedProof) returnedProof.proof = ''
+  returnedProof = null
+}
 function clearAction(): void {
+  actionRevision++
+  dropProof()
+  dropReturnedProof()
+  clearExternalProof()
   pending.value = null
   proof.value = null
   password.value = ''
   newPassword.value = ''
   confirmation.value = ''
   actionError.value = ''
+}
+function useProof(value: LoginProof): void {
+  dropProof()
+  proof.value = value
+  proofDeadline = setTimeout(
+    () => {
+      if (proof.value !== value) return
+      dropProof()
+      newPassword.value = ''
+      confirmation.value = ''
+      actionError.value = t('accountAuth.security.errors.proofExpired')
+    },
+    Math.min(2_147_483_647, Math.max(0, Date.parse(value.expiresAt) - Date.now())),
+  )
 }
 function reset(): void {
   revision++
@@ -150,19 +184,30 @@ async function run(operation: () => Promise<void>): Promise<void> {
   if (blocked.value || !pending.value) return
   const snapshot = captureSession()
   const request = revision
+  const actionRequest = actionRevision
   busy.value = true
   actionError.value = ''
   try {
     await operation()
   } catch (cause) {
-    if (!disposed && request === revision && isSessionCurrent(snapshot)) {
-      proof.value = null
+    if (
+      !disposed &&
+      request === revision &&
+      actionRequest === actionRevision &&
+      isSessionCurrent(snapshot)
+    ) {
+      dropProof()
       actionError.value = isProofRejection(cause)
         ? t('accountAuth.security.errors.proofExpired')
         : extractErrorMessage(cause, t('accountAuth.security.reauth.failed'))
     }
   } finally {
-    if (!disposed && request === revision && isSessionCurrent(snapshot)) {
+    if (
+      !disposed &&
+      request === revision &&
+      actionRequest === actionRevision &&
+      isSessionCurrent(snapshot)
+    ) {
       password.value = ''
       busy.value = false
     }
@@ -176,18 +221,24 @@ async function verifyPassword(): Promise<void> {
     return
   }
   const snapshot = captureSession()
+  const request = actionRevision
   await run(async () => {
     const result = await reauthenticateWithPassword({
       password: password.value,
       action: operation.action,
       targetId: operation.targetId,
     })
-    if (!disposed && isSessionCurrent(snapshot) && pending.value === operation)
-      proof.value = {
+    if (
+      !disposed &&
+      request === actionRevision &&
+      isSessionCurrent(snapshot) &&
+      pending.value === operation
+    )
+      useProof({
         ...operation,
         proof: result.reauthentication_proof,
         expiresAt: result.expires_at,
-      }
+      })
   })
 }
 async function verifyExternal(bindingId: number | null): Promise<void> {
@@ -207,7 +258,7 @@ async function execute(): Promise<void> {
   const operation = pending.value
   if (blocked.value || !operation || !methods.value) return
   if (!actionAllowed(methods.value, operation.action, operation.targetId)) {
-    proof.value = null
+    dropProof()
     actionError.value = t('accountAuth.security.errors.conflict')
     return
   }
@@ -216,7 +267,7 @@ async function execute(): Promise<void> {
     !proofMatches(proof.value, operation.action, operation.targetId) ||
     !proofIsFresh(proof.value)
   ) {
-    proof.value = null
+    dropProof()
     actionError.value = t('accountAuth.security.errors.proofExpired')
     return
   }
@@ -232,7 +283,7 @@ async function execute(): Promise<void> {
   const snapshot = captureSession()
   const token = proof.value!.proof
   const nextPassword = newPassword.value
-  proof.value = null
+  dropProof()
   newPassword.value = ''
   confirmation.value = ''
   await run(async () => {
@@ -253,7 +304,7 @@ async function execute(): Promise<void> {
         break
       }
     }
-    if (!isSessionCurrent(snapshot)) return
+    if (disposed || pending.value !== operation || !isSessionCurrent(snapshot)) return
     message.success(t('accountAuth.security.messages.removed'))
     auth.clearSession()
     await router.replace('/login')
@@ -268,15 +319,33 @@ watch(
   { flush: 'sync' },
 )
 onMounted(async () => {
-  const returned = takeExternalProof()
+  returnedProof = takeExternalProof()
+  if (returnedProof)
+    proofDeadline = setTimeout(
+      dropReturnedProof,
+      Math.min(2_147_483_647, Math.max(0, Date.parse(returnedProof.expiresAt) - Date.now())),
+    )
   const snapshot = captureSession()
-  if (!(await load()) || disposed || !isSessionCurrent(snapshot) || !returned || !methods.value)
+  if (
+    !(await load()) ||
+    disposed ||
+    !isSessionCurrent(snapshot) ||
+    !returnedProof ||
+    !methods.value
+  ) {
+    dropReturnedProof()
     return
+  }
+  const returned = returnedProof
+  returnedProof = null
+  clearTimeout(proofDeadline)
+  proofDeadline = undefined
   if (
     !actionAllowed(methods.value, returned.action, returned.targetId) ||
     !proofIsFresh(returned) ||
     !returned.proof
   ) {
+    returned.proof = ''
     error.value = t('accountAuth.security.errors.proofMismatch')
     return
   }
@@ -287,10 +356,16 @@ onMounted(async () => {
       : methods.value.bindings.find((item) => item.binding_id === bindingIdOf(returned.targetId))
           ?.display_name
   begin(returned.action, returned.targetId, label)
-  if (pending.value) proof.value = returned
+  if (pending.value) useProof(returned)
+  else returned.proof = ''
 })
+function leaveDocument(): void {
+  reset()
+}
+window.addEventListener('pagehide', leaveDocument)
 onBeforeUnmount(() => {
   disposed = true
+  window.removeEventListener('pagehide', leaveDocument)
   reset()
 })
 </script>

@@ -1,4 +1,7 @@
+import { authCallbackMessages } from './auth-callback'
+
 export const authenticationMessages = {
+  ...authCallbackMessages,
   capabilitiesFailed: '暂时无法获取登录方式，请重试。',
   retry: '重试',
   noLogin: '此实例当前没有可用的登录方式，请联系管理员。',
@@ -22,12 +25,8 @@ export const authenticationMessages = {
   externalLogin: '使用 {name} 继续',
   externalDivider: '或选择其他登录方式',
   starting: '正在打开认证服务…',
-  failed: '认证未完成，请重新发起。',
-  flowInvalid: '认证流程已失效或与当前服务、账号不匹配，请重新开始。',
   storageUnavailable: '此浏览器无法保存认证流程，请允许当前站点使用会话存储后重试。',
   secureContextRequired: '外部认证需要通过 HTTPS 或本机地址打开此页面。',
-  callbackTitle: '完成认证',
-  callbackLoading: '正在确认认证结果…',
   signupTitle: '创建你的账号',
   signupHint:
     '当前外部身份尚未关联账号。若已有 LinguaFlow 账号，请取消并登录原账号，再从安全设置绑定。',
@@ -39,13 +38,9 @@ export const authenticationMessages = {
   confirmSignup: '创建账号并登录',
   confirmLink: '确认绑定',
   cancel: '取消并返回',
-  restart: '返回登录',
-  returnSecurity: '返回账号安全',
   returnAdmin: '返回认证管理',
   linked: '登录方式已绑定',
   cancelFailed: '取消未获确认，此流程会自动到期。',
-  resultUnknown: '结果未获确认，请重新登录；若在绑定账号，可返回安全设置检查登录方式。',
-  flowExpired: '确认已过期，请重新发起认证。',
   adminTitle: '认证管理',
   adminDescription: '管理登录方式、准入规则与配置发布。',
 }

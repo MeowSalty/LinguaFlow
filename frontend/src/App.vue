@@ -2,13 +2,13 @@
 import { darkTheme, dateZhCN, zhCN, type GlobalThemeOverrides } from 'naive-ui'
 
 import BootstrapNoticeHost from '@/components/BootstrapNoticeHost.vue'
-import AppLayout from '@/layouts/AppLayout.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useThemeStore } from '@/stores/theme'
 import { sessionGeneration } from '@/api/session-context'
 import { readLfTokens, type LfTokenName, type LfTokenState } from '@/utils/themeTokens'
 
 const route = useRoute()
+const AppLayout = defineAsyncComponent(() => import('@/layouts/AppLayout.vue'))
 const locale = useLocaleStore()
 const theme = useThemeStore()
 const isBlank = computed(() => route.meta.layout === 'blank')
