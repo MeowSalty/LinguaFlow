@@ -17,7 +17,7 @@ import {
   connectionTestCandidate,
   stableJson,
 } from '@/components/admin/authentication/auth-connection-model'
-import { createBrowserChallenge, EXTERNAL_FLOW_KEY } from './external-browser'
+import { clearExternalBrowserStorage, createBrowserChallenge } from './external-browser'
 
 export const CONNECTION_TEST_RELAY_KEY = 'linguaflow.connection-test-relay.v1'
 interface RelayMarker {
@@ -71,8 +71,7 @@ export function startConnectionTest(
   try {
     channel = new BroadcastChannel(channelName)
     popup.opener = null
-    popup.sessionStorage.removeItem(EXTERNAL_FLOW_KEY)
-    popup.sessionStorage.removeItem('linguaflow.external-result.v1')
+    clearExternalBrowserStorage(popup.sessionStorage)
   } catch {
     channel?.close()
     popup.close()

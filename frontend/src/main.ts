@@ -14,6 +14,18 @@ import { useThemeStore } from './stores/theme'
 import { installSessionIsolation } from './stores/sessionIsolation'
 import { installCrossTabSessionSync } from './auth/cross-tab-session'
 import { useServiceStore } from './stores/service'
+import {
+  activateExternalCallback,
+  installExternalAuthLifecycle,
+  prepareExternalCallback,
+} from './auth/external-browser'
+
+installExternalAuthLifecycle()
+prepareExternalCallback(
+  location.pathname === '/auth/complete'
+    ? (window as Window & { __linguaflowAuthTicket?: string }).__linguaflowAuthTicket
+    : undefined,
+)
 
 const router = createRouter({
   history: createWebHistory(),
@@ -33,6 +45,7 @@ useThemeStore().initTheme()
 
 installCrossTabSessionSync(() => useServiceStore().isLocal)
 await bootstrapApp()
+activateExternalCallback()
 
 app.use(router)
 installRouterGuards(router)

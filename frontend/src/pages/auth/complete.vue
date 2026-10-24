@@ -4,7 +4,7 @@ import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAuthCapabilities } from '@/composables/useAuthCapabilities'
-import { captureSession, isSessionCurrent, onSessionChange } from '@/api/session-context'
+import { captureSession, isSessionCurrent } from '@/api/session-context'
 import type { ApiSchemas } from '@/api/client-core'
 import {
   readExternalFlow,
@@ -12,7 +12,11 @@ import {
   completeExternalConfirmation,
   cancelExternalFlow,
   clearExternalFlow,
+  clearExternalProof,
+  onExternalAuthReset,
   saveExternalResult,
+  type ExternalConfirmation,
+  type ExternalExchangeResult,
   type ExternalFlow,
 } from '@/auth/external-browser'
 import { authenticationFailure } from '@/auth/errors'
@@ -32,7 +36,7 @@ const { capabilities, reload: reloadCapabilities } = useAuthCapabilities()
 const message = useMessage()
 const formRef = shallowRef<FormInst | null>(null)
 const flow = shallowRef<ExternalFlow | null>(null)
-const confirmation = shallowRef<ApiSchemas['ExternalConfirmationResponse'] | null>(null)
+const confirmation = shallowRef<ExternalConfirmation | null>(null)
 const loading = shallowRef(true)
 const testRelay = shallowRef(false)
 const busy = shallowRef(false)
@@ -68,11 +72,9 @@ const expired = computed(
       flow.value ? Date.parse(flow.value.expiresAt) : 0,
     ) <= now.value,
 )
-const returnTo = computed(() => (flow.value?.purpose === 'login' ? '/login' : '/settings/security'))
+const returnTo = computed(() => (auth.user ? '/settings/security' : '/login'))
 const returnLabel = computed(() =>
-  flow.value && flow.value.purpose !== 'login'
-    ? t('authentication.returnSecurity')
-    : t('authentication.restart'),
+  auth.user ? t('authentication.returnSecurity') : t('authentication.restart'),
 )
 const rules = computed<FormRules>(() => ({
   username: [
@@ -121,52 +123,84 @@ const rules = computed<FormRules>(() => ({
     : {}),
 }))
 let alive = true
+let revision = 0
+let proofTransferred = false
+function clearInputs(): void {
+  Object.assign(form, {
+    username: '',
+    display_name: '',
+    email: '',
+    wantsPassword: false,
+    password: '',
+    confirmPassword: '',
+  })
+}
+function resetFlow(reason: 'expired' | 'invalidated'): void {
+  revision++
+  confirmation.value = null
+  flow.value = null
+  canConfirm.value = false
+  busy.value = false
+  loading.value = false
+  clearInputs()
+  error.value = t(
+    reason === 'expired' ? 'authentication.flowExpired' : 'authentication.flowInvalid',
+  )
+}
 const interval = setInterval(() => {
   now.value = Date.now()
 }, 1000)
-const stop = onSessionChange(() => {
-  if (flow.value && !readExternalFlow()) {
-    confirmation.value = null
-    form.wantsPassword = false
-    form.email = ''
-    form.password = ''
-    form.confirmPassword = ''
-    error.value = t('authentication.flowInvalid')
-  }
-})
+const stop = onExternalAuthReset(resetFlow)
 onBeforeUnmount(() => {
   alive = false
+  revision++
   stop()
   clearInterval(interval)
-  form.wantsPassword = false
-  form.email = ''
-  form.password = ''
-  form.confirmPassword = ''
+  confirmation.value = null
+  flow.value = null
+  clearInputs()
+  clearExternalFlow()
+  if (!proofTransferred) clearExternalProof()
 })
 
-async function finish(
-  result: ApiSchemas['ExternalExchangeResponse'] | ApiSchemas['ExternalCompleteResponse'],
-) {
+async function finish(result: ExternalExchangeResult | ApiSchemas['ExternalCompleteResponse']) {
   if (!flow.value) throw new Error(t('authentication.flowInvalid'))
   const destination = safeReturnPath(flow.value.returnTo)
   if (result.kind === 'session') {
     const context = captureSession()
+    clearInputs()
+    confirmation.value = null
     flow.value = null
     clearExternalFlow()
     auth.acceptExternalSession(result.session, context)
     await router.replace(destination)
   } else if (result.kind === 'linked') {
+    clearInputs()
+    confirmation.value = null
     flow.value = null
     clearExternalFlow()
     message.success(t('authentication.linked'))
     await router.replace('/settings/security')
   } else if (result.kind === 'reauthentication_proof') {
-    flow.value = null
     saveExternalResult(result)
-    await router.replace('/settings/security')
+    flow.value = null
+    proofTransferred = true
+    try {
+      const failure = await router.replace('/settings/security')
+      if (failure) {
+        proofTransferred = false
+        clearExternalProof()
+        throw new Error(t('authentication.flowInvalid'))
+      }
+    } catch (cause) {
+      proofTransferred = false
+      clearExternalProof()
+      throw cause
+    }
   } else if (result.kind === 'test_result') {
     throw new Error(t('authentication.flowInvalid'))
   } else {
+    flow.value = readExternalFlow()
     confirmation.value = result
     form.wantsPassword = false
     form.email = result.email ?? ''
@@ -178,6 +212,7 @@ async function finish(
 }
 onMounted(async () => {
   const context = captureSession()
+  const request = revision
   const ticketWindow = window as Window & { __linguaflowAuthTicket?: string }
   const ticket = ticketWindow.__linguaflowAuthTicket
   delete ticketWindow.__linguaflowAuthTicket
@@ -189,18 +224,19 @@ onMounted(async () => {
   flow.value = readExternalFlow()
   try {
     const result = await exchangeExternalTicket(ticket)
-    if (alive && isSessionCurrent(context)) await finish(result)
+    if (alive && request === revision && isSessionCurrent(context)) await finish(result)
   } catch (cause) {
-    if (alive && isSessionCurrent(context))
+    if (alive && request === revision && isSessionCurrent(context))
       error.value = extractErrorMessage(cause, t('authentication.failed'))
   } finally {
-    if (alive) loading.value = false
+    if (alive && request === revision) loading.value = false
   }
 })
 async function confirm() {
   if (busy.value || expired.value || !canConfirm.value || confirmationInvalid.value) return
   busy.value = true
   const context = captureSession()
+  const request = revision
   try {
     if (signup.value) {
       try {
@@ -209,7 +245,7 @@ async function confirm() {
         return
       }
     }
-    if (!isSessionCurrent(context) || !alive) return
+    if (!isSessionCurrent(context) || !alive || request !== revision) return
     error.value = ''
     const email = normalizeEmail(form.email)
     const result = await completeExternalConfirmation(
@@ -222,14 +258,14 @@ async function confirm() {
           }
         : {},
     )
-    if (alive && isSessionCurrent(context)) await finish(result)
+    if (alive && request === revision && isSessionCurrent(context)) await finish(result)
   } catch (cause) {
-    if (alive && isSessionCurrent(context)) {
+    if (alive && request === revision && isSessionCurrent(context)) {
       const failure = authenticationFailure(cause, 'external-complete')
       canConfirm.value = readExternalFlow()?.stage === 'confirming'
       if (failure === 'rule-denied' || failure === 'forbidden') {
         await reloadCapabilities()
-        if (!alive || !isSessionCurrent(context)) return
+        if (!alive || request !== revision || !isSessionCurrent(context)) return
       }
       const currentConnection = capabilities.value?.connections.find(
         (entry) => entry.connection_id === confirmation.value?.profile.connection_id,
@@ -240,9 +276,11 @@ async function confirm() {
           : confirmationError(cause, failure)
     }
   } finally {
-    busy.value = false
-    form.password = ''
-    form.confirmPassword = ''
+    if (alive && request === revision) {
+      busy.value = false
+      form.password = ''
+      form.confirmPassword = ''
+    }
   }
 }
 

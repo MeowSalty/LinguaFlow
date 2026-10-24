@@ -180,6 +180,13 @@ describe('administrator connection test relay', () => {
 
   it('opens a unique blank popup, removes opener, and starts with challenge plus memory changes', async () => {
     mocks.post.mockResolvedValue(startResponse())
+    const inheritedKeys = [
+      'linguaflow.external-flow.v1',
+      'linguaflow.external-flow.v2',
+      'linguaflow.external-flow.v2.probe',
+      'linguaflow.external-result.v1',
+    ]
+    for (const key of inheritedKeys) popupStorage.set(key, 'previous-external-auth')
     const changes = { oidc: { issuer: 'https://candidate.example' }, client_secret: 'secret' }
     const handle = begin(record(), changes)
     expect(opened[0]).toMatchObject({
@@ -187,6 +194,7 @@ describe('administrator connection test relay', () => {
       name: expect.stringMatching(/^linguaflow-auth-test-/),
     })
     expect(popup.opener).toBeNull()
+    for (const key of inheritedKeys) expect(popupStorage.has(key)).toBe(false)
     await waitForStart()
     const [path, options] = mocks.post.mock.calls[0]!
     expect(path).toBe('/admin/auth-connections/{connectionId}/test')
