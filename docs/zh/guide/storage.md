@@ -150,7 +150,7 @@
 
 ## 旧数据迁移（独立工具）
 
-从旧版本升级、把 `data/jobs` 下的旧版文件搬入新对象存储体系时，使用独立命令行工具 `linguaflow-migrate storage`：支持只读探测、计划冻结、演练、正式导入与断点续跑。用法见 [CLI 命令参考 · linguaflow-migrate](/zh/guide/cli#linguaflow-migrate-命令)。
+从旧版本升级、把 `data/jobs` 下的旧版文件搬入新对象存储体系时，使用独立命令行工具 `linguaflow-migrate storage`：先 `plan` 只读清点并冻结导入计划，再 `apply` 正式导入；中断可续跑（`status` / `resume`）。用法见 [CLI 命令参考 · linguaflow-migrate](/zh/guide/cli#linguaflow-migrate-命令)。
 
 ::: warning 迁移必须离线执行
 导入写操作（`storage apply`）要求 `--offline`——先停止全部 LinguaFlow 服务进程再执行。迁移要求默认站点空间是 `local` 驱动——先迁到本地空间，再在界面上把项目迁往 S3。
