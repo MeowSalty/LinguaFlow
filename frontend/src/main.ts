@@ -15,17 +15,21 @@ import { installSessionIsolation } from './stores/sessionIsolation'
 import { installCrossTabSessionSync } from './auth/cross-tab-session'
 import { useServiceStore } from './stores/service'
 import {
+  assertCallbackPrepared,
+  finishCallbackStartup,
+  hasPreparedCallback,
+} from './auth/callback-startup'
+import { releaseCallbackShell } from './auth/callback-shell'
+import {
   activateExternalCallback,
   installExternalAuthLifecycle,
   prepareExternalCallback,
 } from './auth/external-browser'
 
+const callbackPrepared = hasPreparedCallback()
+assertCallbackPrepared()
 installExternalAuthLifecycle()
-prepareExternalCallback(
-  location.pathname === '/auth/complete'
-    ? (window as Window & { __linguaflowAuthTicket?: string }).__linguaflowAuthTicket
-    : undefined,
-)
+if (!callbackPrepared) prepareExternalCallback()
 
 const router = createRouter({
   history: createWebHistory(),
@@ -45,9 +49,17 @@ useThemeStore().initTheme()
 
 installCrossTabSessionSync(() => useServiceStore().isLocal)
 await bootstrapApp()
-activateExternalCallback()
+if (callbackPrepared) assertCallbackPrepared()
+else activateExternalCallback()
 
-app.use(router)
 installRouterGuards(router)
+app.use(router)
+await router.isReady()
+if (callbackPrepared) {
+  if (router.currentRoute.value.meta.layout !== 'blank') await import('./layouts/AppLayout.vue')
+  assertCallbackPrepared()
+}
 
 app.mount('#app')
+releaseCallbackShell()
+finishCallbackStartup()

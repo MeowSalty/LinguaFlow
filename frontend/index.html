@@ -1,21 +1,195 @@
-<!DOCTYPE html>
-<html lang="">
+<!doctype html>
+<html lang="zh-Hans">
   <head>
-    <meta charset="UTF-8">
-    <meta name="referrer" content="no-referrer">
+    <meta charset="UTF-8" />
+    <meta name="referrer" content="no-referrer" />
     <script>
-      if (location.pathname === '/auth/complete') {
+      if (location.pathname.replace(/\/$/, '') === '/auth/complete') {
+        document.documentElement.dataset.authCallback = ''
         const callbackUrl = new URL(location.href)
         window.__linguaflowAuthTicket = callbackUrl.searchParams.get('ticket') || undefined
-        history.replaceState(history.state, '', callbackUrl.pathname)
+        history.replaceState(history.state, '', '/auth/complete')
+        let theme = 'system'
+        try {
+          theme = localStorage.getItem('linguaflow.theme') || theme
+        } catch {}
+        const dark =
+          theme === 'dark' ||
+          (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
       }
     </script>
-    <link rel="icon" href="/favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LinguaFlow</title>
+    <style>
+      #auth-startup {
+        display: none;
+      }
+      html[data-auth-callback] body {
+        margin: 0;
+        background: #f5f7fa;
+        color: #17212e;
+      }
+      html[data-auth-callback][data-theme='dark'] body {
+        background: #11161e;
+        color: #e5eaf2;
+      }
+      html[data-auth-callback] #auth-startup {
+        display: grid;
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+        background: inherit;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+      }
+      #auth-startup .auth-card {
+        width: min(100%, 380px);
+        text-align: center;
+      }
+      #auth-startup .auth-brand {
+        margin: 0 0 28px;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      #auth-startup h1 {
+        margin: 20px 0 12px;
+        font-size: 23px;
+        font-weight: 600;
+      }
+      #auth-startup p {
+        line-height: 1.65;
+        font-size: 14px;
+      }
+      #auth-startup-message {
+        margin: 0;
+      }
+      #auth-startup-slow {
+        margin-top: 14px;
+        opacity: 0.65;
+      }
+      #auth-startup .auth-spinner {
+        display: inline-block;
+        width: 28px;
+        height: 28px;
+        border: 3px solid #dbe3ef;
+        border-top-color: #507ae6;
+        border-radius: 50%;
+        animation: auth-turn 1s linear infinite;
+      }
+      #auth-startup[data-state='failed'] .auth-spinner,
+      #auth-startup[data-state='complete'] .auth-spinner {
+        display: none;
+      }
+      #auth-startup-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 24px;
+      }
+      #auth-startup a,
+      #auth-startup button {
+        border: 1px solid #b8c7e2;
+        border-radius: 8px;
+        background: transparent;
+        padding: 9px 14px;
+        color: inherit;
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+        text-decoration: none;
+        line-height: 1.4;
+      }
+      #auth-startup a:hover,
+      #auth-startup button:hover {
+        background: #507ae614;
+      }
+      #auth-startup :focus-visible {
+        outline: 2px solid #507ae6;
+        outline-offset: 4px;
+      }
+      #auth-startup [hidden] {
+        display: none !important;
+      }
+      @keyframes auth-turn {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #auth-startup .auth-spinner {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
+    <section id="auth-startup" data-state="loading" aria-labelledby="auth-startup-title">
+      <div class="auth-card">
+        <div class="auth-brand">LinguaFlow</div>
+        <span class="auth-spinner" aria-hidden="true"></span>
+        <h1 id="auth-startup-title">%AUTH_CALLBACK_callbackTitle%</h1>
+        <div role="status" aria-live="polite" aria-atomic="true">
+          <p id="auth-startup-message">%AUTH_CALLBACK_callbackLoading%</p>
+          <p id="auth-startup-slow" hidden>%AUTH_CALLBACK_callbackSlow%</p>
+        </div>
+        <div id="auth-startup-actions" hidden>
+          <a href="/login">%AUTH_CALLBACK_restart%</a>
+          <a href="/settings/security">%AUTH_CALLBACK_returnSecurity%</a>
+          <button id="auth-startup-close" type="button">%AUTH_CALLBACK_closeWindow%</button>
+        </div>
+        <noscript><p>%AUTH_CALLBACK_callbackNoScript%</p></noscript>
+      </div>
+    </section>
     <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <script>
+      document.getElementById('auth-startup-close').addEventListener('click', () => window.close())
+      setTimeout(() => {
+        const panel = document.getElementById('auth-startup')
+        if (panel?.dataset.state === 'loading')
+          document.getElementById('auth-startup-slow').hidden = false
+      }, 10000)
+      window.addEventListener(
+        'error',
+        (event) => {
+          if (
+            !document.documentElement.hasAttribute('data-auth-callback') ||
+            !(event.target instanceof HTMLScriptElement) ||
+            event.target.type !== 'module'
+          )
+            return
+          delete window.__linguaflowAuthTicket
+          try {
+            for (const key of [
+              'linguaflow.external-flow.v2',
+              'linguaflow.external-flow.v1',
+              'linguaflow.external-result.v1',
+              'linguaflow.connection-test-relay.v1',
+            ])
+              sessionStorage.removeItem(key)
+          } catch {}
+          document.getElementById('auth-startup').dataset.state = 'failed'
+          document.getElementById('auth-startup-title').textContent =
+            '%AUTH_CALLBACK_callbackFailedTitle%'
+          document.getElementById('auth-startup-message').textContent =
+            '%AUTH_CALLBACK_callbackUnavailable%'
+          document.getElementById('auth-startup-slow').hidden = true
+          document.getElementById('auth-startup-actions').hidden = false
+        },
+        true,
+      )
+    </script>
+    <script type="module" src="/src/entry.ts" data-auth-entry></script>
   </body>
 </html>

@@ -6,12 +6,12 @@ import {
   isSessionCurrent,
   onSessionChange,
   type SessionSnapshot,
-} from '@/api/session-context'
+} from '@/api/session-core'
 import { clearAuthTokens, getAuthEpoch } from '@/api/token-storage'
 import { buildRequestFailureError } from '@/api/utils'
 import { isExternalConfirmation, isReauthenticationProof } from '@/api/auth-contract'
 import { canRetryExternalConfirmation } from '@/auth/errors'
-import { t } from '@/i18n'
+import { t } from '@/i18n-runtime'
 import { safeReturnPath } from './return-path'
 
 type Action = ApiSchemas['ReauthenticationRequest']['action']
@@ -222,6 +222,9 @@ function currentFlow(): RuntimeFlow | null {
 export function readExternalFlow(): ExternalFlow | null {
   const flow = currentFlow()
   if (!flow) return null
+  return flowMetadata(flow)
+}
+function flowMetadata(flow: ExternalFlow): ExternalFlow {
   return {
     baseUrl: flow.baseUrl,
     epoch: flow.epoch,
@@ -235,6 +238,10 @@ export function readExternalFlow(): ExternalFlow | null {
     returnTo: flow.returnTo,
     stage: flow.stage,
   }
+}
+/** Bootstrap can inspect the claimed identity without gaining access to its verifier. */
+export function readPreparedExternalCallback(): ExternalFlow | null {
+  return callbackCandidate ? flowMetadata(callbackCandidate) : null
 }
 /** Claim and remove the redirect record before bootstrap can restore an identity. */
 export function prepareExternalCallback(ticket?: string): void {
@@ -453,7 +460,11 @@ export async function startExternalReauthentication(
     return data
   })
 }
-export async function exchangeExternalTicket(ticket?: string): Promise<ExternalExchangeResult> {
+export async function exchangeExternalTicket(
+  ticket?: string,
+  signal?: AbortSignal,
+): Promise<ExternalExchangeResult> {
+  signal?.throwIfAborted()
   const flow = requireFlow()
   if (!ticket && flow.stage === 'confirming' && flow.confirmation)
     return confirmationSnapshot(flow.confirmation)
@@ -464,7 +475,9 @@ export async function exchangeExternalTicket(ticket?: string): Promise<ExternalE
   try {
     const { data, error, response } = await flowClient(flow).POST('/auth/external/exchange', {
       body: { ticket, verifier: flow.verifier },
+      signal,
     })
+    signal?.throwIfAborted()
     assertFlow(flow)
     if (!data) throw buildRequestFailureError(t('authentication.failed'), error, response)
     const allowed = {
