@@ -3,6 +3,7 @@ package v015
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -188,35 +189,21 @@ func VerifyOperation(ctx context.Context, directory string) (*operation.Report, 
 	if p.Kind != "upgrade" || p.Build != catalog.Build() || p.TargetSignature != catalog.TargetSignature() {
 		return nil, operation.Fail(operation.Incompatible, "use the exact upgrade build for this operation")
 	}
+	backup, err := loadMaterials(ctx, directory, p, j)
+	if err != nil {
+		return nil, err
+	}
 	resolved, source, err := OpenPlannedSource(ctx, p)
 	if err != nil {
 		return nil, err
 	}
 	defer source.Close()
-	backup, err := LoadBackupReceipt(ctx, j.BackupDirectory, p)
+	if err := verifyRouteProtection(ctx, source, resolved, p, backup); err != nil {
+		return nil, err
+	}
+	cfg, err := executionConfig(p, j, resolved.Config)
 	if err != nil {
 		return nil, err
-	}
-	if err := VerifyExternalBackup(ctx, source, resolved.Config, resolved.CredentialKeys, p, backup.Objects); err != nil {
-		return nil, err
-	}
-	var cfg config.ServerConfig
-	if p.Source.Driver == "sqlite" {
-		path := j.Staging
-		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
-			path = p.Target.DataDir
-		}
-		identity, err := operation.Identity(path)
-		if err != nil || identity != j.StagingIdentity {
-			return nil, operation.Fail(operation.BaselineChanged, "target directory identity changed")
-		}
-		cfg = config.ServerConfig{DataDir: path, Database: config.DatabaseConfig{Driver: "sqlite"}}
-		j.Staging = path
-	} else {
-		cfg, err = ResolveTarget(p, false)
-		if err != nil {
-			return nil, err
-		}
 	}
 	db, client, err := snapshot.Open(ctx, &cfg, true)
 	if err != nil {
@@ -226,14 +213,15 @@ func VerifyOperation(ctx context.Context, directory string) (*operation.Report, 
 	if _, state, err := operation.Steps(ctx, db, p); err != nil || state != "ready" {
 		return nil, operation.Fail(operation.NeedsAction, "target is not verified ready")
 	}
-	probe, err := Probe(ctx, db, p.Source.Driver)
+	result, err := operation.ResultDigest(ctx, db, p)
 	if err != nil {
 		return nil, err
 	}
-	if j.TargetFingerprint != "" && probe.Fingerprint != j.TargetFingerprint {
+	actual, err := BusinessFingerprint(ctx, db, p.Source.Driver)
+	if err != nil || actual != result || (j.TargetFingerprint != "" && result != j.TargetFingerprint) {
 		return nil, operation.Fail(operation.BaselineChanged, "target changed after the recorded migration verification")
 	}
-	counts, err := VerifyPreserved(ctx, source, db, p)
+	counts, err := VerifyBaseline(ctx, db, p, true)
 	if err != nil {
 		return nil, err
 	}
@@ -246,14 +234,65 @@ func VerifyOperation(ctx context.Context, directory string) (*operation.Report, 
 	if err := VerifySourceKeys(ctx, db, resolved.CredentialKeys); err != nil {
 		return nil, err
 	}
-	if err := verifyTargetFiles(ctx, p, j, backup); err != nil {
+	if err := VerifyShape(ctx, db, p); err != nil {
 		return nil, err
 	}
-	return &operation.Report{Version: 1, ID: p.ID, Phase: j.Phase, Verified: true, SourceFingerprint: p.SourceFingerprint, Counts: counts, BackupTime: backup.CreatedAt, Next: []string{"Switch deployment inputs explicitly, then verify the original administrator login and business views before enabling writers."}}, nil
+	if err := verifyExecutionFiles(ctx, p, j, backup); err != nil {
+		return nil, err
+	}
+	if j.Phase != "completed" {
+		j.Phase = "ready"
+	}
+	r := upgradeReport(p, j, backup, counts)
+	r.Rehearsal = rehearsalStatus(directory, p)
+	return r, nil
+}
+
+func executionConfig(p *operation.Plan, j *operation.Journal, source config.ServerConfig) (config.ServerConfig, error) {
+	if p.Strategy == operation.Inplace {
+		return source, nil
+	}
+	if p.Source.Driver == "postgres" {
+		return ResolveTarget(p, false)
+	}
+	paths := []string{p.Target.DataDir, filepath.Join(filepath.Dir(p.Target.DataDir), ".linguaflow-stage-"+p.ID)}
+	var selected string
+	for _, path := range paths {
+		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return source, err
+		}
+		var owner struct{ ID, Digest string }
+		if err := operation.Read(filepath.Join(path, "operation.json"), &owner); err != nil || owner.ID != p.ID || owner.Digest != operation.Digest(p) {
+			return source, operation.Fail(operation.Incompatible, "execution directory does not belong to this plan")
+		}
+		if selected != "" {
+			return source, operation.Fail(operation.Incompatible, "both staging and published directories are occupied")
+		}
+		selected = path
+	}
+	if selected == "" {
+		return source, operation.Fail(operation.NeedsAction, "conversion directory is unavailable")
+	}
+	id, err := operation.Identity(selected)
+	if err != nil || (j.StagingIdentity != "" && id != j.StagingIdentity) {
+		return source, operation.Fail(operation.BaselineChanged, "conversion directory identity changed")
+	}
+	j.Staging, j.StagingIdentity = selected, id
+	return config.ServerConfig{DataDir: selected, Database: config.DatabaseConfig{Driver: "sqlite"}, Mode: modeConfig(p.Source.Mode)}, nil
 }
 
 func RollbackOperation(ctx context.Context, directory string, offline bool) (*operation.Report, error) {
-	if !offline {
+	return RollbackOperationWithOptions(ctx, directory, RunOptions{Offline: offline})
+}
+
+func RollbackOperationWithOptions(ctx context.Context, directory string, options RunOptions) (*operation.Report, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	options.Fault = operation.ContextCheckpoint(ctx, options.Fault)
+	if !options.Offline {
 		return nil, operation.Fail(operation.NeedsAction, "version rollback requires --offline and all writers stopped")
 	}
 	p, j, err := operation.Load(directory)
@@ -268,15 +307,18 @@ func RollbackOperation(ctx context.Context, directory string, offline bool) (*op
 		return nil, err
 	}
 	defer unlock()
+	if p.Strategy == operation.Inplace {
+		return rollbackInplace(ctx, directory, p, j, options)
+	}
+	backup, err := loadMaterials(ctx, directory, p, j)
+	if err != nil {
+		return nil, err
+	}
 	resolved, source, err := OpenPlannedSource(ctx, p)
 	if err != nil {
 		return nil, err
 	}
 	defer source.Close()
-	backup, err := LoadBackupReceipt(ctx, j.BackupDirectory, p)
-	if err != nil {
-		return nil, err
-	}
 	if err := VerifyExternalBackup(ctx, source, resolved.Config, resolved.CredentialKeys, p, backup.Objects); err != nil {
 		return nil, err
 	}
@@ -316,23 +358,34 @@ func RollbackOperation(ctx context.Context, directory string, offline bool) (*op
 	if err := operation.SaveJournal(directory, j); err != nil {
 		return nil, err
 	}
-	r := &operation.Report{Version: 1, ID: p.ID, Phase: "rolled_back", SourceFingerprint: p.SourceFingerprint, BackupTime: backup.CreatedAt, Next: []string{"All source, target, database snapshot, keyring and object recovery materials are retained.", "Select the original data directory or original PostgreSQL DSN with the source release while all writers remain stopped.", "Restoration returns to the recorded backup time; writes made in the new deployment are not copied back into the old schema."}}
+	r := upgradeReport(p, j, backup, nil)
+	r.Restoration = "source_retained"
+	r.Next = []string{"All source, target, database snapshot, keyring and object recovery materials are retained.", "Select the original data directory or original PostgreSQL DSN with the source release while all writers remain stopped."}
 	return r, saveReport(directory, r)
 }
 
 func rehearse(ctx context.Context, options RunOptions, p *operation.Plan) (*operation.Report, error) {
 	directory := filepath.Join(options.Directory, "rehearsal")
 	if _, err := os.Lstat(directory); err == nil {
-		return Run(ctx, RunOptions{Directory: directory, Offline: true, Fault: options.Fault})
+		r, err := Run(ctx, RunOptions{Directory: directory, Offline: true, Fault: options.Fault})
+		if err != nil {
+			return nil, err
+		}
+		return recordRehearsal(options.Directory, p, r)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	rehearsal := *p
+	rehearsal.Baseline = nil
+	rehearsal.Strategy, rehearsal.DatabaseBackup = operation.Clone, operation.BackupAuto
 	id, err := operation.NewID()
 	if err != nil {
 		return nil, err
 	}
 	rehearsal.ID = id
+	if p.Source.Driver == "postgres" && p.Target.RehearsalRestored {
+		return rehearseRestoredPostgres(ctx, options, p, &rehearsal)
+	}
 	if p.Source.Driver == "sqlite" {
 		rehearsal.Target.DataDir = filepath.Join(options.Directory, "rehearsal-target")
 		rehearsal.Target.ParentIdentity, err = operation.Identity(options.Directory)
@@ -342,13 +395,7 @@ func rehearse(ctx context.Context, options RunOptions, p *operation.Plan) (*oper
 		rehearsal.LocalRoots = append([]operation.LocalRoot(nil), p.LocalRoots...)
 		for i := range rehearsal.LocalRoots {
 			r := &rehearsal.LocalRoots[i]
-			if r.Target != r.Source {
-				relative, err := filepath.Rel(p.Target.DataDir, r.Target)
-				if err != nil {
-					return nil, err
-				}
-				r.Target = filepath.Join(rehearsal.Target.DataDir, relative)
-			}
+			r.Target = mapRehearsalRoot(p, *r, rehearsal.Target.DataDir, i)
 		}
 	} else {
 		cfg, err := ResolveTarget(p, true)
@@ -385,13 +432,7 @@ func rehearse(ctx context.Context, options RunOptions, p *operation.Plan) (*oper
 		rehearsal.LocalRoots = append([]operation.LocalRoot(nil), p.LocalRoots...)
 		for i := range rehearsal.LocalRoots {
 			r := &rehearsal.LocalRoots[i]
-			if r.Target != r.Source {
-				rel, err := filepath.Rel(p.Target.DataDir, r.Target)
-				if err != nil {
-					return nil, err
-				}
-				r.Target = filepath.Join(cfg.DataDir, rel)
-			}
+			r.Target = mapRehearsalRoot(p, *r, cfg.DataDir, i)
 		}
 	}
 	var manifest *storagemigrate.Manifest
@@ -410,6 +451,13 @@ func rehearse(ctx context.Context, options RunOptions, p *operation.Plan) (*oper
 				manifest.DefaultRoot = filepath.Join(rehearsal.Target.DataDir, relative)
 			}
 		}
+		if p.Strategy == operation.Inplace {
+			for _, root := range rehearsal.LocalRoots {
+				if root.Source == manifest.DefaultRoot {
+					manifest.DefaultRoot = root.Target
+				}
+			}
+		}
 		rehearsal.StorageManifest = filepath.Join(directory, "storage-plan.json")
 		rehearsal.StorageDigest = operation.Digest(manifest)
 	}
@@ -421,5 +469,121 @@ func rehearse(ctx context.Context, options RunOptions, p *operation.Plan) (*oper
 			return nil, err
 		}
 	}
-	return Run(ctx, RunOptions{Directory: directory, Offline: true, Fault: options.Fault})
+	r, err := Run(ctx, RunOptions{Directory: directory, Offline: true, Fault: options.Fault})
+	if err != nil {
+		return nil, err
+	}
+	return recordRehearsal(options.Directory, p, r)
+}
+
+func mapRehearsalRoot(p *operation.Plan, root operation.LocalRoot, target string, index int) string {
+	base, path := p.Target.DataDir, root.Target
+	if root.Target == root.Source || base == "" {
+		base, path = p.Source.DataDir, root.Source
+	}
+	rel, err := filepath.Rel(base, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		rel = filepath.Join("storage-roots", fmt.Sprintf("%06d", index))
+	}
+	return filepath.Join(target, rel)
+}
+
+type rehearsalEvidence struct {
+	Version    int               `json:"version"`
+	ID         string            `json:"operation_id"`
+	PlanDigest string            `json:"plan_digest"`
+	Status     string            `json:"status"`
+	Report     *operation.Report `json:"report"`
+}
+
+func recordRehearsal(directory string, p *operation.Plan, r *operation.Report) (*operation.Report, error) {
+	if !r.Verified || r.Phase != "completed" {
+		return nil, operation.Fail(operation.NeedsAction, "independent rehearsal has not completed verification")
+	}
+	r.Rehearsal = "verified"
+	e := &rehearsalEvidence{Version: operation.Version, ID: p.ID, PlanDigest: operation.Digest(p), Status: "verified", Report: r}
+	path := filepath.Join(directory, "rehearsal-result.json")
+	_, err := os.Lstat(path)
+	if err := operation.Write(path, e, errors.Is(err, os.ErrNotExist)); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func rehearsalStatus(directory string, p *operation.Plan) string {
+	var e rehearsalEvidence
+	if err := operation.Read(filepath.Join(directory, "rehearsal-result.json"), &e); err != nil || e.Version != operation.Version || e.ID != p.ID || e.PlanDigest != operation.Digest(p) || e.Status != "verified" || e.Report == nil || !e.Report.Verified {
+		return "not_run"
+	}
+	return "verified"
+}
+
+// A manually restored PostgreSQL copy is itself the independent rehearsal
+// source. Its private operation uses an external declaration and never dumps or
+// restores the original PostgreSQL database.
+func rehearseRestoredPostgres(ctx context.Context, options RunOptions, p, rehearsal *operation.Plan) (*operation.Report, error) {
+	cfg, err := ResolveTarget(p, true)
+	if err != nil {
+		return nil, err
+	}
+	db, _, err := snapshot.Open(ctx, &cfg, true)
+	if err != nil {
+		return nil, err
+	}
+	probe, probeErr := Probe(ctx, db, "postgres")
+	id, idErr := snapshot.PostgresIdentity(ctx, db)
+	closeErr := db.Close()
+	if errors.Join(probeErr, idErr, closeErr) != nil || probe.Fingerprint != p.SourceFingerprint || probe.SchemaDigest != p.SourceSchema || probe.Format != "v015" || id != p.Target.RehearsalIdentity {
+		return nil, operation.Fail(operation.BaselineChanged, "manually restored rehearsal no longer matches the original baseline")
+	}
+	resolved, source, err := OpenPlannedSource(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	source.Close()
+	// Resolve implicit local roots before selecting the rehearsal data directory.
+	// The independent database continues to reference the protected original files.
+	if len(resolved.Config.Storage.Backends) == 0 {
+		for _, root := range p.LocalRoots {
+			resolved.Config.Storage.Backends = append(resolved.Config.Storage.Backends, config.StorageBackendConfig{ID: root.BackendID, Driver: "local", Root: root.Source})
+		}
+	}
+	resolved.Config.DataDir, resolved.Config.Database = cfg.DataDir, cfg.Database
+	rehearsal.Source = operation.Endpoint{ConfigPath: filepath.Join(options.Directory, "rehearsal-source.yaml"), DataDir: cfg.DataDir, Driver: "postgres", Mode: p.Source.Mode, Identity: id, InputDigest: InputDigest(resolved)}
+	rehearsal.Strategy, rehearsal.DatabaseBackup = operation.Inplace, operation.BackupExternal
+	rehearsal.Target = operation.Target{}
+	rehearsal.LocalRoots = append([]operation.LocalRoot(nil), p.LocalRoots...)
+	for i := range rehearsal.LocalRoots {
+		rehearsal.LocalRoots[i].Target = rehearsal.LocalRoots[i].Source
+	}
+	data, err := config.EncodeServerDocument(resolved.Config, config.LogConfig{Level: "info", Format: "text"})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := credential.PublishPrivateFile(rehearsal.Source.ConfigPath, data); err != nil {
+		return nil, err
+	}
+	directory := filepath.Join(options.Directory, "rehearsal")
+	var manifest *storagemigrate.Manifest
+	if p.StorageManifest != "" {
+		manifest, err = storagemigrate.ReadManifest(p.StorageManifest)
+		if err != nil || operation.Digest(manifest) != p.StorageDigest {
+			return nil, operation.Fail(operation.Incompatible, "rehearsal storage subplan changed")
+		}
+		manifest.OperationID = rehearsal.ID
+		rehearsal.StorageManifest, rehearsal.StorageDigest = filepath.Join(directory, "storage-plan.json"), operation.Digest(manifest)
+	}
+	if _, err := operation.Create(directory, rehearsal); err != nil {
+		return nil, err
+	}
+	if manifest != nil {
+		if err := operation.Write(rehearsal.StorageManifest, manifest, true); err != nil {
+			return nil, err
+		}
+	}
+	r, err := Run(ctx, RunOptions{Directory: directory, Offline: true, BackupReference: "manual-rehearsal:" + p.SourceFingerprint, Fault: options.Fault})
+	if err != nil {
+		return nil, err
+	}
+	return recordRehearsal(options.Directory, p, r)
 }

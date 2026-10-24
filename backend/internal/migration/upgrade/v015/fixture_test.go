@@ -75,5 +75,16 @@ func fixturePlan(t *testing.T, db *sql.DB, mode string) *operation.Plan {
 		t.Fatal(err)
 	}
 	id, _ := operation.NewID()
-	return &operation.Plan{ID: id, Version: 1, Kind: "upgrade", Route: "upgrade-v015-auth1", Source: operation.Endpoint{Driver: "sqlite", Mode: mode}, Accounts: accounts, Build: "release-test", TargetSignature: operation.Digest("fixture")}
+	p := &operation.Plan{ID: id, Version: operation.Version, Strategy: operation.Clone, DatabaseBackup: operation.BackupAuto, Kind: "upgrade", Route: "upgrade-v015-auth1", Source: operation.Endpoint{Driver: "sqlite", Mode: mode}, Accounts: accounts, Build: "release-test", TargetSignature: operation.Digest("fixture")}
+	inspection, err := Probe(context.Background(), db, "sqlite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.SourceFingerprint, p.SourceSchema = inspection.Fingerprint, inspection.SchemaDigest
+	baseline, err := CaptureBaseline(context.Background(), db, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Baseline = baseline
+	return p
 }

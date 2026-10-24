@@ -22,7 +22,7 @@ import (
 // Requires three explicitly provisioned empty disposable databases. A skipped
 // test is unverified, and must never promote the PostgreSQL support cell.
 func TestPostgresServeReleaseDumpRestoreAcceptance(t *testing.T) {
-	dsns := []string{os.Getenv("LINGUAFLOW_MIGRATION_TEST_POSTGRES_SOURCE"), os.Getenv("LINGUAFLOW_MIGRATION_TEST_POSTGRES_TARGET"), os.Getenv("LINGUAFLOW_MIGRATION_TEST_POSTGRES_REHEARSAL")}
+	dsns := []string{os.Getenv("LINGUAFLOW_MIGRATION_TEST_POSTGRES_SOURCE_CLONE"), os.Getenv("LINGUAFLOW_MIGRATION_TEST_POSTGRES_TARGET_CLONE"), os.Getenv("LINGUAFLOW_MIGRATION_TEST_POSTGRES_REHEARSAL_CLONE")}
 	for _, dsn := range dsns {
 		if dsn == "" {
 			t.Skip("unverified: three explicit disposable PostgreSQL DSNs and matching dump/restore tools are required")

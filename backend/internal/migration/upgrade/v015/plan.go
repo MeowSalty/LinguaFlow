@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/catalog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/operation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/snapshot"
@@ -20,10 +19,20 @@ import (
 type PlanOptions struct {
 	Inputs                                                                                            config.ServerInputs
 	Directory, TargetDataDir, TargetConfig, RehearsalConfig, MappingPath, LegacyRoot, ExternalReceipt string
+	Strategy, DatabaseBackup                                                                          string
 }
 
 func NewPlan(ctx context.Context, options PlanOptions) (*operation.Plan, error) {
+	targetRequested := options.TargetDataDir != "" || options.TargetConfig != ""
+	strategy, err := operation.ResolveStrategy(operation.Strategy(options.Strategy), targetRequested)
+	if err != nil {
+		return nil, err
+	}
 	narrow, err := config.ResolveMigrationDatabase(options.Inputs)
+	if err != nil {
+		return nil, err
+	}
+	databaseBackup, err := operation.ResolveBackup(operation.DatabaseBackupMode(options.DatabaseBackup), narrow.Database.Driver, strategy)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +94,7 @@ func NewPlan(ctx context.Context, options PlanOptions) (*operation.Plan, error) 
 	if _, err := os.Lstat(options.Directory); !errors.Is(err, os.ErrNotExist) {
 		return nil, operation.Fail(operation.TargetNotEmpty, "operation directory must not exist")
 	}
-	p := &operation.Plan{Version: 1, ID: id, Kind: "upgrade", Route: "upgrade-v015-auth1", Build: catalog.Build(), CreatedAt: time.Now().UTC(), Source: operation.Endpoint{ConfigPath: resolved.ConfigPath, DataDir: resolved.Config.DataDir, Driver: narrow.Database.Driver, Mode: inspection.Mode, Identity: sourceIdentity, InputDigest: InputDigest(resolved)}, SourceFingerprint: inspection.Fingerprint, SourceSchema: inspection.SchemaDigest, TargetSignature: catalog.TargetSignature(), Accounts: accounts}
+	p := &operation.Plan{Version: operation.Version, Strategy: strategy, DatabaseBackup: databaseBackup, ID: id, Kind: "upgrade", Route: "upgrade-v015-auth1", Build: catalog.Build(), CreatedAt: time.Now().UTC(), Source: operation.Endpoint{ConfigPath: resolved.ConfigPath, DataDir: resolved.Config.DataDir, Driver: narrow.Database.Driver, Mode: inspection.Mode, Identity: sourceIdentity, InputDigest: InputDigest(resolved)}, SourceFingerprint: inspection.Fingerprint, SourceSchema: inspection.SchemaDigest, TargetSignature: catalog.TargetSignature(), Accounts: accounts}
 	if p.Source.Driver == "sqlite" {
 		p.Source.DatabaseDSN = narrow.DatabaseDSN()
 	}
@@ -102,59 +111,70 @@ func NewPlan(ctx context.Context, options PlanOptions) (*operation.Plan, error) 
 	}
 	p.ObjectsDigest = ObjectsDigest(objects)
 	if p.Source.Driver == "sqlite" {
-		if options.TargetConfig != "" || !filepath.IsAbs(options.TargetDataDir) {
-			return nil, operation.Fail(operation.UnsupportedTarget, "SQLite requires a new absolute target data directory")
+		if options.RehearsalConfig != "" {
+			return nil, operation.Fail(operation.UnsupportedTarget, "database rehearsal configuration is only supported for PostgreSQL")
 		}
-		p.Target.DataDir = filepath.Clean(options.TargetDataDir)
-		if err := operation.ValidatePath(filepath.Dir(p.Target.DataDir), true); err != nil {
-			return nil, err
-		}
-		if _, err := os.Lstat(p.Target.DataDir); !errors.Is(err, os.ErrNotExist) {
-			return nil, operation.Fail(operation.TargetNotEmpty, "SQLite target directory already exists")
-		}
-		p.Target.ParentIdentity, err = operation.Identity(filepath.Dir(p.Target.DataDir))
-		if err != nil {
-			return nil, err
+		if strategy == operation.Clone {
+			if options.TargetConfig != "" || !filepath.IsAbs(options.TargetDataDir) {
+				return nil, operation.Fail(operation.UnsupportedTarget, "SQLite clone requires a new absolute target data directory")
+			}
+			p.Target.DataDir = filepath.Clean(options.TargetDataDir)
+			if err := operation.ValidatePath(filepath.Dir(p.Target.DataDir), true); err != nil {
+				return nil, err
+			}
+			if _, err := os.Lstat(p.Target.DataDir); !errors.Is(err, os.ErrNotExist) {
+				return nil, operation.Fail(operation.TargetNotEmpty, "SQLite target directory already exists")
+			}
+			p.Target.ParentIdentity, err = operation.Identity(filepath.Dir(p.Target.DataDir))
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
-		if options.TargetDataDir != "" || !filepath.IsAbs(options.TargetConfig) {
-			return nil, operation.Fail(operation.UnsupportedTarget, "PostgreSQL requires a separate explicitly configured empty target database")
-		}
-		p.Target.ConfigPath = options.TargetConfig
 		p.Target.RehearsalConfigPath = options.RehearsalConfig
-		target, err := ResolveTarget(p, false)
-		if err != nil {
-			return nil, err
-		}
-		p.Target.DataDir, p.Target.InputDigest = target.DataDir, operation.Digest(target)
-		if err := operation.ValidatePath(filepath.Dir(target.DataDir), true); err != nil {
-			return nil, err
-		}
-		if _, err := os.Lstat(target.DataDir); !errors.Is(err, os.ErrNotExist) {
-			return nil, operation.Fail(operation.TargetNotEmpty, "PostgreSQL target recovery directory must be new")
-		}
-		p.Target.ParentIdentity, err = operation.Identity(filepath.Dir(target.DataDir))
-		if err != nil {
-			return nil, err
-		}
-		tdb, _, err := snapshot.Open(ctx, &target, false)
-		if err != nil {
-			return nil, err
-		}
-		if err := snapshot.EmptyPostgres(ctx, tdb); err != nil {
+		if strategy == operation.Clone {
+			if options.TargetDataDir != "" || !filepath.IsAbs(options.TargetConfig) {
+				return nil, operation.Fail(operation.UnsupportedTarget, "PostgreSQL clone requires a separate explicitly configured empty target database")
+			}
+			p.Target.ConfigPath = options.TargetConfig
+			target, err := ResolveTarget(p, false)
+			if err != nil {
+				return nil, err
+			}
+			p.Target.DataDir, p.Target.InputDigest = target.DataDir, operation.Digest(target)
+			if err := operation.ValidatePath(filepath.Dir(target.DataDir), true); err != nil {
+				return nil, err
+			}
+			if _, err := os.Lstat(target.DataDir); !errors.Is(err, os.ErrNotExist) {
+				return nil, operation.Fail(operation.TargetNotEmpty, "PostgreSQL target recovery directory must be new")
+			}
+			p.Target.ParentIdentity, err = operation.Identity(filepath.Dir(target.DataDir))
+			if err != nil {
+				return nil, err
+			}
+			tdb, _, err := snapshot.Open(ctx, &target, false)
+			if err != nil {
+				return nil, err
+			}
+			if err := snapshot.EmptyPostgres(ctx, tdb); err != nil {
+				tdb.Close()
+				return nil, err
+			}
+			p.Target.Identity, err = snapshot.PostgresIdentity(ctx, tdb)
 			tdb.Close()
-			return nil, err
-		}
-		p.Target.Identity, err = snapshot.PostgresIdentity(ctx, tdb)
-		tdb.Close()
-		if err != nil {
-			return nil, err
-		}
-		if p.Target.Identity == p.Source.Identity {
-			return nil, operation.Fail(operation.UnsupportedTarget, "source and target PostgreSQL database identities overlap")
-		}
-		if _, err := snapshot.InspectPostgresTools(ctx); err != nil {
-			return nil, err
+			if err != nil {
+				return nil, err
+			}
+			if p.Target.Identity == p.Source.Identity {
+				return nil, operation.Fail(operation.UnsupportedTarget, "source and target PostgreSQL database identities overlap")
+			}
+			if _, err := snapshot.InspectPostgresTools(ctx); err != nil {
+				return nil, err
+			}
+		} else if databaseBackup == operation.BackupAuto {
+			if _, err := snapshot.InspectPostgresDump(ctx); err != nil {
+				return nil, err
+			}
 		}
 		if options.RehearsalConfig != "" {
 			if !filepath.IsAbs(options.RehearsalConfig) {
@@ -170,23 +190,43 @@ func NewPlan(ctx context.Context, options PlanOptions) (*operation.Plan, error) 
 			}
 			emptyErr := snapshot.EmptyPostgres(ctx, rdb)
 			identity, idErr := snapshot.PostgresIdentity(ctx, rdb)
-			rdb.Close()
-			if emptyErr != nil {
-				return nil, emptyErr
-			}
 			if idErr != nil {
+				rdb.Close()
 				return nil, idErr
 			}
-			if identity == p.Source.Identity || identity == p.Target.Identity || operation.Overlap(r.DataDir, p.Source.DataDir) || operation.Overlap(r.DataDir, p.Target.DataDir) || operation.Overlap(r.DataDir, options.Directory) {
+			rehearsalRestored := false
+			if identity == p.Source.Identity || identity == p.Target.Identity {
+				rdb.Close()
+				return nil, operation.Fail(operation.UnsupportedTarget, "rehearsal database and write roots must be independent")
+			}
+			if emptyErr != nil {
+				if errorCode(emptyErr) != operation.TargetNotEmpty {
+					rdb.Close()
+					return nil, emptyErr
+				}
+				rehearsalInspection, probeErr := Probe(ctx, rdb, "postgres")
+				if probeErr != nil {
+					rdb.Close()
+					return nil, probeErr
+				}
+				rehearsalRestored, err = validateRehearsalBaseline(inspection, rehearsalInspection)
+				if err != nil {
+					rdb.Close()
+					return nil, err
+				}
+			}
+			rdb.Close()
+			if operation.Overlap(r.DataDir, p.Source.DataDir) || operation.Overlap(r.DataDir, p.Target.DataDir) || operation.Overlap(r.DataDir, options.Directory) {
 				return nil, operation.Fail(operation.UnsupportedTarget, "rehearsal database and write roots must be independent")
 			}
 			if _, err := os.Lstat(r.DataDir); !errors.Is(err, os.ErrNotExist) {
 				return nil, operation.Fail(operation.TargetNotEmpty, "rehearsal recovery directory must be new")
 			}
 			p.Target.RehearsalIdentity, p.Target.RehearsalDataDir, p.Target.RehearsalInputDigest = identity, r.DataDir, operation.Digest(r)
+			p.Target.RehearsalRestored = rehearsalRestored
 		}
 	}
-	for _, path := range []string{options.Directory, p.Target.DataDir} {
+	for _, path := range []string{options.Directory, p.Target.DataDir, p.Target.RehearsalDataDir} {
 		if path != "" && operation.Overlap(resolved.Config.DataDir, path) {
 			return nil, operation.Fail(operation.UnsupportedTarget, "source, target and operation write roots must be separate")
 		}
@@ -204,21 +244,23 @@ func NewPlan(ctx context.Context, options PlanOptions) (*operation.Plan, error) 
 		if err != nil {
 			return nil, err
 		}
-		for _, root := range []string{options.Directory, p.Target.DataDir} {
+		for _, root := range []string{options.Directory, p.Target.DataDir, p.Target.RehearsalDataDir} {
 			if operation.Overlap(root, dbPath) {
 				return nil, operation.Fail(operation.UnsupportedTarget, "write root overlaps source database")
 			}
 		}
 	}
-	if p.Target.DataDir != "" {
-		p.LocalRoots, err = localRoots(resolved.Config, p.Target.DataDir)
-		if err != nil {
-			return nil, err
-		}
+	localTarget := p.Target.DataDir
+	if strategy == operation.Inplace {
+		localTarget = resolved.Config.DataDir
+	}
+	p.LocalRoots, err = localRoots(resolved.Config, localTarget)
+	if err != nil {
+		return nil, err
 	}
 	for _, backend := range resolved.Config.Storage.Backends {
 		if backend.Driver == "local" {
-			for _, root := range []string{options.Directory, p.Target.DataDir} {
+			for _, root := range []string{options.Directory, p.Target.DataDir, p.Target.RehearsalDataDir} {
 				if root != "" && operation.Overlap(backend.Root, root) {
 					return nil, operation.Fail(operation.UnsupportedTarget, "write root overlaps source object storage")
 				}
@@ -270,6 +312,14 @@ func NewPlan(ctx context.Context, options PlanOptions) (*operation.Plan, error) 
 	return p, nil
 }
 
+func errorCode(err error) string {
+	var classified *operation.Error
+	if errors.As(err, &classified) {
+		return classified.Code
+	}
+	return ""
+}
+
 func compareNarrow(n *config.MigrationDatabaseInputs, r *config.ResolvedServer) error {
 	if n.DataDir != r.Config.DataDir || n.Database.Driver != r.Config.Database.Driver {
 		return operation.Fail(operation.BaselineChanged, "full deployment inputs differ from the read-only probe")
@@ -311,15 +361,13 @@ func PlannedInputs(p *operation.Plan) config.ServerInputs {
 	return in
 }
 
-func InputDigest(resolved *config.ResolvedServer) string {
-	var keys []byte
-	if resolved.CredentialKeys != nil {
-		keys, _ = credential.EncodeKeyring(resolved.CredentialKeys)
+func InputDigest(resolved *config.ResolvedServer) string { return snapshot.InputDigest(resolved) }
+
+func validateRehearsalBaseline(source, rehearsal *Inspection) (bool, error) {
+	if rehearsal.Format != "v015" || rehearsal.Fingerprint != source.Fingerprint || rehearsal.SchemaDigest != source.SchemaDigest {
+		return false, operation.Fail(operation.UnsupportedTarget, "PostgreSQL rehearsal database must be empty or a manually restored copy matching the original v0.15 baseline")
 	}
-	return operation.Digest(struct {
-		Config config.ServerConfig
-		Keys   []byte
-	}{resolved.Config, keys})
+	return true, nil
 }
 
 func EndpointIdentity(ctx context.Context, db *sql.DB, cfg config.ServerConfig) (string, error) {

@@ -43,6 +43,9 @@ func TestReleaseConversionPreservesAccountsAndDefersReady(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if err := operation.Step(ctx, db, "sqlite", p, "storage", func(c *ent.Client) error { return NormalizeBaselineTimestamps(ctx, c, p) }); err != nil {
+				t.Fatal(err)
+			}
 			user := client.User.GetX(ctx, 1)
 			if user.PasswordHash != hash || user.AuthVersion != 1 || user.EmailVerifiedAt != nil || user.VerifiedEmailKey != "" || user.PasswordVerifiedHash != "" {
 				t.Fatal("conversion changed authentication evidence")

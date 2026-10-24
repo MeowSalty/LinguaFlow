@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +12,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
@@ -45,81 +43,26 @@ type BackupObject struct {
 }
 
 type BackupReceipt struct {
-	Version           int                           `json:"version"`
-	ID                string                        `json:"operation_id"`
-	SourceFingerprint string                        `json:"source_fingerprint"`
-	PlanDigest        string                        `json:"plan_digest"`
-	CreatedAt         time.Time                     `json:"created_at"`
-	DirectoryIdentity string                        `json:"directory_identity"`
-	Database          operation.Artifact            `json:"database"`
-	Keyring           operation.Artifact            `json:"keyring"`
-	Deployment        operation.Artifact            `json:"deployment"`
-	Objects           []BackupObject                `json:"objects"`
-	Markers           map[string]operation.Artifact `json:"markers,omitempty"`
-	Complete          bool                          `json:"complete"`
+	snapshot.ProtectionReceipt
+	Objects []BackupObject                `json:"objects"`
+	Markers map[string]operation.Artifact `json:"markers,omitempty"`
 }
 
 // CaptureSourceBackup uses raw released DTOs and a low-level snapshot. It never
 // creates a source policy, auth marker, pin, or format reservation.
-func CaptureSourceBackup(ctx context.Context, db *sql.DB, resolved *config.ResolvedServer, p *operation.Plan, directory string) (*BackupReceipt, error) {
-	if _, err := os.Lstat(directory); !errors.Is(err, os.ErrNotExist) {
-		return nil, operation.Fail(operation.BackupIncomplete, "backup directory already exists without a complete receipt; retain it and use a new operation")
-	}
-	if err := operation.ValidatePath(filepath.Dir(directory), true); err != nil {
-		return nil, err
-	}
-	if err := credential.CreatePrivateDirectory(directory); err != nil {
-		return nil, err
-	}
-	identity, err := operation.Identity(directory)
-	if err != nil {
-		return nil, err
-	}
-	receipt := &BackupReceipt{Version: 1, ID: p.ID, SourceFingerprint: p.SourceFingerprint, PlanDigest: operation.Digest(p), CreatedAt: time.Now().UTC(), DirectoryIdentity: identity}
-	name := "database.sqlite"
-	if p.Source.Driver == "postgres" {
-		name = "database.pgdump"
-	}
-	target := filepath.Join(directory, name)
-	if p.Source.Driver == "sqlite" {
-		err = snapshot.SQLite(ctx, db, target)
-	} else {
-		err = snapshot.Postgres(ctx, db, &resolved.Config, target)
-	}
-	if err != nil {
-		return nil, err
-	}
-	receipt.Database, err = operation.Hash(ctx, target)
-	if err != nil {
-		return nil, err
+func CaptureSourceBackup(ctx context.Context, db *sql.DB, resolved *config.ResolvedServer, p *operation.Plan, directory string, references ...string) (*BackupReceipt, error) {
+	reference := ""
+	if len(references) > 0 {
+		reference = references[0]
 	}
 	if err := VerifySourceKeys(ctx, db, resolved.CredentialKeys); err != nil {
 		return nil, err
 	}
-	if resolved.CredentialKeys != nil {
-		data, err := credential.EncodeKeyring(resolved.CredentialKeys)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := credential.PublishPrivateFile(filepath.Join(directory, "keyring.json"), data); err != nil {
-			return nil, err
-		}
-		receipt.Keyring, err = operation.Hash(ctx, filepath.Join(directory, "keyring.json"))
-		if err != nil {
-			return nil, err
-		}
-	}
-	deployment, err := json.MarshalIndent(resolved.Config, "", "  ")
+	protection, err := snapshot.CaptureProtection(ctx, db, resolved, p, directory, reference)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := credential.PublishPrivateFile(filepath.Join(directory, "deployment.json"), deployment); err != nil {
-		return nil, err
-	}
-	receipt.Deployment, err = operation.Hash(ctx, filepath.Join(directory, "deployment.json"))
-	if err != nil {
-		return nil, err
-	}
+	receipt := &BackupReceipt{ProtectionReceipt: *protection}
 	objects, err := SourceObjects(ctx, db, resolved.Config, p.LegacyRoot)
 	if err != nil {
 		return nil, err
@@ -127,6 +70,9 @@ func CaptureSourceBackup(ctx context.Context, db *sql.DB, resolved *config.Resol
 	receipt.Objects = objects
 	if p.ObjectsDigest != "" && ObjectsDigest(objects) != p.ObjectsDigest {
 		return nil, operation.Fail(operation.BaselineChanged, "referenced object set changed before backup")
+	}
+	if p.Strategy == operation.Inplace {
+		return finishBackup(ctx, db, p, directory, receipt)
 	}
 	objectsDir := filepath.Join(directory, "objects")
 	if err := credential.CreatePrivateDirectory(objectsDir); err != nil {
@@ -193,6 +139,10 @@ func CaptureSourceBackup(ctx context.Context, db *sql.DB, resolved *config.Resol
 	if err := VerifyExternalBackup(ctx, db, resolved.Config, resolved.CredentialKeys, p, receipt.Objects); err != nil {
 		return nil, err
 	}
+	return finishBackup(ctx, db, p, directory, receipt)
+}
+
+func finishBackup(ctx context.Context, db *sql.DB, p *operation.Plan, directory string, receipt *BackupReceipt) (*BackupReceipt, error) {
 	after, err := Fingerprint(ctx, db, p.Source.Driver)
 	if err != nil {
 		return nil, err
@@ -200,7 +150,6 @@ func CaptureSourceBackup(ctx context.Context, db *sql.DB, resolved *config.Resol
 	if after != p.SourceFingerprint {
 		return nil, operation.Fail(operation.BaselineChanged, "source changed during backup; preserve the snapshot and create a new plan")
 	}
-	receipt.Complete = true
 	if err := operation.Write(filepath.Join(directory, "receipt.json"), receipt, true); err != nil {
 		return nil, err
 	}
@@ -208,6 +157,14 @@ func CaptureSourceBackup(ctx context.Context, db *sql.DB, resolved *config.Resol
 }
 
 func LoadBackupReceipt(ctx context.Context, directory string, p *operation.Plan) (*BackupReceipt, error) {
+	if p.Baseline == nil {
+		if p.Directory == "" {
+			return nil, operation.Fail(operation.BackupIncomplete, "original operation baseline is unavailable")
+		}
+		if err := operation.LoadBaseline(p.Directory, p, &operation.Journal{}); err != nil {
+			return nil, err
+		}
+	}
 	r := new(BackupReceipt)
 	if err := operation.Read(filepath.Join(directory, "receipt.json"), r); err != nil {
 		return nil, operation.Fail(operation.BackupIncomplete, "complete backup receipt is missing")
@@ -219,27 +176,25 @@ func LoadBackupReceipt(ctx context.Context, directory string, p *operation.Plan)
 }
 
 func VerifyBackupReceipt(ctx context.Context, directory string, p *operation.Plan, r *BackupReceipt) error {
-	identity, err := operation.Identity(directory)
-	if err != nil || identity != r.DirectoryIdentity {
-		return operation.Fail(operation.BackupIncomplete, "backup directory identity changed")
-	}
-	if r.Version != 1 || !r.Complete || r.ID != p.ID || r.PlanDigest != operation.Digest(p) || r.SourceFingerprint != p.SourceFingerprint || r.CreatedAt.IsZero() {
-		return operation.Fail(operation.BackupIncomplete, "receipt does not bind this operation and source")
+	if err := snapshot.VerifyProtection(ctx, directory, p, &r.ProtectionReceipt); err != nil {
+		return err
 	}
 	if p.ObjectsDigest != "" && ObjectsDigest(r.Objects) != p.ObjectsDigest {
 		return operation.Fail(operation.BackupIncomplete, "backup receipt omits or changes exact referenced objects")
 	}
-	for _, root := range p.LocalRoots {
-		if root.MarkerDigest == "" {
-			continue
-		}
-		proof, ok := r.Markers[root.BackendID]
-		if !ok || proof.SHA256 != root.MarkerDigest || filepath.Base(proof.Name) != proof.Name {
-			return operation.Fail(operation.BackupIncomplete, "storage marker recovery evidence is incomplete")
-		}
-		actual, err := operation.Hash(ctx, filepath.Join(directory, proof.Name))
-		if err != nil || actual != proof {
-			return operation.Fail(operation.BackupIncomplete, "storage marker recovery bytes changed")
+	if p.Strategy == operation.Clone {
+		for _, root := range p.LocalRoots {
+			if root.MarkerDigest == "" {
+				continue
+			}
+			proof, ok := r.Markers[root.BackendID]
+			if !ok || proof.SHA256 != root.MarkerDigest || filepath.Base(proof.Name) != proof.Name {
+				return operation.Fail(operation.BackupIncomplete, "storage marker recovery evidence is incomplete")
+			}
+			actual, err := operation.Hash(ctx, filepath.Join(directory, proof.Name))
+			if err != nil || actual != proof {
+				return operation.Fail(operation.BackupIncomplete, "storage marker recovery bytes changed")
+			}
 		}
 	}
 	for _, expected := range []operation.Artifact{r.Database, r.Keyring, r.Deployment} {
@@ -254,14 +209,12 @@ func VerifyBackupReceipt(ctx context.Context, directory string, p *operation.Pla
 			return operation.Fail(operation.BackupIncomplete, "backup artifact bytes changed")
 		}
 	}
-	if r.Database.Name == "" || r.Deployment.Name == "" {
-		return operation.Fail(operation.BackupIncomplete, "database and deployment recovery artifacts are required")
-	}
 	var deployment config.ServerConfig
 	if err := operation.Read(filepath.Join(directory, r.Deployment.Name), &deployment); err != nil {
 		return operation.Fail(operation.BackupIncomplete, "deployment recovery inputs cannot be read")
 	}
 	var keys *credential.Keyring
+	var err error
 	if r.Keyring.Name != "" {
 		keys, err = credential.LoadKeyring(filepath.Join(directory, r.Keyring.Name))
 		if err != nil {
@@ -293,6 +246,9 @@ func VerifyBackupReceipt(ctx context.Context, directory string, p *operation.Pla
 			return operation.Fail(operation.BackupIncomplete, "database snapshot or decryption evidence differs from the source")
 		}
 	}
+	if p.Strategy == operation.Inplace {
+		return nil
+	}
 	for _, object := range r.Objects {
 		if object.Driver == "s3" {
 			continue
@@ -312,6 +268,49 @@ func VerifyBackupReceipt(ctx context.Context, directory string, p *operation.Pla
 		actual, err := operation.Hash(ctx, filepath.Join(directory, filepath.FromSlash(object.Recovery)))
 		if err != nil || actual.Size != object.Size || actual.SHA256 != object.SHA256 {
 			return operation.Fail(operation.BackupIncomplete, "independent local recovery bytes are missing or changed")
+		}
+	}
+	return nil
+}
+
+// VerifyOriginalReferences checks retained original bytes without copying or
+// publishing storage objects. S3 references remain covered by database facts;
+// provider restoration is reported separately from database protection.
+func VerifyOriginalReferences(ctx context.Context, p *operation.Plan, r *BackupReceipt) error {
+	for _, root := range p.LocalRoots {
+		if root.Identity != "" {
+			id, err := operation.Identity(root.Source)
+			if err != nil || id != root.Identity {
+				return operation.Fail(operation.BaselineChanged, "original storage root identity changed")
+			}
+		}
+		if root.MarkerDigest != "" {
+			a, err := operation.Hash(ctx, filepath.Join(root.Source, ".linguaflow", "space.json"))
+			if err != nil || a.SHA256 != root.MarkerDigest {
+				return operation.Fail(operation.BaselineChanged, "original storage marker changed")
+			}
+		}
+	}
+	for _, object := range r.Objects {
+		if object.Driver != "local" || object.ObservedStatus != "readable" {
+			continue
+		}
+		if object.Root == "" || storeutil.ValidateKey(object.Key) != nil {
+			return operation.Fail(operation.BackupIncomplete, "invalid original object reference")
+		}
+		store, err := localstore.OpenExisting(object.Root)
+		if err != nil {
+			return operation.Fail(operation.BackupIncomplete, "original object root is missing")
+		}
+		reader, err := store.Open(ctx, storage.Object{Key: object.Key, Version: object.Version})
+		if err != nil {
+			store.Close()
+			return operation.Fail(operation.BackupIncomplete, "original object is missing")
+		}
+		n, digest, readErr := hashReader(ctx, reader, object.ObservedSize)
+		closeErr := errors.Join(reader.Close(), store.Close())
+		if errors.Join(readErr, closeErr) != nil || n != object.ObservedSize || digest != object.ObservedSHA256 {
+			return operation.Fail(operation.BackupIncomplete, "original object bytes changed")
 		}
 	}
 	return nil

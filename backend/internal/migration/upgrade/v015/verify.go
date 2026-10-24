@@ -26,6 +26,17 @@ import (
 // finite-route differences. New tables may add facts but cannot replace IDs,
 // ownership edges, task payloads, historical ciphertext or source revisions.
 func VerifyPreserved(ctx context.Context, original, target *sql.DB, p *operation.Plan) (map[string]int64, error) {
+	if p.Version == operation.Version {
+		if p.Baseline == nil {
+			if p.Directory == "" {
+				return nil, operation.Fail(operation.BackupIncomplete, "preservation verification requires the original durable baseline")
+			}
+			if err := operation.LoadBaseline(p.Directory, p, &operation.Journal{}); err != nil {
+				return nil, err
+			}
+		}
+		return VerifyBaseline(ctx, target, p, true)
+	}
 	counts := map[string]int64{}
 	changes, err := preservedChanges(ctx, original, target, p)
 	if err != nil {
