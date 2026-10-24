@@ -306,7 +306,7 @@ linguaflow admin authentication-recovery revoke --config ./server.yaml \
 
 ## linguaflow-migrate 命令
 
-版本升级的**离线迁移工具**（与主程序一同分发的独立二进制，有意不挂在 `linguaflow` 命令树上）。覆盖两类场景：
+版本升级的**离线迁移工具**（独立二进制，有意不挂在 `linguaflow` 命令树上）。覆盖两类场景：
 
 - **版本升级**（`upgrade`）— 把 v0.15.0 的数据库与账号数据离线转换到当前版本
 - **旧存储导入**（`storage`）— 把旧版文件存储（`data/jobs` 目录）迁入当前的对象存储体系，产品背景见 [存储管理](/zh/guide/storage)
@@ -322,6 +322,28 @@ linguaflow admin authentication-recovery revoke --config ./server.yaml \
 ::: warning v0.16 遗留操作目录只能识别、不能接管
 迁移操作文件的格式已升至 v2。此前版本（v0.16）创建的迁移操作目录（v1 格式）只会被 `status` 只读识别并显示当年的构建号，`resume` / `verify` / `rollback` 一律拒绝执行——请改用**当年执行该操作的构建**对应的迁移二进制完成或回退那批操作，新工具不会接手中途的旧操作。
 :::
+
+### 获取与编译
+
+::: warning 迁移工具不随 Release 与 Docker 镜像分发
+GitHub Release 产物与 Docker 镜像目前**只包含主程序** `linguaflow`。`linguaflow-migrate` 需要从**要升级到的那个版本**（tag 或 commit）的源码自行编译——Go 静态编译，可在本地交叉编译后上传服务器。
+:::
+
+```bash
+# 推荐：Taskfile 构建，自动注入版本与提交信息（在仓库根目录执行）
+# 为 Linux amd64 服务器交叉编译，按服务器实际架构调整 GOARCH
+task -t backend/Taskfile.yml migrate:build GOOS=linux GOARCH=amd64
+# 产物：backend/bin/linguaflow-migrate
+
+# 不用 Task 时的等价手工构建
+cd backend
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o linguaflow-migrate ./cmd/linguaflow-migrate
+```
+
+两个约束：
+
+- **同一个构建跑全程** — `upgrade plan` 会把工具的构建身份冻结进计划，`apply` / `resume` / `verify` 都会校验执行二进制与之一致。编译一次、上传同一份文件，中途不要重新编译替换。
+- **工具与主程序同版本** — 迁移完成后，用**同一版本源码**编译的主程序（或该版本的官方 Release 主程序）启动服务。
 
 ### 迁移前准备
 

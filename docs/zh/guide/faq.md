@@ -217,7 +217,7 @@ cp ./data/linguaflow.db ./backup/linguaflow_backup.db
 
 - 启动时若检测到旧版 SQLite 数据库（旧时间戳格式），会**直接报错拒绝启动**，不会静默迁移——此时请用迁移工具转换，或换用新的数据库路径从零开始
 - v0.14 及更早版本（含 v0.13.0）的数据库不带账号库格式标记，同样**拒绝启动**，且当前版本不提供旧账户自动转换——这部分历史数据请使用**发布对应版本的原版迁移程序**做一次性迁移
-- **v0.15.0 数据**使用当前版本附带的 `linguaflow-migrate` 离线升级（详见 [CLI 命令参考 · linguaflow-migrate](/zh/guide/cli#linguaflow-migrate-命令)）
+- **v0.15.0 数据**使用离线迁移工具 `linguaflow-migrate` 升级（该工具不随 Release 与 Docker 镜像分发，需从对应版本源码编译，详见 [CLI 命令参考 · linguaflow-migrate](/zh/guide/cli#linguaflow-migrate-命令)）
 
 迁移前请停止旧服务并确认已有备份；迁移后按工具输出的变量与文件路径启动新版本，无需重新初始化账户。迁移中断后服务会拒绝启动并提示恢复，按工具的 `status` → `resume` 流程续跑即可，不要删库重来。
 
