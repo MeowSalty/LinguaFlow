@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { createHash } from 'node:crypto'
-import { authCapabilities, json, mockApp, testUser } from './fixtures'
+import { authCapabilities, json, loginMethods, mockApp, testUser } from './fixtures'
 
 async function anonymous(page: Page) {
   await mockApp(page)
@@ -9,6 +9,53 @@ async function anonymous(page: Page) {
     localStorage.removeItem('linguaflow.refresh_token')
   })
 }
+
+async function observeExternalFlowWrites(page: Page): Promise<string[]> {
+  const writes: string[] = []
+  await page.exposeBinding('captureExternalFlowWrite', (_source, value: string) => {
+    writes.push(value)
+  })
+  await page.addInitScript(() => {
+    const setItem = Storage.prototype.setItem
+    Storage.prototype.setItem = function (key, value) {
+      if (this === window.sessionStorage && key === 'linguaflow.external-flow.v2') {
+        const capture = (
+          window as Window & { captureExternalFlowWrite?: (raw: string) => Promise<void> }
+        ).captureExternalFlowWrite
+        if (capture) void capture(value)
+      }
+      return setItem.call(this, key, value)
+    }
+  })
+  return writes
+}
+
+async function expectNoPersistedExternalSecrets(page: Page, secrets: string[] = []) {
+  const state = await page.evaluate(() => ({
+    href: location.href,
+    v2: sessionStorage.getItem('linguaflow.external-flow.v2'),
+    v1: sessionStorage.getItem('linguaflow.external-flow.v1'),
+    result: sessionStorage.getItem('linguaflow.external-result.v1'),
+    storage: [localStorage, sessionStorage]
+      .flatMap((store) => Object.keys(store).map((key) => `${key}=${store.getItem(key)}`))
+      .join('\n'),
+  }))
+  expect(new URL(state.href).searchParams.has('ticket')).toBe(false)
+  expect(new URL(state.href).search).not.toMatch(
+    /[?&](?:verifier|confirmation(?:_token)?|reauthentication_proof|proof)=/i,
+  )
+  expect(state.v2).toBeNull()
+  expect(state.v1).toBeNull()
+  expect(state.result).toBeNull()
+  expect(state.storage).not.toMatch(
+    /"(?:verifier|confirmation_token|reauthentication_proof|proof)"\s*:/,
+  )
+  for (const secret of secrets) {
+    expect(state.href).not.toContain(secret)
+    expect(state.storage).not.toContain(secret)
+  }
+}
+
 const externalConnection = {
   connection_id: 'company',
   display_name: 'Company SSO',
@@ -76,15 +123,17 @@ test('registration normalizes username and allows an omitted email', async ({ pa
   expect(payload?.password).toBe(' abcdefgh ')
 })
 
-test('OAuth signup uses a browser challenge, requires explicit first password and retries a username conflict', async ({
+test('OAuth signup keeps only a started transaction off-site and retries a username conflict in-page', async ({
   page,
 }) => {
   await anonymous(page)
+  const storageWrites = await observeExternalFlowWrites(page)
   await page.route('**/api/v1/auth/capabilities', (route) =>
     json(route, { ...authCapabilities, connections: [externalConnection] }),
   )
   let challenge = ''
   let exchanges = 0
+  const exchangeBodies: Record<string, unknown>[] = []
   const completed: Record<string, unknown>[] = []
   await page.route('**/api/v1/auth/external/company/start', (route) => {
     const body = route.request().postDataJSON()
@@ -99,6 +148,7 @@ test('OAuth signup uses a browser challenge, requires explicit first password an
   await page.route('**/api/v1/auth/external/exchange', (route) => {
     exchanges++
     const body = route.request().postDataJSON()
+    exchangeBodies.push(body)
     expect(createHash('sha256').update(body.verifier).digest('base64url')).toBe(challenge)
     expect(body.ticket).toBe('one-use-ticket')
     expect(route.request().headers().referer).toBeUndefined()
@@ -126,10 +176,26 @@ test('OAuth signup uses a browser challenge, requires explicit first password an
   await page.getByRole('button', { name: '使用 Company SSO 继续' }).click()
   await expect(page).toHaveURL(/\/auth\/complete$/)
   await expect(page.getByText('Example identity')).toBeVisible()
+  await expect
+    .poll(() => storageWrites.some((raw) => JSON.parse(raw)?.stage === 'started'))
+    .toBe(true)
+  const started = storageWrites
+    .map((raw) => JSON.parse(raw) as Record<string, unknown>)
+    .find((flow) => flow?.stage === 'started')!
+  expect(started).toMatchObject({ purpose: 'login', transactionId: 'tx-one', stage: 'started' })
+  expect(started.verifier).toMatch(/^[A-Za-z0-9_-]{43}$/)
+  for (const secretField of [
+    'ticket',
+    'authorization_url',
+    'confirmation',
+    'confirmation_token',
+    'proof',
+  ])
+    expect(started).not.toHaveProperty(secretField)
   expect(completed).toHaveLength(0)
-  await page.reload()
-  await expect(page.getByText('Example identity')).toBeVisible()
   expect(exchanges).toBe(1)
+  const verifier = String(exchangeBodies[0]?.verifier)
+  await expectNoPersistedExternalSecrets(page, [verifier, 'confirmation-one'])
   await page.locator('input[autocomplete="username"]').fill('new-owner')
   await page.getByRole('button', { name: '创建账号并登录' }).click()
   expect(completed).toHaveLength(0)
@@ -149,9 +215,7 @@ test('OAuth signup uses a browser challenge, requires explicit first password an
     confirmation_token: 'confirmation-one',
   })
   expect(completed[1]).not.toHaveProperty('email')
-  expect(
-    await page.evaluate(() => sessionStorage.getItem('linguaflow.external-flow.v1')),
-  ).toBeNull()
+  await expectNoPersistedExternalSecrets(page, [verifier, 'confirmation-one'])
   expect(await page.evaluate(() => localStorage.getItem('linguaflow.access_token'))).toBe(
     'external-access',
   )
@@ -174,9 +238,39 @@ test('binding requires explicit confirmation and keeps the current account sessi
   page,
 }) => {
   await mockApp(page)
-  let payload: Record<string, unknown> | undefined
-  await page.route('**/api/v1/auth/external/exchange', (route) =>
+  let startBody: Record<string, unknown> | undefined
+  let completionBody: Record<string, unknown> | undefined
+  let verifier = ''
+  let challenge = ''
+  await page.route('**/api/v1/users/me/login-methods', (route) =>
     json(route, {
+      ...loginMethods,
+      available_connections: [
+        { connection_id: 'company', display_name: 'Company SSO', can_link: true },
+      ],
+    }),
+  )
+  await page.route('**/api/v1/auth/reauthenticate', (route) =>
+    json(route, {
+      reauthentication_proof: 'link-start-proof',
+      expires_at: '2099-01-01T00:00:00Z',
+    }),
+  )
+  await page.route('**/api/v1/users/me/login-bindings/company/start', (route) => {
+    startBody = route.request().postDataJSON()
+    challenge = String(startBody.browser_challenge)
+    expect(startBody.reauthentication_proof).toBe('link-start-proof')
+    return json(route, {
+      transaction_id: 'link-tx',
+      authorization_url: `${startBody.completion_url}?ticket=link-ticket`,
+      expires_at: '2099-01-01T00:00:00Z',
+    })
+  })
+  await page.route('**/api/v1/auth/external/exchange', (route) => {
+    const body = route.request().postDataJSON()
+    verifier = String(body.verifier)
+    expect(createHash('sha256').update(verifier).digest('base64url')).toBe(challenge)
+    return json(route, {
       kind: 'link_confirmation',
       confirmation_token: 'link-confirmation',
       transaction_id: 'link-tx',
@@ -187,40 +281,28 @@ test('binding requires explicit confirmation and keeps the current account sessi
         connection_name: 'Company SSO',
         external_display: 'Linked identity',
       },
-    }),
-  )
+    })
+  })
   await page.route('**/api/v1/auth/external/complete', (route) => {
-    payload = route.request().postDataJSON()
+    completionBody = route.request().postDataJSON()
     expect(route.request().headers().authorization).toBe('Bearer test-access')
     return json(route, { kind: 'linked', binding_id: 7 })
   })
-  await page.goto('/settings/preferences')
-  await page.evaluate(() => {
-    const epoch = localStorage.getItem('linguaflow.auth_epoch') ?? 'test-epoch'
-    localStorage.setItem('linguaflow.auth_epoch', epoch)
-    sessionStorage.setItem(
-      'linguaflow.external-flow.v1',
-      JSON.stringify({
-        baseUrl: location.origin + '/api/v1',
-        epoch,
-        userId: 1,
-        purpose: 'link',
-        connectionId: 'company',
-        verifier: 'v'.repeat(43),
-        transactionId: 'link-tx',
-        expiresAt: '2099-01-01T00:00:00Z',
-        returnTo: '/settings/security',
-        stage: 'started',
-      }),
-    )
-  })
-  await page.goto('/auth/complete?ticket=link-ticket')
+  await page.goto('/settings/security')
+  await page.getByRole('button', { name: '绑定', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('使用密码验证').fill('current password')
+  await dialog.getByRole('button', { name: '验证', exact: true }).click()
+  await expect(dialog.getByText('身份已验证，请确认本次操作。', { exact: true })).toBeVisible()
+  await dialog.getByRole('button', { name: '继续', exact: true }).click()
   await expect(page.getByText('Linked identity')).toBeVisible()
-  expect(payload).toBeUndefined()
+  expect(startBody).toBeDefined()
+  await expectNoPersistedExternalSecrets(page, [verifier, 'link-confirmation', 'link-start-proof'])
   await expect(page.locator('input[autocomplete="username"]')).toHaveCount(0)
   await page.getByRole('button', { name: '确认绑定', exact: true }).click()
   await expect(page).toHaveURL(/\/settings\/security$/)
-  expect(payload).toEqual({ confirmation_token: 'link-confirmation', verifier: 'v'.repeat(43) })
+  expect(completionBody).toEqual({ confirmation_token: 'link-confirmation', verifier })
+  await expectNoPersistedExternalSecrets(page, [verifier, 'link-confirmation', 'link-start-proof'])
   expect(await page.evaluate(() => localStorage.getItem('linguaflow.access_token'))).toBe(
     'test-access',
   )
@@ -422,12 +504,10 @@ test('optional external password submits raw input only after the switch is enab
   await page.getByRole('button', { name: '创建账号并登录' }).click()
   await expect(page).toHaveURL(/\/$/)
   expect(completed[0]).toMatchObject({ initial_password: ' first-password ' })
-  expect(
-    await page.evaluate(() => sessionStorage.getItem('linguaflow.external-flow.v1')),
-  ).toBeNull()
+  await expectNoPersistedExternalSecrets(page, [String(completed[0]?.verifier), 'confirmation-b5'])
 })
 
-test('a user-modified signup email is sent but never written into the stored confirmation', async ({
+test('a user-modified signup email remains available for an in-page conflict retry', async ({
   page,
 }) => {
   await anonymous(page)
@@ -460,13 +540,13 @@ test('a user-modified signup email is sent but never written into the stored con
   await page.getByRole('button', { name: '创建账号并登录' }).click()
   await expect(page.getByText('此用户名已被使用，请更换用户名。')).toBeVisible()
   expect(completed[0]).toMatchObject({ email: 'mine@example.com', username: 'taken-owner' })
-  const stored = await page.evaluate(() => sessionStorage.getItem('linguaflow.external-flow.v1'))
-  expect(stored).toContain('suggested@example.com')
-  expect(stored).not.toContain('mine@example.com')
+  await expect(page.locator('input[autocomplete="email"]')).toHaveValue('mine@example.com')
+  await expectNoPersistedExternalSecrets(page, [String(completed[0]?.verifier), 'confirmation-b5'])
   await page.locator('input[autocomplete="username"]').fill('b5-owner')
   await page.getByRole('button', { name: '创建账号并登录' }).click()
   await expect(page).toHaveURL(/\/$/)
   expect(completed[1]).toMatchObject({ email: 'mine@example.com', username: 'b5-owner' })
+  await expectNoPersistedExternalSecrets(page, [String(completed[0]?.verifier), 'confirmation-b5'])
 })
 
 test('security hides password maintenance and rejects stale inputs when password login is disabled', async ({
