@@ -1,5 +1,5 @@
 import createClient, { type Client, type ClientOptions, type Middleware } from 'openapi-fetch'
-import { t } from '@/i18n'
+import { t } from '@/i18n-runtime'
 import type { components, paths } from './types'
 import {
   clearAuthTokens,
@@ -25,7 +25,7 @@ import {
   normalizeApiBaseUrl,
   StaleSessionError,
   type SessionSnapshot,
-} from './session-context'
+} from './session-core'
 
 export type ApiPaths = paths
 export type ApiSchemas = components['schemas']
