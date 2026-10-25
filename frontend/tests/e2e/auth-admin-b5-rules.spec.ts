@@ -170,6 +170,8 @@ test('blocks signup while login is off without requesting candidate catalogs or 
     'aria-checked',
     'true',
   )
+  await expect(drawer.getByTestId('auth-connection-policy-details-signup')).toBeHidden()
+  await expect(drawer.getByTestId('auth-connection-policy-details-login')).toBeHidden()
   expect(calls.catalogs).toHaveLength(initialCatalogCount)
   expect(calls.patches).toHaveLength(0)
   for (const action of ['save-configuration', 'check', 'impact', 'test'] as const)
@@ -182,10 +184,8 @@ test('blocks signup while login is off without requesting candidate catalogs or 
     await expect(drawer.getByTestId(`auth-connection-${action}`)).toBeEnabled()
 })
 
-test('restores a separately changed valid draft when signup is switched back off', async ({
-  page,
-}) => {
-  const current = externalRecord({ login_enabled: false, signup_enabled: false })
+test('restores a separately changed draft by closing signup after login', async ({ page }) => {
+  const current = externalRecord()
   const calls = await routeExternalRules(page, current, {
     login: [emailField],
     signup: [domainField('registration.email_domain')],
@@ -199,13 +199,14 @@ test('restores a separately changed valid draft when signup is switched back off
   await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeEnabled()
 
   const candidateCount = calls.catalogs.filter((call) => call.method === 'POST').length
-  await drawer.getByTestId('auth-connection-purpose-signup').click()
+  await drawer.getByTestId('auth-connection-purpose-login').click()
   await expect(drawer.getByTestId('auth-connection-signup-login-warning')).toBeVisible()
   await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeDisabled()
   expect(calls.catalogs.filter((call) => call.method === 'POST')).toHaveLength(candidateCount)
 
   await drawer.getByTestId('auth-connection-purpose-signup').click()
   await expect(drawer.getByTestId('auth-connection-signup-login-warning')).toBeHidden()
+  await expect(drawer.getByTestId('auth-connection-policy-signup')).toBeHidden()
   await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeEnabled()
   expect(calls.patches).toHaveLength(0)
   await drawer.getByTestId('auth-connection-save-configuration').click()
@@ -214,8 +215,249 @@ test('restores a separately changed valid draft when signup is switched back off
     expected_revision: current.aggregate_revision,
     policy: {
       ...current.configuration.policy,
+      login_enabled: false,
+      signup_enabled: false,
       signup: { ...current.configuration.policy.signup, email_requirement: 'required' },
     },
+  })
+})
+
+test('reveals dependent policies progressively and saves their preserved values', async ({
+  page,
+}) => {
+  const current = externalRecord({
+    login_enabled: false,
+    signup_enabled: false,
+    link_enabled: false,
+    signup: { email_requirement: 'required', password_requirement: 'optional' },
+    login_rules: ruleSet('all', [
+      { field_id: 'external.email', operator: 'eq', value: 'member@example.com' },
+    ]),
+    signup_rules: ruleSet('all', [
+      { field_id: 'registration.email_domain', operator: 'in', value: ['example.com'] },
+    ]),
+    link_rules: ruleSet('all', [
+      { field_id: 'external.email_domain', operator: 'not_in', value: ['blocked.example'] },
+    ]),
+  })
+  const calls = await routeExternalRules(page, current, {
+    login: [emailField],
+    signup: [domainField('registration.email_domain')],
+    link: [domainField('external.email_domain')],
+  })
+  const drawer = await openExternalEditor(page)
+  await waitForCatalogs(page, calls.catalogs)
+  const details = (purpose: Purpose) =>
+    drawer.getByTestId(`auth-connection-policy-details-${purpose}`)
+  await expect(drawer.getByTestId('auth-connection-policy-signup')).toBeHidden()
+  for (const purpose of purposes) await expect(details(purpose)).toBeHidden()
+  await expect(drawer.locator('.n-spin-body')).toHaveCount(0)
+  await drawer.locator('[data-anchor="policy"]').screenshot({
+    path: test.info().outputPath('policy-disabled.png'),
+    animations: 'disabled',
+  })
+
+  await drawer.getByTestId('auth-connection-purpose-link').click()
+  await expect(details('link')).toBeVisible()
+  await expect(drawer.getByTestId('auth-connection-policy-signup')).toBeHidden()
+  await expect(details('login')).toBeHidden()
+  await drawer.getByTestId('auth-connection-purpose-link').click()
+  await expect(details('link')).toBeHidden()
+
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  await expect(details('login')).toBeVisible()
+  await expect(drawer.getByTestId('auth-connection-purpose-signup')).toHaveAttribute(
+    'aria-checked',
+    'false',
+  )
+  await expect(details('signup')).toBeHidden()
+  await drawer.getByTestId('auth-connection-purpose-signup').click()
+  await expect(details('signup')).toBeVisible()
+  await expect(drawer.getByTestId('auth-connection-signup-email-requirement')).toContainText('必填')
+  await expect(drawer.getByTestId('auth-connection-signup-password-requirement')).toContainText(
+    '可选',
+  )
+
+  await drawer.getByTestId('auth-connection-purpose-signup').click()
+  await expect(details('signup')).toBeHidden()
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  await expect(drawer.getByTestId('auth-connection-policy-signup')).toBeHidden()
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  await drawer.getByTestId('auth-connection-purpose-signup').click()
+  await expect(details('signup')).toBeVisible()
+  await expect(details('signup')).toContainText('example.com')
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeEnabled()
+  await expect(drawer.getByTestId('auth-connection-purpose-signup')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  await expect(drawer.locator('.n-spin-body')).toHaveCount(0)
+  await drawer
+    .getByTestId('auth-connection-policy-signup')
+    .evaluate((element) => element.scrollIntoView({ block: 'start' }))
+  await page.screenshot({
+    path: test.info().outputPath('policy-enabled.png'),
+    animations: 'disabled',
+  })
+  expect(calls.patches).toHaveLength(0)
+
+  await drawer.getByTestId('auth-connection-save-configuration').click()
+  await expect.poll(() => calls.patches.length).toBe(1)
+  expect(calls.patches[0]).toEqual({
+    expected_revision: current.aggregate_revision,
+    policy: { ...current.configuration.policy, login_enabled: true, signup_enabled: true },
+  })
+})
+
+test('preserves invalid numeric drafts while hidden and repairs them without enabling the purpose', async ({
+  page,
+}) => {
+  const numberField: ApiSchemas['AuthAttributeField'] = {
+    field_id: 'external.score',
+    label: '分数',
+    type: 'number',
+    source: 'oidc_userinfo',
+    pointer: '/score',
+    user_editable: false,
+    allowed_operators: ['eq'],
+  }
+  const current = externalRecord({
+    signup_enabled: false,
+    link_enabled: false,
+    login_rules: ruleSet('all', [{ field_id: 'external.score', operator: 'eq', value: 10 }]),
+  })
+  const calls = await routeExternalRules(page, current, { login: [numberField] })
+  const drawer = await openExternalEditor(page)
+  await waitForCatalogs(page, calls.catalogs)
+  const details = drawer.getByTestId('auth-connection-policy-details-login')
+  const input = details.getByPlaceholder('输入数字，如 3.14')
+  await input.fill('1e')
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  await expect(details).toBeHidden()
+  await expect(drawer.getByTestId('auth-connection-inactive-policy-warning-login')).toBeVisible()
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeDisabled()
+
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  await expect(input).toBeVisible()
+  await expect(input).toHaveValue('1e')
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  await drawer.getByTestId('auth-connection-edit-inactive-policy-login').click()
+  await expect(input).toHaveValue('1e')
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeDisabled()
+  await input.fill('12.5')
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeEnabled()
+  await expect(input).toBeVisible()
+  await expect(drawer.getByTestId('auth-connection-purpose-login')).toHaveAttribute(
+    'aria-checked',
+    'false',
+  )
+  await drawer.getByTestId('auth-connection-hide-inactive-policy-login').click()
+  await expect(details).toBeHidden()
+  expect(calls.patches).toHaveLength(0)
+
+  await drawer.getByTestId('auth-connection-save-configuration').click()
+  await expect.poll(() => calls.patches.length).toBe(1)
+  expect(calls.patches[0]).toMatchObject({
+    policy: {
+      login_enabled: false,
+      login_rules: ruleSet('all', [{ field_id: 'external.score', operator: 'eq', value: 12.5 }]),
+    },
+  })
+})
+
+test('repairs rejected signup requirements while keeping signup and login closed', async ({
+  page,
+}) => {
+  const current = externalRecord({
+    link_enabled: false,
+    signup: { email_requirement: 'required', password_requirement: 'none' },
+    signup_rules: ruleSet('all', [
+      { field_id: 'registration.email_domain', operator: 'in', value: ['example.com'] },
+    ]),
+  })
+  const calls = await routeExternalRules(
+    page,
+    current,
+    { signup: [domainField('registration.email_domain')] },
+    async (route, call) => {
+      const changes = call.body?.changes as { policy?: ApiSchemas['AuthConnectionPolicy'] }
+      if (changes.policy?.signup?.email_requirement !== 'optional') return false
+      await json(route, { detail: '注册邮箱必须设为必填' }, 400)
+      return true
+    },
+  )
+  const drawer = await openExternalEditor(page)
+  await waitForCatalogs(page, calls.catalogs)
+  const details = drawer.getByTestId('auth-connection-policy-details-signup')
+  await chooseSelect(page, drawer.getByTestId('auth-connection-signup-email-requirement'), '可选')
+  await expect(drawer.getByTestId('auth-connection-catalog-error-signup')).toContainText(
+    '注册邮箱必须设为必填',
+  )
+  await drawer.getByTestId('auth-connection-purpose-signup').click()
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  await expect(drawer.getByTestId('auth-connection-inactive-policy-warning-signup')).toBeVisible()
+  await expect(drawer.getByTestId('auth-connection-purpose-signup')).toBeDisabled()
+  await expect(details).toBeHidden()
+  await drawer.getByTestId('auth-connection-edit-inactive-policy-signup').click()
+  await expect(details).toBeVisible()
+  await chooseSelect(page, drawer.getByTestId('auth-connection-signup-email-requirement'), '必填')
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeEnabled()
+  await expect(details).toBeVisible()
+  await drawer.getByTestId('auth-connection-hide-inactive-policy-signup').click()
+  await expect(drawer.getByTestId('auth-connection-policy-signup')).toBeHidden()
+  expect(calls.patches).toHaveLength(0)
+
+  await drawer.getByTestId('auth-connection-save-configuration').click()
+  await expect.poll(() => calls.patches.length).toBe(1)
+  expect(calls.patches[0]).toEqual({
+    expected_revision: current.aggregate_revision,
+    policy: {
+      ...current.configuration.policy,
+      login_enabled: false,
+      signup_enabled: false,
+    },
+  })
+})
+
+test('keeps catalog failures reachable for hidden signup and hides it again after retry', async ({
+  page,
+}) => {
+  const current = externalRecord({
+    login_enabled: false,
+    signup_enabled: false,
+    link_enabled: false,
+  })
+  const calls = await routeExternalRules(page, current)
+  let failSignupCatalog = true
+  await page.route('**/api/v1/admin/auth-connections/company/attributes**', (route) => {
+    const request = route.request()
+    const purpose =
+      request.method() === 'POST'
+        ? request.postDataJSON().purpose
+        : new URL(request.url()).searchParams.get('purpose')
+    if (purpose === 'signup' && failSignupCatalog)
+      return json(route, { detail: '注册属性暂时不可用' }, 503)
+    return route.fallback()
+  })
+  const drawer = await openExternalEditor(page)
+  const error = drawer.getByTestId('auth-connection-catalog-error-signup')
+  await expect(error).toContainText('注册属性暂时不可用')
+  await expect(drawer.getByTestId('auth-connection-purpose-signup')).toBeDisabled()
+  await expect(drawer.getByTestId('auth-connection-policy-details-signup')).toBeHidden()
+  await drawer.getByTestId('auth-connection-purpose-link').click()
+  await expect(error).toBeVisible()
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeDisabled()
+
+  failSignupCatalog = false
+  await drawer.getByTestId('auth-connection-catalog-retry-signup').click()
+  await expect(error).toBeHidden()
+  await expect(drawer.getByTestId('auth-connection-policy-signup')).toBeHidden()
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeEnabled()
+  expect(calls.patches).toHaveLength(0)
+  await drawer.getByTestId('auth-connection-save-configuration').click()
+  await expect.poll(() => calls.patches.length).toBe(1)
+  expect(calls.patches[0]).toMatchObject({
+    policy: { login_enabled: false, signup_enabled: false, link_enabled: true },
   })
 })
 

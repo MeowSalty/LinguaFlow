@@ -87,6 +87,7 @@ for (const password of ['none', 'optional'] as const) {
       await expect(warning).toHaveText(maintenanceMessage)
       await editor.getByTestId('auth-connection-purpose-signup').click()
       await expect(warning).toBeHidden()
+      await expect(passwordSelect).toBeHidden()
       await expect(passwordSelect).toContainText(selectedLabel)
       await expect(editor.getByTestId('auth-connection-save-configuration')).toBeEnabled()
       await editor.getByTestId('auth-connection-save-configuration').click()
