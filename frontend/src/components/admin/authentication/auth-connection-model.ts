@@ -156,6 +156,19 @@ export function connectionChanges(
 export const connectionProtocolChanged = (changes: ApiSchemas['AuthConnectionChanges']): boolean =>
   changes.oidc !== undefined || changes.oauth2 !== undefined || 'client_secret' in changes
 
+export function requiresSignupMaintenancePath(
+  kind: AuthConnection['kind'],
+  signupEnabled: boolean,
+  passwordRequirement: 'none' | 'optional' | 'required' | null | undefined,
+  freshSupported: boolean,
+): boolean {
+  return Boolean(
+    signupEnabled &&
+    (passwordRequirement === 'none' || passwordRequirement === 'optional') &&
+    (kind === 'generic_oauth2' || !freshSupported),
+  )
+}
+
 /** Shared candidate identity for diagnostics, evidence and purpose-scoped catalogs. */
 export function connectionCandidateFingerprint(
   record: AuthConnection,

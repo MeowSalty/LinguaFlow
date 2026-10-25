@@ -80,6 +80,7 @@ import {
   connectionTestCandidate,
   hasUnsafeRuleNumbers,
   parsePreviewSources,
+  requiresSignupMaintenancePath,
   stableJson,
   type SecretMode,
 } from './auth-connection-model'
@@ -307,12 +308,16 @@ function setupIssueLabel(field: string): string {
       return t('authAdmin.serverPublicBaseUrl')
     case 'server.authentication.completion_urls':
       return t('authAdmin.completionUrls')
+    case 'policy.signup.password_requirement':
+      return t('authAdmin.signupPasswordRequirement')
     default:
       return field
   }
 }
 function setupIssueMessage(issue: ApiSchemas['AuthConfigurationIssue']): string {
   if (issue.code === 'required') return t('authAdmin.issueRequired')
+  if (issue.code === 'maintenance-path-required')
+    return t('authAdmin.signupPasswordMaintenanceRequired')
   return issue.message
 }
 /** Editable fields resolve to in-form anchors; server-side fields stay report-only. */
@@ -506,6 +511,27 @@ const currentEvidence = computed(() => {
 const evidence = shallowRef<ConnectionTestEvidence | null>(null)
 const testStale = computed(() => Boolean(evidence.value && !currentEvidence.value))
 const currentTestResult = computed(() => currentEvidence.value?.result ?? null)
+const candidateFreshSupported = computed(
+  () =>
+    currentTestResult.value?.fresh_supported ??
+    check.value?.fresh_supported ??
+    (!connectionProtocolChanged(candidateChanges.value) && record.value.validation.fresh_supported),
+)
+const signupMaintenancePathRequired = computed(() =>
+  requiresSignupMaintenancePath(
+    record.value.kind,
+    form.value.policy.signup_enabled,
+    signupPasswordRequirement.value,
+    candidateFreshSupported.value,
+  ),
+)
+const signupMaintenanceHint = computed(() =>
+  t(
+    record.value.kind === 'generic_oauth2'
+      ? 'authAdmin.signupPasswordMaintenanceRequired'
+      : 'authAdmin.signupPasswordFreshTestRequired',
+  ),
+)
 
 function formatTime(value: string) {
   const date = new Date(value)
@@ -1019,6 +1045,10 @@ function stateAction(action: 'configure' | 'enable' | 'disable') {
   }
   if (action === 'enable' && !record.value.configuration_complete) {
     message.error(t('authAdmin.invalidForm'))
+    return
+  }
+  if (action === 'enable' && signupMaintenancePathRequired.value) {
+    message.error(signupMaintenanceHint.value)
     return
   }
   /** Enabling always needs a fresh matched proof; validation.applied_test_id is only a summary. */
@@ -1677,6 +1707,14 @@ onMounted(() => {
                       />
                     </n-form-item>
                   </div>
+                  <n-alert
+                    v-if="signupMaintenancePathRequired"
+                    type="warning"
+                    :show-icon="false"
+                    data-testid="auth-connection-signup-maintenance-warning"
+                  >
+                    {{ signupMaintenanceHint }}
+                  </n-alert>
                 </div>
                 <div class="mt-3">
                   <AuthRuleEditor
@@ -1950,7 +1988,13 @@ onMounted(() => {
         <n-button
           v-if="state === 'configuring'"
           type="primary"
-          :disabled="busy || dirty || !record.configuration_complete || !deploymentReady"
+          :disabled="
+            busy ||
+            dirty ||
+            !record.configuration_complete ||
+            !deploymentReady ||
+            signupMaintenancePathRequired
+          "
           data-testid="auth-connection-enable"
           @click="stateAction('enable')"
           >{{ t('authAdmin.enable') }}</n-button
