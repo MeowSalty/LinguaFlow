@@ -66,27 +66,40 @@ async function routeExternalRules(
   page: Page,
   input: ApiSchemas['AuthConnectionRecord'],
   fields: Partial<Record<Purpose, ApiSchemas['AuthAttributeField'][]>> = {},
+  handleCandidate?: (route: Route, call: CatalogCall) => Promise<boolean>,
 ) {
   let current = input
   const catalogs: CatalogCall[] = []
   const patches: Record<string, unknown>[] = []
 
   await mockB4Connection(page, () => current)
-  await page.route('**/api/v1/admin/auth-connections/company/attributes**', (route: Route) => {
-    const request = route.request()
-    const url = new URL(request.url())
-    const body =
-      request.method() === 'POST' ? (request.postDataJSON() as Record<string, unknown>) : undefined
-    const purpose = (body?.purpose ?? url.searchParams.get('purpose')) as Purpose
-    expect(purposes).toContain(purpose)
-    catalogs.push({ method: request.method() as 'GET' | 'POST', purpose, body })
-    return json(route, {
-      revision: body?.expected_revision ?? Number(url.searchParams.get('expected_revision')),
-      purpose,
-      fields: fields[purpose] ?? [],
-      operators: {},
-    })
-  })
+  await page.route(
+    '**/api/v1/admin/auth-connections/company/attributes**',
+    async (route: Route) => {
+      const request = route.request()
+      const url = new URL(request.url())
+      const body =
+        request.method() === 'POST'
+          ? (request.postDataJSON() as Record<string, unknown>)
+          : undefined
+      const purpose = (body?.purpose ?? url.searchParams.get('purpose')) as Purpose
+      expect(purposes).toContain(purpose)
+      catalogs.push({ method: request.method() as 'GET' | 'POST', purpose, body })
+      if (body) {
+        const changes = body.changes as { policy?: Partial<ApiSchemas['AuthConnectionPolicy']> }
+        const policy = { ...current.configuration.policy, ...changes?.policy }
+        if (policy.signup_enabled && !policy.login_enabled)
+          return json(route, { detail: 'Signup requires login' }, 400)
+        if (await handleCandidate?.(route, { method: 'POST', purpose, body })) return
+      }
+      return json(route, {
+        revision: body?.expected_revision ?? Number(url.searchParams.get('expected_revision')),
+        purpose,
+        fields: fields[purpose] ?? [],
+        operators: {},
+      })
+    },
+  )
   await page.route('**/api/v1/admin/auth-connections/company', (route) => {
     if (route.request().method() !== 'PATCH') return route.fallback()
     const body = route.request().postDataJSON() as Record<string, unknown>
@@ -129,6 +142,170 @@ async function chooseSelect(page: Page, select: ReturnType<Page['locator']>, lab
   await option.click()
   await expect(page.locator('.n-base-select-menu:visible')).toHaveCount(0)
 }
+
+test('blocks signup while login is off without requesting candidate catalogs or saving', async ({
+  page,
+}) => {
+  const current = externalRecord()
+  const calls = await routeExternalRules(page, current, {
+    login: [emailField],
+    signup: [domainField('registration.email_domain')],
+    link: [domainField('external.email_domain')],
+  })
+  const drawer = await openExternalEditor(page)
+  await waitForCatalogs(page, calls.catalogs)
+  const initialCatalogCount = calls.catalogs.length
+
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+
+  const warning = drawer.getByTestId('auth-connection-signup-login-warning')
+  await expect(warning).toHaveText(
+    '允许注册需要同时开启“允许登录”。请开启“允许登录”，或关闭“允许注册”。当前修改尚未保存。',
+  )
+  await expect(drawer.getByTestId('auth-connection-purpose-login')).toHaveAttribute(
+    'aria-checked',
+    'false',
+  )
+  await expect(drawer.getByTestId('auth-connection-purpose-signup')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  expect(calls.catalogs).toHaveLength(initialCatalogCount)
+  expect(calls.patches).toHaveLength(0)
+  for (const action of ['save-configuration', 'check', 'impact', 'test'] as const)
+    await expect(drawer.getByTestId(`auth-connection-${action}`)).toBeDisabled()
+
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  await expect(warning).toBeHidden()
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeDisabled()
+  for (const action of ['check', 'test'] as const)
+    await expect(drawer.getByTestId(`auth-connection-${action}`)).toBeEnabled()
+})
+
+test('restores a separately changed valid draft when signup is switched back off', async ({
+  page,
+}) => {
+  const current = externalRecord({ login_enabled: false, signup_enabled: false })
+  const calls = await routeExternalRules(page, current, {
+    login: [emailField],
+    signup: [domainField('registration.email_domain')],
+    link: [domainField('external.email_domain')],
+  })
+  const drawer = await openExternalEditor(page)
+  await waitForCatalogs(page, calls.catalogs)
+
+  await chooseSelect(page, drawer.getByTestId('auth-connection-signup-email-requirement'), '必填')
+  await expect.poll(() => calls.catalogs.filter((call) => call.method === 'POST').length).toBe(3)
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeEnabled()
+
+  const candidateCount = calls.catalogs.filter((call) => call.method === 'POST').length
+  await drawer.getByTestId('auth-connection-purpose-signup').click()
+  await expect(drawer.getByTestId('auth-connection-signup-login-warning')).toBeVisible()
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeDisabled()
+  expect(calls.catalogs.filter((call) => call.method === 'POST')).toHaveLength(candidateCount)
+
+  await drawer.getByTestId('auth-connection-purpose-signup').click()
+  await expect(drawer.getByTestId('auth-connection-signup-login-warning')).toBeHidden()
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeEnabled()
+  expect(calls.patches).toHaveLength(0)
+  await drawer.getByTestId('auth-connection-save-configuration').click()
+  await expect.poll(() => calls.patches.length).toBe(1)
+  expect(calls.patches[0]).toEqual({
+    expected_revision: current.aggregate_revision,
+    policy: {
+      ...current.configuration.policy,
+      signup: { ...current.configuration.policy.signup, email_requirement: 'required' },
+    },
+  })
+})
+
+test('ignores stale candidate failures while signup without login is invalid and recovers', async ({
+  page,
+}) => {
+  const current = externalRecord()
+  let releaseFailures!: () => void
+  const failureGate = new Promise<void>((resolve) => {
+    releaseFailures = resolve
+  })
+  let pendingCount = 0
+  const calls = await routeExternalRules(
+    page,
+    current,
+    {
+      login: [emailField],
+      signup: [domainField('registration.email_domain')],
+      link: [domainField('external.email_domain')],
+    },
+    async (route) => {
+      if (++pendingCount > 3) return false
+      await failureGate
+      await json(route, { detail: '过时错误' }, 400)
+      return true
+    },
+  )
+  const drawer = await openExternalEditor(page)
+  await waitForCatalogs(page, calls.catalogs)
+  await chooseSelect(page, drawer.getByTestId('auth-connection-signup-email-requirement'), '必填')
+  await expect.poll(() => pendingCount).toBe(3)
+  const candidateCalls = calls.catalogs.filter((call) => call.method === 'POST')
+  expect(candidateCalls.map((call) => call.purpose).sort()).toEqual(['link', 'login', 'signup'])
+  for (const call of candidateCalls)
+    expect(call.body).toMatchObject({
+      expected_revision: current.aggregate_revision,
+      purpose: call.purpose,
+      changes: { policy: { signup: { email_requirement: 'required' } } },
+    })
+
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  const warning = drawer.getByTestId('auth-connection-signup-login-warning')
+  await expect(warning).toHaveText(
+    '允许注册需要同时开启“允许登录”。请开启“允许登录”，或关闭“允许注册”。当前修改尚未保存。',
+  )
+  await expect(drawer.locator('.n-spin-body')).toHaveCount(0)
+  expect(calls.catalogs.filter((call) => call.method === 'POST')).toHaveLength(3)
+  const staleResponses = purposes.map((purpose) =>
+    page.waitForResponse((response) => {
+      const request = response.request()
+      return (
+        request.method() === 'POST' &&
+        request.url().includes('/company/attributes') &&
+        request.postDataJSON().purpose === purpose &&
+        response.status() === 400
+      )
+    }),
+  )
+  releaseFailures()
+  await Promise.all((await Promise.all(staleResponses)).map((response) => response.finished()))
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      }),
+  )
+  for (const purpose of purposes)
+    await expect(drawer.getByTestId(`auth-connection-catalog-error-${purpose}`)).toHaveCount(0)
+  await expect(drawer.locator('.n-spin-body')).toHaveCount(0)
+  await expect(warning).toBeVisible()
+  expect(calls.catalogs.filter((call) => call.method === 'POST')).toHaveLength(3)
+  expect(calls.patches).toHaveLength(0)
+
+  await drawer.getByTestId('auth-connection-purpose-login').click()
+  await expect.poll(() => pendingCount).toBe(6)
+  await expect(drawer.getByTestId('auth-connection-save-configuration')).toBeEnabled()
+  await expect(warning).toBeHidden()
+  for (const purpose of purposes)
+    await expect(drawer.getByTestId(`auth-connection-catalog-error-${purpose}`)).toHaveCount(0)
+  await expect(drawer.locator('.n-spin-body')).toHaveCount(0)
+  await drawer.getByTestId('auth-connection-save-configuration').click()
+  await expect.poll(() => calls.patches.length).toBe(1)
+  expect(calls.patches[0]).toEqual({
+    expected_revision: current.aggregate_revision,
+    policy: {
+      ...current.configuration.policy,
+      signup: { ...current.configuration.policy.signup, email_requirement: 'required' },
+    },
+  })
+})
 
 test('posts every purpose catalog with the actual candidate after signup requirements change', async ({
   page,

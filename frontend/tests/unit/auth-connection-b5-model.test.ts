@@ -5,6 +5,7 @@ import {
   connectionCandidateFingerprint,
   connectionChanges,
   connectionForm,
+  connectionSignupLoginRequired,
   connectionSignupRequired,
   newConnectionSnapshot,
   type SecretMode,
@@ -110,5 +111,61 @@ describe('B5 external connection model', () => {
       signup: { email_requirement: 'required', password_requirement: 'none' },
     }
     expect(connectionCandidateFingerprint(saved, changed)).not.toBe(base)
+  })
+
+  it.each<[boolean, boolean, boolean]>([
+    [false, false, false],
+    [true, false, false],
+    [true, true, false],
+    [false, true, true],
+  ])(
+    'validates registration dependency with login=%s and signup=%s',
+    (loginEnabled, signupEnabled, required) => {
+      const saved = record()
+      const form = connectionForm(saved)
+      form.policy.login_enabled = loginEnabled
+      form.policy.signup_enabled = signupEnabled
+      const original = clone(form)
+      expect(connectionSignupLoginRequired(form.policy)).toBe(required)
+      const changes = () => connectionChanges(saved, form, 'keep', '', 'configuration')
+      if (required) expect(changes).toThrow('Signup requires login')
+      else expect(changes).not.toThrow()
+      expect(form).toEqual(original)
+    },
+  )
+
+  it('keeps presentation saves independent of an unfinished registration dependency', () => {
+    const saved = record()
+    const form = connectionForm(saved)
+    form.display_name = 'Updated company name'
+    form.policy.login_enabled = false
+    form.policy.signup_enabled = true
+    expect(connectionChanges(saved, form, 'keep', '', 'presentation')).toEqual({
+      display_name: 'Updated company name',
+    })
+    expect(() => connectionChanges(saved, form, 'keep', '', 'configuration')).toThrow(
+      'Signup requires login',
+    )
+  })
+
+  it('accepts enabling login or closing signup after an invalid draft', () => {
+    const saved = record()
+    const form = connectionForm(saved)
+    form.policy.login_enabled = false
+    form.policy.signup_enabled = true
+    expect(() => connectionChanges(saved, form, 'keep', '', 'configuration')).toThrow()
+
+    form.policy.login_enabled = true
+    expect(connectionChanges(saved, form, 'keep', '', 'configuration').policy).toMatchObject({
+      login_enabled: true,
+      signup_enabled: true,
+    })
+
+    form.policy.login_enabled = false
+    form.policy.signup_enabled = false
+    expect(connectionChanges(saved, form, 'keep', '', 'configuration').policy).toMatchObject({
+      login_enabled: false,
+      signup_enabled: false,
+    })
   })
 })
