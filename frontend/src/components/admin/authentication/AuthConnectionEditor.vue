@@ -76,6 +76,7 @@ import {
   connectionForm,
   connectionFormValid,
   connectionProtocolChanged,
+  connectionSignupLoginRequired,
   connectionSignupRequired,
   connectionTestCandidate,
   hasUnsafeRuleNumbers,
@@ -242,6 +243,7 @@ function catalogSourceKey(
   }
 }
 const signupEmailRequirement = computed(() => form.value.policy.signup?.email_requirement ?? null)
+const signupLoginRequired = computed(() => connectionSignupLoginRequired(form.value.policy))
 const signupPasswordRequirement = computed(
   () => form.value.policy.signup?.password_requirement ?? null,
 )
@@ -588,6 +590,9 @@ watch([sources, previewEmail], () => {
   preview.value = null
 })
 watch(candidateFingerprint, () => {
+  for (const purpose of purposes) catalogRequests[purpose]++
+  catalogLoading.value = {}
+  catalogErrors.value = {}
   if (!alive || !candidateValid.value) return
   for (const purpose of purposes) void loadCatalog(purpose)
 })
@@ -604,6 +609,14 @@ async function loadCatalog(purpose: AuthRulePurpose) {
   const fingerprint = activeCatalogFingerprint.value
   const key = catalogSourceKey(purpose, fingerprint)
   const current = ++catalogRequests[purpose]
+  const isCurrent = () =>
+    alive &&
+    isSessionCurrent(context) &&
+    candidateValid.value &&
+    current === catalogRequests[purpose] &&
+    id === record.value.id &&
+    expectedRevision === revision.value &&
+    fingerprint === activeCatalogFingerprint.value
   const cached = catalogCache.get(key)
   if (cached) {
     setCatalog(purpose, cached)
@@ -622,27 +635,18 @@ async function loadCatalog(purpose: AuthRulePurpose) {
           changes,
         })
       : await fetchAuthConnectionAttributes(id, expectedRevision, purpose)
-    if (
-      !alive ||
-      !isSessionCurrent(context) ||
-      current !== catalogRequests[purpose] ||
-      id !== record.value.id ||
-      expectedRevision !== revision.value ||
-      fingerprint !== activeCatalogFingerprint.value
-    )
-      return
+    if (!isCurrent()) return
     catalogCache.set(key, data)
     setCatalog(purpose, data)
     catalogFingerprints.value = { ...catalogFingerprints.value, [purpose]: fingerprint }
   } catch (cause) {
-    if (alive && isSessionCurrent(context) && current === catalogRequests[purpose])
+    if (isCurrent())
       catalogErrors.value = {
         ...catalogErrors.value,
         [purpose]: extractErrorMessage(cause, t('authAdmin.catalogFailed')),
       }
   } finally {
-    if (alive && isSessionCurrent(context) && current === catalogRequests[purpose])
-      catalogLoading.value = { ...catalogLoading.value, [purpose]: false }
+    if (isCurrent()) catalogLoading.value = { ...catalogLoading.value, [purpose]: false }
   }
 }
 
@@ -1662,6 +1666,15 @@ onMounted(() => {
                   :data-testid="'auth-connection-purpose-' + purpose"
                 />
               </div>
+              <n-alert
+                v-if="purpose === 'signup' && signupLoginRequired"
+                type="warning"
+                :show-icon="false"
+                class="mt-3"
+                data-testid="auth-connection-signup-login-warning"
+              >
+                {{ t('authAdmin.signupLoginRequired') }}
+              </n-alert>
               <n-alert
                 v-if="catalogErrorFor(purpose)"
                 type="warning"

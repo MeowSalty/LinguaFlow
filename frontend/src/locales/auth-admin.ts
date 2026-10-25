@@ -96,6 +96,8 @@ export const authAdminMessages = {
   passwordOptional: '可选',
   passwordRequired: '必填',
   signupPolicyMissing: '注册要求缺失或无效，无法保存。请选择邮箱与密码要求。',
+  signupLoginRequired:
+    '允许注册需要同时开启“允许登录”。请开启“允许登录”，或关闭“允许注册”。当前修改尚未保存。',
   signupPasswordMaintenanceRequired:
     '当前 OAuth 连接不支持近期认证，开启注册时注册密码要求必须为“必填”，或关闭允许注册。',
   signupPasswordFreshTestRequired:
