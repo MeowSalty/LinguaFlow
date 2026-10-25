@@ -80,6 +80,10 @@ export const authAdminMessages = {
   loginEnabled: '允许登录',
   signupEnabled: '允许注册',
   linkEnabled: '允许绑定',
+  signupAvailableAfterLogin: '开启登录后可配置注册。',
+  inactivePolicyInvalid: '此用途已关闭，但保留的配置仍有无效内容，修正后才能保存。',
+  reviewInactivePolicy: '展开修正',
+  collapsePolicy: '收起配置',
   passwordRules: '内置密码规则固定为不限制。',
   mappings: '属性映射',
   catalogPurpose: {

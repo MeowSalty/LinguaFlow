@@ -125,6 +125,7 @@ const catalogLoading = ref<Partial<Record<AuthRulePurpose, boolean>>>({})
 const catalogErrors = ref<Partial<Record<AuthRulePurpose, string>>>({})
 const mappingsValid = ref(true)
 const ruleValid = ref({ login: true, signup: true, link: true })
+const inactivePolicyExpanded = ref({ login: false, signup: false, link: false })
 const sources = ref(`{
   "oidc_id_token": {},
   "oidc_userinfo": {}
@@ -247,6 +248,45 @@ const signupLoginRequired = computed(() => connectionSignupLoginRequired(form.va
 const signupPasswordRequirement = computed(
   () => form.value.policy.signup?.password_requirement ?? null,
 )
+function inactivePolicyNeedsRepair(purpose: AuthRulePurpose): boolean {
+  return (
+    (purpose === 'signup' && connectionSignupRequired(form.value.policy)) ||
+    (!catalogLoading.value[purpose] && !ruleValid.value[purpose])
+  )
+}
+function purposeVisible(purpose: AuthRulePurpose): boolean {
+  return (
+    purpose !== 'signup' ||
+    form.value.policy.login_enabled ||
+    form.value.policy.signup_enabled ||
+    inactivePolicyNeedsRepair(purpose) ||
+    Boolean(catalogErrorFor(purpose)) ||
+    inactivePolicyExpanded.value[purpose]
+  )
+}
+function purposeDetailsVisible(purpose: AuthRulePurpose): boolean {
+  return (
+    inactivePolicyExpanded.value[purpose] ||
+    (form.value.policy[`${purpose}_enabled`] &&
+      (purpose !== 'signup' || form.value.policy.login_enabled))
+  )
+}
+function purposeDisabled(purpose: AuthRulePurpose): boolean {
+  return (
+    protocolLocked.value ||
+    (purpose === 'signup' && !form.value.policy.login_enabled && !form.value.policy.signup_enabled)
+  )
+}
+function updatePurposeEnabled(purpose: AuthRulePurpose, enabled: boolean) {
+  if (
+    purposeDisabled(purpose) ||
+    (purpose === 'signup' && enabled && !form.value.policy.login_enabled)
+  )
+    return
+  form.value.policy[`${purpose}_enabled`] = enabled
+  inactivePolicyExpanded.value[purpose] = false
+  if (purpose === 'login' && !enabled) inactivePolicyExpanded.value.signup = false
+}
 function updateSignupEmailRequirement(value: 'optional' | 'required' | null) {
   if (!value || !form.value.policy.signup || connectionSignupRequired(form.value.policy)) return
   form.value.policy.signup = {
@@ -1655,17 +1695,40 @@ onMounted(() => {
             <section
               v-for="purpose in purposes"
               :key="purpose"
+              v-show="purposeVisible(purpose)"
               class="border-b border-lf-border py-4 first:pt-0 last:border-b-0 last:pb-0"
+              :data-testid="`auth-connection-policy-${purpose}`"
             >
               <div class="flex items-center justify-between gap-3">
                 <span class="text-sm font-medium">{{ t(`authAdmin.${purpose}Enabled`) }}</span>
-                <n-switch
-                  v-model:value="form.policy[`${purpose}_enabled`]"
-                  :disabled="protocolLocked"
-                  :aria-label="t(`authAdmin.${purpose}Enabled`)"
-                  :data-testid="'auth-connection-purpose-' + purpose"
-                />
+                <div class="flex items-center gap-3">
+                  <n-button
+                    v-if="inactivePolicyExpanded[purpose]"
+                    text
+                    size="small"
+                    :data-testid="`auth-connection-hide-inactive-policy-${purpose}`"
+                    @click="inactivePolicyExpanded[purpose] = false"
+                  >
+                    {{ t('authAdmin.collapsePolicy') }}
+                  </n-button>
+                  <n-switch
+                    :value="form.policy[`${purpose}_enabled`]"
+                    :disabled="purposeDisabled(purpose)"
+                    :aria-disabled="purposeDisabled(purpose)"
+                    :aria-label="t(`authAdmin.${purpose}Enabled`)"
+                    :data-testid="'auth-connection-purpose-' + purpose"
+                    @update:value="(enabled: boolean) => updatePurposeEnabled(purpose, enabled)"
+                  />
+                </div>
               </div>
+              <p
+                v-if="
+                  purpose === 'login' && !form.policy.login_enabled && !form.policy.signup_enabled
+                "
+                class="mt-2 text-xs text-lf-text-muted"
+              >
+                {{ t('authAdmin.signupAvailableAfterLogin') }}
+              </p>
               <n-alert
                 v-if="purpose === 'signup' && signupLoginRequired"
                 type="warning"
@@ -1674,6 +1737,25 @@ onMounted(() => {
                 data-testid="auth-connection-signup-login-warning"
               >
                 {{ t('authAdmin.signupLoginRequired') }}
+              </n-alert>
+              <n-alert
+                v-if="!form.policy[`${purpose}_enabled`] && inactivePolicyNeedsRepair(purpose)"
+                type="warning"
+                :show-icon="false"
+                class="mt-3"
+                :data-testid="`auth-connection-inactive-policy-warning-${purpose}`"
+              >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span>{{ t('authAdmin.inactivePolicyInvalid') }}</span>
+                  <n-button
+                    v-if="!inactivePolicyExpanded[purpose]"
+                    size="small"
+                    :data-testid="`auth-connection-edit-inactive-policy-${purpose}`"
+                    @click="inactivePolicyExpanded[purpose] = true"
+                  >
+                    {{ t('authAdmin.reviewInactivePolicy') }}
+                  </n-button>
+                </div>
               </n-alert>
               <n-alert
                 v-if="catalogErrorFor(purpose)"
@@ -1689,7 +1771,12 @@ onMounted(() => {
                   >{{ t('authAdmin.retry') }}</n-button
                 >
               </n-alert>
-              <n-spin :show="Boolean(catalogLoading[purpose])">
+              <!-- Keep rule drafts mounted: invalid text may differ from the last typed value. -->
+              <n-spin
+                v-show="purposeDetailsVisible(purpose)"
+                :show="Boolean(catalogLoading[purpose])"
+                :data-testid="`auth-connection-policy-details-${purpose}`"
+              >
                 <div v-if="purpose === 'signup'" class="mt-3 space-y-3">
                   <n-alert v-if="connectionSignupRequired(form.policy)" type="warning">
                     {{ t('authAdmin.signupPolicyMissing') }}
