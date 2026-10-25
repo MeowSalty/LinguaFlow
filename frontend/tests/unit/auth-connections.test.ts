@@ -25,6 +25,7 @@ import {
   hasUnsafeRuleNumbers,
   newConnectionSnapshot,
   parsePreviewSources,
+  requiresSignupMaintenancePath,
 } from '../../src/components/admin/authentication/auth-connection-model'
 
 vi.mock('@/i18n', () => ({ t: (key: string) => key }))
@@ -274,6 +275,36 @@ describe('authentication connection API contract', () => {
     })
     expect(POST).toHaveBeenCalledTimes(1)
   })
+
+  it('maps a maintenance-path issue to the actionable signup message', async () => {
+    const problem = {
+      type: 'urn:linguaflow:auth-connection-configuration-incomplete',
+      title: 'auth_connection_configuration-incomplete',
+      status: 409,
+      issues: [
+        {
+          code: 'maintenance-path-required',
+          field: 'policy.signup.password_requirement',
+          message: 'Registration requires a maintenance path.',
+        },
+      ],
+    }
+    const POST = vi.fn().mockResolvedValue({
+      error: problem,
+      response: new Response(null, { status: 409 }),
+    })
+
+    const failure = await configureAuthConnection('company', { expected_revision: 9 }, {
+      POST,
+    } as unknown as ApiClient).catch((cause) => cause)
+
+    expect(failure).toBeInstanceOf(AuthConnectionError)
+    expect(failure).toMatchObject({
+      code: 'configuration-incomplete',
+      message: 'authAdmin.signupPasswordMaintenanceRequired',
+      problem,
+    })
+  })
 })
 
 describe('authentication connection model', () => {
@@ -324,5 +355,14 @@ describe('authentication connection model', () => {
     })
     for (const input of ['null', '[]', '{"oauth2_profile":{}}', '{"oidc_userinfo":[]}'])
       expect(() => parsePreviewSources(input)).toThrow()
+  })
+
+  it('requires a maintenance path only for active non-required signup passwords', () => {
+    expect(requiresSignupMaintenancePath('generic_oauth2', true, 'none', false)).toBe(true)
+    expect(requiresSignupMaintenancePath('generic_oauth2', true, 'optional', true)).toBe(true)
+    expect(requiresSignupMaintenancePath('oidc', true, 'none', false)).toBe(true)
+    expect(requiresSignupMaintenancePath('oidc', true, 'optional', true)).toBe(false)
+    expect(requiresSignupMaintenancePath('oidc', false, 'none', false)).toBe(false)
+    expect(requiresSignupMaintenancePath('oidc', true, 'required', false)).toBe(false)
   })
 })
