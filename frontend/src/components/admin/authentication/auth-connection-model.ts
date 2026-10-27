@@ -100,6 +100,10 @@ export function connectionSignupPolicyValid(policy: AuthConnectionPolicy): boole
 export const connectionSignupRequired = (policy: AuthConnectionPolicy): boolean =>
   !connectionSignupPolicyValid(policy)
 
+/** Registration is only valid when the same connection also allows login. */
+export const connectionSignupLoginRequired = (policy: AuthConnectionPolicy): boolean =>
+  policy.signup_enabled && !policy.login_enabled
+
 export type ConnectionSaveGroup = 'presentation' | 'configuration' | 'all'
 /** Compare JSON content independently of object property insertion order. */
 export function stableJson(value: unknown): string {
@@ -137,6 +141,7 @@ export function connectionChanges(
   if (hasUnsafeRuleNumbers(record.configuration) || hasUnsafeRuleNumbers(form))
     throw new Error('Unsafe rule number')
   if (connectionSignupRequired(form.policy)) throw new Error('Missing signup policy')
+  if (connectionSignupLoginRequired(form.policy)) throw new Error('Signup requires login')
   if (!same(form.policy, saved.policy)) body.policy = clone(form.policy)
   if (!same(form.attribute_mappings, saved.attribute_mappings))
     body.attribute_mappings = clone(form.attribute_mappings)
@@ -155,6 +160,19 @@ export function connectionChanges(
 
 export const connectionProtocolChanged = (changes: ApiSchemas['AuthConnectionChanges']): boolean =>
   changes.oidc !== undefined || changes.oauth2 !== undefined || 'client_secret' in changes
+
+export function requiresSignupMaintenancePath(
+  kind: AuthConnection['kind'],
+  signupEnabled: boolean,
+  passwordRequirement: 'none' | 'optional' | 'required' | null | undefined,
+  freshSupported: boolean,
+): boolean {
+  return Boolean(
+    signupEnabled &&
+    (passwordRequirement === 'none' || passwordRequirement === 'optional') &&
+    (kind === 'generic_oauth2' || !freshSupported),
+  )
+}
 
 /** Shared candidate identity for diagnostics, evidence and purpose-scoped catalogs. */
 export function connectionCandidateFingerprint(

@@ -30,7 +30,16 @@ export type AuthConnectionProblem = Omit<
 export class AuthConnectionError extends ApiError {
   declare readonly problem: AuthConnectionProblem | undefined
   constructor(problem: AuthConnectionProblem | undefined, status?: number) {
-    super(problem?.detail || problem?.title || t('authAdmin.requestFailed'), status, problem)
+    const maintenancePathRequired = problem?.issues?.some(
+      (issue) => issue.code === 'maintenance-path-required',
+    )
+    super(
+      maintenancePathRequired
+        ? t('authAdmin.signupPasswordMaintenanceRequired')
+        : problem?.detail || problem?.title || t('authAdmin.requestFailed'),
+      status,
+      problem,
+    )
     this.name = 'AuthConnectionError'
   }
   get code(): string | undefined {

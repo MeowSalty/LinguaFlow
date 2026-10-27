@@ -80,6 +80,10 @@ export const authAdminMessages = {
   loginEnabled: '允许登录',
   signupEnabled: '允许注册',
   linkEnabled: '允许绑定',
+  signupAvailableAfterLogin: '开启登录后可配置注册。',
+  inactivePolicyInvalid: '此用途已关闭，但保留的配置仍有无效内容，修正后才能保存。',
+  reviewInactivePolicy: '展开修正',
+  collapsePolicy: '收起配置',
   passwordRules: '内置密码规则固定为不限制。',
   mappings: '属性映射',
   catalogPurpose: {
@@ -96,6 +100,12 @@ export const authAdminMessages = {
   passwordOptional: '可选',
   passwordRequired: '必填',
   signupPolicyMissing: '注册要求缺失或无效，无法保存。请选择邮箱与密码要求。',
+  signupLoginRequired:
+    '允许注册需要同时开启“允许登录”。请开启“允许登录”，或关闭“允许注册”。当前修改尚未保存。',
+  signupPasswordMaintenanceRequired:
+    '当前 OAuth 连接不支持近期认证，开启注册时注册密码要求必须为“必填”，或关闭允许注册。',
+  signupPasswordFreshTestRequired:
+    '开启注册并选择“不需要”或“可选”密码前，请先通过真实测试确认此 OIDC 连接支持近期认证，或将注册密码要求设为“必填”，或关闭允许注册。',
   evidenceAge: '属性证据有效期（秒）',
   catalogFailed: '属性目录加载失败，请重试。',
   loadCandidateAttributes: '按当前修改解析属性',
