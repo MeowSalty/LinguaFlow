@@ -438,6 +438,9 @@ task -t backend/Taskfile.yml migrate:rehearse 'CLI_ARGS=--operation-dir /abs/op 
 task -t backend/Taskfile.yml migrate:apply 'CLI_ARGS=--operation-dir /abs/op --offline'
 task -t backend/Taskfile.yml migrate:status 'CLI_ARGS=--operation-dir /abs/op'
 task -t backend/Taskfile.yml migrate:resume 'CLI_ARGS=--operation-dir /abs/op --offline'
+task -t backend/Taskfile.yml migrate:verify 'CLI_ARGS=--operation-dir /abs/op'
+task -t backend/Taskfile.yml migrate:rollback 'CLI_ARGS=--operation-dir /abs/op --offline'
+task -t backend/Taskfile.yml migrate:storage 'CLI_ARGS=plan --operation-dir /abs/op'   # 子命令接在 CLI_ARGS 首位
 ```
 
 `CLI_ARGS` 中的文件路径必须使用绝对路径。生产操作固定使用 `migrate:build` 产物（`backend/bin/linguaflow-migrate`）。
