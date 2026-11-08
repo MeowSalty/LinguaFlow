@@ -31,6 +31,7 @@ type EngineFactory struct {
 	build            backend.Factory
 	candidateLimits  pipeline.CandidateLimits
 	maxResponseBytes int64
+	runtimePolicy    pipeline.RuntimePolicy
 }
 
 func NewEngineFactory(logger *slog.Logger, limiterPool *backend.LimiterPool, clients ...telemetry.HTTPClientFactory) *EngineFactory {
@@ -42,7 +43,7 @@ func NewEngineFactoryWithCredentials(logger *slog.Logger, limiterPool *backend.L
 		logger = slog.Default()
 	}
 	f := &EngineFactory{logger: logger, limiterPool: limiterPool, reader: reader, checker: checker, build: backend.Build,
-		candidateLimits: pipeline.DefaultCandidateLimits(), maxResponseBytes: backend.DefaultMaxResponseBytes}
+		candidateLimits: pipeline.DefaultCandidateLimits(), maxResponseBytes: backend.DefaultMaxResponseBytes, runtimePolicy: pipeline.DefaultRuntimePolicy()}
 	if len(clients) > 0 {
 		f.httpClients = clients[0]
 	}
@@ -84,10 +85,11 @@ func (f *EngineFactory) BuildEngineWithConfig(
 	ownRuntime := runtime == nil
 	if runtime == nil {
 		var err error
-		runtime, err = NewExecutionRuntime(snapshot, f.limiterPool, nil, f.candidateLimits)
+		runtime, err = NewExecutionRuntime(snapshot, f.limiterPool, nil, f.candidateLimits, f.runtimePolicy)
 		if err != nil {
 			return nil, err
 		}
+		runtime.Lifetime = workerLifetime(ctx)
 	}
 	var owned []backend.Backend
 	success := false
@@ -312,7 +314,7 @@ func unwrapMetered(b backend.Backend) (*backend.MeteredBackend, bool) {
 	return nil, false
 }
 
-func NewExecutionRuntime(snapshot *service.JobExecutionSnapshot, pool *backend.LimiterPool, gate *pipeline.PauseGate, limits pipeline.CandidateLimits) (*pipeline.ExecutionRuntime, error) {
+func NewExecutionRuntime(snapshot *service.JobExecutionSnapshot, pool *backend.LimiterPool, gate *pipeline.PauseGate, limits pipeline.CandidateLimits, policies ...pipeline.RuntimePolicy) (*pipeline.ExecutionRuntime, error) {
 	model, err := execution.ConcurrencyModelForSpec(snapshot)
 	if err != nil {
 		return nil, err
@@ -328,7 +330,11 @@ func NewExecutionRuntime(snapshot *service.JobExecutionSnapshot, pool *backend.L
 	if err != nil {
 		return nil, err
 	}
-	return pipeline.NewExecutionRuntime(admission, limits, gate), nil
+	runtime := pipeline.NewExecutionRuntime(admission, limits, gate)
+	if len(policies) > 0 {
+		runtime.Configure(policies[0])
+	}
+	return runtime, nil
 }
 
 // BuildEngineConfig 是 JobRunner 与 PreviewRunner 共享的引擎配置构建器。

@@ -30,6 +30,9 @@ func PipelineRuntime(cfg config.PipelineConfig, logger *slog.Logger) (PipelineCo
 // SetPipelineLimits injects deployment limits before the factory is shared.
 // Zero-value limits retain the same defaults used by standalone CLI calls.
 func (f *EngineFactory) SetPipelineLimits(limits PipelineConfig) {
+	if limits.RuntimePolicy.PreparePending > 0 {
+		f.runtimePolicy = limits.RuntimePolicy
+	}
 	if limits.Candidates.Segments > 0 && limits.Candidates.Bytes > 0 && limits.Candidates.ItemBytes > 0 {
 		f.candidateLimits = limits.Candidates
 	}
