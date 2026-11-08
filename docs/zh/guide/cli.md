@@ -338,6 +338,10 @@ task -t backend/Taskfile.yml migrate:build GOOS=linux GOARCH=amd64
 # 不用 Task 时的等价手工构建
 cd backend
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o linguaflow-migrate ./cmd/linguaflow-migrate
+
+# 需要分发到多台机器时，一次性构建六平台产物（linux / darwin / windows × amd64 / arm64）
+# 输出到 backend/bin/release/，每个产物附带同名 .sha256 校验文件
+task -t backend/Taskfile.yml migrate:release
 ```
 
 两个约束：
