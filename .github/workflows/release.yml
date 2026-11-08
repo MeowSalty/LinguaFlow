@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
   test:
@@ -57,9 +56,50 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  frontend:
+    name: 构建发布前端
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.51.1'
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: 安装前端依赖
+        run: task frontend:install -- --frozen-lockfile
+
+      - name: 构建前端并检查类型
+        run: |
+          task frontend:build
+          test -s frontend/dist/index.html
+          test -d frontend/dist/assets
+          test -s frontend/dist/.vite/manifest.json
+
+      - name: 上传发布前端
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-frontend-dist
+          path: frontend/dist/
+          include-hidden-files: true
+          if-no-files-found: error
+
   build:
     name: 构建发布二进制
-    needs: test
+    needs: [test, frontend]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -88,23 +128,20 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      - name: 安装 pnpm
-        uses: pnpm/action-setup@v5
+      - name: 清理前端嵌入占位目录
+        run: rm -rf backend/internal/web/dist
+
+      - name: 下载发布前端到嵌入目录
+        uses: actions/download-artifact@v8
         with:
-          run_install: false
-          package_json_file: frontend/package.json
+          name: release-frontend-dist
+          path: backend/internal/web/dist
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: 安装前端依赖
-        run: task frontend:install -- --frozen-lockfile
-
-      - name: 嵌入前端到后端
-        run: task backend:web:embed
+      - name: 验证前端嵌入产物
+        run: |
+          test -s backend/internal/web/dist/index.html
+          test -d backend/internal/web/dist/assets
+          test -s backend/internal/web/dist/.vite/manifest.json
 
       - name: 构建二进制文件
         env:
@@ -140,6 +177,7 @@ jobs:
       - name: 下载所有构建产物
         uses: actions/download-artifact@v8
         with:
+          pattern: linguaflow-*
           path: artifacts
 
       - name: 准备发布文件
@@ -200,7 +238,7 @@ jobs:
 
   notify-failure:
     name: 推送发布失败通知
-    needs: [test, build, release]
+    needs: [test, frontend, build, release]
     if: failure()
     runs-on: ubuntu-latest
     steps:
