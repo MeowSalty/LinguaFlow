@@ -419,6 +419,12 @@ func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []
 
 	callStart := time.Now()
 	resp, callErr := h.Backend.Translate(ctx, req)
+	if storageFailure(callErr) {
+		return batchResult{err: callErr}
+	}
+	if d := workDeferred(callErr); d != nil {
+		return batchResult{waitCapacity: d, deferred: true}
+	}
 	if callErr != nil {
 		isExternalInterrupt := errors.Is(callErr, context.Canceled) ||
 			(errors.Is(callErr, context.DeadlineExceeded) && ctx.Err() != nil)

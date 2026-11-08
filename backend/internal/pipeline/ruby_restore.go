@@ -249,6 +249,13 @@ func retryAlignSegmentDirected(
 
 // callRubyBackend 调用后端并重试。
 func callRubyBackend(ctx context.Context, b backend.Backend, req backend.Request, retryPolicy backend.RetryPolicy) (*backend.Response, error) {
+	ctx = context.WithValue(ctx, coordinatorPreparationKey{}, false)
+	if s, _ := ctx.Value(requestSessionKey{}).(*requestSession); s != nil {
+		stage, phase := s.intent.Stage, s.intent.Phase
+		s.intent.Stage = backend.RequestStageAlignment
+		s.intent.Phase = "alignment"
+		defer func() { s.intent.Stage = stage; s.intent.Phase = phase }()
+	}
 	var resp *backend.Response
 	err := backend.WithRetry(ctx, retryPolicy, func() error {
 		var rerr error

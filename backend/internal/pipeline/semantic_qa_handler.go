@@ -225,6 +225,12 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 
 	callStart := time.Now()
 	resp, callErr := h.Backend.Translate(ctx, req)
+	if storageFailure(callErr) {
+		return batchResult{err: callErr}
+	}
+	if d := workDeferred(callErr); d != nil {
+		return batchResult{waitCapacity: d, deferred: true}
+	}
 	if callErr != nil {
 		// 外部中断：Canceled，或 DeadlineExceeded 且父 ctx 已死（job 取消/外层 deadline）。
 		// 本地 backend timeout 产出 DeadlineExceeded 但父 ctx 仍活，不走此分支。

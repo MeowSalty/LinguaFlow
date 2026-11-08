@@ -56,12 +56,14 @@ func (s *storedRoundTestStore) Record(_ context.Context, _ string, record Reques
 	return nil
 }
 
-func (s *storedRoundTestStore) Cursor(ctx context.Context, idx int, cursor WorkCursor) error {
-	if err := s.RoundStore.Cursor(ctx, idx, cursor); err != nil {
+func (s *storedRoundTestStore) Cursors(ctx context.Context, transitions []CursorTransition) error {
+	if err := s.RoundStore.Cursors(ctx, transitions); err != nil {
 		return err
 	}
 	if s.cursorSaved != nil {
-		s.cursorSaved(idx, cursor)
+		for _, t := range transitions {
+			s.cursorSaved(t.Index, t.Cursor)
+		}
 	}
 	return nil
 }

@@ -24,6 +24,10 @@ type WorkCursor struct {
 	State          string
 	NextAttemptAt  time.Time
 }
+type CursorTransition struct {
+	Index  int
+	Cursor WorkCursor
+}
 
 type RoundRecovery struct {
 	Sealed    bool
@@ -90,7 +94,7 @@ type RoundStore interface {
 	Candidates(context.Context, int, int) ([]*Candidate, int, error)
 	Save(context.Context, *Candidate) error
 	Retire(context.Context, *Candidate, WorkCursor) error
-	Cursor(context.Context, int, WorkCursor) error
+	Cursors(context.Context, []CursorTransition) error
 	Reserve(context.Context, RequestIntent) error
 	Record(context.Context, string, RequestRecord) error
 }
@@ -181,10 +185,12 @@ func (s *MemoryRoundStore) Save(_ context.Context, c *Candidate) error {
 	s.state.Cursors[c.Index] = WorkCursor{Pool: c.PoolIndex, Attempt: c.MainAttempt, LogicalAttempt: c.LogicalAttempt, NetworkAttempt: c.NetworkAttempt, NextAttemptAt: c.NextAttemptAt, State: "candidate"}
 	return nil
 }
-func (s *MemoryRoundStore) Cursor(_ context.Context, index int, c WorkCursor) error {
+func (s *MemoryRoundStore) Cursors(_ context.Context, transitions []CursorTransition) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.state.Cursors[index] = c
+	for _, t := range transitions {
+		s.state.Cursors[t.Index] = t.Cursor
+	}
 	return nil
 }
 func (s *MemoryRoundStore) Reserve(context.Context, RequestIntent) error        { return nil }

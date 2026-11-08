@@ -142,7 +142,7 @@ func TestRequestBackendRetriesOnlyLocalStorage(t *testing.T) {
 	for _, terminal := range []bool{false, true} {
 		t.Run(map[bool]string{false: "transient", true: "terminal"}[terminal], func(t *testing.T) {
 			runtime := testExecutionRuntime(t, 2)
-			runtime.saveRetryDelay = time.Nanosecond
+			runtime.Policy.Save.RetryDelay = time.Nanosecond
 			var records int
 			failure := errors.New("database unavailable")
 			store := &runtimeTestStore{record: func(context.Context, string, RequestRecord) error {
