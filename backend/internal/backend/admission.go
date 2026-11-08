@@ -109,6 +109,70 @@ func (a *RequestAdmission) TryAdmit(ctx context.Context, intent RequestAdmission
 	return a.tryAdmit(ctx, intent, gate, nil)
 }
 
+// ReadyHint inspects capacity and current RPM without consuming any budget.
+// Acquire always performs the authoritative joint decision afterwards.
+func (a *RequestAdmission) ReadyHint(ctx context.Context, intent RequestAdmissionIntent, gate DispatchGate) (AdmissionWait, error) {
+	var w AdmissionWait
+	if err := ctx.Err(); err != nil {
+		return w, err
+	}
+	if gate != nil {
+		w.PauseRequested = gate.Done()
+		select {
+		case <-w.PauseRequested:
+			return w, ErrDispatchPaused
+		default:
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	w.CapacityChanged = a.changed
+	if a.closed {
+		return w, ErrAdmissionClosed
+	}
+	limit, ok := a.config.MainConcurrency[intent.RoundIndex]
+	if !ok {
+		return w, fmt.Errorf("request round %d has no frozen budget", intent.RoundIndex)
+	}
+	shared := intent.Stage == RequestStageMain || a.config.LegacyRoundShared
+	if !shared && a.config.AlignmentConcurrency == 0 {
+		return w, errors.New("alignment request has no frozen budget")
+	}
+	if intent.Stage != RequestStageMain && intent.Stage != RequestStageAlignment {
+		return w, fmt.Errorf("unsupported stage %q", intent.Stage)
+	}
+	if a.completions >= a.config.MaxCompletions {
+		w.Reason = "completion_capacity"
+	} else if shared && a.main[intent.RoundIndex] >= limit {
+		w.Reason = "main_concurrency"
+	} else if !shared && a.alignment >= a.config.AlignmentConcurrency {
+		w.Reason = "alignment_concurrency"
+	}
+	if a.pool != nil {
+		a.pool.mu.Lock()
+		defer a.pool.mu.Unlock()
+		h, ok := a.pool.limiters[intent.BackendID]
+		if a.pool.closed {
+			return w, ErrLimiterClosed
+		}
+		if !ok || h.closed {
+			return w, ErrLimiterMissing
+		}
+		w.PolicyChanged = h.changed
+		if h.rpm > 0 {
+			now := time.Now()
+			tokens := min(float64(h.rpm), h.tokens+max(now.Sub(h.updated).Minutes(), 0)*float64(h.rpm))
+			if tokens < 1 {
+				w.AvailableAt = now.Add(max(time.Duration((1-tokens)/float64(h.rpm)*float64(time.Minute)), time.Nanosecond))
+				if w.Reason == "" {
+					w.Reason = "backend_rpm"
+				}
+			}
+		}
+	}
+	return w, nil
+}
+
 var errAdmissionTurnChanged = errors.New("request admission turn changed")
 
 type admissionTurn struct {
@@ -222,6 +286,18 @@ func (a *RequestAdmission) notifyLocked() {
 	a.version++
 	close(a.changed)
 	a.changed = make(chan struct{})
+}
+
+func (a *RequestAdmission) Changed() <-chan struct{} {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.changed
+}
+func (a *RequestAdmission) PolicyChanged() <-chan struct{} {
+	if a.pool == nil {
+		return nil
+	}
+	return a.pool.Changed()
 }
 
 // Close prevents new dispatch and wakes waiters. Existing permits must still be

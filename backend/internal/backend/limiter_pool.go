@@ -28,6 +28,7 @@ type LimiterPool struct {
 	initialized bool
 	closed      bool
 	metrics     LimiterSnapshot
+	changed     chan struct{}
 }
 
 type limiterHandle struct {
@@ -39,7 +40,16 @@ type limiterHandle struct {
 	closed  bool
 }
 
-func NewLimiterPool() *LimiterPool { return &LimiterPool{limiters: make(map[int]*limiterHandle)} }
+func NewLimiterPool() *LimiterPool {
+	return &LimiterPool{limiters: make(map[int]*limiterHandle), changed: make(chan struct{})}
+}
+func (p *LimiterPool) signalLocked() {
+	if p.changed != nil {
+		close(p.changed)
+	}
+	p.changed = make(chan struct{})
+}
+func (p *LimiterPool) Changed() <-chan struct{} { p.mu.Lock(); defer p.mu.Unlock(); return p.changed }
 
 // Initialize replaces the policy registry before workers start. Missing IDs are
 // subsequently errors; stale persisted execution snapshots cannot recreate them.
@@ -86,6 +96,7 @@ func (p *LimiterPool) registerLocked(id, rpm int) {
 	h.rpm, h.tokens, h.updated = rpm, float64(rpm), time.Now()
 	close(h.changed)
 	h.changed = make(chan struct{})
+	p.signalLocked()
 }
 
 func (p *LimiterPool) Lookup(id int) (RateLimiter, error) {
@@ -128,6 +139,7 @@ func (p *LimiterPool) removeLocked(id int, h *limiterHandle) {
 	h.closed = true
 	close(h.changed)
 	delete(p.limiters, id)
+	p.signalLocked()
 }
 
 func (p *LimiterPool) Remove(id int) {
