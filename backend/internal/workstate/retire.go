@@ -14,7 +14,11 @@ func (s *Store) RetireCandidate(ctx context.Context, scope Scope, id string, ver
 	if id == "" || version < 1 {
 		return ErrCandidateVersion
 	}
-	return Transaction(ctx, s.client, func(tx *ent.Client) error {
+	if successor.State == "" {
+		successor.State = "unresolved"
+	}
+	ctx = operationContext(ctx)
+	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
 		if err := guardScope(ctx, tx, scope, false); err != nil {
 			return err
 		}
@@ -45,9 +49,6 @@ func (s *Store) RetireCandidate(ctx context.Context, scope Scope, id string, ver
 			}
 			return ErrCandidateVersion
 		}
-		if successor.State == "" {
-			successor.State = "unresolved"
-		}
 		if err := saveCursor(ctx, tx, scope, w.SegmentID, successor); err != nil {
 			return err
 		}
@@ -59,5 +60,31 @@ func (s *Store) RetireCandidate(ctx context.Context, scope Scope, id string, ver
 			return err
 		}
 		return tx.WorkItem.UpdateOneID(w.ID).SetCandidateID("").Exec(ctx)
+	})
+	return s.finishUnknown(ctx, scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
+		c, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(id)).Only(ctx)
+		if err != nil {
+			return false, err
+		}
+		if c.Version != version {
+			return false, ErrCandidateVersion
+		}
+		w, err := tx.WorkItem.Get(ctx, c.WorkItemID)
+		if err != nil {
+			return false, err
+		}
+		if w.JobID != scope.JobID || w.ResourceID != scope.ResourceID || w.JobRoundID != scope.RoundID {
+			return false, ErrManifest
+		}
+		if w.State == "resolved" || c.State == "completed" {
+			return true, nil
+		}
+		if w.CandidateID == "" && (c.State == "rejected" || c.State == "stale") && len(c.Payload) == 0 && c.PayloadBytes == 0 && cursorSaved(w, successor) {
+			return true, nil
+		}
+		if c.State == "pending_alignment" || c.State == "ready_to_commit" {
+			return false, nil
+		}
+		return false, errUnverifiable
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -24,6 +25,7 @@ type AlignmentWorker struct {
 }
 
 type alignmentUpdate struct {
+	waitCapacity              *WorkDeferred
 	inputTokens, outputTokens int64
 	paused                    bool
 	err                       error
@@ -104,9 +106,17 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 			session.intent.CandidateID = ""
 		}
 		w.session = session
-		callCtx := context.WithValue(ctx, requestSessionKey{}, session)
+		callCtx := session.Context(ctx)
 		start := time.Now()
 		resp, callErr := backends[0].Translate(callCtx, req)
+		if d := workDeferred(callErr); d != nil {
+			update.waitCapacity = d
+			return update
+		}
+		if !session.handoffDeadline.IsZero() {
+			ctx = callCtx
+			ctx = persistence.WithDeadline(ctx, session.handoffDeadline)
+		}
 		if resp == nil && callErr == nil {
 			callErr = &backend.EmptyResponseError{BackendName: backends[0].Name()}
 		}
@@ -275,7 +285,7 @@ func (w *AlignmentWorker) saveCandidate(ctx context.Context, c *Candidate) error
 	if err = w.runtime.Window.ReserveResize(c.ID, int64(len(data))); err != nil {
 		return err
 	}
-	if err = w.runtime.Save(ctx, func(saveCtx context.Context) error { return w.store.Save(saveCtx, c) }); err != nil {
+	if err = w.runtime.SaveNamed(ctx, candidateSaveMetadata("candidate", w.store, c), func(saveCtx context.Context) error { return w.store.Save(saveCtx, c) }); err != nil {
 		return err
 	}
 	return w.runtime.Window.Resize(c.ID, int64(len(data)))

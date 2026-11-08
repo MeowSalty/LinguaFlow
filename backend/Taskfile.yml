@@ -21,6 +21,24 @@ vars:
   BACKEND_LDFLAGS: '{{default (printf "%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=%s" .BACKEND_LDFLAGS_EXTRA .VERSION .COMMIT) .BACKEND_LDFLAGS}}'
 
 tasks:
+  test:persistence:
+    desc: 隔离 SQLite 持久化协议、批处理和故障验收
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/persistenceacceptance/run.mjs {{.CLI_ARGS}}
+
+  test:persistence:postgres:
+    desc: 私有 PostgreSQL 持久化协议、锁竞争及竞态验收
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/persistenceacceptance/run.mjs --postgres {{.CLI_ARGS}}
+
+  bench:persistence:
+    desc: 相同 SQLite/隔离 PostgreSQL 夹具的 SQL 数、延迟和全流水线压力对照
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/persistenceacceptance/run.mjs --bench {{.CLI_ARGS}}
+
   test:auth:deployment:
     desc: 隔离 PostgreSQL、Keycloak 26.8.0、通用 OAuth 及同源/跨域 A/B1/B2/B3 认证验收
     dir: '{{.TASKFILE_DIR}}'

@@ -38,6 +38,9 @@ type batchJob struct {
 
 // batchResult 描述一个批次的处理结果。
 type batchResult struct {
+	checkpointCtx   context.Context
+	waitCapacity    *WorkDeferred
+	waitJob         *batchJob
 	candidates      []*Candidate
 	err             error
 	finish          func() error // confirms handoff and releases response capacity after the checkpoint
@@ -380,12 +383,16 @@ func runPool(
 					if result.err != nil {
 						stop(result.err)
 					}
-					if result.deferred {
+					if result.deferred && result.waitCapacity == nil {
 						pendingMu.Lock()
 						nextPending = append(nextPending, job.idxs...)
 						pendingMu.Unlock()
 					}
 					result.idxs = job.idxs
+					if result.waitCapacity != nil {
+						copyJob := job
+						result.waitJob = &copyJob
+					}
 					results <- result
 					continue
 				}
@@ -452,12 +459,8 @@ func runPool(
 					}
 				}
 				// 提交确认门：副作用是否真的落库无法从 result 的成功形态判断，必须
-				// 看两个 ctx——副作用经由哪条 ctx 写库没有统一约定：走 batchHandler
-				// 的模式中 translate/correct/adjudicate 忽略形参、以闭包捕获的资源级
-				// ctx 落库（见 worker/job_runner.go 的 batchHandler 声明），故以 ctx
-				// 判定；semantic_qa/revise 以形参（即 runCtx）落库，extract 无
-				// batchHandler、术语在 ProcessBatch 内以 runCtx 写库，故 runCtx 也
-				// 必须判定——它同时覆盖 handlerErr fail-fast 取消 runCtx（ctx 仍
+				// 看两个 ctx：副作用使用回调形参 runCtx，资源级 ctx 同时提供父取消
+				// 屏障。runCtx 的检查覆盖 handlerErr fail-fast 取消 runCtx（ctx 仍
 				// 存活）的窗口，以及父 ctx 取消向子 ctx 传播的瞬间窗口。ctx 已死时
 				// 各 handler 对 context.Canceled 的处理是「静默跳过该段并返回 nil」，
 				// 而 semantic_qa/revise 的 preserveResult 与成功形态无法区分——
@@ -489,7 +492,7 @@ func runPool(
 	submitWg.Add(1)
 	go func() {
 		defer submitWg.Done()
-		for _, batch := range batches {
+		for batchIndex, batch := range batches {
 			job := batchJob{idxs: batch}
 			for _, idx := range batch {
 				cursor := initialCursors[idx]
@@ -500,6 +503,13 @@ func runPool(
 			}
 			select {
 			case <-done:
+				// Closing delivery cannot discard the source batches that never
+				// reached a worker. They remain eligible in the same pool/attempt.
+				pendingMu.Lock()
+				for _, remaining := range batches[batchIndex:] {
+					nextPending = append(nextPending, remaining...)
+				}
+				pendingMu.Unlock()
 				return
 			case jobs <- job:
 			}
@@ -580,8 +590,12 @@ func runPool(
 			notifyResolvedSegments(result.idxs, result, reporter, resolvedNotifier)
 			if round.Runtime != nil {
 				if barrier, ok := reporter.(interface{ FlushCheckpoint(context.Context) error }); ok {
-					if err := round.Runtime.Save(runCtx, barrier.FlushCheckpoint); err != nil {
-						failCheckpoint(err)
+					checkpointCtx := result.checkpointCtx
+					if checkpointCtx == nil {
+						checkpointCtx = runCtx
+					}
+					if err := barrier.FlushCheckpoint(checkpointCtx); err != nil {
+						failCheckpoint(&StorageError{Err: err})
 						return
 					}
 				} else {
@@ -613,29 +627,113 @@ func runPool(
 		pendingMu.Unlock()
 	}
 
+	var capacityWaiting []batchResult
+	capacityWake := false
 	for active > 0 {
+		var preparationChanged, admissionChanged <-chan struct{}
+		var globalPolicyChanged <-chan struct{}
+		var pauseRequested <-chan struct{}
+		if round.Runtime != nil {
+			preparationChanged = round.Runtime.Preparation.Changed()
+			admissionChanged = round.Runtime.Admission.Changed()
+			globalPolicyChanged = round.Runtime.Admission.PolicyChanged()
+			pauseRequested = round.Gate.Done()
+		}
+		if capacityWake {
+			for len(capacityWaiting) > 0 {
+				select {
+				case jobs <- *capacityWaiting[0].waitJob:
+					capacityWaiting = capacityWaiting[1:]
+				default:
+					goto waitingSubmitted
+				}
+			}
+		}
+	waitingSubmitted:
+		capacityWake = false
+		var wakeAt time.Time
+		var policyChanged <-chan struct{}
+		for _, v := range capacityWaiting {
+			w := v.waitCapacity.Wait
+			if policyChanged == nil {
+				policyChanged = w.PolicyChanged
+			}
+			if !w.AvailableAt.IsZero() && (wakeAt.IsZero() || w.AvailableAt.Before(wakeAt)) {
+				wakeAt = w.AvailableAt
+			}
+		}
+		var timer *time.Timer
+		var timerC <-chan time.Time
+		if !wakeAt.IsZero() {
+			timer = time.NewTimer(max(time.Until(wakeAt), time.Nanosecond))
+			timerC = timer.C
+		}
 		select {
 		case <-runCtx.Done():
+			if timer != nil {
+				timer.Stop()
+			}
+			goto cleanup
+		case <-pauseRequested:
+			if timer != nil {
+				timer.Stop()
+			}
 			goto cleanup
 		case result := <-results:
-			applyBatchResult(result)
-
-			if result.retry != nil && result.retry.attempt < transientBudget {
+			if result.waitCapacity != nil {
+				capacityWaiting = append(capacityWaiting, result)
+				w := result.waitCapacity.Wait
 				select {
-				case <-runCtx.Done():
-					deferRetry(result)
-					active--
-				case jobs <- *result.retry:
-					// in-flight 重试不递减 active（复用席位）
+				case <-w.CapacityChanged:
+					capacityWake = true
+				default:
+				}
+				select {
+				case <-w.PolicyChanged:
+					capacityWake = true
+				default:
+				}
+				if !w.AvailableAt.IsZero() && !time.Now().Before(w.AvailableAt) {
+					capacityWake = true
 				}
 			} else {
-				deferRetry(result)
-				active--
+				applyBatchResult(result)
+
+				if result.retry != nil && result.retry.attempt < transientBudget {
+					select {
+					case <-runCtx.Done():
+						deferRetry(result)
+						active--
+					case jobs <- *result.retry:
+						// in-flight 重试不递减 active（复用席位）
+					}
+				} else {
+					deferRetry(result)
+					active--
+				}
 			}
+		case <-preparationChanged:
+			capacityWake = true
+		case <-admissionChanged:
+			capacityWake = true
+		case <-policyChanged:
+			capacityWake = true
+		case <-globalPolicyChanged:
+			capacityWake = true
+		case <-timerC:
+			capacityWake = true
+		}
+		if timer != nil {
+			timer.Stop()
 		}
 	}
 
 cleanup:
+	for _, result := range capacityWaiting {
+		pendingMu.Lock()
+		nextPending = append(nextPending, result.idxs...)
+		pendingMu.Unlock()
+	}
 	close(done)
 	submitWg.Wait()
 	close(jobs)
@@ -649,6 +747,15 @@ cleanup:
 	//       → 整个任务卡死。
 	// 排空期 jobs 已关闭，重试不能重投，一律转 nextPending。
 	workersDone := make(chan struct{})
+	drainResult := func(result batchResult) {
+		if result.waitCapacity != nil {
+			pendingMu.Lock()
+			nextPending = append(nextPending, result.idxs...)
+			pendingMu.Unlock()
+		}
+		applyBatchResult(result)
+		deferRetry(result)
+	}
 	go func() {
 		wg.Wait()
 		close(workersDone)
@@ -656,8 +763,7 @@ cleanup:
 	for workersRunning := true; workersRunning; {
 		select {
 		case result := <-results:
-			applyBatchResult(result)
-			deferRetry(result)
+			drainResult(result)
 		case <-workersDone:
 			workersRunning = false
 		}
@@ -665,8 +771,7 @@ cleanup:
 	// worker 已全部退出，不再有发送方：关闭后 range 排空缓冲残留。
 	close(results)
 	for result := range results {
-		applyBatchResult(result)
-		deferRetry(result)
+		drainResult(result)
 	}
 
 	if v := handlerErr.Load(); v != nil {

@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 )
 
 // runStoredRound keeps the existing non-candidate handlers while giving every
 // external request the same admission, accounting, and durable attempt boundary.
 func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandler func(context.Context, BatchResult) error, logger *slog.Logger, reporter progress.Reporter) (RunRoundResult, error) {
+	ctx = WithExecutionRuntime(ctx, round.Runtime)
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -41,7 +43,7 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 		for _, batch := range batches {
 			members = append(members, batch...)
 		}
-		err = round.Runtime.Save(ctx, func(saveCtx context.Context) error {
+		err = round.Runtime.SaveNamed(ctx, persistence.Metadata{Operation: "seal", Class: persistence.Normal, ResourceID: storeResourceID(round.Store)}, func(saveCtx context.Context) error {
 			var sealErr error
 			state, sealErr = round.Store.Seal(saveCtx, uniqueSortedInts(members))
 			return sealErr
@@ -82,6 +84,7 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 			break
 		}
 		groups := map[int][]int{}
+		var advances []CursorTransition
 		for _, idx := range state.Members {
 			if completed[idx] {
 				continue
@@ -99,9 +102,7 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 				if cursor.Pool >= maxPools {
 					cursor.State = "unresolved"
 				}
-				if err := round.Runtime.Save(ctx, func(saveCtx context.Context) error { return round.Store.Cursor(saveCtx, idx, cursor) }); err != nil {
-					return RunRoundResult{}, err
-				}
+				advances = append(advances, CursorTransition{Index: idx, Cursor: cursor})
 				if state.Cursors == nil {
 					state.Cursors = map[int]WorkCursor{}
 				}
@@ -109,6 +110,11 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 				continue
 			}
 			groups[cursor.Attempt] = append(groups[cursor.Attempt], idx)
+		}
+		if len(advances) > 0 {
+			if err := round.Runtime.SaveNamed(ctx, persistence.Metadata{Operation: "pool_advance", Class: persistence.Normal, ResourceID: storeResourceID(round.Store)}, func(saveCtx context.Context) error { return round.Store.Cursors(saveCtx, advances) }); err != nil {
+				return RunRoundResult{}, err
+			}
 		}
 		var batches [][]int
 		for attempt := 0; attempt < budget; attempt++ {
@@ -225,6 +231,21 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 	if ctx.Err() != nil || round.Gate.Paused() {
 		return deferred
 	}
+	if intent := prepareIntent(handler, round.Store, backend.RequestStageMain); intent.BackendID != 0 {
+		ticket, err := round.Runtime.Preparation.Try(ctx, intent, round.Gate)
+		if err != nil {
+			if d := workDeferred(err); d != nil {
+				return batchResult{waitCapacity: d, deferred: true}
+			}
+			return batchResult{err: err, deferred: true}
+		}
+		ctx = withPreparationTicket(withCoordinatorPreparation(ctx), ticket)
+		defer func() {
+			if ticket.Active() && out.err == nil {
+				ticket.Release()
+			}
+		}()
+	}
 	session := &requestSession{runtime: round.Runtime, store: round.Store, reporter: reporter, intent: RequestIntent{Stage: backend.RequestStageMain, RoundIndex: handlerRoundIndex(handler), ResourceID: storeResourceID(round.Store), Indices: append([]int(nil), job.idxs...), Pool: pool, Attempt: job.attempt, Phase: "main"}}
 	retained := false
 	defer func() {
@@ -240,8 +261,11 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 			}
 		}
 	}()
-	callCtx := context.WithValue(ctx, requestSessionKey{}, session)
+	callCtx := session.Context(ctx)
 	result := handler.ProcessBatch(callCtx, doc, job.idxs, job.attempt, logger)
+	if result.waitCapacity != nil {
+		return result
+	}
 	if session.err != nil {
 		deferred.err = session.err
 		return deferred
@@ -264,6 +288,7 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 		result.unresolved = append(result.unresolved, result.retry.idxs...)
 		result.retry = nil
 	}
+	var transitions []CursorTransition
 	for _, idx := range job.idxs {
 		next := WorkCursor{Pool: pool, Attempt: job.attempt, State: "pending"}
 		if session.calls > 0 {
@@ -293,12 +318,14 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 				next.State = "unresolved"
 			}
 		}
-		if err := round.Runtime.Save(ctx, func(saveCtx context.Context) error { return round.Store.Cursor(saveCtx, idx, next) }); err != nil {
-			deferred.err = err
-			return deferred
-		}
+		transitions = append(transitions, CursorTransition{Index: idx, Cursor: next})
+	}
+	if err := round.Runtime.Save(callCtx, func(saveCtx context.Context) error { return round.Store.Cursors(saveCtx, transitions) }); err != nil {
+		deferred.err = err
+		return deferred
 	}
 	result.finish = session.finish
+	result.checkpointCtx = persistence.WithDeadline(callCtx, session.handoffDeadline)
 	result.fail = func(err error) { session.fail(err) }
 	retained = true
 	return result

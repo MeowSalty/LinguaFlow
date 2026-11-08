@@ -41,7 +41,7 @@ func stagedTestRuntime(t *testing.T, limits CandidateLimits) *ExecutionRuntime {
 		t.Fatal(err)
 	}
 	r := NewExecutionRuntime(a, limits, nil)
-	r.saveRetryDelay = time.Millisecond
+	r.Policy.Save.RetryDelay = time.Millisecond
 	t.Cleanup(r.Close)
 	return r
 }

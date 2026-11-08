@@ -12,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
@@ -80,9 +81,14 @@ type checkpointWrite struct {
 // 一致性（ticker goroutine 与调用方 goroutine 交叉 flush 时不出现「旧缓冲
 // 写新行」）；mu 保护 stageName/stageTotal 展示态；stageDone 为原子计数。
 type DBReporter struct {
+	saver         persistence.Saver
+	lifetime      context.Context
+	ownSaver      *persistence.Scheduler
+	saveOnce      sync.Once
 	client        *ent.Client
 	jobID         int
 	jobResourceID int
+	resourceID    int
 	logger        *slog.Logger
 	broker        *event.Broker
 
@@ -106,11 +112,12 @@ type DBReporter struct {
 	stageDone atomic.Int64
 
 	// 轮次展示态
-	mu            sync.Mutex
-	stageName     string
-	stageTotal    int
-	stageErr      error
-	checkpointErr error
+	mu                 sync.Mutex
+	stageName          string
+	stageTotal         int
+	stageErr           error
+	checkpointErr      error
+	checkpointDeadline time.Time
 
 	// 定时器安全网
 	ticker       *time.Ticker
@@ -129,9 +136,12 @@ type DBReporter struct {
 // 轮次目标行与断点映射经 SwitchRound 运行时注入
 // （每轮切换各注入一次，单一注入通道）。
 type DBReporterOptions struct {
+	Saver         persistence.Saver
+	Lifetime      context.Context
 	Client        *ent.Client
 	JobID         int
 	JobResourceID int
+	ResourceID    int
 	Logger        *slog.Logger
 	Ticker        time.Duration // flush 安全网间隔，默认 2s
 	Broker        *event.Broker // 事件 Broker，nil 时跳过事件推送
@@ -150,14 +160,23 @@ func NewDBReporter(opts DBReporterOptions) *DBReporter {
 	}
 
 	r := &DBReporter{
+		saver: opts.Saver, lifetime: opts.Lifetime,
 		client:        opts.Client,
 		jobID:         opts.JobID,
 		jobResourceID: opts.JobResourceID,
+		resourceID:    opts.ResourceID,
 		logger:        logger,
 		broker:        opts.Broker,
 		ticker:        time.NewTicker(tickerDur),
 		done:          make(chan struct{}),
 		tickerExited:  make(chan struct{}),
+	}
+	if r.lifetime == nil {
+		r.lifetime = context.Background()
+	}
+	if r.saver == nil {
+		r.ownSaver = persistence.New(persistence.DefaultPolicy(), logger)
+		r.saver = r.ownSaver
 	}
 
 	go r.runTicker()
@@ -258,19 +277,20 @@ func (r *DBReporter) StageStart(name string, total int) {
 	r.pending = r.pending[:0]
 	round := r.round
 	r.flushMu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := workstate.Transaction(ctx, r.client, func(tx *ent.Client) error {
-		if err := workstate.LockJob(ctx, tx, r.jobID); err != nil {
-			return err
-		}
-		if round == nil {
-			return tx.Job.UpdateOneID(r.jobID).AddProgressTotal(int64(total)).Exec(ctx)
-		}
-		if err := workstate.InitializeTotal(ctx, tx, r.jobID, round.rowID, total); err != nil {
-			return err
-		}
-		return workstate.Calibrate(ctx, tx, r.jobID)
+	ctx := r.lifetimeContext()
+	err := r.saving().Save(ctx, persistence.Metadata{Operation: "stage_initialize", Class: persistence.Normal, JobID: r.jobID, ResourceID: r.resourceID}, func(ctx context.Context) error {
+		return workstate.Transaction(ctx, r.client, func(tx *ent.Client) error {
+			if err := workstate.LockJob(ctx, tx, r.jobID); err != nil {
+				return err
+			}
+			if round == nil {
+				return tx.Job.UpdateOneID(r.jobID).AddProgressTotal(int64(total)).Exec(ctx)
+			}
+			if err := workstate.InitializeTotal(ctx, tx, r.jobID, round.rowID, total); err != nil {
+				return err
+			}
+			return workstate.Calibrate(ctx, tx, r.jobID)
+		})
 	})
 	r.mu.Lock()
 	r.stageErr = err
@@ -402,6 +422,13 @@ func (r *DBReporter) BatchComplete() {
 // FlushCheckpoint is the durable barrier before a legacy executor releases a
 // batch or starts another model request. Storage retries reuse the same facts.
 func (r *DBReporter) FlushCheckpoint(ctx context.Context) error {
+	if at := persistence.Deadline(ctx); !at.IsZero() {
+		r.mu.Lock()
+		if r.checkpointDeadline.IsZero() || at.Before(r.checkpointDeadline) {
+			r.checkpointDeadline = at
+		}
+		r.mu.Unlock()
+	}
 	if !r.beginWrite() {
 		return fmt.Errorf("checkpoint reporter is closed")
 	}
@@ -461,6 +488,9 @@ func (r *DBReporter) Close() error {
 		// Publish final event
 		if r.closeErr == nil && r.StageError() == nil {
 			r.publishEvent("stage_done", "", "资源处理完成")
+		}
+		if r.ownSaver != nil {
+			r.ownSaver.Close()
 		}
 	})
 	return r.closeErr
@@ -537,13 +567,57 @@ func (r *DBReporter) flush() error {
 }
 
 func (r *DBReporter) flushLocked() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return r.flushLockedContext(ctx)
+	return r.flushLockedContext(persistence.WithDeadline(r.lifetimeContext(), time.Now().Add(120*time.Second)))
 }
 
 func (r *DBReporter) flushLockedContext(ctx context.Context) (err error) {
-	defer func() { r.mu.Lock(); r.checkpointErr = err; r.mu.Unlock() }()
+	r.mu.Lock()
+	previous := errors.Join(r.stageErr, r.checkpointErr)
+	budget := r.checkpointDeadline
+	r.mu.Unlock()
+	if !budget.IsZero() {
+		current := persistence.Deadline(ctx)
+		if current.IsZero() || budget.Before(current) {
+			ctx = persistence.WithDeadline(ctx, budget)
+		}
+	}
+	var uncertain interface{ Uncertain() bool }
+	if errors.As(previous, &uncertain) && uncertain.Uncertain() {
+		return previous
+	}
+	defer func() {
+		r.mu.Lock()
+		r.checkpointErr = err
+		r.mu.Unlock()
+		if err == nil {
+			r.flushMu.Lock()
+			dirty := len(r.pending) > 0 || len(r.stale) > 0 || r.round != nil && r.round.needsWrite()
+			r.flushMu.Unlock()
+			if !dirty {
+				r.mu.Lock()
+				r.checkpointDeadline = time.Time{}
+				r.mu.Unlock()
+			}
+		}
+	}()
+	return r.saving().Save(persistence.WithLifetime(ctx, r.lifetimeContext()), persistence.Metadata{Operation: "checkpoint", Class: persistence.Reliable, JobID: r.jobID, ResourceID: r.resourceID}, r.flushExecution)
+}
+func (r *DBReporter) lifetimeContext() context.Context {
+	if r.lifetime == nil {
+		return context.Background()
+	}
+	return r.lifetime
+}
+func (r *DBReporter) saving() persistence.Saver {
+	r.saveOnce.Do(func() {
+		if r.saver == nil {
+			r.ownSaver = persistence.New(persistence.DefaultPolicy(), r.logger)
+			r.saver = r.ownSaver
+		}
+	})
+	return r.saver
+}
+func (r *DBReporter) flushExecution(ctx context.Context) (err error) {
 	// 对齐是写 segment_completed 的前置条件：未对齐的轮次先以 DB 为准重建
 	// 集合。无轮次行时该步自然为 no-op，flushFn 测试注入路径因此保持无 DB。
 	if err := r.alignCheckpoints(ctx); err != nil {
@@ -560,7 +634,13 @@ func (r *DBReporter) flushLockedContext(ctx context.Context) (err error) {
 		if len(updates) == 0 {
 			return nil
 		}
-		return r.flushFn(updates)
+		err := r.flushFn(updates)
+		if err != nil {
+			r.flushMu.Lock()
+			r.pending = append(updates, r.pending...)
+			r.flushMu.Unlock()
+		}
+		return err
 	}
 	// 旧轮残留先写：各自按记录里的行 ID 落库，与当前轮互不干扰。
 	writes := make([]checkpointWrite, 0, len(r.stale)+1)
@@ -591,6 +671,11 @@ func (r *DBReporter) flushLockedContext(ctx context.Context) (err error) {
 	r.flushMu.Unlock()
 
 	err = r.writeFlush(ctx, writes, jobDelta)
+	if err != nil && jobDelta > 0 {
+		r.flushMu.Lock()
+		r.pending = append(updates, r.pending...)
+		r.flushMu.Unlock()
+	}
 	if len(writes) > 0 {
 		// 写回记账同一临界区完成：成功记下已提交的计数值（写抑制备忘，此后
 		// 集合不再增长就无需重写）；失败则断点是正确性数据，放回各记录队首
@@ -635,7 +720,7 @@ func (r *DBReporter) pruneStale() {
 // writeFlush 只提交完成事实，共享 writer 在 Job 锁内去重并维护全部派生进度。
 // 不向数据库回写 checkpointWrite.count，因其他消费者可能已经确认更多事实。
 func (r *DBReporter) writeFlush(ctx context.Context, writes []checkpointWrite, jobDelta int) error {
-	return workstate.Transaction(ctx, r.client, func(tx *ent.Client) error {
+	err := workstate.Transaction(ctx, r.client, func(tx *ent.Client) error {
 		if err := workstate.LockJob(ctx, tx, r.jobID); err != nil {
 			return err
 		}
@@ -653,6 +738,16 @@ func (r *DBReporter) writeFlush(ctx context.Context, writes []checkpointWrite, j
 		}
 		return nil
 	})
+	if err != nil && jobDelta == 0 {
+		facts := make(map[int][]workstate.Confirmation, len(writes))
+		for _, w := range writes {
+			for _, id := range w.ids {
+				facts[w.round.rowID] = append(facts[w.round.rowID], workstate.Confirmation{SegmentID: id})
+			}
+		}
+		return workstate.ResolveCheckpoint(ctx, r.client, r.jobID, err, facts)
+	}
+	return err
 }
 
 // publishEvent publishes a lifecycle event to the Broker. No-op if broker is nil.

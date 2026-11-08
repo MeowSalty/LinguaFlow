@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 )
@@ -60,16 +61,28 @@ func decodeRequestMembers(data json.RawMessage) ([]RequestMember, error) {
 
 func alignmentStage(stage string) bool { return stage == "ruby_alignment" || stage == "alignment" }
 
-func validateRequestMember(ctx context.Context, tx *ent.Client, w *ent.WorkItem, m RequestMember) error {
-	if w.CandidateID != m.CandidateID || w.PoolIndex != m.Pool {
-		return ErrCandidateVersion
+func loadRequestCandidates(ctx context.Context, tx *ent.Client, members []RequestMember) (map[string]*ent.WorkCandidate, error) {
+	result := make(map[string]*ent.WorkCandidate, len(members))
+	for start := 0; start < len(members); start += bulkIDs {
+		end := min(start+bulkIDs, len(members))
+		ids := make([]string, 0, end-start)
+		for _, m := range members[start:end] {
+			ids = append(ids, m.CandidateID)
+		}
+		rows, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityIn(ids...)).Select(workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldWorkItemID, workcandidate.FieldVersion, workcandidate.FieldState).All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			result[row.Identity] = row
+		}
 	}
-	c, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(m.CandidateID)).Only(ctx)
-	if ent.IsNotFound(err) {
+	return result, nil
+}
+
+func validateRequestMemberRow(w *ent.WorkItem, m RequestMember, c *ent.WorkCandidate) error {
+	if w.CandidateID != m.CandidateID || w.PoolIndex != m.Pool || c == nil {
 		return ErrCandidateVersion
-	}
-	if err != nil {
-		return err
 	}
 	if c.WorkItemID != w.ID || c.Version != m.CandidateVersion || c.State != "pending_alignment" {
 		return ErrCandidateVersion
@@ -106,7 +119,53 @@ func alignmentProof(ctx context.Context, tx *ent.Client, scope Scope, w *ent.Wor
 	if err != nil {
 		return false, err
 	}
+	return alignmentProofRows(scope, w, requestID, workID, version, completed, rows)
+}
+
+func loadCursorProofs(ctx context.Context, tx *ent.Client, scope Scope, transitions []CursorTransition, items map[int]*ent.WorkItem) ([]*ent.WorkRequest, error) {
+	var requests, candidates []string
+	seenRequests, seenCandidates := map[string]bool{}, map[string]bool{}
+	for _, t := range transitions {
+		w := items[t.SegmentID]
+		if w.State == "resolved" || t.Cursor.PromptPhase != "alignment_complete" || t.Cursor.AlignmentAttempts != w.AlignmentAttempts || w.CandidateID == "" {
+			continue
+		}
+		if t.Cursor.LastAlignmentRequestID != "" {
+			if !seenRequests[t.Cursor.LastAlignmentRequestID] {
+				seenRequests[t.Cursor.LastAlignmentRequestID] = true
+				requests = append(requests, t.Cursor.LastAlignmentRequestID)
+			}
+		} else if !seenCandidates[w.CandidateID] {
+			seenCandidates[w.CandidateID] = true
+			candidates = append(candidates, w.CandidateID)
+		}
+	}
+	var result []*ent.WorkRequest
+	for start := 0; start < max(len(requests), len(candidates)); start += bulkIDs {
+		var identity []predicate.WorkRequest
+		if start < len(requests) {
+			identity = append(identity, workrequest.IdentityIn(requests[start:min(start+bulkIDs, len(requests))]...))
+		}
+		if start < len(candidates) {
+			identity = append(identity, workrequest.CandidateIDIn(candidates[start:min(start+bulkIDs, len(candidates))]...))
+		}
+		rows, err := tx.WorkRequest.Query().Where(workrequest.JobIDEQ(scope.JobID), workrequest.ResourceIDEQ(scope.ResourceID), workrequest.JobRoundIDEQ(scope.RoundID), workrequest.RetryEpochEQ(scope.RetryEpoch), workrequest.StageIn("ruby_alignment", "alignment"), workrequest.StateIn("received", "completed"), workrequest.Or(identity...)).All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, rows...)
+	}
+	return result, nil
+}
+
+func alignmentProofRows(scope Scope, w *ent.WorkItem, requestID, workID string, version int64, completed bool, rows []*ent.WorkRequest) (bool, error) {
 	for _, r := range rows {
+		if requestID != "" && r.Identity != requestID {
+			continue
+		}
+		if requestID == "" && r.CandidateID != w.CandidateID {
+			continue
+		}
 		members, err := decodeRequestMembers(r.Members)
 		if err != nil {
 			return false, err

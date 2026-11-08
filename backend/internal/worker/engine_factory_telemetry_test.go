@@ -276,7 +276,11 @@ func TestEngineFactoryRechecksPolicyAfterLimiterWait(t *testing.T) {
 			}
 			result := make(chan error, 1)
 			go func() { _, err := b.Translate(ctx, backend.Request{User: "queued"}); result <- err }()
-			for f.pool.Snapshot().Waiters == 0 {
+			for {
+				_, queued := f.engine.Rounds()[0].Runtime.Preparation.Snapshot()
+				if queued > 0 {
+					break
+				}
 				select {
 				case err := <-result:
 					t.Fatalf("request did not wait: %v", err)

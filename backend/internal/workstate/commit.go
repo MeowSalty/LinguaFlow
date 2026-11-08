@@ -26,6 +26,7 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		return CommitResult{Outcome: Fatal}, fmt.Errorf("invalid result identity or baseline")
 	}
 	var result CommitResult
+	ctx = operationContext(ctx)
 	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
 		result = CommitResult{}
 		if err := LockJob(ctx, tx, in.Scope.JobID); err != nil {
@@ -35,6 +36,13 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		if err == nil {
 			if previous.JobRoundID != in.Scope.RoundID || previous.SegmentID != in.SegmentID {
 				return fmt.Errorf("commit identity belongs to another work item")
+			}
+			round, err := tx.JobRound.Get(ctx, previous.JobRoundID)
+			if err != nil {
+				return err
+			}
+			if round.JobID != in.Scope.JobID {
+				return ErrManifest
 			}
 			result.Outcome = AlreadyCommitted
 			return nil
@@ -137,7 +145,7 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		if result.ContentVersion == 0 {
 			result.ContentVersion = row.ContentVersion
 		}
-		if _, err := Confirm(ctx, tx, in.Scope.JobID, in.Scope.RoundID, []Confirmation{{SegmentID: in.SegmentID, CommitID: in.CommitID, CandidateID: in.CandidateID, Outcome: outcome}}); err != nil {
+		if _, err := confirm(ctx, tx, in.Scope.JobID, in.Scope.RoundID, []Confirmation{{SegmentID: in.SegmentID, CommitID: in.CommitID, CandidateID: in.CandidateID, Outcome: outcome}}, true); err != nil {
 			return err
 		}
 		if err := tx.WorkItem.UpdateOneID(w.ID).SetState("resolved").ClearNextAttemptAt().Exec(ctx); err != nil {
@@ -154,10 +162,9 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 	if err == nil {
 		return result, nil
 	}
-	// A lost commit acknowledgement can be verified even if the job was
-	// cancelled or a human changed the segment after the successful commit.
-	if ctx.Err() == nil {
-		if ok, lookupErr := s.LookupCommit(ctx, in.CommitID); lookupErr == nil && ok {
+	if unknownCommit(err) {
+		err = s.finishUnknown(ctx, in.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) { return commitExists(ctx, tx, in) })
+		if err == nil {
 			return CommitResult{Outcome: AlreadyCommitted}, nil
 		}
 	}

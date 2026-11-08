@@ -220,9 +220,20 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 	// 单后端：直接调用 b.Translate（不再用 backend.WithRetry 包裹）。
 	// 在途重试由 executor 的 retry 通道统一处理。
 	var lastErr error
+	var lastBackend, lastResponse string
 	for _, b := range h.Backends {
+		lastBackend = b.Name()
 		callStart := time.Now()
 		resp, callErr := b.Translate(ctx, req)
+		if storageFailure(callErr) {
+			return batchResult{err: callErr}
+		}
+		if resp != nil {
+			lastResponse = resp.Text
+		}
+		if d := workDeferred(callErr); d != nil {
+			return batchResult{waitCapacity: d, deferred: true}
+		}
 		if callErr != nil {
 			// 致命 401/403：跳池（同 backend 重试无意义），跨轮传播换 backend。
 			if isFatalBackendError(callErr) {
@@ -342,18 +353,21 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		logger.Warn("extract batch failed (all backends exhausted)", "err", lastErr)
 	}
 	h.emitBatchOutcome(progress.BatchEvent{
-		Stage:          "extract",
-		SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
-		SegmentCount:   len(idxs),
-		Status:         "failed",
-		DurationMs:     time.Since(start).Milliseconds(),
-		ErrorType:      "backend_error",
-		ErrorMessage:   lastErr.Error(),
-		RoundIndex:     h.RoundIndex,
-		SystemPrompt:   sys,
-		UserMessage:    usr,
-		ResponseFormat: req.ResponseFormat,
-		JSONSchema:     req.JSONSchema,
+		Stage:           "extract",
+		SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
+		SegmentCount:    len(idxs),
+		Status:          "failed",
+		DurationMs:      time.Since(start).Milliseconds(),
+		ErrorType:       "backend_error",
+		ErrorMessage:    fmt.Sprint(lastErr),
+		BackendName:     lastBackend,
+		SentContent:     usr,
+		ReceivedContent: lastResponse,
+		RoundIndex:      h.RoundIndex,
+		SystemPrompt:    sys,
+		UserMessage:     usr,
+		ResponseFormat:  req.ResponseFormat,
+		JSONSchema:      req.JSONSchema,
 	})
 	return batchResult{unresolved: idxs}
 }

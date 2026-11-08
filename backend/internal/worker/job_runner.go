@@ -72,6 +72,7 @@ type jobCancelEntry struct {
 
 // PipelineConfig 流水线准入配置（由 server 从 WorkerConfig 注入）。
 type PipelineConfig struct {
+	RuntimePolicy    pipeline.RuntimePolicy
 	Candidates       pipeline.CandidateLimits
 	MaxResponseBytes int64
 	// MaxInflightWeight 在途工作配额上限（源文本字节；0 = 不限制）。
@@ -248,11 +249,13 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 		_ = r.jobs.MarkJobStarted(jobCtx, jobID)
 
 		adm := newAdmission(r.pipeCfg.MaxInflightWeight, r.pipeCfg.MaxInflightResources)
-		requestRuntime, err := NewExecutionRuntime(snapshot, r.limiterPool, gate, r.pipeCfg.Candidates)
+		requestRuntime, err := NewExecutionRuntime(snapshot, r.limiterPool, gate, r.pipeCfg.Candidates, r.pipeCfg.RuntimePolicy)
 		if err != nil {
 			return err
 		}
-		defer requestRuntime.Admission.Close()
+		requestRuntime.Lifetime = workerLifetime(ctx)
+		requestRuntime.JobID = jobID
+		defer requestRuntime.Close()
 		jobCtx = pipeline.WithExecutionRuntime(jobCtx, requestRuntime)
 		// Reconstruct aggregate occupancy from headers before admitting a resource.
 		// Recovery never materializes all persisted candidate bodies at once.
@@ -266,10 +269,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 				break
 			}
 			for _, header := range headers {
-				if header.DTOVersion != pipeline.CandidateDTOVersion {
-					return fmt.Errorf("unsupported saved candidate DTO %d", header.DTOVersion)
-				}
-				if err := requestRuntime.Window.Restore(header.ID, header.PayloadBytes); err != nil {
+				if err := restoreCandidateHeader(requestRuntime.Window, header); err != nil {
 					return err
 				}
 				draftResources[header.Scope.ResourceID] = true
@@ -354,6 +354,13 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 }
 
 // roundConcurrency 从快照提取某轮的站位容量（concurrency 字段）。
+func restoreCandidateHeader(window *pipeline.CandidateWindow, header workstate.CandidateHeader) error {
+	if header.DTOVersion != pipeline.CandidateDTOVersion {
+		return fmt.Errorf("unsupported saved candidate DTO %d", header.DTOVersion)
+	}
+	return window.RestoreScoped(header.ID, header.PayloadBytes, header.Scope.ResourceID, header.Scope.RoundID)
+}
+
 func roundConcurrency(snapshot *service.JobExecutionSnapshot, roundIdx int) int {
 	if roundIdx < 0 || roundIdx >= len(snapshot.Rounds) {
 		return 1
@@ -548,11 +555,19 @@ func (r *JobRunner) processJobResource(
 		return err
 	}
 	_ = r.jobs.MarkJobResourceStarted(ctx, item.ID)
+	res, err := item.Edges.ResourceOrErr()
+	if err != nil {
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+		return nil
+	}
 
 	reporter := progress.NewDBReporter(progress.DBReporterOptions{
+		Saver:         pipeline.ExecutionRuntimeFromContext(ctx).PersistenceSaver(),
+		Lifetime:      workerLifetime(ctx),
 		Client:        r.client,
 		JobID:         exec.Job.ID,
 		JobResourceID: item.ID,
+		ResourceID:    res.ID,
 		Logger:        r.logger,
 		Broker:        r.eventBroker,
 	})
@@ -562,12 +577,6 @@ func (r *JobRunner) processJobResource(
 			retErr = errors.Join(retErr, &pipeline.StorageError{Err: err})
 		}
 	}()
-
-	res, err := item.Edges.ResourceOrErr()
-	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
-		return nil
-	}
 
 	// 获取 Resource 级互斥锁
 	if r.resMutex != nil {
@@ -866,7 +875,7 @@ func (r *JobRunner) processJobResource(
 			persistFailedIndices = make(map[int]struct{})
 			persistFailedMu.Unlock()
 
-			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
+			batchHandler = func(ctx context.Context, batchResult pipeline.BatchResult) error {
 				defaultStatus := service.SegmentStatusTranslated
 				if autoApprove {
 					defaultStatus = service.SegmentStatusApproved
@@ -955,7 +964,7 @@ func (r *JobRunner) processJobResource(
 				return nil
 			}
 		case "correct":
-			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
+			batchHandler = func(ctx context.Context, batchResult pipeline.BatchResult) error {
 				for _, ts := range batchResult.Segments {
 					dbID, ok := docIndexToDBID[ts.Index]
 					if !ok {
@@ -997,7 +1006,7 @@ func (r *JobRunner) processJobResource(
 				return nil
 			}
 		case "adjudicate":
-			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
+			batchHandler = func(ctx context.Context, batchResult pipeline.BatchResult) error {
 				completed := 0
 				for _, ts := range batchResult.Segments {
 					dbID, ok := docIndexToDBID[ts.Index]

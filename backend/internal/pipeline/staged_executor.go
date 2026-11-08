@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 )
 
@@ -21,6 +22,7 @@ type stagedHandler interface {
 }
 
 type stagedEvent struct {
+	waitCapacity *WorkDeferred
 	page         bool
 	nextPage     int
 	lastPage     bool
@@ -45,6 +47,7 @@ var ErrResourceYield = errors.New("resource yields to recovered candidates")
 // durable destination. Main workers finish at reliable handoff, not alignment.
 // Only this goroutine applies confirmed results to the resource Document.
 func RunStagedRound(ctx context.Context, round Round, doc *Document, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporter progress.Reporter) (RunRoundResult, error) {
+	ctx = WithExecutionRuntime(ctx, runtime)
 	h, ok := round.Handler.(stagedHandler)
 	if !ok {
 		return RunRound(ctx, round, doc, nil, logger, reporter)
@@ -58,6 +61,8 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 	if store == nil {
 		store = NewMemoryRoundStore(nil)
 	}
+	consumer := runtime.Window.EnterScope(storeResourceID(store), storeRoundID(store))
+	defer consumer.Leave()
 	state, err := store.Load(ctx)
 	if err != nil {
 		return RunRoundResult{}, err
@@ -71,7 +76,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		for _, batch := range batches {
 			members = append(members, batch...)
 		}
-		state, err = store.Seal(ctx, uniqueSortedInts(members))
+		err = runtime.SaveNamed(ctx, persistence.Metadata{Operation: "seal", Class: persistence.Normal, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
+			var sealErr error
+			state, sealErr = store.Seal(saveCtx, uniqueSortedInts(members))
+			return sealErr
+		})
 		if err != nil {
 			return RunRoundResult{}, err
 		}
@@ -113,6 +122,12 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 	mainActive, candidateActive := 0, 0
 	var firstErr error
 	yielded := false
+	type waitingWindowBatch struct {
+		indices       []int
+		pool, attempt int
+		wake          <-chan struct{}
+	}
+	var waitingBatch *waitingWindowBatch
 	paused := func() bool { return runtime.Gate != nil && runtime.Gate.Paused() }
 	applyMember := func(e stagedEvent) {
 		for idx, cursor := range e.cursors {
@@ -182,7 +197,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		atomic.AddInt64(&doc.OutputTokens, e.outputTokens)
 		if e.page {
 			pageActive = false
-			pageAfter, recoveryDone = e.nextPage, e.lastPage
+			pageAfter = e.nextPage
+			recoveryDone = e.lastPage && e.err == nil && runCtx.Err() == nil
+			if recoveryDone {
+				consumer.RecoveryComplete()
+			}
 		} else if e.main {
 			mainActive--
 		} else {
@@ -191,6 +210,9 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		for _, idx := range e.indices {
 			delete(active, idx)
 		}
+		if e.waitCapacity != nil {
+			return
+		}
 		applyMember(e)
 		for _, member := range e.members {
 			applyMember(member)
@@ -198,6 +220,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 	}
 	for {
 		windowChanged := runtime.Window.Changed()
+		preparationChanged := runtime.Preparation.Changed()
+		admissionChanged := runtime.Admission.Changed()
+		globalPolicyChanged := runtime.Admission.PolicyChanged()
+		var capacityWaits []*WorkDeferred
+		var windowWake <-chan struct{}
 		var batchDeadline time.Time
 		if runCtx.Err() == nil && !paused() {
 			if !recoveryDone && !pageActive && len(candidates) == 0 {
@@ -219,7 +246,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 							bytes = int64(len(payload))
 						}
 						if err == nil {
-							err = runtime.Window.Restore(c.ID, bytes)
+							err = runtime.Window.ClaimRecovered(c.ID, bytes, consumer)
 						}
 						if err != nil {
 							e.err = err
@@ -279,21 +306,59 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					}
 					continue
 				}
+				var ticket *PreparationTicket
+				if needsAlignmentAttempt(round, c) {
+					var e error
+					ticket, e = runtime.Preparation.Try(runCtx, prepareIntent(round.Handler, store, backend.RequestStageAlignment), runtime.Gate)
+					if d := workDeferred(e); d != nil {
+						capacityWaits = append(capacityWaits, d)
+						continue
+					}
+					if e != nil {
+						if !errors.Is(e, backend.ErrDispatchPaused) {
+							firstErr = e
+							cancel()
+						}
+						break
+					}
+				}
 				for _, member := range batch {
 					active[member.Index] = true
 				}
 				candidateActive++
 				wg.Add(1)
-				go func(batch []*Candidate) {
+				go func(batch []*Candidate, ticket *PreparationTicket) {
 					defer wg.Done()
-					if len(batch) == 1 {
-						events <- processCandidate(runCtx, round, batch[0], store, runtime, logger, reporter)
-					} else {
-						events <- processCandidates(runCtx, round, batch, store, runtime, logger, reporter)
+					callCtx := runCtx
+					if ticket != nil {
+						callCtx = withPreparationTicket(withCoordinatorPreparation(runCtx), ticket)
 					}
-				}(batch)
+					var e stagedEvent
+					if len(batch) == 1 {
+						e = processCandidate(callCtx, round, batch[0], store, runtime, logger, reporter)
+					} else {
+						e = processCandidates(callCtx, round, batch, store, runtime, logger, reporter)
+					}
+					if ticket != nil && ticket.Active() && e.err == nil {
+						ticket.Release()
+					}
+					events <- e
+				}(batch, ticket)
 			}
 			for recoveryDone && mainActive < max(1, round.Concurrency) {
+				if waitingBatch != nil {
+					ready := false
+					select {
+					case <-waitingBatch.wake:
+						ready = true
+					default:
+					}
+					if !ready {
+						windowWake = waitingBatch.wake
+						capacityWaits = append(capacityWaits, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "candidate_window", CapacityChanged: windowWake}})
+						break
+					}
+				}
 				pool := -1
 				attempt := 0
 				for idx := range remaining {
@@ -328,7 +393,14 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					}
 				}
 				sort.Ints(eligible)
-				built, e := h.BuildBatches(runCtx, doc, eligible, pool)
+				var built [][]int
+				var e error
+				if waitingBatch != nil {
+					pool, attempt = waitingBatch.pool, waitingBatch.attempt
+					built = [][]int{waitingBatch.indices}
+				} else {
+					built, e = h.BuildBatches(runCtx, doc, eligible, pool)
+				}
 				if e != nil {
 					firstErr = e
 					cancel()
@@ -340,30 +412,65 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					break
 				}
 				idxs := built[0]
-				reservation := NewWorkID()
-				for len(idxs) > 0 && !runtime.Window.TryReserve(reservation, len(idxs)) {
-					if len(idxs) == 1 {
-						idxs = nil
-						break
-					}
-					idxs = idxs[:len(idxs)/2]
+				ticket, e := runtime.Preparation.Try(runCtx, prepareIntent(round.Handler, store, backend.RequestStageMain), runtime.Gate)
+				if d := workDeferred(e); d != nil {
+					capacityWaits = append(capacityWaits, d)
+					break
 				}
-				if len(idxs) == 0 {
-					if mainActive+candidateActive == 0 && len(candidates) == 0 {
-						yielded = true
+				if e != nil {
+					if !errors.Is(e, backend.ErrDispatchPaused) {
+						firstErr = e
+						cancel()
 					}
 					break
 				}
+				reservation := NewWorkID()
+				result, wake := runtime.Window.TryReserveOwned(reservation, len(idxs), storeResourceID(store), consumer)
+				for (result == WindowTooLarge || result == WindowPinnedLimit) && len(idxs) > 1 {
+					idxs = idxs[:len(idxs)/2]
+					result, wake = runtime.Window.TryReserveOwned(reservation, len(idxs), storeResourceID(store), consumer)
+				}
+				if result == WindowTooLarge {
+					ticket.Release()
+					firstErr = ErrCandidateCapacity
+					cancel()
+					break
+				}
+				if result == WindowBusy {
+					ticket.Release()
+					// Ignore the grant/release notification generated by this failed
+					// window probe; actual later preparation changes still wake us.
+					preparationChanged = runtime.Preparation.Changed()
+					waitingBatch = &waitingWindowBatch{indices: append([]int(nil), idxs...), pool: pool, attempt: attempt, wake: wake}
+					windowWake = wake
+					capacityWaits = append(capacityWaits, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "candidate_window", CapacityChanged: wake}})
+					if mainActive+candidateActive == 0 && !pageActive && len(candidates) == 0 && !runtime.Window.CanDrainFor(consumer) {
+						// A consumer may have released/left after the Busy probe. Its
+						// locked wake proves occupancy changed; retry the retained
+						// batch before yielding a now-runnable sole resource.
+						select {
+						case <-wake:
+						default:
+							yielded = true
+						}
+					}
+					break
+				}
+				waitingBatch = nil
 				copyDoc := snapshotDocument(doc, idxs)
 				for _, idx := range idxs {
 					active[idx] = true
 				}
 				mainActive++
 				wg.Add(1)
-				go func(idxs []int, pool, attempt int, snapshot *Document, key string) {
+				go func(idxs []int, pool, attempt int, snapshot *Document, key string, ticket *PreparationTicket) {
 					defer wg.Done()
-					events <- prepareMain(runCtx, round, h, snapshot, idxs, pool, attempt, key, store, runtime, logger, reporter)
-				}(idxs, pool, attempt, copyDoc, reservation)
+					e := prepareMain(withPreparationTicket(withCoordinatorPreparation(runCtx), ticket), round, h, snapshot, idxs, pool, attempt, key, store, runtime, logger, reporter)
+					if ticket.Active() && e.err == nil {
+						ticket.Release()
+					}
+					events <- e
+				}(idxs, pool, attempt, copyDoc, reservation, ticket)
 			}
 		}
 		if mainActive+candidateActive == 0 && !pageActive {
@@ -388,7 +495,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 						break
 					}
 				}
-				if !future {
+				if !future && len(capacityWaits) == 0 {
 					firstErr = fmt.Errorf("unfinished manifest has no candidate, runnable batch, or retry deadline")
 					break
 				}
@@ -396,6 +503,16 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		}
 		// Only real deadlines use a timer; capacity changes wake immediately.
 		deadline := batchDeadline
+		var policyChanged <-chan struct{}
+		for _, d := range capacityWaits {
+			w := d.Wait
+			if policyChanged == nil {
+				policyChanged = w.PolicyChanged
+			}
+			if !w.AvailableAt.IsZero() && (deadline.IsZero() || w.AvailableAt.Before(deadline)) {
+				deadline = w.AvailableAt
+			}
+		}
 		for idx := range remaining {
 			if active[idx] {
 				continue
@@ -422,6 +539,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			case e := <-events:
 				apply(e)
 			case <-changed:
+			case <-windowWake:
+			case <-preparationChanged:
+			case <-admissionChanged:
+			case <-policyChanged:
+			case <-globalPolicyChanged:
 			case <-timerC:
 			case <-runtime.Gate.Done():
 			case <-runCtx.Done():
@@ -483,13 +605,15 @@ func prepareMain(ctx context.Context, round Round, h stagedHandler, doc *Documen
 	}()
 	defer runtime.Window.Release(reservation)
 	if attempt >= transientBudgetFor(round.Retry) {
+		var transitions []CursorTransition
 		for _, idx := range idxs {
 			cursor := WorkCursor{Pool: pool + 1, State: "pending"}
-			if err := runtime.Save(ctx, func(saveCtx context.Context) error { return store.Cursor(saveCtx, idx, cursor) }); err != nil {
-				e.err = err
-				return e
-			}
+			transitions = append(transitions, CursorTransition{Index: idx, Cursor: cursor})
 			e.cursors[idx] = cursor
+		}
+		if err := runtime.SaveNamed(ctx, persistence.Metadata{Operation: "pool_advance", Class: persistence.Reliable, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error { return store.Cursors(saveCtx, transitions) }); err != nil {
+			e.err = err
+			return e
 		}
 		return e
 	}
@@ -502,12 +626,16 @@ func prepareMain(ctx context.Context, round Round, h stagedHandler, doc *Documen
 		if e.err != nil {
 			session.fail(e.err)
 		}
-		if err := session.finish(); err != nil && e.err == nil {
+		if err := session.finish(); err != nil && (e.err == nil || storageFailure(err)) {
 			e.err = err
 		}
 	}()
-	ctx = context.WithValue(ctx, requestSessionKey{}, session)
+	ctx = session.Context(ctx)
 	result := h.PrepareBatch(ctx, doc, idxs, attempt, logger)
+	if result.waitCapacity != nil {
+		e.waitCapacity = result.waitCapacity
+		return e
+	}
 	if session.err != nil {
 		e.err = session.err
 		return e
@@ -536,7 +664,7 @@ func prepareMain(ctx context.Context, round Round, h stagedHandler, doc *Documen
 			e.err = ErrCandidateCapacity
 			return e
 		}
-		if err = runtime.Save(ctx, func(saveCtx context.Context) error { return store.Save(saveCtx, c) }); err != nil {
+		if err = runtime.SaveNamed(ctx, candidateSaveMetadata("candidate", store, c), func(saveCtx context.Context) error { return store.Save(saveCtx, c) }); err != nil {
 			e.err = err
 			return e
 		}
@@ -551,6 +679,7 @@ func prepareMain(ctx context.Context, round Round, h stagedHandler, doc *Documen
 		accepted[c.Index] = true
 		e.cursors[c.Index] = WorkCursor{Pool: pool, Attempt: attempt + 1, State: "candidate"}
 	}
+	var transitions []CursorTransition
 	for _, idx := range idxs {
 		if accepted[idx] {
 			continue
@@ -576,11 +705,14 @@ func prepareMain(ctx context.Context, round Round, h stagedHandler, doc *Documen
 			cursor.Pool++
 			cursor.Attempt = 0
 		}
-		if err := runtime.Save(ctx, func(saveCtx context.Context) error { return store.Cursor(saveCtx, idx, cursor) }); err != nil {
+		transitions = append(transitions, CursorTransition{Index: idx, Cursor: cursor})
+		e.cursors[idx] = cursor
+	}
+	if len(transitions) > 0 {
+		if err := runtime.Save(ctx, func(saveCtx context.Context) error { return store.Cursors(saveCtx, transitions) }); err != nil {
 			e.err = err
 			return e
 		}
-		e.cursors[idx] = cursor
 	}
 	return e
 }
@@ -603,11 +735,21 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 	if !c.Ready {
 		worker := &AlignmentWorker{store: store, runtime: runtime, reporter: reporter}
 		defer func() {
-			if err := worker.finish(e.err); err != nil && e.err == nil {
+			if err := worker.finish(e.err); err != nil && (e.err == nil || storageFailure(err)) {
 				e.err = err
 			}
 		}()
 		update := worker.Run(ctx, round, c)
+		if update.waitCapacity != nil {
+			e.waitCapacity = update.waitCapacity
+			return e
+		}
+		if worker.session != nil && !worker.session.handoffDeadline.IsZero() {
+			if worker.session.callCtx != nil {
+				ctx = worker.session.callCtx
+			}
+			ctx = persistence.WithDeadline(ctx, worker.session.handoffDeadline)
+		}
 		e.inputTokens, e.outputTokens = update.inputTokens, update.outputTokens
 		if update.err != nil || update.paused {
 			e.err = update.err
@@ -633,7 +775,7 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 		return retired
 	}
 	var outcome CommitOutcome
-	err = runtime.Save(ctx, func(saveCtx context.Context) error {
+	err = runtime.SaveNamed(ctx, candidateSaveMetadata("commit", store, c), func(saveCtx context.Context) error {
 		var commitErr error
 		outcome, commitErr = store.Commit(saveCtx, c, result)
 		return commitErr
@@ -687,11 +829,21 @@ func processCandidates(ctx context.Context, round Round, candidates []*Candidate
 	}
 	worker := &AlignmentWorker{store: store, runtime: runtime, reporter: reporter}
 	defer func() {
-		if err := worker.finish(e.err); err != nil && e.err == nil {
+		if err := worker.finish(e.err); err != nil && (e.err == nil || storageFailure(err)) {
 			e.err = err
 		}
 	}()
 	update := worker.RunBatch(ctx, round, live)
+	if update.waitCapacity != nil {
+		e.waitCapacity = update.waitCapacity
+		return e
+	}
+	if worker.session != nil && !worker.session.handoffDeadline.IsZero() {
+		if worker.session.callCtx != nil {
+			ctx = worker.session.callCtx
+		}
+		ctx = persistence.WithDeadline(ctx, worker.session.handoffDeadline)
+	}
 	e.inputTokens, e.outputTokens = update.inputTokens, update.outputTokens
 	if update.err != nil || update.paused {
 		e.err = update.err
@@ -723,7 +875,7 @@ func retireCandidate(ctx context.Context, round Round, c *Candidate, store Round
 	if stale {
 		e.outcome = CommitStale
 	}
-	e.err = runtime.Save(ctx, func(saveCtx context.Context) error {
+	e.err = runtime.SaveNamed(ctx, candidateSaveMetadata("retire", store, c), func(saveCtx context.Context) error {
 		if stale {
 			if retirer, ok := store.(interface {
 				RetireStale(context.Context, *Candidate, WorkCursor) error
@@ -745,4 +897,19 @@ func storeResourceID(store RoundStore) int {
 		return s.ResourceIdentity()
 	}
 	return 0
+}
+
+func storeRoundID(store RoundStore) int {
+	if s, ok := store.(interface{ RoundIdentity() int }); ok {
+		return s.RoundIdentity()
+	}
+	return 0
+}
+
+func candidateSaveMetadata(operation string, store RoundStore, c *Candidate) persistence.Metadata {
+	requestID := c.LastAlignmentRequestID
+	if requestID == "" {
+		requestID = c.ParentRequestID
+	}
+	return persistence.Metadata{Operation: operation, Class: persistence.Reliable, ResourceID: storeResourceID(store), RequestID: requestID, CandidateID: c.ID}
 }

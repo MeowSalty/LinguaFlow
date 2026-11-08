@@ -279,6 +279,12 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 	// 调用 LLM
 	callStart := time.Now()
 	resp, callErr := h.callOnce(ctx, h.Backend, req)
+	if storageFailure(callErr) {
+		return batchResult{err: callErr}
+	}
+	if d := workDeferred(callErr); d != nil {
+		return batchResult{waitCapacity: d, deferred: true}
+	}
 
 	if callErr != nil {
 		if isFatalBackendError(callErr) {

@@ -201,6 +201,46 @@ func TestRunRound_PauseMidPoolStopsDispatch(t *testing.T) {
 	}
 }
 
+func TestRunPoolPauseRecoversLateWorkDeferredAndUnsentSource(t *testing.T) {
+	gate := NewPauseGate()
+	runtime := testExecutionRuntime(t, 1)
+	runtime.Gate = gate
+	store := NewMemoryRoundStore(nil)
+	entered, release := make(chan struct{}), make(chan struct{})
+	h := &pauseProbeHandler{modeName: "extract", segsPerBatch: 1}
+	h.processFn = func(_ *pauseProbeHandler, _ []int) batchResult {
+		close(entered)
+		<-release
+		return batchResult{deferred: true, waitCapacity: &WorkDeferred{Wait: backend.AdmissionWait{CapacityChanged: make(chan struct{})}}}
+	}
+	round := Round{Concurrency: 1, Gate: gate, Runtime: runtime, Store: store, Handler: h}
+	batches := [][]int{{0}, {1}, {2}, {3}, {4}, {5}}
+	done := make(chan poolResult, 1)
+	go func() {
+		result, err := runPool(context.Background(), round, h, newTestDoc(6), batches, 1, nil, quietLogger(), nil, 0, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		done <- result
+	}()
+	<-entered
+	// Pause wins before the held handler can return its capacity intent. The
+	// coordinator must join that result and the producer's unsubmitted tail.
+	gate.Pause()
+	close(release)
+	select {
+	case result := <-done:
+		if got := sortedCopy(result.unresolved); !equalInts(got, []int{0, 1, 2, 3, 4, 5}) {
+			t.Fatalf("pause discarded deferred/source work: %v", got)
+		}
+		if len(result.resolved) != 0 {
+			t.Fatal("unprepared work counted as completed")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("pause failed to join deferred batch")
+	}
+}
+
 // TestRunRound_PausedBeforeStart 启动前已暂停：不进入任何池（零建批、零派发），
 // 无 StageStart/Finalize，返回空结果且无错误——段落未被触碰，天然保持未解决
 // 状态（未解决语义由任务层断点集合与 resume 流程覆盖，不经过本返回值）。

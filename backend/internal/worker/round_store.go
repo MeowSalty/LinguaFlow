@@ -47,6 +47,7 @@ func newRoundStore(client *ent.Client, scope workstate.Scope, indices map[int]in
 	return s
 }
 func (s *roundStore) ResourceIdentity() int { return s.scope.ResourceID }
+func (s *roundStore) RoundIdentity() int    { return s.scope.RoundID }
 func (s *roundStore) WorkIdentity(index int) string {
 	id, ok := s.indexToID[index]
 	if !ok {
@@ -260,29 +261,52 @@ func (s *roundStore) retryAttempts() int {
 func (s *roundStore) current(ctx context.Context, index int) (workstate.Cursor, error) {
 	return s.store.LoadCursor(ctx, s.scope, s.indexToID[index])
 }
-func (s *roundStore) Cursor(ctx context.Context, index int, next pipeline.WorkCursor) error {
-	cur, err := s.current(ctx, index)
+func cursorTransition(current workstate.Cursor, next pipeline.WorkCursor) (workstate.Cursor, error) {
+	if next.Pool > current.PoolIndex {
+		current.PoolIndex = next.Pool
+		current.MainAttempts = 0
+		current.MainNetworkAttempts = 0
+		current.AlignmentAttempts = 0
+		current.AlignmentNetworkAttempts = 0
+		current.NetworkAttempts = 0
+	}
+	current.MainAttempts = max(current.MainAttempts, next.Attempt)
+	current.State = next.State
+	current.PromptPhase = next.Phase
+	current.NextAttemptAt = nil
+	if !next.NextAttemptAt.IsZero() {
+		at := next.NextAttemptAt
+		current.NextAttemptAt = &at
+	}
+	data, err := json.Marshal(next)
+	if err != nil {
+		return workstate.Cursor{}, err
+	}
+	current.Data = data
+	return current, nil
+}
+func (s *roundStore) Cursors(ctx context.Context, transitions []pipeline.CursorTransition) error {
+	ids := make([]int, len(transitions))
+	for i, t := range transitions {
+		id, ok := s.indexToID[t.Index]
+		if !ok {
+			return permanentStoreError{workstate.ErrManifest}
+		}
+		ids[i] = id
+	}
+	rows, err := s.store.LoadCursors(ctx, s.scope, ids)
 	if err != nil {
 		return s.classify(err)
 	}
-	if next.Pool > cur.PoolIndex {
-		cur.PoolIndex = next.Pool
-		cur.MainAttempts = 0
-		cur.MainNetworkAttempts = 0
-		cur.AlignmentAttempts = 0
-		cur.AlignmentNetworkAttempts = 0
-		cur.NetworkAttempts = 0
+	next := make([]workstate.CursorTransition, 0, len(transitions))
+	for i, t := range transitions {
+		cursor, err := cursorTransition(rows[ids[i]], t.Cursor)
+		if err != nil {
+			return s.classify(err)
+		}
+		next = append(next, workstate.CursorTransition{SegmentID: ids[i], Cursor: cursor})
 	}
-	cur.MainAttempts = max(cur.MainAttempts, next.Attempt)
-	cur.State = next.State
-	cur.PromptPhase = next.Phase
-	cur.NextAttemptAt = nil
-	if !next.NextAttemptAt.IsZero() {
-		at := next.NextAttemptAt
-		cur.NextAttemptAt = &at
-	}
-	cur.Data, _ = json.Marshal(next)
-	return s.classify(s.store.SaveCursor(ctx, s.scope, s.indexToID[index], cur))
+	return s.classify(s.store.SaveCursors(ctx, s.scope, next))
 }
 func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) error {
 	ids := make([]int, len(in.Indices))
@@ -298,16 +322,25 @@ func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) err
 		rubyBudget = s.snapshot.RubyRetry.MaxAttempts
 	}
 	retry := s.retryAttempts()
-	// Cursor advances are durable before a newly grouped request is reserved.
-	for _, idx := range in.Indices {
-		cur, err := s.current(ctx, idx)
-		if err != nil {
-			return s.classify(err)
-		}
+	// Pool advance is a separate durable phase: a failed Reserve never refunds it.
+	cursors, err := s.store.LoadCursors(ctx, s.scope, ids)
+	if err != nil {
+		return s.classify(err)
+	}
+	var advances []workstate.CursorTransition
+	for i, id := range ids {
+		cur := cursors[id]
 		if in.Pool > cur.PoolIndex {
-			if err := s.Cursor(ctx, idx, pipeline.WorkCursor{Pool: in.Pool, State: "pending"}); err != nil {
-				return err
+			cur, err = cursorTransition(cur, pipeline.WorkCursor{Pool: in.Pool, State: "pending"})
+			if err != nil {
+				return s.classify(err)
 			}
+			advances = append(advances, workstate.CursorTransition{SegmentID: ids[i], Cursor: cur})
+		}
+	}
+	for start := 0; start < len(advances); start += 500 {
+		if err := s.store.SaveCursors(ctx, s.scope, advances[start:min(start+500, len(advances))]); err != nil {
+			return s.classify(err)
 		}
 	}
 	model := "legacy_round_shared"
@@ -327,7 +360,7 @@ func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) err
 	if in.Stage == backend.RequestStageAlignment {
 		req.MaxNetworkAttempts = max(1, retry)
 	}
-	err := s.store.ReserveRequest(ctx, req)
+	err = s.store.ReserveRequest(ctx, req)
 	if errors.Is(err, workstate.ErrStopped) {
 		row, readErr := s.client.Job.Get(ctx, s.scope.JobID)
 		if readErr == nil && row.RetryEpoch == s.scope.RetryEpoch && row.Status != "cancelled" && (row.PauseRequested || row.Status == "pausing" || row.Status == "paused") {
@@ -337,10 +370,10 @@ func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) err
 	return s.classify(err)
 }
 func (s *roundStore) Record(ctx context.Context, id string, r pipeline.RequestRecord) error {
-	return s.classify(s.store.RecordRequest(ctx, id, workstate.RequestResult{State: r.State, UsageKnown: r.UsageKnown, InputTokens: r.Usage.PromptTokens, OutputTokens: r.Usage.CompletionTokens, DurationMS: r.Duration.Milliseconds(), LastError: r.Error}))
+	return s.classify(s.store.RecordRequestForScope(ctx, s.scope, id, workstate.RequestResult{State: r.State, UsageKnown: r.UsageKnown, InputTokens: r.Usage.PromptTokens, OutputTokens: r.Usage.CompletionTokens, DurationMS: r.Duration.Milliseconds(), LastError: r.Error}))
 }
 func (s *roundStore) AbortRequest(ctx context.Context, id string) error {
-	return s.classify(s.store.AbortRequest(ctx, id))
+	return s.classify(s.store.AbortRequestForScope(ctx, s.scope, id))
 }
 func (s *roundStore) Retire(ctx context.Context, c *pipeline.Candidate, next pipeline.WorkCursor) error {
 	cur, err := s.current(ctx, c.Index)
