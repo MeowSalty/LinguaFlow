@@ -397,6 +397,12 @@ tasks:
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - task --dir "{{.TASKFILE_DIR}}/.." openapi:bundle
+      - task: openapi:generate:bundled
+
+  openapi:generate:bundled:
+    desc: 读取已准备的 OpenAPI bundle，生成后端 OpenAPI Go 代码
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
       - go generate ./internal/api
 
   ent:generate:

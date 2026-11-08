@@ -48,30 +48,72 @@ tasks:
     desc: 验证 OpenAPI 规范
     deps: [openapi:bundle]
     cmds:
+      - task: _openapi:lint:bundled
+
+  _openapi:lint:bundled:
+    internal: true
+    cmds:
       - pnpm --package=@redocly/cli dlx redocly lint {{.OPENAPI_SCHEMA}}
+
+  openapi:ci:
+    desc: 强制合并一次并校验 OpenAPI 规范及指定所有权的生成物(CI)
+    requires:
+      vars:
+        - name: OWNER
+          enum: [backend, frontend]
+    cmds:
+      - task --force openapi:bundle
+      - task: _openapi:lint:bundled
+      - task: '_openapi:ci:{{.OWNER}}'
+
+  _openapi:ci:backend:
+    internal: true
+    cmds:
+      - task: _openapi:check:api:bundled
+      - task: _openapi:check:backend:bundled
+
+  _openapi:ci:frontend:
+    internal: true
+    cmds:
+      - task: _openapi:check:frontend:bundled
 
   openapi:check:api:
     desc: 校验 OpenAPI 源规范与已同步 bundle 一致(api 所有权)
     cmds:
       - task --force openapi:bundle
+      - task: _openapi:check:api:bundled
+
+  _openapi:check:api:bundled:
+    internal: true
+    cmds:
       - git diff --exit-code -- {{.OPENAPI_SCHEMA}}
 
   openapi:check:backend:
     desc: 校验后端 OpenAPI 生成代码已同步(backend 所有权)
     cmds:
       - task --force openapi:bundle
-      - task: backend:openapi:generate
+      - task: _openapi:check:backend:bundled
+
+  _openapi:check:backend:bundled:
+    internal: true
+    cmds:
+      - task: backend:openapi:generate:bundled
       - git diff --exit-code -- backend/internal/api/openapi.gen.go backend/go.mod backend/go.sum
 
   openapi:check:frontend:
     desc: 校验前端 OpenAPI 类型已同步(frontend 所有权)
     cmds:
       - task --force openapi:bundle
+      - task: _openapi:check:frontend:bundled
+
+  _openapi:check:frontend:bundled:
+    internal: true
+    cmds:
       - task: frontend:openapi:generate
       - git diff --exit-code -- frontend/src/api/types.d.ts
 
   openapi:check:
-    desc: 重新生成并检查全部 OpenAPI 产物是否已同步(本地全量校验;CI 按所有权分别调用 openapi:check:*)
+    desc: 重新生成并检查全部 OpenAPI 产物是否已同步(本地全量校验;CI 调用 openapi:ci)
     cmds:
       - task: openapi:check:api
       - task: openapi:check:backend

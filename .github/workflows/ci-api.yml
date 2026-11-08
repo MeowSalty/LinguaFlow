@@ -64,29 +64,24 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - name: 验证 OpenAPI 规范
-        run: task openapi:lint
-
       - name: 安装前端依赖
+        if: github.event_name == 'pull_request' && github.head_ref == 'frontend'
         run: task frontend:install -- --frozen-lockfile
 
       - name: 安装 Go
+        if: github.event_name != 'pull_request' || github.head_ref != 'frontend'
         uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      - name: 校验 OpenAPI bundle 一致性
+      - name: 验证 OpenAPI 规范、bundle 与后端生成物
         if: github.event_name != 'pull_request' || github.head_ref != 'frontend'
-        run: task openapi:check:api
+        run: task openapi:ci OWNER=backend
 
-      - name: 校验后端生成物一致性
-        if: github.event_name != 'pull_request' || github.head_ref != 'frontend'
-        run: task openapi:check:backend
-
-      - name: 校验前端生成物一致性
-        if: github.head_ref == 'frontend'
-        run: task openapi:check:frontend
+      - name: 验证 OpenAPI 规范与前端生成物
+        if: github.event_name == 'pull_request' && github.head_ref == 'frontend'
+        run: task openapi:ci OWNER=frontend
 
       - name: 检查 ent 生成文件一致性
         if: github.event_name != 'pull_request' || github.head_ref != 'frontend'
