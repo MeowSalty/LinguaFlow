@@ -45,42 +45,90 @@ func ReconcileJob(ctx context.Context, tx *ent.Client, jobID int) error {
 		total += int64(row.SegmentTotal)
 		completed += EffectiveProgress(row.Status, int64(row.SegmentTotal), int64(row.SegmentCompleted))
 	}
-	return tx.Job.UpdateOneID(jobID).SetProgressTotal(total).SetProgressCompleted(completed).Exec(ctx)
+	return updateJobProgress(ctx, tx, jobID, total, completed)
 }
 
 // Calibrate repairs count caches from their database sets. It is also called
 // after cascading segment/round deletion, before the deletion transaction ends.
+func updateJobProgress(ctx context.Context, tx *ent.Client, jobID int, total, completed int64) error {
+	n, err := tx.Job.Update().Where(job.IDEQ(jobID)).SetProgressTotal(total).SetProgressCompleted(completed).Save(ctx)
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrStopped
+	}
+	return nil
+}
+
 func Calibrate(ctx context.Context, tx *ent.Client, jobID int) error {
 	rows, err := tx.JobRound.Query().Where(jobround.JobIDEQ(jobID)).Order(ent.Asc(jobround.FieldID)).All(ctx)
 	if err != nil {
 		return err
 	}
-	for _, row := range rows {
-		n, err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(row.ID)).Count(ctx)
-		if err != nil {
+	completed, total := map[int]int{}, map[int]int{}
+	for start := 0; start < len(rows); start += bulkIDs {
+		end := min(start+bulkIDs, len(rows))
+		ids := make([]int, 0, end-start)
+		sealed := make([]int, 0, end-start)
+		for _, row := range rows[start:end] {
+			ids = append(ids, row.ID)
+			if row.ManifestSealed {
+				sealed = append(sealed, row.ID)
+			}
+		}
+		var counts []struct {
+			RoundID int `json:"job_round_id"`
+			Count   int `json:"count"`
+		}
+		if err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDIn(ids...)).GroupBy(jobroundsegment.FieldJobRoundID).Aggregate(ent.Count()).Scan(ctx, &counts); err != nil {
 			return err
 		}
-		u := tx.JobRound.UpdateOneID(row.ID).SetSegmentCompleted(n)
+		for _, count := range counts {
+			completed[count.RoundID] = count.Count
+		}
+		if len(sealed) > 0 {
+			counts = nil
+			if err := tx.WorkItem.Query().Where(workitem.JobRoundIDIn(sealed...)).GroupBy(workitem.FieldJobRoundID).Aggregate(ent.Count()).Scan(ctx, &counts); err != nil {
+				return err
+			}
+			for _, count := range counts {
+				total[count.RoundID] = count.Count
+			}
+		}
+	}
+	var jobTotal, jobCompleted int64
+	for _, row := range rows {
+		n := completed[row.ID]
+		t := row.SegmentTotal
 		if row.ManifestSealed {
-			total, err := tx.WorkItem.Query().Where(workitem.JobRoundIDEQ(row.ID)).Count(ctx)
+			t = total[row.ID]
+			if t < n {
+				return fmt.Errorf("%w: round %d has completion outside manifest", ErrManifest, row.ID)
+			}
+		}
+		if n != row.SegmentCompleted || t != row.SegmentTotal {
+			matched, err := tx.JobRound.Update().Where(jobround.IDEQ(row.ID), jobround.JobIDEQ(jobID), jobround.SegmentCompletedEQ(row.SegmentCompleted), jobround.SegmentTotalEQ(row.SegmentTotal)).SetSegmentCompleted(n).SetSegmentTotal(t).Save(ctx)
 			if err != nil {
 				return err
 			}
-			if total < n {
-				return fmt.Errorf("%w: round %d has completion outside manifest", ErrManifest, row.ID)
+			if matched != 1 {
+				return ErrManifest
 			}
-			u.SetSegmentTotal(total)
 		}
-		if err := u.Exec(ctx); err != nil {
-			return err
-		}
+		jobTotal += int64(t)
+		jobCompleted += EffectiveProgress(row.Status, int64(t), int64(n))
 	}
-	return ReconcileJob(ctx, tx, jobID)
+	return updateJobProgress(ctx, tx, jobID, jobTotal, jobCompleted)
 }
 
 // Confirm inserts genuinely new facts under the Job lock. It never uses a
 // reporter's memory count, so late legacy buffers cannot erase another writer.
 func Confirm(ctx context.Context, tx *ent.Client, jobID, roundID int, facts []Confirmation) (int, error) {
+	return confirm(ctx, tx, jobID, roundID, facts, false)
+}
+
+func confirm(ctx context.Context, tx *ent.Client, jobID, roundID int, facts []Confirmation, enrich bool) (int, error) {
 	row, err := tx.JobRound.Get(ctx, roundID)
 	if err != nil {
 		return 0, err
@@ -89,53 +137,118 @@ func Confirm(ctx context.Context, tx *ent.Client, jobID, roundID int, facts []Co
 		return 0, ErrManifest
 	}
 	before := EffectiveProgress(row.Status, int64(row.SegmentTotal), int64(row.SegmentCompleted))
-	ids := make([]int, 0, len(facts))
 	byID := make(map[int]Confirmation, len(facts))
 	for _, fact := range facts {
-		if fact.SegmentID > 0 {
-			ids = append(ids, fact.SegmentID)
-			byID[fact.SegmentID] = fact
-		}
-	}
-	sort.Ints(ids)
-	existing, err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(roundID), jobroundsegment.SegmentIDIn(ids...)).All(ctx)
-	if err != nil {
-		return 0, err
-	}
-	for _, fact := range existing {
-		delete(byID, fact.SegmentID)
-	}
-	added := 0
-	for _, id := range ids {
-		fact, ok := byID[id]
-		if !ok {
+		if fact.SegmentID < 1 {
 			continue
 		}
-		delete(byID, id)
-		if row.ManifestSealed {
-			ok, err := tx.WorkItem.Query().Where(workitem.JobRoundIDEQ(roundID), workitem.SegmentIDEQ(id)).Exist(ctx)
+		if old, ok := byID[fact.SegmentID]; ok {
+			if confirmationConflict(old, fact) {
+				return 0, fmt.Errorf("%w: conflicting completion identity", ErrManifest)
+			}
+			if old.CommitID != "" {
+				fact.CommitID = old.CommitID
+			}
+			if old.CandidateID != "" {
+				fact.CandidateID = old.CandidateID
+			}
+			if old.Outcome != "" {
+				fact.Outcome = old.Outcome
+			}
+		}
+		byID[fact.SegmentID] = fact
+	}
+	ids := make([]int, 0, len(byID))
+	for id := range byID {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	for start := 0; start < len(ids); start += bulkIDs {
+		end := min(start+bulkIDs, len(ids))
+		existing, err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(roundID), jobroundsegment.SegmentIDIn(ids[start:end]...)).All(ctx)
+		if err != nil {
+			return 0, err
+		}
+		for _, old := range existing {
+			incoming := byID[old.SegmentID]
+			previous := Confirmation{SegmentID: old.SegmentID}
+			if old.CommitID != nil {
+				previous.CommitID = *old.CommitID
+			}
+			if old.CandidateID != nil {
+				previous.CandidateID = *old.CandidateID
+			}
+			if old.Outcome != "legacy" {
+				previous.Outcome = Outcome(old.Outcome)
+			}
+			if confirmationConflict(previous, incoming) {
+				return 0, fmt.Errorf("%w: conflicting persisted completion identity", ErrManifest)
+			}
+			// Only Commit reaches this path after full acceptance checks. A legacy
+			// completion already counts, but needs the accepted commit identity so
+			// a lost COMMIT acknowledgement can be verified without applying again.
+			if enrich && (old.CommitID == nil && incoming.CommitID != "" || old.CandidateID == nil && incoming.CandidateID != "" || old.Outcome == "legacy" && incoming.Outcome != "") {
+				u := tx.JobRoundSegment.Update().Where(jobroundsegment.IDEQ(old.ID), jobroundsegment.JobRoundIDEQ(roundID), jobroundsegment.SegmentIDEQ(old.SegmentID))
+				if old.CommitID == nil && incoming.CommitID != "" {
+					u.SetCommitID(incoming.CommitID)
+				}
+				if old.CandidateID == nil && incoming.CandidateID != "" {
+					u.SetCandidateID(incoming.CandidateID)
+				}
+				if old.Outcome == "legacy" && incoming.Outcome != "" {
+					u.SetOutcome(string(incoming.Outcome))
+				}
+				n, err := u.Save(ctx)
+				if err != nil {
+					return 0, err
+				}
+				if n != 1 {
+					return 0, ErrManifest
+				}
+			}
+			delete(byID, old.SegmentID)
+		}
+	}
+	newIDs := make([]int, 0, len(byID))
+	for _, id := range ids {
+		if _, ok := byID[id]; ok {
+			newIDs = append(newIDs, id)
+		}
+	}
+	if row.ManifestSealed {
+		for start := 0; start < len(newIDs); start += bulkIDs {
+			end := min(start+bulkIDs, len(newIDs))
+			count, err := tx.WorkItem.Query().Where(workitem.JobIDEQ(jobID), workitem.JobRoundIDEQ(roundID), workitem.SegmentIDIn(newIDs[start:end]...)).Count(ctx)
 			if err != nil {
 				return 0, err
 			}
-			if !ok {
+			if count != end-start {
 				return 0, ErrManifest
 			}
 		}
-		b := tx.JobRoundSegment.Create().SetJobRoundID(roundID).SetSegmentID(id)
-		if fact.CommitID != "" {
-			b.SetCommitID(fact.CommitID)
+	}
+	for start := 0; start < len(newIDs); start += bulkRows {
+		end := min(start+bulkRows, len(newIDs))
+		builders := make([]*ent.JobRoundSegmentCreate, 0, end-start)
+		for _, id := range newIDs[start:end] {
+			fact := byID[id]
+			b := tx.JobRoundSegment.Create().SetJobRoundID(roundID).SetSegmentID(id)
+			if fact.CommitID != "" {
+				b.SetCommitID(fact.CommitID)
+			}
+			if fact.CandidateID != "" {
+				b.SetCandidateID(fact.CandidateID)
+			}
+			if fact.Outcome != "" {
+				b.SetOutcome(string(fact.Outcome))
+			}
+			builders = append(builders, b)
 		}
-		if fact.CandidateID != "" {
-			b.SetCandidateID(fact.CandidateID)
-		}
-		if fact.Outcome != "" {
-			b.SetOutcome(string(fact.Outcome))
-		}
-		if err := b.Exec(ctx); err != nil {
+		if err := tx.JobRoundSegment.CreateBulk(builders...).Exec(ctx); err != nil {
 			return 0, err
 		}
-		added++
 	}
+	added := len(newIDs)
 	// Counting the round's indexed relation also repairs pre-upgrade caches. No
 	// per-segment scan over the job or a reporter's stale absolute value is used.
 	count := row.SegmentCompleted + added
@@ -145,16 +258,25 @@ func Confirm(ctx context.Context, tx *ent.Client, jobID, roundID int, facts []Co
 			return 0, err
 		}
 	}
-	if err := tx.JobRound.UpdateOneID(roundID).SetSegmentCompleted(count).Exec(ctx); err != nil {
+	if n, err := tx.JobRound.Update().Where(jobround.IDEQ(roundID), jobround.JobIDEQ(jobID), jobround.SegmentCompletedEQ(row.SegmentCompleted)).SetSegmentCompleted(count).Save(ctx); err != nil {
 		return 0, err
+	} else if n != 1 {
+		return 0, ErrManifest
 	}
 	after := EffectiveProgress(row.Status, int64(row.SegmentTotal), int64(count))
 	if delta := after - before; delta != 0 {
-		if err := tx.Job.UpdateOneID(jobID).AddProgressCompleted(delta).Exec(ctx); err != nil {
+		if n, err := tx.Job.Update().Where(job.IDEQ(jobID)).AddProgressCompleted(delta).Save(ctx); err != nil {
 			return 0, err
+		} else if n != 1 {
+			return 0, ErrStopped
 		}
 	}
 	return added, nil
+}
+
+// Empty metadata is a completion notification, not a conflicting identity.
+func confirmationConflict(a, b Confirmation) bool {
+	return a.CommitID != "" && b.CommitID != "" && a.CommitID != b.CommitID || a.CandidateID != "" && b.CandidateID != "" && a.CandidateID != b.CandidateID || a.Outcome != "" && b.Outcome != "" && a.Outcome != b.Outcome
 }
 
 func SetRoundStatus(ctx context.Context, tx *ent.Client, roundID int, allowed []string, status string) error {

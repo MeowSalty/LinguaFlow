@@ -8,6 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -87,6 +88,7 @@ func (s *Store) SealRound(ctx context.Context, scope Scope, ids []int) (RoundSta
 		ids = append(ids, id)
 	}
 	sort.Ints(ids)
+	ctx = operationContext(ctx)
 	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
 		if err := guardScope(ctx, tx, scope, true); err != nil {
 			return err
@@ -110,9 +112,13 @@ func (s *Store) SealRound(ctx context.Context, scope Scope, ids []int) (RoundSta
 			}
 			return nil
 		}
-		count, err := tx.Segment.Query().Where(segment.IDIn(ids...), segment.ResourceIDEQ(scope.ResourceID)).Count(ctx)
-		if err != nil {
-			return err
+		count := 0
+		for start := 0; start < len(ids); start += bulkIDs {
+			n, err := tx.Segment.Query().Where(segment.IDIn(ids[start:min(start+bulkIDs, len(ids))]...), segment.ResourceIDEQ(scope.ResourceID)).Count(ctx)
+			if err != nil {
+				return err
+			}
+			count += n
 		}
 		if count != len(ids) {
 			return ErrManifest
@@ -132,19 +138,53 @@ func (s *Store) SealRound(ctx context.Context, scope Scope, ids []int) (RoundSta
 			}
 			done[row.SegmentID] = true
 		}
-		for _, id := range ids {
-			state := "pending"
-			if done[id] {
-				state = "resolved"
+		for start := 0; start < len(ids); start += bulkRows {
+			end := min(start+bulkRows, len(ids))
+			builders := make([]*ent.WorkItemCreate, 0, end-start)
+			for _, id := range ids[start:end] {
+				state := "pending"
+				if done[id] {
+					state = "resolved"
+				}
+				builders = append(builders, tx.WorkItem.Create().SetJobID(scope.JobID).SetResourceID(scope.ResourceID).SetJobRoundID(scope.RoundID).SetSegmentID(id).SetRetryEpoch(scope.RetryEpoch).SetState(state))
 			}
-			if err := tx.WorkItem.Create().SetJobID(scope.JobID).SetResourceID(scope.ResourceID).SetJobRoundID(scope.RoundID).SetSegmentID(id).SetRetryEpoch(scope.RetryEpoch).SetState(state).Exec(ctx); err != nil {
+			if err := tx.WorkItem.CreateBulk(builders...).Exec(ctx); err != nil {
 				return err
 			}
 		}
-		if err := tx.JobRound.UpdateOneID(scope.RoundID).SetManifestVersion(1).SetManifestSealed(true).SetSegmentTotal(len(ids)).Exec(ctx); err != nil {
+		n, err := tx.JobRound.Update().Where(jobround.IDEQ(scope.RoundID), jobround.ManifestSealedEQ(false)).SetManifestVersion(1).SetManifestSealed(true).SetSegmentTotal(len(ids)).Save(ctx)
+		if err != nil {
 			return err
 		}
+		if n != 1 {
+			return ErrManifest
+		}
 		return Calibrate(ctx, tx, scope.JobID)
+	})
+	err = s.finishUnknown(ctx, scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
+		round, err := tx.JobRound.Get(ctx, scope.RoundID)
+		if err != nil {
+			return false, err
+		}
+		if !round.ManifestSealed {
+			return false, nil
+		}
+		if round.JobID != scope.JobID || round.SegmentTotal != len(ids) {
+			return false, ErrManifest
+		}
+		rows, err := tx.WorkItem.Query().Where(workitem.JobRoundIDEQ(scope.RoundID)).Select(workitem.FieldSegmentID).All(ctx)
+		if err != nil {
+			return false, err
+		}
+		if len(rows) != len(ids) {
+			return false, ErrManifest
+		}
+		for _, row := range rows {
+			if _, ok := unique[row.SegmentID]; !ok {
+				return false, ErrManifest
+			}
+		}
+		return true, nil
 	})
 	if err != nil {
 		return RoundState{}, err
@@ -198,67 +238,20 @@ func member(ctx context.Context, tx *ent.Client, scope Scope, id int) (*ent.Work
 }
 
 func (s *Store) SaveCursor(ctx context.Context, scope Scope, segmentID int, cursor Cursor) error {
-	return Transaction(ctx, s.client, func(tx *ent.Client) error {
-		if err := guardScope(ctx, tx, scope, false); err != nil {
-			return err
-		}
-		return saveCursor(ctx, tx, scope, segmentID, cursor)
-	})
+	return s.SaveCursors(ctx, scope, []CursorTransition{{SegmentID: segmentID, Cursor: cursor}})
 }
 
-func saveCursor(ctx context.Context, tx *ent.Client, scope Scope, segmentID int, cursor Cursor) error {
+func saveCursor(ctx context.Context, tx *ent.Client, scope Scope, segmentID int, cursor Cursor, expected ...map[int]attemptCounters) error {
 	row, err := member(ctx, tx, scope, segmentID)
 	if err != nil {
 		return err
 	}
-	if row.State == "resolved" {
-		return nil
-	}
-	newPool := cursor.PoolIndex > row.PoolIndex
-	newAlignment := cursor.AlignmentAttempts > row.AlignmentAttempts
-	alignmentCompleted := false
-	if cursor.PromptPhase == "alignment_complete" && cursor.AlignmentAttempts == row.AlignmentAttempts && row.CandidateID != "" {
-		alignmentCompleted, err = alignmentProof(ctx, tx, scope, row, cursor.LastAlignmentRequestID, cursor.WorkID, cursor.CandidateVersion, true)
-		if err != nil {
-			return err
-		}
-	}
-	if cursor.PoolIndex < row.PoolIndex || (!newPool && (cursor.MainAttempts < row.MainAttempts || cursor.AlignmentAttempts < row.AlignmentAttempts)) || (!newPool && !newAlignment && !alignmentCompleted && cursor.NetworkAttempts < row.NetworkAttempts) {
-		return ErrStale
-	}
-	u := tx.WorkItem.UpdateOneID(row.ID).SetPoolIndex(cursor.PoolIndex).SetMainAttempts(cursor.MainAttempts).SetAlignmentAttempts(cursor.AlignmentAttempts).SetNetworkAttempts(cursor.NetworkAttempts).SetLastError(cursor.LastError)
-	if newPool {
-		u.SetMainNetworkAttempts(0).SetAlignmentNetworkAttempts(0)
-	} else if newAlignment || alignmentCompleted {
-		u.SetAlignmentNetworkAttempts(0)
-	}
-	if cursor.State != "" {
-		u.SetState(cursor.State)
-	}
-	if cursor.PromptPhase != "" {
-		u.SetPromptPhase(cursor.PromptPhase)
-	}
-	if cursor.NextAttemptAt == nil {
-		u.ClearNextAttemptAt()
-	} else {
-		u.SetNextAttemptAt(*cursor.NextAttemptAt)
-	}
-	if len(cursor.Data) > 0 {
-		u.SetCursor(cursor.Data)
-	}
-	if err := u.Exec(ctx); err != nil {
-		return err
-	}
-	if cursor.State == "rejected" || cursor.State == "stale" || cursor.State == "unresolved" {
-		if _, err := tx.WorkCandidate.Update().Where(workcandidate.WorkItemIDEQ(row.ID)).SetState(cursor.State).ClearPayload().SetPayloadBytes(0).Save(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
+	return saveCursorRows(ctx, tx, scope, []CursorTransition{{SegmentID: segmentID, Cursor: cursor}}, map[int]*ent.WorkItem{segmentID: row}, expected...)
 }
 
 func (s *Store) SavePool(ctx context.Context, scope Scope, pool int) error {
-	return Transaction(ctx, s.client, func(tx *ent.Client) error {
+	ctx = operationContext(ctx)
+	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
 		if err := guardScope(ctx, tx, scope, false); err != nil {
 			return err
 		}
@@ -270,6 +263,19 @@ func (s *Store) SavePool(ctx context.Context, scope Scope, pool int) error {
 			return ErrStale
 		}
 		return tx.JobRound.UpdateOneID(row.ID).SetPoolIndex(pool).Exec(ctx)
+	})
+	return s.finishUnknown(ctx, scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
+		row, err := tx.JobRound.Get(ctx, scope.RoundID)
+		if err != nil {
+			return false, err
+		}
+		if row.JobID != scope.JobID {
+			return false, ErrManifest
+		}
+		if row.PoolIndex > pool {
+			return false, errUnverifiable
+		}
+		return row.PoolIndex == pool, nil
 	})
 }
 
@@ -305,7 +311,9 @@ func (s *Store) saveCandidate(ctx context.Context, c Candidate, cursor *Cursor) 
 	if c.State == "" {
 		c.State = "pending_alignment"
 	}
-	return Transaction(ctx, s.client, func(tx *ent.Client) error {
+	ctx = operationContext(ctx)
+	expected := map[int]attemptCounters{}
+	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
 		if err := saveCandidate(ctx, tx, c); err != nil {
 			return err
 		}
@@ -313,9 +321,32 @@ func (s *Store) saveCandidate(ctx context.Context, c Candidate, cursor *Cursor) 
 			cursor.LastAlignmentRequestID = c.LastAlignmentRequestID
 			cursor.CandidateVersion = c.Version
 			cursor.WorkID = c.WorkID
-			return saveCursor(ctx, tx, c.Scope, c.SegmentID, *cursor)
+			return saveCursor(ctx, tx, c.Scope, c.SegmentID, *cursor, expected)
 		}
 		return nil
+	})
+	return s.finishUnknown(ctx, c.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
+		w, err := member(ctx, tx, c.Scope, c.SegmentID)
+		if err != nil {
+			return false, err
+		}
+		row, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Only(ctx)
+		if ent.IsNotFound(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if row.WorkItemID != w.ID || row.Version != c.Version || row.SnapshotDigest != c.SnapshotDigest || row.DtoVersion != c.DTOVersion || row.Mode != c.Mode || row.BaselineVersion != c.BaselineVersion || row.State != c.State || string(row.Payload) != string(c.Payload) {
+			if row.WorkItemID == w.ID && row.Version < c.Version {
+				return false, nil
+			}
+			return false, errUnverifiable
+		}
+		if w.CandidateID != c.ID || cursor != nil && (!cursorSaved(w, *cursor) || attemptsFromRow(w) != expected[c.SegmentID]) {
+			return false, errUnverifiable
+		}
+		return true, nil
 	})
 }
 

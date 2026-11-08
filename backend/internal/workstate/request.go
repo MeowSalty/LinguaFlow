@@ -9,6 +9,8 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 )
 
@@ -36,7 +38,8 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 			return err
 		}
 	}
-	return Transaction(ctx, s.client, func(tx *ent.Client) error {
+	ctx = operationContext(ctx)
+	err = Transaction(ctx, s.client, func(tx *ent.Client) error {
 		if err := guardScope(ctx, tx, r.Scope, true); err != nil {
 			return err
 		}
@@ -59,11 +62,24 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 		}
 		logicalAttempt := 0
 		debits := make([]requestDebit, 0, len(ids))
+		rows, err := loadMembers(ctx, tx, r.Scope, ids)
+		if err != nil {
+			return err
+		}
+		candidates, err := loadRequestCandidates(ctx, tx, members)
+		if err != nil {
+			return err
+		}
+		type debitGroup struct {
+			row             *ent.WorkItem
+			after           attemptCounters
+			main, alignment bool
+			ids             []int
+		}
+		groups := map[string]*debitGroup{}
+		var groupOrder []string
 		for i, id := range ids {
-			w, err := member(ctx, tx, r.Scope, id)
-			if err != nil {
-				return err
-			}
+			w := rows[id]
 			if w.State == "resolved" {
 				return ErrStale
 			}
@@ -72,7 +88,7 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 			}
 			alignmentAttempt := r.AlignmentAttempt
 			if len(members) > 0 {
-				if err := validateRequestMember(ctx, tx, w, members[i]); err != nil {
+				if err := validateRequestMemberRow(w, members[i], candidates[members[i].CandidateID]); err != nil {
 					return err
 				}
 				alignmentAttempt = members[i].NetworkAttempt == 0
@@ -111,26 +127,52 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 			before := attemptsFromRow(w)
 			after := before
 			after.Network = network
-			u := tx.WorkItem.UpdateOneID(w.ID).SetNetworkAttempts(network)
 			if alignment {
-				u.SetAlignmentNetworkAttempts(network)
 				after.AlignmentNetwork = network
 			} else {
-				u.SetMainNetworkAttempts(network)
 				after.MainNetwork = network
 			}
 			if r.MainAttempt {
-				u.AddMainAttempts(1)
 				after.Main++
 			}
 			if alignmentAttempt {
-				u.AddAlignmentAttempts(1)
 				after.Alignment++
 			}
-			if err := u.Exec(ctx); err != nil {
+			keyData, err := json.Marshal([]any{w.State, w.CandidateID, w.PoolIndex, w.PromptPhase, before, after, r.MainAttempt, alignmentAttempt})
+			if err != nil {
 				return err
 			}
+			key := string(keyData)
+			g := groups[key]
+			if g == nil {
+				g = &debitGroup{row: w, after: after, main: r.MainAttempt, alignment: alignmentAttempt}
+				groups[key] = g
+				groupOrder = append(groupOrder, key)
+			}
+			g.ids = append(g.ids, w.ID)
 			debits = append(debits, requestDebit{SegmentID: id, Pool: w.PoolIndex, Before: before, After: after})
+		}
+		for _, key := range groupOrder {
+			g := groups[key]
+			for start := 0; start < len(g.ids); start += bulkRows {
+				end := min(start+bulkRows, len(g.ids))
+				p := append(expectedMember(r.Scope, g.row), workitem.IDIn(g.ids[start:end]...))
+				u := tx.WorkItem.Update().Where(p...).SetNetworkAttempts(g.after.Network)
+				if alignmentStage(r.Stage) {
+					u.SetAlignmentNetworkAttempts(g.after.AlignmentNetwork)
+				} else {
+					u.SetMainNetworkAttempts(g.after.MainNetwork)
+				}
+				if g.main {
+					u.AddMainAttempts(1)
+				}
+				if g.alignment {
+					u.AddAlignmentAttempts(1)
+				}
+				if err := checkedUpdate(ctx, u, end-start); err != nil {
+					return err
+				}
+			}
 		}
 		encoded, err := json.Marshal(debits)
 		if err != nil {
@@ -142,32 +184,56 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 		}
 		return create.Exec(ctx)
 	})
+	return s.finishUnknown(ctx, r.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) { return reservationExists(ctx, tx, r) })
 }
 
 // RecordRequest accepts accounting for an already reserved request after
 // cancellation; it never creates a candidate or changes accepted content.
 func (s *Store) RecordRequest(ctx context.Context, id string, result RequestResult) error {
+	return s.recordRequest(ctx, nil, id, result)
+}
+
+func (s *Store) RecordRequestForScope(ctx context.Context, scope Scope, id string, result RequestResult) error {
+	return s.recordRequest(ctx, &scope, id, result)
+}
+
+func (s *Store) recordRequest(ctx context.Context, scope *Scope, id string, result RequestResult) error {
 	if result.State != "sent" && result.State != "received" && result.State != "unknown" && result.State != "completed" && result.State != "failed" {
 		return fmt.Errorf("invalid request result state")
 	}
-	return Transaction(ctx, s.client, func(tx *ent.Client) error {
+	jobID := 0
+	var expected *ent.WorkRequest
+	ctx = operationContext(ctx)
+	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
+		if scope != nil {
+			jobID = scope.JobID
+		} else {
+			header, err := tx.WorkRequest.Query().Where(workrequest.IdentityEQ(id)).Select(workrequest.FieldID, workrequest.FieldJobID).Only(ctx)
+			if err != nil {
+				return err
+			}
+			jobID = header.JobID
+		}
+		if err := LockJob(ctx, tx, jobID); err != nil {
+			return err
+		}
 		row, err := tx.WorkRequest.Query().Where(workrequest.IdentityEQ(id)).Only(ctx)
 		if err != nil {
 			return err
 		}
-		if err := LockJob(ctx, tx, row.JobID); err != nil {
-			return err
-		}
-		row, err = tx.WorkRequest.Get(ctx, row.ID)
-		if err != nil {
-			return err
+		if row.JobID != jobID || (scope != nil && (row.JobRoundID != scope.RoundID || row.ResourceID != scope.ResourceID || row.RetryEpoch != scope.RetryEpoch)) {
+			return ErrManifest
 		}
 		if row.State == "cancelled_before_dispatch" {
 			return ErrStopped
 		}
-		u := tx.WorkRequest.UpdateOneID(row.ID)
+		copyRow := *row
+		expected = &copyRow
+		u := tx.WorkRequest.Update().Where(workrequest.IDEQ(row.ID), workrequest.JobIDEQ(jobID), workrequest.StateEQ(row.State), workrequest.UsageKnownEQ(row.UsageKnown))
 		if row.State != "completed" && row.State != "failed" && !(row.State == "received" && result.State == "sent") {
 			u.SetState(result.State).SetLastError(result.LastError)
+			expected.State = result.State
+			expected.LastError = result.LastError
 		}
 		if row.UsageRecordID == nil && (result.State == "sent" || result.State == "received" || result.State == "completed" || result.State == "failed") {
 			j, err := tx.Job.Query().Where(job.IDEQ(row.JobID)).WithCreatedBy().WithProject().Only(ctx)
@@ -189,18 +255,45 @@ func (s *Store) RecordRequest(ctx context.Context, id string, result RequestResu
 				return err
 			}
 			u.SetUsageRecordID(created.ID)
+			expected.UsageRecordID = &created.ID
 		} else if row.UsageRecordID != nil && result.UsageKnown && !row.UsageKnown {
-			if err := tx.UsageRecord.UpdateOneID(*row.UsageRecordID).SetInputTokens(usageInt(result.InputTokens)).SetOutputTokens(usageInt(result.OutputTokens)).Exec(ctx); err != nil {
+			if n, err := tx.UsageRecord.Update().Where(usagerecord.IDEQ(*row.UsageRecordID)).SetInputTokens(usageInt(result.InputTokens)).SetOutputTokens(usageInt(result.OutputTokens)).Save(ctx); err != nil {
 				return err
+			} else if n != 1 {
+				return ErrManifest
 			}
 		}
 		if result.UsageKnown && !row.UsageKnown {
 			u.SetUsageKnown(true).SetInputTokens(result.InputTokens).SetOutputTokens(result.OutputTokens)
+			expected.UsageKnown = true
+			expected.InputTokens = result.InputTokens
+			expected.OutputTokens = result.OutputTokens
 		}
 		if result.DurationMS > row.DurationMs {
 			u.SetDurationMs(result.DurationMS)
+			expected.DurationMs = result.DurationMS
 		}
-		return u.Exec(ctx)
+		n, err := u.Save(ctx)
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return ErrManifest
+		}
+		return nil
+	})
+	return s.finishUnknown(ctx, jobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
+		row, err := tx.WorkRequest.Query().Where(workrequest.IdentityEQ(id)).Only(ctx)
+		if err != nil {
+			return false, err
+		}
+		if expected == nil || row.JobID != jobID {
+			return false, ErrManifest
+		}
+		if row.State == expected.State && row.LastError == expected.LastError && row.UsageKnown == expected.UsageKnown && row.InputTokens == expected.InputTokens && row.OutputTokens == expected.OutputTokens && row.DurationMs == expected.DurationMs && sameInt(row.UsageRecordID, expected.UsageRecordID) {
+			return true, nil
+		}
+		return false, errUnverifiable
 	})
 }
 
