@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.34.5",
   "scripts": {
     "dev": "vite",
     "build": "run-s \"build-only {@}\" type-check --",
@@ -21,9 +20,9 @@
     "naive-ui": "^2.45.3",
     "openapi-fetch": "^0.17.0",
     "pinia": "^4.0.3",
-    "re2js": "2.8.6",
+    "re2js": "2.9.1",
     "vue": "^3.5.43",
-    "vue-i18n": "^11.4.13",
+    "vue-i18n": "^11.4.18",
     "vue-router": "^5.4.0"
   },
   "devDependencies": {
@@ -36,7 +35,7 @@
     "@vitejs/plugin-vue-jsx": "^5.1.6",
     "@vue/eslint-config-typescript": "^14.9.0",
     "@vue/tsconfig": "^0.9.1",
-    "eslint": "^10.12.0",
+    "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-oxlint": "~1.87.0",
     "eslint-plugin-vue": "~10.11.1",
@@ -59,19 +58,5 @@
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
-  "pnpm": {
-    "auditConfig": {
-      "ignoreGhsas": [
-        "GHSA-vfj7-8cjw-p6xm"
-      ]
-    },
-    "overrides": {
-      "brace-expansion@^2.0.0": "2.1.7",
-      "brace-expansion@^5.0.0": "5.0.12",
-      "browserslist@<4.28.7": ">=4.28.7",
-      "js-yaml@^4": "4.3.2",
-      "nanoid@^3": "3.3.18",
-      "postcss": ">=8.5.18"
-    }
-  }
+  "packageManager": "pnpm@10.34.5"
 }
