@@ -19,11 +19,6 @@ jobs:
         with:
           version: '3.51.1'
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-
       - name: 安装 pnpm
         uses: pnpm/action-setup@v5
         with:

@@ -32,6 +32,9 @@ tasks:
   build:
     desc: 构建前端应用
     cmds: [pnpm build]
+  build-only:
+    desc: 仅打包前端应用（CI 已独立检查类型时使用）
+    cmds: [pnpm build-only]
   test:
     desc: 执行前端单元测试
     cmds: ['pnpm exec vitest run {{.CLI_ARGS}}']

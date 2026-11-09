@@ -73,7 +73,32 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
+          cache: false
+
+      - name: 获取测试缓存路径与工具链
+        id: go-test-cache
+        working-directory: backend
+        run: |
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "version=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
+
+      - name: 恢复并保存 Go 测试模块缓存
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.go-test-cache.outputs.modules }}
+          key: go-test-modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-test-cache.outputs.image }}-${{ steps.go-test-cache.outputs.version }}-${{ hashFiles('backend/go.mod', 'backend/go.sum') }}
+
+      # 新源码快照保存新增编译产物，不与 lint/build 共用固定快照。
+      # count=1 强制实跑全部测试；移除它前须重新核验 API、数据库和外部工具输入。
+      - name: 恢复并保存 Go 测试编译缓存
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.go-test-cache.outputs.build }}
+          key: go-test-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-test-cache.outputs.image }}-${{ steps.go-test-cache.outputs.version }}-race-cover-atomic-${{ hashFiles('backend/go.mod', 'backend/go.sum') }}-${{ hashFiles('backend/**', 'api/**', 'Taskfile.yml', '.github/workflows/ci-backend.yml') }}
+          restore-keys: |
+            go-test-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-test-cache.outputs.image }}-${{ steps.go-test-cache.outputs.version }}-race-cover-atomic-${{ hashFiles('backend/go.mod', 'backend/go.sum') }}-
 
       - name: 运行测试（含竞态检测）
         timeout-minutes: 30
