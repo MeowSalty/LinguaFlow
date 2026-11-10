@@ -24,6 +24,9 @@ import (
 // 返回 (顶层 map, 修复算子链, error)。零值 Options 行为等同旧 jsonObjectSlice 路径
 // （基础抽取 + unmarshal，不做结构修复）。
 func TryRepairEnvelope(text, key string, opt Options) (map[string]any, []string, error) {
+	if opt.Bounds != nil {
+		return repairEnvelopeBounded(text, key, opt, true)
+	}
 	var repaired []string
 	accept := arrayValueAccept(key)
 
@@ -151,7 +154,12 @@ func tryRepairKeyed[T any](text, key string, opt Options, normalize func([]T) []
 	if err != nil {
 		return nil, repaired, err
 	}
-	v, err := decodeKeyed(raw, key, normalize)
+	var v []T
+	if opt.Bounds != nil {
+		v, err = decodeKeyedBounded(raw, key, opt, normalize)
+	} else {
+		v, err = decodeKeyed(raw, key, normalize)
+	}
 	if err != nil {
 		return nil, repaired, err
 	}
@@ -208,6 +216,16 @@ func TryRepairSemanticQA(text string, opt Options) ([]prompt.SemanticQAIssue, []
 // text 模式优先纯文本 [issues] 协议，未识别时 fallback JSON（模型常仍吐 JSON）。
 // 返回 (issues, 修复算子链, error)；text 路径修复算子链为空。
 func ParseSemanticQAByMode(text string, isTextMode bool, opt Options) ([]prompt.SemanticQAIssue, []string, error) {
+	if opt.Bounds != nil && isTextMode {
+		issues, recognized, e := prompt.ParseSemanticQATextIssuesBounded(opt.Bounds, text)
+		if e != nil {
+			return nil, nil, e
+		}
+		if recognized {
+			return issues, nil, nil
+		}
+		return TryRepairSemanticQA(text, opt)
+	}
 	if !isTextMode {
 		return TryRepairSemanticQA(text, opt)
 	}
@@ -224,6 +242,9 @@ func ParseSemanticQAByMode(text string, isTextMode bool, opt Options) ([]prompt.
 // 段落），协议未携带时为 nil（无注音条目或 LLM 漏返，由调用方按空对齐处理）。
 // 返回 (revisions, rubyOutput, 修复算子链, error)；text 路径修复算子链为空。
 func ParseReviseByMode(text string, isTextMode bool, opt Options) ([]prompt.ReviseRevision, map[string][]ruby.OutputEntry, []string, error) {
+	if opt.Bounds != nil {
+		return parseReviseBounded(text, isTextMode, opt)
+	}
 	if !isTextMode {
 		return tryRepairReviseWithRuby(text, opt)
 	}
@@ -290,6 +311,16 @@ func TryRepairAdjudication(text string, opt Options) ([]prompt.AdjudicationVerdi
 // text 模式优先纯文本 [verdicts] 协议，命中协议（含空列表）即返回；未命中才 fallback JSON。
 // 返回 (verdicts, 修复算子链, error)；text 路径修复算子链为空。
 func ParseAdjudicationByMode(text string, isTextMode bool, opt Options) ([]prompt.AdjudicationVerdict, []string, error) {
+	if opt.Bounds != nil && isTextMode {
+		verdicts, recognized, e := prompt.ParseAdjudicationTextVerdictsBounded(opt.Bounds, text)
+		if e != nil {
+			return nil, nil, e
+		}
+		if recognized {
+			return verdicts, nil, nil
+		}
+		return TryRepairAdjudication(text, opt)
+	}
 	if !isTextMode {
 		return TryRepairAdjudication(text, opt)
 	}

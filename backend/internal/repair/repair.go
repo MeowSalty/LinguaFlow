@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
@@ -13,6 +15,7 @@ import (
 // Options 控制各层修复算子的启用。零值（所有 bool=false）等于"不修复"——
 // 调用方未传 Options 时 TryRepair 仅做基础 JSON 抽取，行为与原 jsonObjectSlice 路径一致。
 type Options struct {
+	Bounds               *backend.BuildBounds
 	JSONStructural       bool // L1：BOM 剥离、尾随逗号、控制字符、括号补齐、多对象合并
 	SchemaAliases        bool // L2：字段名同义化（translation→translations 等）
 	PlaceholderNormalize bool // L3：占位符大小写/下划线变体归一（与 NormalizePlaceholders 配合）
@@ -88,6 +91,9 @@ type Result struct {
 //  4. SchemaAliases 启用时把 translation/result/output/data.translations 归一为 translations
 //  5. 校验 wantIDs：缺失记入 Missing；多余 ID **不**视为错误（与旧 strict 路径不同）
 func TryRepair(text string, wantIDs []string, opt Options) Result {
+	if opt.Bounds != nil {
+		return tryRepairBounded(text, wantIDs, opt)
+	}
 	var repaired []string
 
 	if opt.JSONStructural {
@@ -239,6 +245,9 @@ func finalizeResult(raw map[string]any, wantIDs []string, repaired []string, opt
 //
 // 返回 (entries, 修复算子链，error)。
 func TryRepairBootstrap(text string, opt Options) ([]prompt.BootstrapEntry, []string, error) {
+	if opt.Bounds != nil {
+		return tryRepairBootstrapBounded(text, opt)
+	}
 	var repaired []string
 	if opt.JSONStructural {
 		cleaned, did := stripBOMAndZeroWidth(text)
