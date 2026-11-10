@@ -20,8 +20,9 @@ import (
 // TranslationPromptTemplateUpdate is the builder for updating TranslationPromptTemplate entities.
 type TranslationPromptTemplateUpdate struct {
 	config
-	hooks    []Hook
-	mutation *TranslationPromptTemplateMutation
+	hooks     []Hook
+	mutation  *TranslationPromptTemplateMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the TranslationPromptTemplateUpdate builder.
@@ -215,6 +216,12 @@ func (_u *TranslationPromptTemplateUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *TranslationPromptTemplateUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *TranslationPromptTemplateUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *TranslationPromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -300,6 +307,7 @@ func (_u *TranslationPromptTemplateUpdate) sqlSave(ctx context.Context) (_node i
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{translationprompttemplate.Label}
@@ -315,9 +323,10 @@ func (_u *TranslationPromptTemplateUpdate) sqlSave(ctx context.Context) (_node i
 // TranslationPromptTemplateUpdateOne is the builder for updating a single TranslationPromptTemplate entity.
 type TranslationPromptTemplateUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *TranslationPromptTemplateMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *TranslationPromptTemplateMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -518,6 +527,12 @@ func (_u *TranslationPromptTemplateUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *TranslationPromptTemplateUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *TranslationPromptTemplateUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *TranslationPromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *TranslationPromptTemplate, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -620,6 +635,7 @@ func (_u *TranslationPromptTemplateUpdateOne) sqlSave(ctx context.Context) (_nod
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &TranslationPromptTemplate{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

@@ -17,8 +17,9 @@ import (
 // CredentialJobReferenceUpdate is the builder for updating CredentialJobReference entities.
 type CredentialJobReferenceUpdate struct {
 	config
-	hooks    []Hook
-	mutation *CredentialJobReferenceMutation
+	hooks     []Hook
+	mutation  *CredentialJobReferenceMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the CredentialJobReferenceUpdate builder.
@@ -70,6 +71,12 @@ func (_u *CredentialJobReferenceUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *CredentialJobReferenceUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *CredentialJobReferenceUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *CredentialJobReferenceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -82,6 +89,7 @@ func (_u *CredentialJobReferenceUpdate) sqlSave(ctx context.Context) (_node int,
 			}
 		}
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{credentialjobreference.Label}
@@ -97,9 +105,10 @@ func (_u *CredentialJobReferenceUpdate) sqlSave(ctx context.Context) (_node int,
 // CredentialJobReferenceUpdateOne is the builder for updating a single CredentialJobReference entity.
 type CredentialJobReferenceUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *CredentialJobReferenceMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *CredentialJobReferenceMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Mutation returns the CredentialJobReferenceMutation object of the builder.
@@ -158,6 +167,12 @@ func (_u *CredentialJobReferenceUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *CredentialJobReferenceUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *CredentialJobReferenceUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *CredentialJobReferenceUpdateOne) sqlSave(ctx context.Context) (_node *CredentialJobReference, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -187,6 +202,7 @@ func (_u *CredentialJobReferenceUpdateOne) sqlSave(ctx context.Context) (_node *
 			}
 		}
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &CredentialJobReference{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

@@ -18,8 +18,9 @@ import (
 // SystemSettingUpdate is the builder for updating SystemSetting entities.
 type SystemSettingUpdate struct {
 	config
-	hooks    []Hook
-	mutation *SystemSettingMutation
+	hooks     []Hook
+	mutation  *SystemSettingMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the SystemSettingUpdate builder.
@@ -165,6 +166,12 @@ func (_u *SystemSettingUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SystemSettingUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SystemSettingUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SystemSettingUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -201,6 +208,7 @@ func (_u *SystemSettingUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.DescriptionCleared() {
 		_spec.ClearField(systemsetting.FieldDescription, field.TypeString)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{systemsetting.Label}
@@ -216,9 +224,10 @@ func (_u *SystemSettingUpdate) sqlSave(ctx context.Context) (_node int, err erro
 // SystemSettingUpdateOne is the builder for updating a single SystemSetting entity.
 type SystemSettingUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *SystemSettingMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *SystemSettingMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -371,6 +380,12 @@ func (_u *SystemSettingUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SystemSettingUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SystemSettingUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SystemSettingUpdateOne) sqlSave(ctx context.Context) (_node *SystemSetting, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -424,6 +439,7 @@ func (_u *SystemSettingUpdateOne) sqlSave(ctx context.Context) (_node *SystemSet
 	if _u.mutation.DescriptionCleared() {
 		_spec.ClearField(systemsetting.FieldDescription, field.TypeString)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &SystemSetting{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

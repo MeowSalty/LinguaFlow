@@ -20,8 +20,9 @@ import (
 // StorageRetirementUpdate is the builder for updating StorageRetirement entities.
 type StorageRetirementUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageRetirementMutation
+	hooks     []Hook
+	mutation  *StorageRetirementMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageRetirementUpdate builder.
@@ -332,6 +333,12 @@ func (_u *StorageRetirementUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageRetirementUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageRetirementUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageRetirementUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -415,6 +422,7 @@ func (_u *StorageRetirementUpdate) sqlSave(ctx context.Context) (_node int, err 
 	if _u.mutation.RetryStartedAtCleared() {
 		_spec.ClearField(storageretirement.FieldRetryStartedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storageretirement.Label}
@@ -430,9 +438,10 @@ func (_u *StorageRetirementUpdate) sqlSave(ctx context.Context) (_node int, err 
 // StorageRetirementUpdateOne is the builder for updating a single StorageRetirement entity.
 type StorageRetirementUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageRetirementMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageRetirementMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -750,6 +759,12 @@ func (_u *StorageRetirementUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageRetirementUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageRetirementUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageRetirementUpdateOne) sqlSave(ctx context.Context) (_node *StorageRetirement, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -850,6 +865,7 @@ func (_u *StorageRetirementUpdateOne) sqlSave(ctx context.Context) (_node *Stora
 	if _u.mutation.RetryStartedAtCleared() {
 		_spec.ClearField(storageretirement.FieldRetryStartedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageRetirement{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

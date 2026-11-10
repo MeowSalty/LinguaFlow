@@ -24,8 +24,9 @@ import (
 // WorkItemUpdate is the builder for updating WorkItem entities.
 type WorkItemUpdate struct {
 	config
-	hooks    []Hook
-	mutation *WorkItemMutation
+	hooks     []Hook
+	mutation  *WorkItemMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the WorkItemUpdate builder.
@@ -500,6 +501,12 @@ func (_u *WorkItemUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *WorkItemUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *WorkItemUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *WorkItemUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -702,6 +709,7 @@ func (_u *WorkItemUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{workitem.Label}
@@ -717,9 +725,10 @@ func (_u *WorkItemUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // WorkItemUpdateOne is the builder for updating a single WorkItem entity.
 type WorkItemUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *WorkItemMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *WorkItemMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -1201,6 +1210,12 @@ func (_u *WorkItemUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *WorkItemUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *WorkItemUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *WorkItemUpdateOne) sqlSave(ctx context.Context) (_node *WorkItem, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1420,6 +1435,7 @@ func (_u *WorkItemUpdateOne) sqlSave(ctx context.Context) (_node *WorkItem, err 
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &WorkItem{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

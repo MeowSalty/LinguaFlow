@@ -21,8 +21,9 @@ import (
 // ActivityLogUpdate is the builder for updating ActivityLog entities.
 type ActivityLogUpdate struct {
 	config
-	hooks    []Hook
-	mutation *ActivityLogMutation
+	hooks     []Hook
+	mutation  *ActivityLogMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the ActivityLogUpdate builder.
@@ -273,6 +274,12 @@ func (_u *ActivityLogUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ActivityLogUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ActivityLogUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ActivityLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -402,6 +409,7 @@ func (_u *ActivityLogUpdate) sqlSave(ctx context.Context) (_node int, err error)
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{activitylog.Label}
@@ -417,9 +425,10 @@ func (_u *ActivityLogUpdate) sqlSave(ctx context.Context) (_node int, err error)
 // ActivityLogUpdateOne is the builder for updating a single ActivityLog entity.
 type ActivityLogUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *ActivityLogMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *ActivityLogMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -677,6 +686,12 @@ func (_u *ActivityLogUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ActivityLogUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ActivityLogUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ActivityLogUpdateOne) sqlSave(ctx context.Context) (_node *ActivityLog, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -823,6 +838,7 @@ func (_u *ActivityLogUpdateOne) sqlSave(ctx context.Context) (_node *ActivityLog
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &ActivityLog{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

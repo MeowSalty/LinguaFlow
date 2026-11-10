@@ -19,8 +19,9 @@ import (
 // StorageSpaceUpdate is the builder for updating StorageSpace entities.
 type StorageSpaceUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageSpaceMutation
+	hooks     []Hook
+	mutation  *StorageSpaceMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageSpaceUpdate builder.
@@ -535,6 +536,12 @@ func (_u *StorageSpaceUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageSpaceUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageSpaceUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageSpaceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -675,6 +682,7 @@ func (_u *StorageSpaceUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storagespace.Label}
@@ -690,9 +698,10 @@ func (_u *StorageSpaceUpdate) sqlSave(ctx context.Context) (_node int, err error
 // StorageSpaceUpdateOne is the builder for updating a single StorageSpace entity.
 type StorageSpaceUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageSpaceMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageSpaceMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -1214,6 +1223,12 @@ func (_u *StorageSpaceUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageSpaceUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageSpaceUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageSpaceUpdateOne) sqlSave(ctx context.Context) (_node *StorageSpace, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1371,6 +1386,7 @@ func (_u *StorageSpaceUpdateOne) sqlSave(ctx context.Context) (_node *StorageSpa
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageSpace{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

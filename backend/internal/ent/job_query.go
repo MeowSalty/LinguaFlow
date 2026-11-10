@@ -36,6 +36,7 @@ type JobQuery struct {
 	withSseEvents            *SSEEventQuery
 	withCredentialReferences *CredentialJobReferenceQuery
 	withFKs                  bool
+	modifiers                []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -403,8 +404,9 @@ func (_q *JobQuery) Clone() *JobQuery {
 		withSseEvents:            _q.withSseEvents.Clone(),
 		withCredentialReferences: _q.withCredentialReferences.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -576,6 +578,9 @@ func (_q *JobQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Job, err
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
+	}
+	if len(_q.modifiers) > 0 {
+		_spec.Modifiers = _q.modifiers
 	}
 	for i := range hooks {
 		hooks[i](ctx, _spec)
@@ -816,6 +821,9 @@ func (_q *JobQuery) loadCredentialReferences(ctx context.Context, query *Credent
 
 func (_q *JobQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
+	if len(_q.modifiers) > 0 {
+		_spec.Modifiers = _q.modifiers
+	}
 	_spec.Node.Columns = _q.ctx.Fields
 	if len(_q.ctx.Fields) > 0 {
 		_spec.Unique = _q.ctx.Unique != nil && *_q.ctx.Unique
@@ -881,6 +889,9 @@ func (_q *JobQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	if _q.ctx.Unique != nil && *_q.ctx.Unique {
 		selector.Distinct()
 	}
+	for _, m := range _q.modifiers {
+		m(selector)
+	}
 	for _, p := range _q.predicates {
 		p(selector)
 	}
@@ -896,6 +907,12 @@ func (_q *JobQuery) sqlQuery(ctx context.Context) *sql.Selector {
 		selector.Limit(*limit)
 	}
 	return selector
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *JobQuery) Modify(modifiers ...func(s *sql.Selector)) *JobSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
 }
 
 // JobGroupBy is the group-by builder for Job entities.
@@ -986,4 +1003,10 @@ func (_s *JobSelect) sqlScan(ctx context.Context, root *JobQuery, v any) error {
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *JobSelect) Modify(modifiers ...func(s *sql.Selector)) *JobSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

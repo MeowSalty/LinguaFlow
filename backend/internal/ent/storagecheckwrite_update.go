@@ -17,8 +17,9 @@ import (
 // StorageCheckWriteUpdate is the builder for updating StorageCheckWrite entities.
 type StorageCheckWriteUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageCheckWriteMutation
+	hooks     []Hook
+	mutation  *StorageCheckWriteMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageCheckWriteUpdate builder.
@@ -116,6 +117,12 @@ func (_u *StorageCheckWriteUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageCheckWriteUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageCheckWriteUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageCheckWriteUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -140,6 +147,7 @@ func (_u *StorageCheckWriteUpdate) sqlSave(ctx context.Context) (_node int, err 
 	if value, ok := _u.mutation.AddedWriteID(); ok {
 		_spec.AddField(storagecheckwrite.FieldWriteID, field.TypeInt, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storagecheckwrite.Label}
@@ -155,9 +163,10 @@ func (_u *StorageCheckWriteUpdate) sqlSave(ctx context.Context) (_node int, err 
 // StorageCheckWriteUpdateOne is the builder for updating a single StorageCheckWrite entity.
 type StorageCheckWriteUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageCheckWriteMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageCheckWriteMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetCheckID sets the "check_id" field.
@@ -262,6 +271,12 @@ func (_u *StorageCheckWriteUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageCheckWriteUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageCheckWriteUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageCheckWriteUpdateOne) sqlSave(ctx context.Context) (_node *StorageCheckWrite, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -303,6 +318,7 @@ func (_u *StorageCheckWriteUpdateOne) sqlSave(ctx context.Context) (_node *Stora
 	if value, ok := _u.mutation.AddedWriteID(); ok {
 		_spec.AddField(storagecheckwrite.FieldWriteID, field.TypeInt, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageCheckWrite{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

@@ -19,8 +19,9 @@ import (
 // StorageAuthVersionUpdate is the builder for updating StorageAuthVersion entities.
 type StorageAuthVersionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageAuthVersionMutation
+	hooks     []Hook
+	mutation  *StorageAuthVersionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageAuthVersionUpdate builder.
@@ -335,6 +336,12 @@ func (_u *StorageAuthVersionUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageAuthVersionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageAuthVersionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageAuthVersionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -439,6 +446,7 @@ func (_u *StorageAuthVersionUpdate) sqlSave(ctx context.Context) (_node int, err
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storageauthversion.Label}
@@ -454,9 +462,10 @@ func (_u *StorageAuthVersionUpdate) sqlSave(ctx context.Context) (_node int, err
 // StorageAuthVersionUpdateOne is the builder for updating a single StorageAuthVersion entity.
 type StorageAuthVersionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageAuthVersionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageAuthVersionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -778,6 +787,12 @@ func (_u *StorageAuthVersionUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageAuthVersionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageAuthVersionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageAuthVersionUpdateOne) sqlSave(ctx context.Context) (_node *StorageAuthVersion, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -899,6 +914,7 @@ func (_u *StorageAuthVersionUpdateOne) sqlSave(ctx context.Context) (_node *Stor
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageAuthVersion{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

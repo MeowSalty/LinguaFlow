@@ -27,8 +27,9 @@ import (
 // ProjectUpdate is the builder for updating Project entities.
 type ProjectUpdate struct {
 	config
-	hooks    []Hook
-	mutation *ProjectMutation
+	hooks     []Hook
+	mutation  *ProjectMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the ProjectUpdate builder.
@@ -605,6 +606,12 @@ func (_u *ProjectUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ProjectUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ProjectUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1041,6 +1048,7 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{project.Label}
@@ -1056,9 +1064,10 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // ProjectUpdateOne is the builder for updating a single Project entity.
 type ProjectUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *ProjectMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *ProjectMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -1642,6 +1651,12 @@ func (_u *ProjectUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ProjectUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ProjectUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -2095,6 +2110,7 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Project{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

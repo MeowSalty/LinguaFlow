@@ -19,8 +19,9 @@ import (
 // AuthTransactionUpdate is the builder for updating AuthTransaction entities.
 type AuthTransactionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *AuthTransactionMutation
+	hooks     []Hook
+	mutation  *AuthTransactionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the AuthTransactionUpdate builder.
@@ -598,6 +599,12 @@ func (_u *AuthTransactionUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AuthTransactionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AuthTransactionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AuthTransactionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -802,6 +809,7 @@ func (_u *AuthTransactionUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if _u.mutation.FinishedAtCleared() {
 		_spec.ClearField(authtransaction.FieldFinishedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{authtransaction.Label}
@@ -817,9 +825,10 @@ func (_u *AuthTransactionUpdate) sqlSave(ctx context.Context) (_node int, err er
 // AuthTransactionUpdateOne is the builder for updating a single AuthTransaction entity.
 type AuthTransactionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *AuthTransactionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *AuthTransactionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -1404,6 +1413,12 @@ func (_u *AuthTransactionUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AuthTransactionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AuthTransactionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AuthTransactionUpdateOne) sqlSave(ctx context.Context) (_node *AuthTransaction, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1625,6 +1640,7 @@ func (_u *AuthTransactionUpdateOne) sqlSave(ctx context.Context) (_node *AuthTra
 	if _u.mutation.FinishedAtCleared() {
 		_spec.ClearField(authtransaction.FieldFinishedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &AuthTransaction{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

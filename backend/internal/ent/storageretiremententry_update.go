@@ -22,8 +22,9 @@ import (
 // StorageRetirementEntryUpdate is the builder for updating StorageRetirementEntry entities.
 type StorageRetirementEntryUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageRetirementEntryMutation
+	hooks     []Hook
+	mutation  *StorageRetirementEntryMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageRetirementEntryUpdate builder.
@@ -450,6 +451,12 @@ func (_u *StorageRetirementEntryUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageRetirementEntryUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageRetirementEntryUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageRetirementEntryUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -626,6 +633,7 @@ func (_u *StorageRetirementEntryUpdate) sqlSave(ctx context.Context) (_node int,
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storageretiremententry.Label}
@@ -641,9 +649,10 @@ func (_u *StorageRetirementEntryUpdate) sqlSave(ctx context.Context) (_node int,
 // StorageRetirementEntryUpdateOne is the builder for updating a single StorageRetirementEntry entity.
 type StorageRetirementEntryUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageRetirementEntryMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageRetirementEntryMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -1077,6 +1086,12 @@ func (_u *StorageRetirementEntryUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageRetirementEntryUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageRetirementEntryUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageRetirementEntryUpdateOne) sqlSave(ctx context.Context) (_node *StorageRetirementEntry, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1270,6 +1285,7 @@ func (_u *StorageRetirementEntryUpdateOne) sqlSave(ctx context.Context) (_node *
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageRetirementEntry{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

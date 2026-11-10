@@ -18,8 +18,9 @@ import (
 // AuthChannelPolicyUpdate is the builder for updating AuthChannelPolicy entities.
 type AuthChannelPolicyUpdate struct {
 	config
-	hooks    []Hook
-	mutation *AuthChannelPolicyMutation
+	hooks     []Hook
+	mutation  *AuthChannelPolicyMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the AuthChannelPolicyUpdate builder.
@@ -89,6 +90,12 @@ func (_u *AuthChannelPolicyUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AuthChannelPolicyUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AuthChannelPolicyUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AuthChannelPolicyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -113,6 +120,7 @@ func (_u *AuthChannelPolicyUpdate) sqlSave(ctx context.Context) (_node int, err 
 	if _u.mutation.LinkRulesCleared() {
 		_spec.ClearField(authchannelpolicy.FieldLinkRules, field.TypeJSON)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{authchannelpolicy.Label}
@@ -128,9 +136,10 @@ func (_u *AuthChannelPolicyUpdate) sqlSave(ctx context.Context) (_node int, err 
 // AuthChannelPolicyUpdateOne is the builder for updating a single AuthChannelPolicy entity.
 type AuthChannelPolicyUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *AuthChannelPolicyMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *AuthChannelPolicyMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -207,6 +216,12 @@ func (_u *AuthChannelPolicyUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AuthChannelPolicyUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AuthChannelPolicyUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AuthChannelPolicyUpdateOne) sqlSave(ctx context.Context) (_node *AuthChannelPolicy, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -248,6 +263,7 @@ func (_u *AuthChannelPolicyUpdateOne) sqlSave(ctx context.Context) (_node *AuthC
 	if _u.mutation.LinkRulesCleared() {
 		_spec.ClearField(authchannelpolicy.FieldLinkRules, field.TypeJSON)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &AuthChannelPolicy{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

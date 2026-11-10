@@ -19,8 +19,9 @@ import (
 // RefreshSessionUpdate is the builder for updating RefreshSession entities.
 type RefreshSessionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *RefreshSessionMutation
+	hooks     []Hook
+	mutation  *RefreshSessionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the RefreshSessionUpdate builder.
@@ -169,6 +170,12 @@ func (_u *RefreshSessionUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RefreshSessionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RefreshSessionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RefreshSessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -244,6 +251,7 @@ func (_u *RefreshSessionUpdate) sqlSave(ctx context.Context) (_node int, err err
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{refreshsession.Label}
@@ -259,9 +267,10 @@ func (_u *RefreshSessionUpdate) sqlSave(ctx context.Context) (_node int, err err
 // RefreshSessionUpdateOne is the builder for updating a single RefreshSession entity.
 type RefreshSessionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *RefreshSessionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *RefreshSessionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -417,6 +426,12 @@ func (_u *RefreshSessionUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *RefreshSessionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *RefreshSessionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *RefreshSessionUpdateOne) sqlSave(ctx context.Context) (_node *RefreshSession, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -509,6 +524,7 @@ func (_u *RefreshSessionUpdateOne) sqlSave(ctx context.Context) (_node *RefreshS
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &RefreshSession{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

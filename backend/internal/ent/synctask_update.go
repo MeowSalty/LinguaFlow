@@ -21,8 +21,9 @@ import (
 // SyncTaskUpdate is the builder for updating SyncTask entities.
 type SyncTaskUpdate struct {
 	config
-	hooks    []Hook
-	mutation *SyncTaskMutation
+	hooks     []Hook
+	mutation  *SyncTaskMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the SyncTaskUpdate builder.
@@ -497,6 +498,12 @@ func (_u *SyncTaskUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SyncTaskUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SyncTaskUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SyncTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -674,6 +681,7 @@ func (_u *SyncTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{synctask.Label}
@@ -689,9 +697,10 @@ func (_u *SyncTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // SyncTaskUpdateOne is the builder for updating a single SyncTask entity.
 type SyncTaskUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *SyncTaskMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *SyncTaskMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -1173,6 +1182,12 @@ func (_u *SyncTaskUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SyncTaskUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SyncTaskUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SyncTaskUpdateOne) sqlSave(ctx context.Context) (_node *SyncTask, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1367,6 +1382,7 @@ func (_u *SyncTaskUpdateOne) sqlSave(ctx context.Context) (_node *SyncTask, err 
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &SyncTask{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

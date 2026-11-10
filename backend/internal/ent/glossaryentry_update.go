@@ -20,8 +20,9 @@ import (
 // GlossaryEntryUpdate is the builder for updating GlossaryEntry entities.
 type GlossaryEntryUpdate struct {
 	config
-	hooks    []Hook
-	mutation *GlossaryEntryMutation
+	hooks     []Hook
+	mutation  *GlossaryEntryMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the GlossaryEntryUpdate builder.
@@ -270,6 +271,12 @@ func (_u *GlossaryEntryUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *GlossaryEntryUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *GlossaryEntryUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *GlossaryEntryUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -383,6 +390,7 @@ func (_u *GlossaryEntryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{glossaryentry.Label}
@@ -398,9 +406,10 @@ func (_u *GlossaryEntryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 // GlossaryEntryUpdateOne is the builder for updating a single GlossaryEntry entity.
 type GlossaryEntryUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *GlossaryEntryMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *GlossaryEntryMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -656,6 +665,12 @@ func (_u *GlossaryEntryUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *GlossaryEntryUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *GlossaryEntryUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *GlossaryEntryUpdateOne) sqlSave(ctx context.Context) (_node *GlossaryEntry, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -786,6 +801,7 @@ func (_u *GlossaryEntryUpdateOne) sqlSave(ctx context.Context) (_node *GlossaryE
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &GlossaryEntry{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

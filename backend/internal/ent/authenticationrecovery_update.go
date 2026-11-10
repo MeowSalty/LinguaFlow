@@ -18,8 +18,9 @@ import (
 // AuthenticationRecoveryUpdate is the builder for updating AuthenticationRecovery entities.
 type AuthenticationRecoveryUpdate struct {
 	config
-	hooks    []Hook
-	mutation *AuthenticationRecoveryMutation
+	hooks     []Hook
+	mutation  *AuthenticationRecoveryMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the AuthenticationRecoveryUpdate builder.
@@ -115,6 +116,12 @@ func (_u *AuthenticationRecoveryUpdate) defaults() {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AuthenticationRecoveryUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AuthenticationRecoveryUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AuthenticationRecoveryUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(authenticationrecovery.Table, authenticationrecovery.Columns, sqlgraph.NewFieldSpec(authenticationrecovery.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -139,6 +146,7 @@ func (_u *AuthenticationRecoveryUpdate) sqlSave(ctx context.Context) (_node int,
 	if _u.mutation.RevokedAtCleared() {
 		_spec.ClearField(authenticationrecovery.FieldRevokedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{authenticationrecovery.Label}
@@ -154,9 +162,10 @@ func (_u *AuthenticationRecoveryUpdate) sqlSave(ctx context.Context) (_node int,
 // AuthenticationRecoveryUpdateOne is the builder for updating a single AuthenticationRecovery entity.
 type AuthenticationRecoveryUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *AuthenticationRecoveryMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *AuthenticationRecoveryMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -259,6 +268,12 @@ func (_u *AuthenticationRecoveryUpdateOne) defaults() {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AuthenticationRecoveryUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AuthenticationRecoveryUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *AuthenticationRecoveryUpdateOne) sqlSave(ctx context.Context) (_node *AuthenticationRecovery, err error) {
 	_spec := sqlgraph.NewUpdateSpec(authenticationrecovery.Table, authenticationrecovery.Columns, sqlgraph.NewFieldSpec(authenticationrecovery.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
@@ -300,6 +315,7 @@ func (_u *AuthenticationRecoveryUpdateOne) sqlSave(ctx context.Context) (_node *
 	if _u.mutation.RevokedAtCleared() {
 		_spec.ClearField(authenticationrecovery.FieldRevokedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &AuthenticationRecovery{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

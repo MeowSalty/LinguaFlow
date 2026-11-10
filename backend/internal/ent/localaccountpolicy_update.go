@@ -19,8 +19,9 @@ import (
 // LocalAccountPolicyUpdate is the builder for updating LocalAccountPolicy entities.
 type LocalAccountPolicyUpdate struct {
 	config
-	hooks    []Hook
-	mutation *LocalAccountPolicyMutation
+	hooks     []Hook
+	mutation  *LocalAccountPolicyMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the LocalAccountPolicyUpdate builder.
@@ -288,6 +289,12 @@ func (_u *LocalAccountPolicyUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *LocalAccountPolicyUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *LocalAccountPolicyUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *LocalAccountPolicyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -348,6 +355,7 @@ func (_u *LocalAccountPolicyUpdate) sqlSave(ctx context.Context) (_node int, err
 	if value, ok := _u.mutation.SignupRules(); ok {
 		_spec.SetField(localaccountpolicy.FieldSignupRules, field.TypeJSON, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{localaccountpolicy.Label}
@@ -363,9 +371,10 @@ func (_u *LocalAccountPolicyUpdate) sqlSave(ctx context.Context) (_node int, err
 // LocalAccountPolicyUpdateOne is the builder for updating a single LocalAccountPolicy entity.
 type LocalAccountPolicyUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *LocalAccountPolicyMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *LocalAccountPolicyMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -640,6 +649,12 @@ func (_u *LocalAccountPolicyUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *LocalAccountPolicyUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *LocalAccountPolicyUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *LocalAccountPolicyUpdateOne) sqlSave(ctx context.Context) (_node *LocalAccountPolicy, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -717,6 +732,7 @@ func (_u *LocalAccountPolicyUpdateOne) sqlSave(ctx context.Context) (_node *Loca
 	if value, ok := _u.mutation.SignupRules(); ok {
 		_spec.SetField(localaccountpolicy.FieldSignupRules, field.TypeJSON, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &LocalAccountPolicy{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
