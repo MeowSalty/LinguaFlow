@@ -125,6 +125,7 @@ func (g *DatabaseGlossary) AddForRequest(ctx context.Context, id string, entries
 		return glossary.AddResult{}, err
 	}
 	g.entries = cache
+	g.publishEntrySnapshotLocked()
 	g.revision++
 	clear(g.lookupCache)
 	return result, nil

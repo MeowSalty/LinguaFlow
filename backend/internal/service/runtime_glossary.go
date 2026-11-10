@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
@@ -12,12 +13,13 @@ import (
 )
 
 type DatabaseGlossary struct {
-	client      *ent.Client
-	projectID   int
-	mu          sync.RWMutex
-	entries     []glossary.Entry
-	lookupCache map[string][]glossary.Entry
-	revision    uint64
+	client        *ent.Client
+	projectID     int
+	mu            sync.RWMutex
+	entries       []glossary.Entry
+	lookupCache   map[string][]glossary.Entry
+	revision      uint64
+	entrySnapshot atomic.Pointer[glossary.EntrySnapshot]
 }
 
 func NewDatabaseGlossary(ctx context.Context, client *ent.Client, projectRow *ent.Project) (*DatabaseGlossary, error) {
@@ -35,12 +37,14 @@ func NewDatabaseGlossary(ctx context.Context, client *ent.Client, projectRow *en
 	for _, row := range rows {
 		entries = append(entries, glossaryEntryFromRow(row))
 	}
-	return &DatabaseGlossary{
+	g := &DatabaseGlossary{
 		client:      client,
 		projectID:   projectRow.ID,
 		entries:     entries,
 		lookupCache: make(map[string][]glossary.Entry),
-	}, nil
+	}
+	g.publishEntrySnapshotLocked()
+	return g, nil
 }
 
 func (g *DatabaseGlossary) Lookup(_ context.Context, text, _, _ string) ([]glossary.Entry, error) {
@@ -112,7 +116,7 @@ func (g *DatabaseGlossary) Add(ctx context.Context, entries ...glossary.Entry) (
 			return result, err
 		}
 		added := glossaryEntryFromRow(created)
-		g.entries = append(g.entries, added)
+		g.addCachedEntryLocked(added)
 		g.revision++
 		clear(g.lookupCache)
 		result.Added = append(result.Added, added)
@@ -121,9 +125,8 @@ func (g *DatabaseGlossary) Add(ctx context.Context, entries ...glossary.Entry) (
 }
 
 func findCachedGlossaryEntry(entries []glossary.Entry, input GlossaryEntryInput) (glossary.Entry, bool) {
-	sourceKey := glossarySourceKey(input.Source)
 	for _, entry := range entries {
-		if entry.Forbidden != input.Forbidden || glossarySourceKey(entry.Source) != sourceKey {
+		if entry.Forbidden != input.Forbidden || !glossary.LowerEqual(entry.Source, input.Source) {
 			continue
 		}
 		if input.Forbidden && entry.Target != input.Target {
