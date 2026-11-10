@@ -11,7 +11,10 @@ import (
 )
 
 // WorkDeferred is scheduler control flow, never a model/storage failure.
-type WorkDeferred struct{ Wait backend.AdmissionWait }
+type WorkDeferred struct {
+	Wait  backend.AdmissionWait
+	Yield bool
+}
 
 func (e *WorkDeferred) Error() string      { return "work deferred: " + e.Wait.Reason }
 func (*WorkDeferred) Permanent() bool      { return true }

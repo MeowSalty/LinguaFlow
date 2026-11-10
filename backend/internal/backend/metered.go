@@ -18,6 +18,10 @@ func NewMeteredBackend(inner Backend) *MeteredBackend {
 
 func (m *MeteredBackend) Name() string { return m.inner.Name() }
 
+// Backend exposes the wrapped provider for capability queries such as exact
+// wire measurement. Requests still execute through Translate and its counters.
+func (m *MeteredBackend) Backend() Backend { return m.inner }
+
 func (m *MeteredBackend) Translate(ctx context.Context, req Request) (*Response, error) {
 	m.apiCalls.Add(1)
 	resp, err := m.inner.Translate(ctx, req)

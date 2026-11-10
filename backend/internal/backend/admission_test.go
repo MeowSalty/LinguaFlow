@@ -44,7 +44,6 @@ func newAdmission(t *testing.T, pool *backend.LimiterPool, legacy bool, results 
 	t.Helper()
 	a, err := backend.NewRequestAdmission(pool, backend.RequestAdmissionConfig{
 		MainConcurrency: map[int]int{0: 1, 1: 1}, AlignmentConcurrency: 2,
-		LegacyRoundShared: legacy, MaxCompletions: results,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -63,39 +62,20 @@ func admit(t *testing.T, a *backend.RequestAdmission, stage backend.RequestStage
 	return p
 }
 
-func TestRequestAdmissionSeparateAndLegacyBudgets(t *testing.T) {
-	for _, legacy := range []bool{false, true} {
-		t.Run(map[bool]string{false: "separate", true: "legacy"}[legacy], func(t *testing.T) {
-			a := newAdmission(t, nil, legacy, 16)
-			main := admit(t, a, backend.RequestStageMain, 0, 1, nil)
-			_, wait, err := a.TryAdmit(context.Background(), backend.RequestAdmissionIntent{Stage: backend.RequestStageMain, RoundIndex: 0}, nil)
-			if err != nil || wait.Reason == "" {
-				t.Fatal("main round exceeded capacity")
-			}
-			p, wait, err := a.TryAdmit(context.Background(), backend.RequestAdmissionIntent{Stage: backend.RequestStageAlignment, RoundIndex: 0}, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if legacy {
-				if p != nil || wait.Reason != "legacy_round_concurrency" {
-					t.Fatal("legacy budget was not shared")
-				}
-				main.Release()
-				admit(t, a, backend.RequestStageAlignment, 0, 1, nil)
-			} else {
-				if p == nil {
-					t.Fatal("main occupied alignment capacity")
-				}
-				defer p.Release()
-				admit(t, a, backend.RequestStageAlignment, 1, 1, nil)
-				p, wait, err = a.TryAdmit(context.Background(), backend.RequestAdmissionIntent{Stage: backend.RequestStageAlignment, RoundIndex: 1}, nil)
-				if err != nil || p != nil || wait.Reason != "alignment_concurrency" {
-					t.Fatal("alignment budget multiplied across rounds")
-				}
-			}
-			admit(t, a, backend.RequestStageMain, 1, 1, nil)
-		})
+func TestRequestAdmissionSeparateBudgets(t *testing.T) {
+	a := newAdmission(t, nil, false, 16)
+	main := admit(t, a, backend.RequestStageMain, 0, 1, nil)
+	if p, wait, err := a.TryAdmit(context.Background(), backend.RequestAdmissionIntent{Stage: backend.RequestStageMain, RoundIndex: 0}, nil); err != nil || p != nil || wait.Reason != "main_concurrency" {
+		t.Fatalf("main cap: %v %v", wait, err)
 	}
+	alignment := admit(t, a, backend.RequestStageAlignment, 0, 1, nil)
+	defer alignment.Release()
+	admit(t, a, backend.RequestStageAlignment, 1, 1, nil)
+	if p, wait, err := a.TryAdmit(context.Background(), backend.RequestAdmissionIntent{Stage: backend.RequestStageAlignment, RoundIndex: 1}, nil); err != nil || p != nil || wait.Reason != "alignment_concurrency" {
+		t.Fatalf("Job aux cap multiplied: %v %v", wait, err)
+	}
+	admit(t, a, backend.RequestStageMain, 1, 1, nil)
+	main.Release()
 }
 
 func TestRequestAdmissionJointRPMAndCapacity(t *testing.T) {
@@ -132,13 +112,17 @@ func TestRequestAdmissionResponseCapacityLivesPastHTTP(t *testing.T) {
 	if gate.Inflight() != 0 || a.Snapshot().MainInflight[0] != 0 {
 		t.Fatal("network capacity not released")
 	}
-	intent := backend.RequestAdmissionIntent{Stage: backend.RequestStageAlignment, RoundIndex: 0}
-	if p, wait, _ := a.TryAdmit(context.Background(), intent, gate); p != nil || wait.Reason != "completion_capacity" {
-		t.Fatal("result capacity released before save")
+	// The main response owner remains in its own C budget, while aux has
+	// independent admission and can save/consume existing candidates.
+	intent := backend.RequestAdmissionIntent{Stage: backend.RequestStageMain, RoundIndex: 0}
+	if next, wait, _ := a.TryAdmit(context.Background(), intent, gate); next != nil || wait.Reason != "main_concurrency" {
+		t.Fatal("main owner released before durable response handoff")
 	}
+	alignment := admit(t, a, backend.RequestStageAlignment, 0, 1, gate)
+	alignment.Release()
 	p.Release()
 	p.Release()
-	admit(t, a, backend.RequestStageAlignment, 0, 1, gate)
+	admit(t, a, backend.RequestStageMain, 0, 1, gate)
 }
 
 func TestRequestAdmissionPauseAndPolicyWakeups(t *testing.T) {
@@ -268,8 +252,13 @@ func TestRequestAdmissionQueueRotatesResources(t *testing.T) {
 }
 
 func TestRequestAdmissionQueueAlternatesStagesForSameBackend(t *testing.T) {
-	a := newAdmission(t, nil, true, 16)
+	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 1}, AlignmentConcurrency: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
 	blocker := admit(t, a, backend.RequestStageMain, 0, 1, nil)
+	auxBlocker := admit(t, a, backend.RequestStageAlignment, 0, 1, nil)
 	grants := make(chan queuedGrant, 4)
 	requests := []struct {
 		id    string
@@ -283,8 +272,35 @@ func TestRequestAdmissionQueueAlternatesStagesForSameBackend(t *testing.T) {
 		awaitQueued(t, a, int64(i+1))
 	}
 	blocker.Release()
-	for _, want := range []string{"main1", "alignment1", "main2", "alignment2"} {
-		receiveGrant(t, grants, want).Release()
+	auxBlocker.Release()
+	// Separate C/A grants may be delivered concurrently. Each stage must get
+	// its FIFO head before either successor, with neither stage starving.
+	first := map[string]*backend.RequestPermit{}
+	for range 2 {
+		select {
+		case grant := <-grants:
+			if grant.err != nil || grant.id != "main1" && grant.id != "alignment1" || first[grant.id] != nil {
+				t.Fatalf("unexpected first grant %+v", grant)
+			}
+			first[grant.id] = grant.permit
+		case <-time.After(time.Second):
+			t.Fatal("one stage starved")
+		}
+	}
+	first["main1"].Release()
+	first["alignment1"].Release()
+	last := map[string]bool{}
+	for range 2 {
+		select {
+		case grant := <-grants:
+			if grant.err != nil || grant.id != "main2" && grant.id != "alignment2" || last[grant.id] {
+				t.Fatalf("unexpected successor %+v", grant)
+			}
+			last[grant.id] = true
+			grant.permit.Release()
+		case <-time.After(time.Second):
+			t.Fatal("stage successor starved")
+		}
 	}
 }
 

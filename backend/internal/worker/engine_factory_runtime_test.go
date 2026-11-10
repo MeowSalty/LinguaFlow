@@ -40,6 +40,10 @@ func TestEngineFactoryOwnsOnlyLocalRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A sibling must still be able to use the shared runtime after this close.
+	intent.RequestID = "sibling-after-close"
+	if ok, err := shared.Admission.PrepareMain(intent.RequestID, 0, 0, 0, 32, 0, false); err != nil || !ok {
+		t.Fatalf("prepare sibling exact request: %v/%v", ok, err)
+	}
 	p, _, err := shared.Admission.TryAdmit(ctx, intent, nil)
 	if err != nil || p == nil {
 		t.Fatalf("resource close shut down shared runtime: %v", err)
@@ -48,6 +52,10 @@ func TestEngineFactoryOwnsOnlyLocalRuntime(t *testing.T) {
 	fixture.factory.build = func(backend.Config) (backend.Backend, error) { return nil, errors.New("construction failed") }
 	if e, err := fixture.factory.BuildEngine(ctx, fixture.snapshot, engine.RuntimeResources{}, nil); e != nil || err == nil {
 		t.Fatalf("expected failed construction: %v", err)
+	}
+	intent.RequestID = "sibling-after-build-failure"
+	if ok, err := shared.Admission.PrepareMain(intent.RequestID, 0, 0, 0, 32, 0, false); err != nil || !ok {
+		t.Fatalf("prepare sibling after failure: %v/%v", ok, err)
 	}
 	p, _, err = shared.Admission.TryAdmit(ctx, intent, nil)
 	if err != nil || p == nil {
@@ -85,7 +93,9 @@ func TestEngineFactoryPassesDeploymentLimitsToAllBackends(t *testing.T) {
 		t.Fatalf("main/alignment factories built=%d, want 2", calls)
 	}
 	window := e.Rounds()[0].Runtime.Window
-	if window.TryReserve("oversized", 3) || !window.TryReserve("full", 2) || window.TryReserve("extra", 1) {
+	// Strict4 keeps one S station for the unique progress exception. This
+	// ordinary reservation can use only S-1; byte/item limits remain deployed.
+	if window.TryReserve("oversized", 3) || !window.TryReserve("full", 1) || window.TryReserve("extra", 1) {
 		t.Fatal("local runtime ignored deployed candidate window")
 	}
 	window.Release("full")

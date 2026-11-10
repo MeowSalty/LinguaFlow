@@ -239,6 +239,34 @@ func (_u *WorkCandidateUpdate) ClearBaselineTarget() *WorkCandidateUpdate {
 	return _u
 }
 
+// SetBaselineDigest sets the "baseline_digest" field.
+func (_u *WorkCandidateUpdate) SetBaselineDigest(v string) *WorkCandidateUpdate {
+	_u.mutation.SetBaselineDigest(v)
+	return _u
+}
+
+// SetNillableBaselineDigest sets the "baseline_digest" field if the given value is not nil.
+func (_u *WorkCandidateUpdate) SetNillableBaselineDigest(v *string) *WorkCandidateUpdate {
+	if v != nil {
+		_u.SetBaselineDigest(*v)
+	}
+	return _u
+}
+
+// SetBaselineTargetIsNull sets the "baseline_target_is_null" field.
+func (_u *WorkCandidateUpdate) SetBaselineTargetIsNull(v bool) *WorkCandidateUpdate {
+	_u.mutation.SetBaselineTargetIsNull(v)
+	return _u
+}
+
+// SetNillableBaselineTargetIsNull sets the "baseline_target_is_null" field if the given value is not nil.
+func (_u *WorkCandidateUpdate) SetNillableBaselineTargetIsNull(v *bool) *WorkCandidateUpdate {
+	if v != nil {
+		_u.SetBaselineTargetIsNull(*v)
+	}
+	return _u
+}
+
 // SetBaselineStatus sets the "baseline_status" field.
 func (_u *WorkCandidateUpdate) SetBaselineStatus(v string) *WorkCandidateUpdate {
 	_u.mutation.SetBaselineStatus(v)
@@ -285,6 +313,32 @@ func (_u *WorkCandidateUpdate) SetNillablePayloadBytes(v *int64) *WorkCandidateU
 // AddPayloadBytes adds value to the "payload_bytes" field.
 func (_u *WorkCandidateUpdate) AddPayloadBytes(v int64) *WorkCandidateUpdate {
 	_u.mutation.AddPayloadBytes(v)
+	return _u
+}
+
+// SetGrowthReserved sets the "growth_reserved" field.
+func (_u *WorkCandidateUpdate) SetGrowthReserved(v bool) *WorkCandidateUpdate {
+	_u.mutation.SetGrowthReserved(v)
+	return _u
+}
+
+// SetNillableGrowthReserved sets the "growth_reserved" field if the given value is not nil.
+func (_u *WorkCandidateUpdate) SetNillableGrowthReserved(v *bool) *WorkCandidateUpdate {
+	if v != nil {
+		_u.SetGrowthReserved(*v)
+	}
+	return _u
+}
+
+// SetPipelineHeader sets the "pipeline_header" field.
+func (_u *WorkCandidateUpdate) SetPipelineHeader(v []byte) *WorkCandidateUpdate {
+	_u.mutation.SetPipelineHeader(v)
+	return _u
+}
+
+// ClearPipelineHeader clears the value of the "pipeline_header" field.
+func (_u *WorkCandidateUpdate) ClearPipelineHeader() *WorkCandidateUpdate {
+	_u.mutation.ClearPipelineHeader()
 	return _u
 }
 
@@ -483,6 +537,12 @@ func (_u *WorkCandidateUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.BaselineTargetCleared() {
 		_spec.ClearField(workcandidate.FieldBaselineTarget, field.TypeString)
 	}
+	if value, ok := _u.mutation.BaselineDigest(); ok {
+		_spec.SetField(workcandidate.FieldBaselineDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BaselineTargetIsNull(); ok {
+		_spec.SetField(workcandidate.FieldBaselineTargetIsNull, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.BaselineStatus(); ok {
 		_spec.SetField(workcandidate.FieldBaselineStatus, field.TypeString, value)
 	}
@@ -494,6 +554,15 @@ func (_u *WorkCandidateUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	}
 	if value, ok := _u.mutation.AddedPayloadBytes(); ok {
 		_spec.AddField(workcandidate.FieldPayloadBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.GrowthReserved(); ok {
+		_spec.SetField(workcandidate.FieldGrowthReserved, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PipelineHeader(); ok {
+		_spec.SetField(workcandidate.FieldPipelineHeader, field.TypeBytes, value)
+	}
+	if _u.mutation.PipelineHeaderCleared() {
+		_spec.ClearField(workcandidate.FieldPipelineHeader, field.TypeBytes)
 	}
 	if value, ok := _u.mutation.Payload(); ok {
 		_spec.SetField(workcandidate.FieldPayload, field.TypeJSON, value)
@@ -764,6 +833,34 @@ func (_u *WorkCandidateUpdateOne) ClearBaselineTarget() *WorkCandidateUpdateOne 
 	return _u
 }
 
+// SetBaselineDigest sets the "baseline_digest" field.
+func (_u *WorkCandidateUpdateOne) SetBaselineDigest(v string) *WorkCandidateUpdateOne {
+	_u.mutation.SetBaselineDigest(v)
+	return _u
+}
+
+// SetNillableBaselineDigest sets the "baseline_digest" field if the given value is not nil.
+func (_u *WorkCandidateUpdateOne) SetNillableBaselineDigest(v *string) *WorkCandidateUpdateOne {
+	if v != nil {
+		_u.SetBaselineDigest(*v)
+	}
+	return _u
+}
+
+// SetBaselineTargetIsNull sets the "baseline_target_is_null" field.
+func (_u *WorkCandidateUpdateOne) SetBaselineTargetIsNull(v bool) *WorkCandidateUpdateOne {
+	_u.mutation.SetBaselineTargetIsNull(v)
+	return _u
+}
+
+// SetNillableBaselineTargetIsNull sets the "baseline_target_is_null" field if the given value is not nil.
+func (_u *WorkCandidateUpdateOne) SetNillableBaselineTargetIsNull(v *bool) *WorkCandidateUpdateOne {
+	if v != nil {
+		_u.SetBaselineTargetIsNull(*v)
+	}
+	return _u
+}
+
 // SetBaselineStatus sets the "baseline_status" field.
 func (_u *WorkCandidateUpdateOne) SetBaselineStatus(v string) *WorkCandidateUpdateOne {
 	_u.mutation.SetBaselineStatus(v)
@@ -810,6 +907,32 @@ func (_u *WorkCandidateUpdateOne) SetNillablePayloadBytes(v *int64) *WorkCandida
 // AddPayloadBytes adds value to the "payload_bytes" field.
 func (_u *WorkCandidateUpdateOne) AddPayloadBytes(v int64) *WorkCandidateUpdateOne {
 	_u.mutation.AddPayloadBytes(v)
+	return _u
+}
+
+// SetGrowthReserved sets the "growth_reserved" field.
+func (_u *WorkCandidateUpdateOne) SetGrowthReserved(v bool) *WorkCandidateUpdateOne {
+	_u.mutation.SetGrowthReserved(v)
+	return _u
+}
+
+// SetNillableGrowthReserved sets the "growth_reserved" field if the given value is not nil.
+func (_u *WorkCandidateUpdateOne) SetNillableGrowthReserved(v *bool) *WorkCandidateUpdateOne {
+	if v != nil {
+		_u.SetGrowthReserved(*v)
+	}
+	return _u
+}
+
+// SetPipelineHeader sets the "pipeline_header" field.
+func (_u *WorkCandidateUpdateOne) SetPipelineHeader(v []byte) *WorkCandidateUpdateOne {
+	_u.mutation.SetPipelineHeader(v)
+	return _u
+}
+
+// ClearPipelineHeader clears the value of the "pipeline_header" field.
+func (_u *WorkCandidateUpdateOne) ClearPipelineHeader() *WorkCandidateUpdateOne {
+	_u.mutation.ClearPipelineHeader()
 	return _u
 }
 
@@ -1038,6 +1161,12 @@ func (_u *WorkCandidateUpdateOne) sqlSave(ctx context.Context) (_node *WorkCandi
 	if _u.mutation.BaselineTargetCleared() {
 		_spec.ClearField(workcandidate.FieldBaselineTarget, field.TypeString)
 	}
+	if value, ok := _u.mutation.BaselineDigest(); ok {
+		_spec.SetField(workcandidate.FieldBaselineDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BaselineTargetIsNull(); ok {
+		_spec.SetField(workcandidate.FieldBaselineTargetIsNull, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.BaselineStatus(); ok {
 		_spec.SetField(workcandidate.FieldBaselineStatus, field.TypeString, value)
 	}
@@ -1049,6 +1178,15 @@ func (_u *WorkCandidateUpdateOne) sqlSave(ctx context.Context) (_node *WorkCandi
 	}
 	if value, ok := _u.mutation.AddedPayloadBytes(); ok {
 		_spec.AddField(workcandidate.FieldPayloadBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.GrowthReserved(); ok {
+		_spec.SetField(workcandidate.FieldGrowthReserved, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PipelineHeader(); ok {
+		_spec.SetField(workcandidate.FieldPipelineHeader, field.TypeBytes, value)
+	}
+	if _u.mutation.PipelineHeaderCleared() {
+		_spec.ClearField(workcandidate.FieldPipelineHeader, field.TypeBytes)
 	}
 	if value, ok := _u.mutation.Payload(); ok {
 		_spec.SetField(workcandidate.FieldPayload, field.TypeJSON, value)

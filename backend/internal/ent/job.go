@@ -28,6 +28,8 @@ type Job struct {
 	RetryEpoch int64 `json:"retry_epoch,omitempty"`
 	// PauseRequested holds the value of the "pause_requested" field.
 	PauseRequested bool `json:"pause_requested,omitempty"`
+	// Bounded current pipeline progress identity and fixed recovery episode inventory
+	PipelineRuntimeState []byte `json:"pipeline_runtime_state,omitempty"`
 	// 所属项目 ID
 	ProjectID int `json:"project_id,omitempty"`
 	// pending, running, pausing, paused, completed, failed, cancelled
@@ -145,7 +147,7 @@ func (*Job) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case job.FieldExecutionConfig:
+		case job.FieldPipelineRuntimeState, job.FieldExecutionConfig:
 			values[i] = new([]byte)
 		case job.FieldPauseRequested:
 			values[i] = new(sql.NullBool)
@@ -201,6 +203,12 @@ func (_m *Job) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field pause_requested", values[i])
 			} else if value.Valid {
 				_m.PauseRequested = value.Bool
+			}
+		case job.FieldPipelineRuntimeState:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field pipeline_runtime_state", values[i])
+			} else if value != nil {
+				_m.PipelineRuntimeState = *value
 			}
 		case job.FieldProjectID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -376,6 +384,9 @@ func (_m *Job) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("pause_requested=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PauseRequested))
+	builder.WriteString(", ")
+	builder.WriteString("pipeline_runtime_state=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PipelineRuntimeState))
 	builder.WriteString(", ")
 	builder.WriteString("project_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ProjectID))

@@ -30,8 +30,12 @@ const (
 	FieldRetryEpoch = "retry_epoch"
 	// FieldState holds the string denoting the state field in the database.
 	FieldState = "state"
+	// FieldMemberOwned holds the string denoting the member_owned field in the database.
+	FieldMemberOwned = "member_owned"
 	// FieldCandidateID holds the string denoting the candidate_id field in the database.
 	FieldCandidateID = "candidate_id"
+	// FieldResponseRequestID holds the string denoting the response_request_id field in the database.
+	FieldResponseRequestID = "response_request_id"
 	// FieldPoolIndex holds the string denoting the pool_index field in the database.
 	FieldPoolIndex = "pool_index"
 	// FieldMainAttempts holds the string denoting the main_attempts field in the database.
@@ -103,7 +107,9 @@ var Columns = []string{
 	FieldSegmentID,
 	FieldRetryEpoch,
 	FieldState,
+	FieldMemberOwned,
 	FieldCandidateID,
+	FieldResponseRequestID,
 	FieldPoolIndex,
 	FieldMainAttempts,
 	FieldAlignmentAttempts,
@@ -147,8 +153,12 @@ var (
 	RetryEpochValidator func(int64) error
 	// DefaultState holds the default value on creation for the "state" field.
 	DefaultState string
+	// DefaultMemberOwned holds the default value on creation for the "member_owned" field.
+	DefaultMemberOwned bool
 	// DefaultCandidateID holds the default value on creation for the "candidate_id" field.
 	DefaultCandidateID string
+	// DefaultResponseRequestID holds the default value on creation for the "response_request_id" field.
+	DefaultResponseRequestID string
 	// DefaultPoolIndex holds the default value on creation for the "pool_index" field.
 	DefaultPoolIndex int
 	// PoolIndexValidator is a validator for the "pool_index" field. It is called by the builders before save.
@@ -227,9 +237,19 @@ func ByState(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldState, opts...).ToFunc()
 }
 
+// ByMemberOwned orders the results by the member_owned field.
+func ByMemberOwned(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMemberOwned, opts...).ToFunc()
+}
+
 // ByCandidateID orders the results by the candidate_id field.
 func ByCandidateID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCandidateID, opts...).ToFunc()
+}
+
+// ByResponseRequestID orders the results by the response_request_id field.
+func ByResponseRequestID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResponseRequestID, opts...).ToFunc()
 }
 
 // ByPoolIndex orders the results by the pool_index field.

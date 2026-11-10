@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
@@ -29,6 +31,9 @@ func (s *JobService) PrepareRecovery(ctx context.Context) error {
 		for _, current := range rows {
 			afterID = current.ID
 			if err := s.prepareRecoveredJob(ctx, current.ID); err != nil {
+				if errors.Is(err, execution.ErrUnsupportedExecutionFormat) {
+					continue
+				}
 				return err
 			}
 		}
@@ -39,6 +44,9 @@ func (s *JobService) PrepareRecovery(ctx context.Context) error {
 }
 
 func (s *JobService) prepareRecoveredJob(ctx context.Context, id int) error {
+	if err := s.CheckExecutionFormat(ctx, id); err != nil {
+		return err
+	}
 	guard, err := s.lifecycle.Lock(ctx, "translation", id)
 	if err != nil {
 		return err
@@ -57,6 +65,9 @@ func (s *JobService) prepareRecoveredJobState(ctx context.Context, id int) error
 		}
 		current, err := client.Job.Get(ctx, id)
 		if err != nil {
+			return err
+		}
+		if err := execution.ValidateExecutionConfigFormat(current.ExecutionConfig); err != nil {
 			return err
 		}
 		if current.PauseRequested || current.Status == JobStatusPausing {
@@ -105,7 +116,25 @@ func (s *JobService) PendingTaskIDs(ctx context.Context, afterID, limit int) ([]
 	if afterID < 0 || limit < 1 || limit > 128 {
 		return nil, fmt.Errorf("invalid pending task page")
 	}
-	return s.client.Job.Query().
-		Where(job.StatusEQ(JobStatusPending), job.IDGT(afterID)).
-		Order(ent.Asc(job.FieldID)).Limit(limit).Select(job.FieldID).Ints(ctx)
+	ids := make([]int, 0, limit)
+	for {
+		rows, err := s.client.Job.Query().Where(job.StatusEQ(JobStatusPending), job.IDGT(afterID)).
+			Order(ent.Asc(job.FieldID)).Limit(128).Select(job.FieldID, job.FieldExecutionConfig).All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			afterID = row.ID
+			if execution.ValidateExecutionConfigFormat(row.ExecutionConfig) != nil {
+				continue
+			}
+			ids = append(ids, row.ID)
+			if len(ids) == limit {
+				return ids, nil
+			}
+		}
+		if len(rows) < 128 {
+			return ids, nil
+		}
+	}
 }

@@ -23,15 +23,16 @@ import (
 // JobRunner and PreviewRunner so that both produce identical execution
 // configurations.
 type EngineFactory struct {
-	logger           *slog.Logger
-	limiterPool      *backend.LimiterPool
-	httpClients      telemetry.HTTPClientFactory
-	reader           credential.Reader
-	checker          credential.Checker
-	build            backend.Factory
-	candidateLimits  pipeline.CandidateLimits
-	maxResponseBytes int64
-	runtimePolicy    pipeline.RuntimePolicy
+	logger               *slog.Logger
+	limiterPool          *backend.LimiterPool
+	httpClients          telemetry.HTTPClientFactory
+	reader               credential.Reader
+	checker              credential.Checker
+	build                backend.Factory
+	candidateLimits      pipeline.CandidateLimits
+	maxResponseBytes     int64
+	responseHandoffBytes int64
+	runtimePolicy        pipeline.RuntimePolicy
 }
 
 func NewEngineFactory(logger *slog.Logger, limiterPool *backend.LimiterPool, clients ...telemetry.HTTPClientFactory) *EngineFactory {
@@ -89,6 +90,9 @@ func (f *EngineFactory) BuildEngineWithConfig(
 		if err != nil {
 			return nil, err
 		}
+		if err := runtime.SetResponseLimits(f.maxResponseBytes, f.responseHandoffBytes); err != nil {
+			return nil, err
+		}
 		runtime.Lifetime = workerLifetime(ctx)
 	}
 	var owned []backend.Backend
@@ -118,43 +122,46 @@ func (f *EngineFactory) BuildEngineWithConfig(
 		}
 
 		var round engine.Round
-		switch rs.Mode {
-		case "translate":
-			if rs.Translate == nil {
-				return nil, fmt.Errorf("round[%d]: mode=translate but translate config is nil", i)
+		err = runtime.Run(ctx, func() error {
+			switch rs.Mode {
+			case "translate":
+				if rs.Translate == nil {
+					return fmt.Errorf("round[%d]: mode=translate but translate config is nil", i)
+				}
+				round, err = buildTranslateRound(rs, snapshot.Strategy, b)
+				if !cfg.Glossary.Enabled && rs.Translate.InlineTermExtraction != nil && rs.Translate.InlineTermExtraction.Enabled {
+					f.logger.Info("inline term extraction disabled by glossary setting", "round", i, "reason", "glossary_disabled")
+				}
+			case "extract":
+				if rs.Extract == nil {
+					return fmt.Errorf("round[%d]: mode=extract but extract config is nil", i)
+				}
+				round, err = buildExtractRound(rs, b)
+			case "adjudicate":
+				if rs.Adjudicate == nil {
+					return fmt.Errorf("round[%d]: mode=adjudicate but adjudicate config is nil", i)
+				}
+				round, err = buildAdjudicateRound(rs, b)
+			case "semantic_qa":
+				if rs.SemanticQA == nil {
+					return fmt.Errorf("round[%d]: mode=semantic_qa but semantic_qa config is nil", i)
+				}
+				round, err = buildSemanticQARound(rs, b)
+			case "revise":
+				if rs.Revise == nil {
+					return fmt.Errorf("round[%d]: mode=revise but revise config is nil", i)
+				}
+				round, err = buildReviseRound(rs, snapshot.Strategy, b)
+			case "correct":
+				if rs.Correct == nil {
+					return fmt.Errorf("round[%d]: mode=correct but correct config is nil", i)
+				}
+				round, err = buildCorrectRound(rs)
+			default:
+				return fmt.Errorf("round[%d]: unsupported mode %q", i, rs.Mode)
 			}
-			round, err = buildTranslateRound(rs, snapshot.Strategy, b)
-			if !cfg.Glossary.Enabled && rs.Translate.InlineTermExtraction != nil && rs.Translate.InlineTermExtraction.Enabled {
-				f.logger.Info("inline term extraction disabled by glossary setting", "round", i, "reason", "glossary_disabled")
-			}
-		case "extract":
-			if rs.Extract == nil {
-				return nil, fmt.Errorf("round[%d]: mode=extract but extract config is nil", i)
-			}
-			round, err = buildExtractRound(rs, b)
-		case "adjudicate":
-			if rs.Adjudicate == nil {
-				return nil, fmt.Errorf("round[%d]: mode=adjudicate but adjudicate config is nil", i)
-			}
-			round, err = buildAdjudicateRound(rs, b)
-		case "semantic_qa":
-			if rs.SemanticQA == nil {
-				return nil, fmt.Errorf("round[%d]: mode=semantic_qa but semantic_qa config is nil", i)
-			}
-			round, err = buildSemanticQARound(rs, b)
-		case "revise":
-			if rs.Revise == nil {
-				return nil, fmt.Errorf("round[%d]: mode=revise but revise config is nil", i)
-			}
-			round, err = buildReviseRound(rs, snapshot.Strategy, b)
-		case "correct":
-			if rs.Correct == nil {
-				return nil, fmt.Errorf("round[%d]: mode=correct but correct config is nil", i)
-			}
-			round, err = buildCorrectRound(rs)
-		default:
-			return nil, fmt.Errorf("round[%d]: unsupported mode %q", i, rs.Mode)
-		}
+			return err
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -315,11 +322,11 @@ func unwrapMetered(b backend.Backend) (*backend.MeteredBackend, bool) {
 }
 
 func NewExecutionRuntime(snapshot *service.JobExecutionSnapshot, pool *backend.LimiterPool, gate *pipeline.PauseGate, limits pipeline.CandidateLimits, policies ...pipeline.RuntimePolicy) (*pipeline.ExecutionRuntime, error) {
-	model, err := execution.ConcurrencyModelForSpec(snapshot)
+	_, err := execution.ConcurrencyModelForSpec(snapshot)
 	if err != nil {
 		return nil, err
 	}
-	config := backend.RequestAdmissionConfig{MainConcurrency: map[int]int{}, LegacyRoundShared: model == execution.LegacyRoundShared}
+	config := backend.RequestAdmissionConfig{MainConcurrency: map[int]int{}}
 	for i := range snapshot.Rounds {
 		config.MainConcurrency[i] = max(1, roundConcurrency(snapshot, i))
 	}
@@ -363,7 +370,11 @@ func BuildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 // 计划级策略快照（snapshot.Strategy，由调用方传入），轮次自身不再携带策略。
 func buildTranslateRound(rs service.JobRoundSnapshot, strategy service.StrategySnapshot, b backend.Backend) (engine.Round, error) {
 	t := rs.Translate
-	roundRenderer, err := prompt.NewRenderer(t.Prompt.Content)
+	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(t.Prompt.Content)))
+	if boundsErr != nil {
+		return engine.Round{}, boundsErr
+	}
+	roundRenderer, err := prompt.NewRendererBounded(rendererBounds, t.Prompt.Content)
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build renderer: %w", err)
 	}
@@ -407,7 +418,11 @@ func buildTranslateRound(rs service.JobRoundSnapshot, strategy service.StrategyS
 
 func buildExtractRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
 	e := rs.Extract
-	renderer, err := prompt.NewBootstrapRenderer(e.TemplateContent)
+	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(e.TemplateContent)))
+	if boundsErr != nil {
+		return engine.Round{}, boundsErr
+	}
+	renderer, err := prompt.NewBootstrapRendererBounded(rendererBounds, e.TemplateContent)
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build bootstrap renderer: %w", err)
 	}
@@ -433,7 +448,11 @@ func buildExtractRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.R
 
 func buildAdjudicateRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
 	a := rs.Adjudicate
-	renderer, err := prompt.NewAdjudicationRenderer(a.TemplateContent)
+	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(a.TemplateContent)))
+	if boundsErr != nil {
+		return engine.Round{}, boundsErr
+	}
+	renderer, err := prompt.NewAdjudicationRendererBounded(rendererBounds, a.TemplateContent)
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build adjudication renderer: %w", err)
 	}
@@ -457,7 +476,11 @@ func buildAdjudicateRound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 
 func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
 	s := rs.SemanticQA
-	renderer, err := prompt.NewSemanticQARenderer(s.TemplateContent)
+	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(s.TemplateContent)))
+	if boundsErr != nil {
+		return engine.Round{}, boundsErr
+	}
+	renderer, err := prompt.NewSemanticQARendererBounded(rendererBounds, s.TemplateContent)
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build semantic_qa renderer: %w", err)
 	}
@@ -485,7 +508,11 @@ func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 // ReviseHandler 降级原文直发。
 func buildReviseRound(rs service.JobRoundSnapshot, strategy service.StrategySnapshot, b backend.Backend) (engine.Round, error) {
 	r := rs.Revise
-	renderer, err := prompt.NewReviseRenderer(r.TemplateContent)
+	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(r.TemplateContent)))
+	if boundsErr != nil {
+		return engine.Round{}, boundsErr
+	}
+	renderer, err := prompt.NewReviseRendererBounded(rendererBounds, r.TemplateContent)
 	if err != nil {
 		return engine.Round{}, fmt.Errorf("build revise renderer: %w", err)
 	}

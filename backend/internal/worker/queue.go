@@ -62,16 +62,17 @@ type queueEntry struct {
 // Queue bounds accepted, unclaimed work. Running work retains its identity for
 // deduplication until Done; cancelled waiting work immediately frees capacity.
 type Queue struct {
-	mu        sync.Mutex
-	capacity  int
-	next      uint64
-	entries   map[int]*queueEntry
-	waiting   []*queueEntry
-	waiters   int
-	changed   chan struct{}
-	closed    bool
-	lifecycle *tasklife.Coordinator
-	kind      string
+	mu            sync.Mutex
+	capacity      int
+	next          uint64
+	entries       map[int]*queueEntry
+	waiting       []*queueEntry
+	waiters       int
+	changed       chan struct{}
+	closed        bool
+	lifecycle     *tasklife.Coordinator
+	kind          string
+	dispatchCheck func(context.Context, int) error
 }
 
 func NewQueue(size int) *Queue {
@@ -85,6 +86,13 @@ func NewQueue(size int) *Queue {
 func (q *Queue) WithLifecycle(coordinator *tasklife.Coordinator, kind string) *Queue {
 	q.lifecycle = coordinator
 	q.kind = kind
+	return q
+}
+
+// WithDispatchCheck must be configured before use. Translation uses it to
+// refuse unsupported execution formats before creating a lifecycle claim.
+func (q *Queue) WithDispatchCheck(check func(context.Context, int) error) *Queue {
+	q.dispatchCheck = check
 	return q
 }
 
@@ -111,6 +119,11 @@ func (q *Queue) enqueueChecked(ctx context.Context, taskID int, check func(conte
 		return false, err
 	}
 	defer guard.Release()
+	if q.dispatchCheck != nil {
+		if err := q.dispatchCheck(ctx, taskID); err != nil {
+			return false, err
+		}
+	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if err := ctx.Err(); err != nil {

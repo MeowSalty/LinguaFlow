@@ -167,7 +167,7 @@ func (m *legacyExecutionMigrator) migrateJob(ctx context.Context, row *ent.Job) 
 	if err != nil {
 		return false, err
 	}
-	raw, err = json.Marshal(resolved)
+	raw, err = marshalFrozenExecution(resolved)
 	if err != nil {
 		return false, errors.New("cannot encode migrated execution snapshot")
 	}

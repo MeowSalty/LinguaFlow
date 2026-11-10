@@ -105,6 +105,20 @@ func (_c *WorkItemCreate) SetNillableState(v *string) *WorkItemCreate {
 	return _c
 }
 
+// SetMemberOwned sets the "member_owned" field.
+func (_c *WorkItemCreate) SetMemberOwned(v bool) *WorkItemCreate {
+	_c.mutation.SetMemberOwned(v)
+	return _c
+}
+
+// SetNillableMemberOwned sets the "member_owned" field if the given value is not nil.
+func (_c *WorkItemCreate) SetNillableMemberOwned(v *bool) *WorkItemCreate {
+	if v != nil {
+		_c.SetMemberOwned(*v)
+	}
+	return _c
+}
+
 // SetCandidateID sets the "candidate_id" field.
 func (_c *WorkItemCreate) SetCandidateID(v string) *WorkItemCreate {
 	_c.mutation.SetCandidateID(v)
@@ -115,6 +129,20 @@ func (_c *WorkItemCreate) SetCandidateID(v string) *WorkItemCreate {
 func (_c *WorkItemCreate) SetNillableCandidateID(v *string) *WorkItemCreate {
 	if v != nil {
 		_c.SetCandidateID(*v)
+	}
+	return _c
+}
+
+// SetResponseRequestID sets the "response_request_id" field.
+func (_c *WorkItemCreate) SetResponseRequestID(v string) *WorkItemCreate {
+	_c.mutation.SetResponseRequestID(v)
+	return _c
+}
+
+// SetNillableResponseRequestID sets the "response_request_id" field if the given value is not nil.
+func (_c *WorkItemCreate) SetNillableResponseRequestID(v *string) *WorkItemCreate {
+	if v != nil {
+		_c.SetResponseRequestID(*v)
 	}
 	return _c
 }
@@ -328,9 +356,17 @@ func (_c *WorkItemCreate) defaults() {
 		v := workitem.DefaultState
 		_c.mutation.SetState(v)
 	}
+	if _, ok := _c.mutation.MemberOwned(); !ok {
+		v := workitem.DefaultMemberOwned
+		_c.mutation.SetMemberOwned(v)
+	}
 	if _, ok := _c.mutation.CandidateID(); !ok {
 		v := workitem.DefaultCandidateID
 		_c.mutation.SetCandidateID(v)
+	}
+	if _, ok := _c.mutation.ResponseRequestID(); !ok {
+		v := workitem.DefaultResponseRequestID
+		_c.mutation.SetResponseRequestID(v)
 	}
 	if _, ok := _c.mutation.PoolIndex(); !ok {
 		v := workitem.DefaultPoolIndex
@@ -417,8 +453,14 @@ func (_c *WorkItemCreate) check() error {
 	if _, ok := _c.mutation.State(); !ok {
 		return &ValidationError{Name: "state", err: errors.New(`ent: missing required field "WorkItem.state"`)}
 	}
+	if _, ok := _c.mutation.MemberOwned(); !ok {
+		return &ValidationError{Name: "member_owned", err: errors.New(`ent: missing required field "WorkItem.member_owned"`)}
+	}
 	if _, ok := _c.mutation.CandidateID(); !ok {
 		return &ValidationError{Name: "candidate_id", err: errors.New(`ent: missing required field "WorkItem.candidate_id"`)}
+	}
+	if _, ok := _c.mutation.ResponseRequestID(); !ok {
+		return &ValidationError{Name: "response_request_id", err: errors.New(`ent: missing required field "WorkItem.response_request_id"`)}
 	}
 	if _, ok := _c.mutation.PoolIndex(); !ok {
 		return &ValidationError{Name: "pool_index", err: errors.New(`ent: missing required field "WorkItem.pool_index"`)}
@@ -528,9 +570,17 @@ func (_c *WorkItemCreate) createSpec() (*WorkItem, *sqlgraph.CreateSpec) {
 		_spec.SetField(workitem.FieldState, field.TypeString, value)
 		_node.State = value
 	}
+	if value, ok := _c.mutation.MemberOwned(); ok {
+		_spec.SetField(workitem.FieldMemberOwned, field.TypeBool, value)
+		_node.MemberOwned = value
+	}
 	if value, ok := _c.mutation.CandidateID(); ok {
 		_spec.SetField(workitem.FieldCandidateID, field.TypeString, value)
 		_node.CandidateID = value
+	}
+	if value, ok := _c.mutation.ResponseRequestID(); ok {
+		_spec.SetField(workitem.FieldResponseRequestID, field.TypeString, value)
+		_node.ResponseRequestID = value
 	}
 	if value, ok := _c.mutation.PoolIndex(); ok {
 		_spec.SetField(workitem.FieldPoolIndex, field.TypeInt, value)

@@ -61,7 +61,7 @@ func TestEngineFactoryProviderConsumesFrozenTimeout(t *testing.T) {
 				defer cancel()
 				resp, err := extractBackend(eng.Rounds()[0].Handler).Translate(ctx, backend.Request{User: "hello"})
 				if calls.Load() == 0 {
-					t.Fatal("provider did not reach the test HTTP server")
+					t.Fatalf("provider did not reach the test HTTP server: response=%v err=%v", resp, err)
 				}
 				if timeout == "20ms" {
 					if err == nil {

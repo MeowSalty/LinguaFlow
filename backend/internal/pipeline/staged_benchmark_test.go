@@ -34,11 +34,11 @@ type controlledCase struct {
 var controlledCases = []controlledCase{
 	{name: "legacy_serial_C1", main: 1, legacy: true, serial: true, shared: true},
 	{name: "corrected_serial_C1", main: 1, serial: true, shared: true},
-	{name: "shared_pipeline_C1", main: 1, shared: true},
+	{name: "job_pipeline_C1_A1", main: 1, align: 1},
 	{name: "independent_pipeline_C1_A1", main: 1, align: 1},
 	{name: "legacy_serial_C2", main: 2, legacy: true, serial: true, shared: true},
 	{name: "corrected_serial_C2", main: 2, serial: true, shared: true},
-	{name: "shared_pipeline_C2", main: 2, shared: true},
+	{name: "job_pipeline_C2_A2", main: 2, align: 2},
 	{name: "independent_pipeline_C2_A2", main: 2, align: 2},
 	{name: "independent_pipeline_C2_A4", main: 2, align: 4},
 	{name: "batch_C1_A1_B4", main: 1, align: 1, batch: 4, wait: 25 * time.Millisecond},
@@ -274,7 +274,7 @@ func runControlledPipeline(ctx context.Context, f *controlledHTTP, tc controlled
 	if err != nil {
 		return nil, err
 	}
-	a, err := backend.NewRequestAdmission(f.pool, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: tc.main}, AlignmentConcurrency: tc.align, LegacyRoundShared: tc.shared})
+	a, err := backend.NewRequestAdmission(f.pool, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: tc.main}, AlignmentConcurrency: tc.align})
 	if err != nil {
 		return nil, err
 	}

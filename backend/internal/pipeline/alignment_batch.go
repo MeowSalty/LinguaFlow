@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
@@ -33,7 +34,11 @@ func (c AlignmentBatchConfig) enabled() bool {
 
 func needsAlignmentAttempt(round Round, c *Candidate) bool {
 	backends, budget, _, _, _ := alignmentSettings(round.Handler)
-	return !c.Ready && c.Alignment != nil && len(c.Alignment.Missing()) > 0 && len(backends) > 0 && c.LogicalAttempt < budget && c.NetworkAttempt < max(1, round.Retry.MaxAttempts)
+	missing := c.Alignment != nil && len(c.Alignment.Missing()) > 0
+	if c.HeaderOnly {
+		missing = c.HeaderMissing
+	}
+	return !c.Ready && missing && len(backends) > 0 && c.LogicalAttempt < budget && c.NetworkAttempt < max(1, round.Retry.MaxAttempts)
 }
 
 func maxTime(left, right time.Time) time.Time {
@@ -44,16 +49,31 @@ func maxTime(left, right time.Time) time.Time {
 }
 
 func alignmentWords(c *Candidate) int {
+	if c.HeaderOnly {
+		return c.HeaderWords
+	}
 	if c.Alignment == nil {
 		return 0
 	}
 	words := 0
-	for _, value := range c.Alignment.AlignmentRequestTexts(rawSource(&c.Segment), c.Alignment.Missing()) {
+	b, err := backend.NewBuildBounds(DefaultCandidateLimits().ItemBytes, max(c.StoredBytes, DefaultCandidateLimits().ItemBytes))
+	if err != nil {
+		return math.MaxInt
+	}
+	missing, err := c.Alignment.MissingBounded(b)
+	if err != nil {
+		return math.MaxInt
+	}
+	err = c.Alignment.VisitAlignmentRequestTextsBounded(b, rawSource(&c.Segment), missing, func(value string) {
 		n := CountWords(value)
 		if n > math.MaxInt-words {
-			return math.MaxInt
+			words = math.MaxInt
+		} else {
+			words += n
 		}
-		words += n
+	})
+	if err != nil {
+		return math.MaxInt
 	}
 	return words
 }

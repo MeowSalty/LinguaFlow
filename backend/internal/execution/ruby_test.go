@@ -1,6 +1,9 @@
 package execution
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestRubyConcurrencyPresenceAndSnapshotCompatibility(t *testing.T) {
 	for _, tt := range []struct {
@@ -19,23 +22,21 @@ func TestRubyConcurrencyPresenceAndSnapshotCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SchemaVersion != 3 || s.DefaultsVersion != 3 || s.RubyProtocolVersion != 2 || s.RubyValidatorVersion != 1 || s.RubyBatchProtocolVersion != 1 || s.RubyRetry.Concurrency != 1 {
+	if s.SchemaVersion != 4 || s.DefaultsVersion != 4 || s.ResponseFormatVersion != 1 || s.RubyProtocolVersion != 2 || s.RubyValidatorVersion != 1 || s.RubyBatchProtocolVersion != 1 || s.RubyRetry.Concurrency != 1 {
 		t.Fatalf("missing frozen defaults: %+v", s)
 	}
 	s.RubyRetry.Concurrency = 0
 	if ValidateSpec(s) == nil {
 		t.Fatal("new snapshot silently supplied A on restore")
 	}
-	s.SchemaVersion = 1
-	s.DefaultsVersion = 1
-	s.RubyProtocolVersion = 0
-	s.RubyValidatorVersion = 0
-	if err := ValidateSpec(s); err != nil {
-		t.Fatalf("legacy snapshot rejected: %v", err)
-	}
-	model, err := ConcurrencyModelForSpec(s)
-	if err != nil || model != LegacyRoundShared || s.RubyRetry.Concurrency != 0 || EffectiveRubyProtocolVersion(s) != 1 {
-		t.Fatalf("legacy changed: %s %v", model, err)
+	for _, version := range []int{1, 2, 3} {
+		s.SchemaVersion, s.DefaultsVersion = version, version
+		if err := ValidateSpec(s); !errors.Is(err, ErrUnsupportedExecutionFormat) {
+			t.Fatalf("old snapshot executed: version=%d error=%v", version, err)
+		}
+		if _, err := ConcurrencyModelForSpec(s); !errors.Is(err, ErrUnsupportedExecutionFormat) {
+			t.Fatalf("old concurrency interpreted: %v", err)
+		}
 	}
 	if err := ValidateProfile(DefaultProfile()); err != nil {
 		t.Fatalf("profile version changed with execution version: %v", err)

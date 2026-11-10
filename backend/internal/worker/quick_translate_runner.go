@@ -322,16 +322,18 @@ func buildAdjudicateBatchHandlerCommon(
 	doc *pipeline.Document,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
+	return func(ctx context.Context, batchResult pipeline.BatchResult) error {
+		return applyStoredMemoryResult(ctx, batchResult, func(_ *backend.BuildBounds, batchResult pipeline.BatchResult) error {
+			for _, ts := range batchResult.Segments {
+				if ts.Index != targetDocIdx {
+					continue
+				}
+				if len(ts.Issues) > 0 {
+					doc.Segments[ts.Index].Issues = ts.Issues
+				}
 			}
-			if len(ts.Issues) > 0 {
-				doc.Segments[ts.Index].Issues = ts.Issues
-			}
-		}
-		return nil
+			return nil
+		})
 	}
 }
 
@@ -341,19 +343,30 @@ func buildSemanticQABatchHandlerCommon(
 	doc *pipeline.Document,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
+	return func(ctx context.Context, batchResult pipeline.BatchResult) error {
+		return applyStoredMemoryResult(ctx, batchResult, func(b *backend.BuildBounds, batchResult pipeline.BatchResult) error {
+			for _, ts := range batchResult.Segments {
+				if ts.Index != targetDocIdx {
+					continue
+				}
+				if len(ts.Issues) == 0 {
+					continue
+				}
+				existing := doc.Segments[ts.Index].Issues
+				var merged []qa.QualityIssue
+				if b != nil {
+					var err error
+					merged, err = mergeSemanticQAIssuesBounded(b, existing, ts.Issues)
+					if err != nil {
+						return err
+					}
+				} else {
+					merged = mergeSemanticQAIssues(existing, ts.Issues)
+				}
+				doc.Segments[ts.Index].Issues = merged
 			}
-			if len(ts.Issues) == 0 {
-				continue
-			}
-			existing := doc.Segments[ts.Index].Issues
-			merged := mergeSemanticQAIssues(existing, ts.Issues)
-			doc.Segments[ts.Index].Issues = merged
-		}
-		return nil
+			return nil
+		})
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"sort"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -18,6 +19,26 @@ import (
 )
 
 type Store struct{ client *ent.Client }
+
+var candidateSaveFields = []string{workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldParentRequestID, workcandidate.FieldVersion, workcandidate.FieldWorkItemID, workcandidate.FieldDtoVersion, workcandidate.FieldSnapshotDigest, workcandidate.FieldMode, workcandidate.FieldSourceGeneration, workcandidate.FieldSourceRevisionID, workcandidate.FieldBaselineVersion, workcandidate.FieldBaselineStatus, workcandidate.FieldState, workcandidate.FieldPayloadBytes, workcandidate.FieldPipelineHeader}
+
+func candidatePayloadLimit(c Candidate) int64 {
+	if c.PayloadLimit > 0 {
+		return c.PayloadLimit
+	}
+	return 1 << 20
+}
+func candidateReadPayload(ctx context.Context, tx *ent.Client, old *ent.WorkCandidate, limit int64) error {
+	if old.PayloadBytes < 0 || old.PayloadBytes > limit {
+		return backend.ErrBuildCapacity
+	}
+	payload, err := tx.WorkCandidate.Query().Where(workcandidate.IDEQ(old.ID), workcandidate.PayloadBytesLTE(limit)).Select(workcandidate.FieldID, workcandidate.FieldPayload).Only(ctx)
+	if err != nil {
+		return err
+	}
+	old.Payload = payload.Payload
+	return nil
+}
 
 func NewStore(client *ent.Client) *Store { return &Store{client: client} }
 
@@ -279,7 +300,7 @@ func (s *Store) SavePool(ctx context.Context, scope Scope, pool int) error {
 	})
 }
 
-func lockSegment(ctx context.Context, tx *ent.Client, scope Scope, id int, version int64) (*ent.Segment, error) {
+func lockSegment(ctx context.Context, tx *ent.Client, scope Scope, id int, version int64, factsOnly ...bool) (*ent.Segment, error) {
 	if version < 1 {
 		return nil, ErrStale
 	}
@@ -289,6 +310,9 @@ func lockSegment(ctx context.Context, tx *ent.Client, scope Scope, id int, versi
 	}
 	if n != 1 {
 		return nil, ErrStale
+	}
+	if len(factsOnly) > 0 && factsOnly[0] {
+		return tx.Segment.Query().Where(segment.IDEQ(id)).Select(segment.FieldID, segment.FieldContentVersion, segment.FieldTargetText, segment.FieldStatus).Only(ctx)
 	}
 	return tx.Segment.Get(ctx, id)
 }
@@ -305,6 +329,9 @@ func (s *Store) SaveCandidateWithCursor(ctx context.Context, c Candidate, cursor
 }
 
 func (s *Store) saveCandidate(ctx context.Context, c Candidate, cursor *Cursor) error {
+	if int64(len(c.Payload)) > candidatePayloadLimit(c) {
+		return backend.ErrBuildCapacity
+	}
 	if c.ID == "" || c.Version < 1 || c.DTOVersion < 1 || c.SnapshotDigest == "" || !json.Valid(c.Payload) {
 		return fmt.Errorf("invalid candidate")
 	}
@@ -330,11 +357,14 @@ func (s *Store) saveCandidate(ctx context.Context, c Candidate, cursor *Cursor) 
 		if err != nil {
 			return false, err
 		}
-		row, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Only(ctx)
+		row, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID), workcandidate.PayloadBytesLTE(candidatePayloadLimit(c))).Select(candidateSaveFields...).Only(ctx)
 		if ent.IsNotFound(err) {
 			return false, nil
 		}
 		if err != nil {
+			return false, err
+		}
+		if err := candidateReadPayload(ctx, tx, row, candidatePayloadLimit(c)); err != nil {
 			return false, err
 		}
 		if row.WorkItemID != w.ID || row.Version != c.Version || row.SnapshotDigest != c.SnapshotDigest || row.DtoVersion != c.DTOVersion || row.Mode != c.Mode || row.BaselineVersion != c.BaselineVersion || row.State != c.State || string(row.Payload) != string(c.Payload) {
@@ -361,9 +391,14 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 	if w.State == "resolved" {
 		return ErrStale
 	}
-	old, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Only(ctx)
+	old, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Select(candidateSaveFields...).Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
 		return err
+	}
+	if old != nil {
+		if err := candidateReadPayload(ctx, tx, old, candidatePayloadLimit(c)); err != nil {
+			return err
+		}
 	}
 	j, err := tx.Job.Get(ctx, c.Scope.JobID)
 	if err != nil {
@@ -374,15 +409,15 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 			return err
 		}
 	}
-	row, err := lockSegment(ctx, tx, c.Scope, c.SegmentID, c.BaselineVersion)
+	row, err := lockSegment(ctx, tx, c.Scope, c.SegmentID, c.BaselineVersion, true)
 	if err != nil {
 		return err
 	}
-	if !sameString(row.TargetText, c.BaselineTarget) || string(row.Status) != c.BaselineStatus {
+	if !candidateBaselineMatches(c, row.TargetText) || string(row.Status) != c.BaselineStatus {
 		return ErrStale
 	}
 	if old != nil {
-		validDTO := old.DtoVersion == c.DTOVersion || (old.DtoVersion == 1 && c.DTOVersion == 2 && c.Version > old.Version)
+		validDTO := old.DtoVersion == c.DTOVersion
 		if old.WorkItemID != w.ID || old.BaselineVersion != c.BaselineVersion || old.SnapshotDigest != c.SnapshotDigest || !validDTO || old.Mode != c.Mode || old.SourceGeneration != c.Scope.SourceGeneration || !sameInt(old.SourceRevisionID, c.Scope.SourceRevisionID) {
 			return ErrCandidateVersion
 		}
@@ -401,7 +436,7 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 		if c.Version != old.Version+1 || w.CandidateID != c.ID {
 			return ErrCandidateVersion
 		}
-		if err := tx.WorkCandidate.UpdateOneID(old.ID).SetVersion(c.Version).SetDtoVersion(c.DTOVersion).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).Exec(ctx); err != nil {
+		if err := tx.WorkCandidate.UpdateOneID(old.ID).SetVersion(c.Version).SetDtoVersion(c.DTOVersion).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).SetPipelineHeader(c.PipelineHeader).Exec(ctx); err != nil {
 			return err
 		}
 	} else {
@@ -417,23 +452,44 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 				return ErrCandidateVersion
 			}
 		}
-		if err := tx.WorkCandidate.Create().SetIdentity(c.ID).SetParentRequestID(c.ParentRequestID).SetVersion(c.Version).SetWorkItemID(w.ID).SetDtoVersion(c.DTOVersion).SetSnapshotDigest(c.SnapshotDigest).SetMode(c.Mode).SetSourceGeneration(c.Scope.SourceGeneration).SetNillableSourceRevisionID(c.Scope.SourceRevisionID).SetBaselineVersion(c.BaselineVersion).SetNillableBaselineTarget(c.BaselineTarget).SetBaselineStatus(c.BaselineStatus).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).Exec(ctx); err != nil {
+		if err := tx.WorkCandidate.Create().SetIdentity(c.ID).SetParentRequestID(c.ParentRequestID).SetVersion(c.Version).SetWorkItemID(w.ID).SetDtoVersion(c.DTOVersion).SetSnapshotDigest(c.SnapshotDigest).SetMode(c.Mode).SetSourceGeneration(c.Scope.SourceGeneration).SetNillableSourceRevisionID(c.Scope.SourceRevisionID).SetBaselineVersion(c.BaselineVersion).SetNillableBaselineTarget(c.BaselineTarget).SetBaselineDigest(c.BaselineDigest).SetBaselineTargetIsNull(c.BaselineTargetIsNull).SetBaselineStatus(c.BaselineStatus).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).SetPipelineHeader(c.PipelineHeader).Exec(ctx); err != nil {
 			return err
 		}
 	}
-	return tx.WorkItem.UpdateOneID(w.ID).SetCandidateID(c.ID).SetState("candidate").Exec(ctx)
+	return tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(true).SetCandidateID(c.ID).SetState("candidate").Exec(ctx)
 }
 
 // guardCandidateHandoff permits saves backed by a request admitted in the
 // current retry epoch. A retained candidate keeps its original main parent;
 // after Retry, its admitted alignment request supplies the new epoch's proof.
 func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old *ent.WorkCandidate) error {
+	if old == nil {
+		ok, err := guardPromotedResponse(ctx, tx, c)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+	}
 	if old != nil {
 		var saved struct {
-			RetryEpoch             int64  `json:"retry_epoch"`
-			LastAlignmentRequestID string `json:"last_alignment_request_id"`
+			RetryEpoch             int64
+			LastAlignmentRequestID string
 		}
-		validSaved := json.Unmarshal(old.Payload, &saved) == nil && saved.RetryEpoch == c.Scope.RetryEpoch
+		validSaved := false
+		if len(old.PipelineHeader) > 0 && len(old.PipelineHeader) <= 2048 {
+			b, e := backend.NewBuildBounds(2048, 0)
+			validSaved = e == nil && b.DecodeJSON(old.PipelineHeader, &saved) == nil && saved.RetryEpoch == c.Scope.RetryEpoch
+		} else {
+			var legacy struct {
+				RetryEpoch             int64  `json:"retry_epoch"`
+				LastAlignmentRequestID string `json:"last_alignment_request_id"`
+			}
+			validSaved = json.Unmarshal(old.Payload, &legacy) == nil && legacy.RetryEpoch == c.Scope.RetryEpoch
+			saved.RetryEpoch = legacy.RetryEpoch
+			saved.LastAlignmentRequestID = legacy.LastAlignmentRequestID
+		}
 		if validSaved && old.Version == c.Version && old.State == c.State && string(old.Payload) == string(c.Payload) {
 			return nil
 		}
@@ -541,4 +597,17 @@ func (s *Store) PauseRequested(ctx context.Context, jobID int) (bool, error) {
 		return false, err
 	}
 	return row.PauseRequested || row.Status == "pausing" || row.Status == "paused", nil
+}
+
+func candidateBaselineMatches(c Candidate, target *string) bool {
+	if c.BaselineDigest != "" {
+		return c.BaselineTargetIsNull == (target == nil) && c.BaselineDigest == stringDigest(target)
+	}
+	return sameString(target, c.BaselineTarget)
+}
+func promotionCandidateBaselineMatches(m PromotionMember, c Candidate) bool {
+	if c.BaselineDigest != "" {
+		return m.BaselineDigest == c.BaselineDigest && m.BaselineTargetIsNull == c.BaselineTargetIsNull
+	}
+	return samePromotionBaseline(m, c.BaselineTarget)
 }

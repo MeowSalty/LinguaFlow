@@ -2,6 +2,7 @@ package execution
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"reflect"
 	"testing"
@@ -46,7 +47,7 @@ func TestRubyBatchSnapshotPresenceAndCompatibility(t *testing.T) {
 		t.Fatalf("explicit zero lost: %+v", got)
 	}
 	in.RubyRetry.MaxWordsPerBatch = new(999)
-	for _, version := range []int{1, 2, 3} {
+	for _, version := range []int{1, 2, 3, 4} {
 		t.Run(string(rune('0'+version)), func(t *testing.T) {
 			raw, err := json.Marshal(frozen)
 			if err != nil {
@@ -64,11 +65,17 @@ func TestRubyBatchSnapshotPresenceAndCompatibility(t *testing.T) {
 				restored.RubyBatchProtocolVersion = 0
 				restored.RubyTemplates.BatchJSON, restored.RubyTemplates.BatchText = "", ""
 			}
+			if version < 4 {
+				if err := ValidateSpec(&restored); !errors.Is(err, ErrUnsupportedExecutionFormat) {
+					t.Fatalf("old snapshot executed: %v", err)
+				}
+				return
+			}
 			if err := ValidateSpec(&restored); err != nil {
 				t.Fatal(err)
 			}
 			got := EffectiveRubyRetryBatch(&restored)
-			if version == 3 {
+			if version == 4 {
 				if got != want || EffectiveRubyBatchProtocolVersion(&restored) != 1 {
 					t.Fatalf("v3 settings lost: %+v", got)
 				}

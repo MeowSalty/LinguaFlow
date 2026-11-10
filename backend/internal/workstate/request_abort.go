@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 )
@@ -19,10 +20,12 @@ type attemptCounters struct {
 }
 
 type requestDebit struct {
-	SegmentID int             `json:"segment_id"`
-	Pool      int             `json:"pool"`
-	Before    attemptCounters `json:"before"`
-	After     attemptCounters `json:"after"`
+	GrowthReserved bool            `json:"growth_reserved"`
+	SegmentID      int             `json:"segment_id"`
+	Pool           int             `json:"pool"`
+	MemberOwned    bool            `json:"member_owned"`
+	Before         attemptCounters `json:"before"`
+	After          attemptCounters `json:"after"`
 }
 
 func attemptsFromRow(w *ent.WorkItem) attemptCounters {
@@ -106,6 +109,7 @@ func (s *Store) abortRequest(ctx context.Context, scope *Scope, id string) error
 			type refund struct {
 				row    *ent.WorkItem
 				before attemptCounters
+				owned  bool
 				ids    []int
 			}
 			groups := map[string]*refund{}
@@ -125,14 +129,19 @@ func (s *Store) abortRequest(ctx context.Context, scope *Scope, id string) error
 				if attemptsFromRow(w) != debit.After {
 					return fmt.Errorf("%w: request cursor changed before abort", ErrCandidateVersion)
 				}
-				data, err := json.Marshal([]any{w.State, w.CandidateID, w.PoolIndex, w.PromptPhase, debit.Before, debit.After})
+				if alignmentStage(row.Stage) && w.CandidateID != "" {
+					if err := tx.WorkCandidate.Update().Where(workcandidate.IdentityEQ(w.CandidateID)).SetGrowthReserved(debit.GrowthReserved).Exec(ctx); err != nil {
+						return err
+					}
+				}
+				data, err := json.Marshal([]any{w.State, w.CandidateID, w.PoolIndex, w.PromptPhase, debit.Before, debit.After, debit.MemberOwned})
 				if err != nil {
 					return err
 				}
 				key := string(data)
 				g := groups[key]
 				if g == nil {
-					g = &refund{row: w, before: debit.Before}
+					g = &refund{row: w, before: debit.Before, owned: debit.MemberOwned}
 					groups[key] = g
 					order = append(order, key)
 				}
@@ -143,7 +152,7 @@ func (s *Store) abortRequest(ctx context.Context, scope *Scope, id string) error
 				for start := 0; start < len(g.ids); start += bulkRows {
 					end := min(start+bulkRows, len(g.ids))
 					before := g.before
-					u := tx.WorkItem.Update().Where(append(expectedMember(scope, g.row), workitem.IDIn(g.ids[start:end]...))...).SetMainAttempts(before.Main).SetAlignmentAttempts(before.Alignment).SetNetworkAttempts(before.Network).SetMainNetworkAttempts(before.MainNetwork).SetAlignmentNetworkAttempts(before.AlignmentNetwork)
+					u := tx.WorkItem.Update().Where(append(expectedMember(scope, g.row), workitem.IDIn(g.ids[start:end]...))...).SetMemberOwned(g.owned).SetMainAttempts(before.Main).SetAlignmentAttempts(before.Alignment).SetNetworkAttempts(before.Network).SetMainNetworkAttempts(before.MainNetwork).SetAlignmentNetworkAttempts(before.AlignmentNetwork)
 					if err := checkedUpdate(ctx, u, end-start); err != nil {
 						return err
 					}

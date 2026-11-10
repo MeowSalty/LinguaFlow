@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
@@ -176,7 +177,7 @@ func commitExists(ctx context.Context, tx *ent.Client, in CommitInput) (bool, er
 func ResolveCheckpoint(ctx context.Context, client *ent.Client, jobID int, err error, facts map[int][]Confirmation) error {
 	return NewStore(client).finishUnknown(ctx, jobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
 		for roundID, confirmations := range facts {
-			round, err := tx.JobRound.Get(ctx, roundID)
+			round, err := loadCheckpointRound(ctx, tx, roundID)
 			if err != nil {
 				return false, err
 			}
@@ -193,7 +194,7 @@ func ResolveCheckpoint(ctx context.Context, client *ent.Client, jobID int, err e
 			}
 			for start := 0; start < len(ids); start += bulkIDs {
 				end := min(start+bulkIDs, len(ids))
-				rows, err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(roundID), jobroundsegment.SegmentIDIn(ids[start:end]...)).All(ctx)
+				rows, err := loadCheckpointFacts(ctx, tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(roundID), jobroundsegment.SegmentIDIn(ids[start:end]...)))
 				if err != nil {
 					return false, err
 				}
@@ -224,16 +225,22 @@ func ResolveCheckpoint(ctx context.Context, client *ent.Client, jobID int, err e
 				return false, errUnverifiable
 			}
 		}
-		rounds, err := tx.JobRound.Query().Where(jobround.JobIDEQ(jobID)).All(ctx)
-		if err != nil {
-			return false, err
-		}
 		var total, completed int64
-		for _, round := range rounds {
-			total += int64(round.SegmentTotal)
-			completed += EffectiveProgress(round.Status, int64(round.SegmentTotal), int64(round.SegmentCompleted))
+		for after := 0; ; {
+			rounds, err := tx.JobRound.Query().Where(jobround.JobIDEQ(jobID), jobround.IDGT(after)).Select(jobround.FieldID, jobround.FieldStatus, jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted).Order(ent.Asc(jobround.FieldID)).Limit(16).All(ctx)
+			if err != nil {
+				return false, err
+			}
+			if len(rounds) == 0 {
+				break
+			}
+			for _, round := range rounds {
+				total += int64(round.SegmentTotal)
+				completed += EffectiveProgress(round.Status, int64(round.SegmentTotal), int64(round.SegmentCompleted))
+				after = round.ID
+			}
 		}
-		job, err := tx.Job.Get(ctx, jobID)
+		job, err := tx.Job.Query().Where(job.IDEQ(jobID)).Select(job.FieldID, job.FieldProgressTotal, job.FieldProgressCompleted).Only(ctx)
 		if err != nil {
 			return false, err
 		}

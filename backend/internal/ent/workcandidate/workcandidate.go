@@ -40,12 +40,20 @@ const (
 	FieldBaselineVersion = "baseline_version"
 	// FieldBaselineTarget holds the string denoting the baseline_target field in the database.
 	FieldBaselineTarget = "baseline_target"
+	// FieldBaselineDigest holds the string denoting the baseline_digest field in the database.
+	FieldBaselineDigest = "baseline_digest"
+	// FieldBaselineTargetIsNull holds the string denoting the baseline_target_is_null field in the database.
+	FieldBaselineTargetIsNull = "baseline_target_is_null"
 	// FieldBaselineStatus holds the string denoting the baseline_status field in the database.
 	FieldBaselineStatus = "baseline_status"
 	// FieldState holds the string denoting the state field in the database.
 	FieldState = "state"
 	// FieldPayloadBytes holds the string denoting the payload_bytes field in the database.
 	FieldPayloadBytes = "payload_bytes"
+	// FieldGrowthReserved holds the string denoting the growth_reserved field in the database.
+	FieldGrowthReserved = "growth_reserved"
+	// FieldPipelineHeader holds the string denoting the pipeline_header field in the database.
+	FieldPipelineHeader = "pipeline_header"
 	// FieldPayload holds the string denoting the payload field in the database.
 	FieldPayload = "payload"
 	// EdgeWorkItem holds the string denoting the work_item edge name in mutations.
@@ -77,9 +85,13 @@ var Columns = []string{
 	FieldSourceRevisionID,
 	FieldBaselineVersion,
 	FieldBaselineTarget,
+	FieldBaselineDigest,
+	FieldBaselineTargetIsNull,
 	FieldBaselineStatus,
 	FieldState,
 	FieldPayloadBytes,
+	FieldGrowthReserved,
+	FieldPipelineHeader,
 	FieldPayload,
 }
 
@@ -120,12 +132,18 @@ var (
 	SourceGenerationValidator func(int64) error
 	// BaselineVersionValidator is a validator for the "baseline_version" field. It is called by the builders before save.
 	BaselineVersionValidator func(int64) error
+	// DefaultBaselineDigest holds the default value on creation for the "baseline_digest" field.
+	DefaultBaselineDigest string
+	// DefaultBaselineTargetIsNull holds the default value on creation for the "baseline_target_is_null" field.
+	DefaultBaselineTargetIsNull bool
 	// DefaultState holds the default value on creation for the "state" field.
 	DefaultState string
 	// DefaultPayloadBytes holds the default value on creation for the "payload_bytes" field.
 	DefaultPayloadBytes int64
 	// PayloadBytesValidator is a validator for the "payload_bytes" field. It is called by the builders before save.
 	PayloadBytesValidator func(int64) error
+	// DefaultGrowthReserved holds the default value on creation for the "growth_reserved" field.
+	DefaultGrowthReserved bool
 )
 
 // OrderOption defines the ordering options for the WorkCandidate queries.
@@ -201,6 +219,16 @@ func ByBaselineTarget(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBaselineTarget, opts...).ToFunc()
 }
 
+// ByBaselineDigest orders the results by the baseline_digest field.
+func ByBaselineDigest(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBaselineDigest, opts...).ToFunc()
+}
+
+// ByBaselineTargetIsNull orders the results by the baseline_target_is_null field.
+func ByBaselineTargetIsNull(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBaselineTargetIsNull, opts...).ToFunc()
+}
+
 // ByBaselineStatus orders the results by the baseline_status field.
 func ByBaselineStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBaselineStatus, opts...).ToFunc()
@@ -214,6 +242,11 @@ func ByState(opts ...sql.OrderTermOption) OrderOption {
 // ByPayloadBytes orders the results by the payload_bytes field.
 func ByPayloadBytes(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPayloadBytes, opts...).ToFunc()
+}
+
+// ByGrowthReserved orders the results by the growth_reserved field.
+func ByGrowthReserved(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGrowthReserved, opts...).ToFunc()
 }
 
 // ByWorkItemField orders the results by work_item field.

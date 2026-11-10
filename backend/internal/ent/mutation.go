@@ -26776,6 +26776,7 @@ type JobMutation struct {
 	retry_epoch                  *int64
 	addretry_epoch               *int64
 	pause_requested              *bool
+	pipeline_runtime_state       *[]byte
 	status                       *string
 	trigger_type                 *string
 	execution_plan_id            *int
@@ -27077,6 +27078,55 @@ func (m *JobMutation) OldPauseRequested(ctx context.Context) (v bool, err error)
 // ResetPauseRequested resets all changes to the "pause_requested" field.
 func (m *JobMutation) ResetPauseRequested() {
 	m.pause_requested = nil
+}
+
+// SetPipelineRuntimeState sets the "pipeline_runtime_state" field.
+func (m *JobMutation) SetPipelineRuntimeState(b []byte) {
+	m.pipeline_runtime_state = &b
+}
+
+// PipelineRuntimeState returns the value of the "pipeline_runtime_state" field in the mutation.
+func (m *JobMutation) PipelineRuntimeState() (r []byte, exists bool) {
+	v := m.pipeline_runtime_state
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPipelineRuntimeState returns the old "pipeline_runtime_state" field's value of the Job entity.
+// If the Job object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobMutation) OldPipelineRuntimeState(ctx context.Context) (v []byte, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPipelineRuntimeState is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPipelineRuntimeState requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPipelineRuntimeState: %w", err)
+	}
+	return oldValue.PipelineRuntimeState, nil
+}
+
+// ClearPipelineRuntimeState clears the value of the "pipeline_runtime_state" field.
+func (m *JobMutation) ClearPipelineRuntimeState() {
+	m.pipeline_runtime_state = nil
+	m.clearedFields[job.FieldPipelineRuntimeState] = struct{}{}
+}
+
+// PipelineRuntimeStateCleared returns if the "pipeline_runtime_state" field was cleared in this mutation.
+func (m *JobMutation) PipelineRuntimeStateCleared() bool {
+	_, ok := m.clearedFields[job.FieldPipelineRuntimeState]
+	return ok
+}
+
+// ResetPipelineRuntimeState resets all changes to the "pipeline_runtime_state" field.
+func (m *JobMutation) ResetPipelineRuntimeState() {
+	m.pipeline_runtime_state = nil
+	delete(m.clearedFields, job.FieldPipelineRuntimeState)
 }
 
 // SetProjectID sets the "project_id" field.
@@ -28071,7 +28121,7 @@ func (m *JobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *JobMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 19)
 	if m.created_at != nil {
 		fields = append(fields, job.FieldCreatedAt)
 	}
@@ -28083,6 +28133,9 @@ func (m *JobMutation) Fields() []string {
 	}
 	if m.pause_requested != nil {
 		fields = append(fields, job.FieldPauseRequested)
+	}
+	if m.pipeline_runtime_state != nil {
+		fields = append(fields, job.FieldPipelineRuntimeState)
 	}
 	if m.project != nil {
 		fields = append(fields, job.FieldProjectID)
@@ -28142,6 +28195,8 @@ func (m *JobMutation) Field(name string) (ent.Value, bool) {
 		return m.RetryEpoch()
 	case job.FieldPauseRequested:
 		return m.PauseRequested()
+	case job.FieldPipelineRuntimeState:
+		return m.PipelineRuntimeState()
 	case job.FieldProjectID:
 		return m.ProjectID()
 	case job.FieldStatus:
@@ -28187,6 +28242,8 @@ func (m *JobMutation) OldField(ctx context.Context, name string) (ent.Value, err
 		return m.OldRetryEpoch(ctx)
 	case job.FieldPauseRequested:
 		return m.OldPauseRequested(ctx)
+	case job.FieldPipelineRuntimeState:
+		return m.OldPipelineRuntimeState(ctx)
 	case job.FieldProjectID:
 		return m.OldProjectID(ctx)
 	case job.FieldStatus:
@@ -28251,6 +28308,13 @@ func (m *JobMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPauseRequested(v)
+		return nil
+	case job.FieldPipelineRuntimeState:
+		v, ok := value.([]byte)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPipelineRuntimeState(v)
 		return nil
 	case job.FieldProjectID:
 		v, ok := value.(int)
@@ -28467,6 +28531,9 @@ func (m *JobMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *JobMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(job.FieldPipelineRuntimeState) {
+		fields = append(fields, job.FieldPipelineRuntimeState)
+	}
 	if m.FieldCleared(job.FieldErrorMessage) {
 		fields = append(fields, job.FieldErrorMessage)
 	}
@@ -28493,6 +28560,9 @@ func (m *JobMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *JobMutation) ClearField(name string) error {
 	switch name {
+	case job.FieldPipelineRuntimeState:
+		m.ClearPipelineRuntimeState()
+		return nil
 	case job.FieldErrorMessage:
 		m.ClearErrorMessage()
 		return nil
@@ -28524,6 +28594,9 @@ func (m *JobMutation) ResetField(name string) error {
 		return nil
 	case job.FieldPauseRequested:
 		m.ResetPauseRequested()
+		return nil
+	case job.FieldPipelineRuntimeState:
+		m.ResetPipelineRuntimeState()
 		return nil
 	case job.FieldProjectID:
 		m.ResetProjectID()
@@ -77892,38 +77965,42 @@ func (m *UserMutation) ResetEdge(name string) error {
 // WorkCandidateMutation represents an operation that mutates the WorkCandidate nodes in the graph.
 type WorkCandidateMutation struct {
 	config
-	op                    Op
-	typ                   string
-	id                    *int
-	created_at            *time.Time
-	updated_at            *time.Time
-	identity              *string
-	version               *int64
-	addversion            *int64
-	parent_request_id     *string
-	dto_version           *int
-	adddto_version        *int
-	snapshot_digest       *string
-	mode                  *string
-	source_generation     *int64
-	addsource_generation  *int64
-	source_revision_id    *int
-	addsource_revision_id *int
-	baseline_version      *int64
-	addbaseline_version   *int64
-	baseline_target       *string
-	baseline_status       *string
-	state                 *string
-	payload_bytes         *int64
-	addpayload_bytes      *int64
-	payload               *json.RawMessage
-	appendpayload         json.RawMessage
-	clearedFields         map[string]struct{}
-	work_item             *int
-	clearedwork_item      bool
-	done                  bool
-	oldValue              func(context.Context) (*WorkCandidate, error)
-	predicates            []predicate.WorkCandidate
+	op                      Op
+	typ                     string
+	id                      *int
+	created_at              *time.Time
+	updated_at              *time.Time
+	identity                *string
+	version                 *int64
+	addversion              *int64
+	parent_request_id       *string
+	dto_version             *int
+	adddto_version          *int
+	snapshot_digest         *string
+	mode                    *string
+	source_generation       *int64
+	addsource_generation    *int64
+	source_revision_id      *int
+	addsource_revision_id   *int
+	baseline_version        *int64
+	addbaseline_version     *int64
+	baseline_target         *string
+	baseline_digest         *string
+	baseline_target_is_null *bool
+	baseline_status         *string
+	state                   *string
+	payload_bytes           *int64
+	addpayload_bytes        *int64
+	growth_reserved         *bool
+	pipeline_header         *[]byte
+	payload                 *json.RawMessage
+	appendpayload           json.RawMessage
+	clearedFields           map[string]struct{}
+	work_item               *int
+	clearedwork_item        bool
+	done                    bool
+	oldValue                func(context.Context) (*WorkCandidate, error)
+	predicates              []predicate.WorkCandidate
 }
 
 var _ ent.Mutation = (*WorkCandidateMutation)(nil)
@@ -78619,6 +78696,78 @@ func (m *WorkCandidateMutation) ResetBaselineTarget() {
 	delete(m.clearedFields, workcandidate.FieldBaselineTarget)
 }
 
+// SetBaselineDigest sets the "baseline_digest" field.
+func (m *WorkCandidateMutation) SetBaselineDigest(s string) {
+	m.baseline_digest = &s
+}
+
+// BaselineDigest returns the value of the "baseline_digest" field in the mutation.
+func (m *WorkCandidateMutation) BaselineDigest() (r string, exists bool) {
+	v := m.baseline_digest
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBaselineDigest returns the old "baseline_digest" field's value of the WorkCandidate entity.
+// If the WorkCandidate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkCandidateMutation) OldBaselineDigest(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBaselineDigest is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBaselineDigest requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBaselineDigest: %w", err)
+	}
+	return oldValue.BaselineDigest, nil
+}
+
+// ResetBaselineDigest resets all changes to the "baseline_digest" field.
+func (m *WorkCandidateMutation) ResetBaselineDigest() {
+	m.baseline_digest = nil
+}
+
+// SetBaselineTargetIsNull sets the "baseline_target_is_null" field.
+func (m *WorkCandidateMutation) SetBaselineTargetIsNull(b bool) {
+	m.baseline_target_is_null = &b
+}
+
+// BaselineTargetIsNull returns the value of the "baseline_target_is_null" field in the mutation.
+func (m *WorkCandidateMutation) BaselineTargetIsNull() (r bool, exists bool) {
+	v := m.baseline_target_is_null
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBaselineTargetIsNull returns the old "baseline_target_is_null" field's value of the WorkCandidate entity.
+// If the WorkCandidate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkCandidateMutation) OldBaselineTargetIsNull(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBaselineTargetIsNull is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBaselineTargetIsNull requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBaselineTargetIsNull: %w", err)
+	}
+	return oldValue.BaselineTargetIsNull, nil
+}
+
+// ResetBaselineTargetIsNull resets all changes to the "baseline_target_is_null" field.
+func (m *WorkCandidateMutation) ResetBaselineTargetIsNull() {
+	m.baseline_target_is_null = nil
+}
+
 // SetBaselineStatus sets the "baseline_status" field.
 func (m *WorkCandidateMutation) SetBaselineStatus(s string) {
 	m.baseline_status = &s
@@ -78747,6 +78896,91 @@ func (m *WorkCandidateMutation) ResetPayloadBytes() {
 	m.addpayload_bytes = nil
 }
 
+// SetGrowthReserved sets the "growth_reserved" field.
+func (m *WorkCandidateMutation) SetGrowthReserved(b bool) {
+	m.growth_reserved = &b
+}
+
+// GrowthReserved returns the value of the "growth_reserved" field in the mutation.
+func (m *WorkCandidateMutation) GrowthReserved() (r bool, exists bool) {
+	v := m.growth_reserved
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGrowthReserved returns the old "growth_reserved" field's value of the WorkCandidate entity.
+// If the WorkCandidate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkCandidateMutation) OldGrowthReserved(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGrowthReserved is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGrowthReserved requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGrowthReserved: %w", err)
+	}
+	return oldValue.GrowthReserved, nil
+}
+
+// ResetGrowthReserved resets all changes to the "growth_reserved" field.
+func (m *WorkCandidateMutation) ResetGrowthReserved() {
+	m.growth_reserved = nil
+}
+
+// SetPipelineHeader sets the "pipeline_header" field.
+func (m *WorkCandidateMutation) SetPipelineHeader(b []byte) {
+	m.pipeline_header = &b
+}
+
+// PipelineHeader returns the value of the "pipeline_header" field in the mutation.
+func (m *WorkCandidateMutation) PipelineHeader() (r []byte, exists bool) {
+	v := m.pipeline_header
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPipelineHeader returns the old "pipeline_header" field's value of the WorkCandidate entity.
+// If the WorkCandidate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkCandidateMutation) OldPipelineHeader(ctx context.Context) (v []byte, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPipelineHeader is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPipelineHeader requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPipelineHeader: %w", err)
+	}
+	return oldValue.PipelineHeader, nil
+}
+
+// ClearPipelineHeader clears the value of the "pipeline_header" field.
+func (m *WorkCandidateMutation) ClearPipelineHeader() {
+	m.pipeline_header = nil
+	m.clearedFields[workcandidate.FieldPipelineHeader] = struct{}{}
+}
+
+// PipelineHeaderCleared returns if the "pipeline_header" field was cleared in this mutation.
+func (m *WorkCandidateMutation) PipelineHeaderCleared() bool {
+	_, ok := m.clearedFields[workcandidate.FieldPipelineHeader]
+	return ok
+}
+
+// ResetPipelineHeader resets all changes to the "pipeline_header" field.
+func (m *WorkCandidateMutation) ResetPipelineHeader() {
+	m.pipeline_header = nil
+	delete(m.clearedFields, workcandidate.FieldPipelineHeader)
+}
+
 // SetPayload sets the "payload" field.
 func (m *WorkCandidateMutation) SetPayload(jm json.RawMessage) {
 	m.payload = &jm
@@ -78873,7 +79107,7 @@ func (m *WorkCandidateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *WorkCandidateMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 21)
 	if m.created_at != nil {
 		fields = append(fields, workcandidate.FieldCreatedAt)
 	}
@@ -78913,6 +79147,12 @@ func (m *WorkCandidateMutation) Fields() []string {
 	if m.baseline_target != nil {
 		fields = append(fields, workcandidate.FieldBaselineTarget)
 	}
+	if m.baseline_digest != nil {
+		fields = append(fields, workcandidate.FieldBaselineDigest)
+	}
+	if m.baseline_target_is_null != nil {
+		fields = append(fields, workcandidate.FieldBaselineTargetIsNull)
+	}
 	if m.baseline_status != nil {
 		fields = append(fields, workcandidate.FieldBaselineStatus)
 	}
@@ -78921,6 +79161,12 @@ func (m *WorkCandidateMutation) Fields() []string {
 	}
 	if m.payload_bytes != nil {
 		fields = append(fields, workcandidate.FieldPayloadBytes)
+	}
+	if m.growth_reserved != nil {
+		fields = append(fields, workcandidate.FieldGrowthReserved)
+	}
+	if m.pipeline_header != nil {
+		fields = append(fields, workcandidate.FieldPipelineHeader)
 	}
 	if m.payload != nil {
 		fields = append(fields, workcandidate.FieldPayload)
@@ -78959,12 +79205,20 @@ func (m *WorkCandidateMutation) Field(name string) (ent.Value, bool) {
 		return m.BaselineVersion()
 	case workcandidate.FieldBaselineTarget:
 		return m.BaselineTarget()
+	case workcandidate.FieldBaselineDigest:
+		return m.BaselineDigest()
+	case workcandidate.FieldBaselineTargetIsNull:
+		return m.BaselineTargetIsNull()
 	case workcandidate.FieldBaselineStatus:
 		return m.BaselineStatus()
 	case workcandidate.FieldState:
 		return m.State()
 	case workcandidate.FieldPayloadBytes:
 		return m.PayloadBytes()
+	case workcandidate.FieldGrowthReserved:
+		return m.GrowthReserved()
+	case workcandidate.FieldPipelineHeader:
+		return m.PipelineHeader()
 	case workcandidate.FieldPayload:
 		return m.Payload()
 	}
@@ -79002,12 +79256,20 @@ func (m *WorkCandidateMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldBaselineVersion(ctx)
 	case workcandidate.FieldBaselineTarget:
 		return m.OldBaselineTarget(ctx)
+	case workcandidate.FieldBaselineDigest:
+		return m.OldBaselineDigest(ctx)
+	case workcandidate.FieldBaselineTargetIsNull:
+		return m.OldBaselineTargetIsNull(ctx)
 	case workcandidate.FieldBaselineStatus:
 		return m.OldBaselineStatus(ctx)
 	case workcandidate.FieldState:
 		return m.OldState(ctx)
 	case workcandidate.FieldPayloadBytes:
 		return m.OldPayloadBytes(ctx)
+	case workcandidate.FieldGrowthReserved:
+		return m.OldGrowthReserved(ctx)
+	case workcandidate.FieldPipelineHeader:
+		return m.OldPipelineHeader(ctx)
 	case workcandidate.FieldPayload:
 		return m.OldPayload(ctx)
 	}
@@ -79110,6 +79372,20 @@ func (m *WorkCandidateMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetBaselineTarget(v)
 		return nil
+	case workcandidate.FieldBaselineDigest:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBaselineDigest(v)
+		return nil
+	case workcandidate.FieldBaselineTargetIsNull:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBaselineTargetIsNull(v)
+		return nil
 	case workcandidate.FieldBaselineStatus:
 		v, ok := value.(string)
 		if !ok {
@@ -79130,6 +79406,20 @@ func (m *WorkCandidateMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPayloadBytes(v)
+		return nil
+	case workcandidate.FieldGrowthReserved:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGrowthReserved(v)
+		return nil
+	case workcandidate.FieldPipelineHeader:
+		v, ok := value.([]byte)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPipelineHeader(v)
 		return nil
 	case workcandidate.FieldPayload:
 		v, ok := value.(json.RawMessage)
@@ -79249,6 +79539,9 @@ func (m *WorkCandidateMutation) ClearedFields() []string {
 	if m.FieldCleared(workcandidate.FieldBaselineTarget) {
 		fields = append(fields, workcandidate.FieldBaselineTarget)
 	}
+	if m.FieldCleared(workcandidate.FieldPipelineHeader) {
+		fields = append(fields, workcandidate.FieldPipelineHeader)
+	}
 	if m.FieldCleared(workcandidate.FieldPayload) {
 		fields = append(fields, workcandidate.FieldPayload)
 	}
@@ -79271,6 +79564,9 @@ func (m *WorkCandidateMutation) ClearField(name string) error {
 		return nil
 	case workcandidate.FieldBaselineTarget:
 		m.ClearBaselineTarget()
+		return nil
+	case workcandidate.FieldPipelineHeader:
+		m.ClearPipelineHeader()
 		return nil
 	case workcandidate.FieldPayload:
 		m.ClearPayload()
@@ -79322,6 +79618,12 @@ func (m *WorkCandidateMutation) ResetField(name string) error {
 	case workcandidate.FieldBaselineTarget:
 		m.ResetBaselineTarget()
 		return nil
+	case workcandidate.FieldBaselineDigest:
+		m.ResetBaselineDigest()
+		return nil
+	case workcandidate.FieldBaselineTargetIsNull:
+		m.ResetBaselineTargetIsNull()
+		return nil
 	case workcandidate.FieldBaselineStatus:
 		m.ResetBaselineStatus()
 		return nil
@@ -79330,6 +79632,12 @@ func (m *WorkCandidateMutation) ResetField(name string) error {
 		return nil
 	case workcandidate.FieldPayloadBytes:
 		m.ResetPayloadBytes()
+		return nil
+	case workcandidate.FieldGrowthReserved:
+		m.ResetGrowthReserved()
+		return nil
+	case workcandidate.FieldPipelineHeader:
+		m.ResetPipelineHeader()
 		return nil
 	case workcandidate.FieldPayload:
 		m.ResetPayload()
@@ -79423,7 +79731,9 @@ type WorkItemMutation struct {
 	retry_epoch                   *int64
 	addretry_epoch                *int64
 	state                         *string
+	member_owned                  *bool
 	candidate_id                  *string
+	response_request_id           *string
 	pool_index                    *int
 	addpool_index                 *int
 	main_attempts                 *int
@@ -79861,6 +80171,42 @@ func (m *WorkItemMutation) ResetState() {
 	m.state = nil
 }
 
+// SetMemberOwned sets the "member_owned" field.
+func (m *WorkItemMutation) SetMemberOwned(b bool) {
+	m.member_owned = &b
+}
+
+// MemberOwned returns the value of the "member_owned" field in the mutation.
+func (m *WorkItemMutation) MemberOwned() (r bool, exists bool) {
+	v := m.member_owned
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMemberOwned returns the old "member_owned" field's value of the WorkItem entity.
+// If the WorkItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkItemMutation) OldMemberOwned(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMemberOwned is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMemberOwned requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMemberOwned: %w", err)
+	}
+	return oldValue.MemberOwned, nil
+}
+
+// ResetMemberOwned resets all changes to the "member_owned" field.
+func (m *WorkItemMutation) ResetMemberOwned() {
+	m.member_owned = nil
+}
+
 // SetCandidateID sets the "candidate_id" field.
 func (m *WorkItemMutation) SetCandidateID(s string) {
 	m.candidate_id = &s
@@ -79895,6 +80241,42 @@ func (m *WorkItemMutation) OldCandidateID(ctx context.Context) (v string, err er
 // ResetCandidateID resets all changes to the "candidate_id" field.
 func (m *WorkItemMutation) ResetCandidateID() {
 	m.candidate_id = nil
+}
+
+// SetResponseRequestID sets the "response_request_id" field.
+func (m *WorkItemMutation) SetResponseRequestID(s string) {
+	m.response_request_id = &s
+}
+
+// ResponseRequestID returns the value of the "response_request_id" field in the mutation.
+func (m *WorkItemMutation) ResponseRequestID() (r string, exists bool) {
+	v := m.response_request_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseRequestID returns the old "response_request_id" field's value of the WorkItem entity.
+// If the WorkItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkItemMutation) OldResponseRequestID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseRequestID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseRequestID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseRequestID: %w", err)
+	}
+	return oldValue.ResponseRequestID, nil
+}
+
+// ResetResponseRequestID resets all changes to the "response_request_id" field.
+func (m *WorkItemMutation) ResetResponseRequestID() {
+	m.response_request_id = nil
 }
 
 // SetPoolIndex sets the "pool_index" field.
@@ -80574,7 +80956,7 @@ func (m *WorkItemMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *WorkItemMutation) Fields() []string {
-	fields := make([]string, 0, 19)
+	fields := make([]string, 0, 21)
 	if m.created_at != nil {
 		fields = append(fields, workitem.FieldCreatedAt)
 	}
@@ -80599,8 +80981,14 @@ func (m *WorkItemMutation) Fields() []string {
 	if m.state != nil {
 		fields = append(fields, workitem.FieldState)
 	}
+	if m.member_owned != nil {
+		fields = append(fields, workitem.FieldMemberOwned)
+	}
 	if m.candidate_id != nil {
 		fields = append(fields, workitem.FieldCandidateID)
+	}
+	if m.response_request_id != nil {
+		fields = append(fields, workitem.FieldResponseRequestID)
 	}
 	if m.pool_index != nil {
 		fields = append(fields, workitem.FieldPoolIndex)
@@ -80656,8 +81044,12 @@ func (m *WorkItemMutation) Field(name string) (ent.Value, bool) {
 		return m.RetryEpoch()
 	case workitem.FieldState:
 		return m.State()
+	case workitem.FieldMemberOwned:
+		return m.MemberOwned()
 	case workitem.FieldCandidateID:
 		return m.CandidateID()
+	case workitem.FieldResponseRequestID:
+		return m.ResponseRequestID()
 	case workitem.FieldPoolIndex:
 		return m.PoolIndex()
 	case workitem.FieldMainAttempts:
@@ -80703,8 +81095,12 @@ func (m *WorkItemMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldRetryEpoch(ctx)
 	case workitem.FieldState:
 		return m.OldState(ctx)
+	case workitem.FieldMemberOwned:
+		return m.OldMemberOwned(ctx)
 	case workitem.FieldCandidateID:
 		return m.OldCandidateID(ctx)
+	case workitem.FieldResponseRequestID:
+		return m.OldResponseRequestID(ctx)
 	case workitem.FieldPoolIndex:
 		return m.OldPoolIndex(ctx)
 	case workitem.FieldMainAttempts:
@@ -80790,12 +81186,26 @@ func (m *WorkItemMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetState(v)
 		return nil
+	case workitem.FieldMemberOwned:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMemberOwned(v)
+		return nil
 	case workitem.FieldCandidateID:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCandidateID(v)
+		return nil
+	case workitem.FieldResponseRequestID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseRequestID(v)
 		return nil
 	case workitem.FieldPoolIndex:
 		v, ok := value.(int)
@@ -81042,8 +81452,14 @@ func (m *WorkItemMutation) ResetField(name string) error {
 	case workitem.FieldState:
 		m.ResetState()
 		return nil
+	case workitem.FieldMemberOwned:
+		m.ResetMemberOwned()
+		return nil
 	case workitem.FieldCandidateID:
 		m.ResetCandidateID()
+		return nil
+	case workitem.FieldResponseRequestID:
+		m.ResetResponseRequestID()
 		return nil
 	case workitem.FieldPoolIndex:
 		m.ResetPoolIndex()
@@ -81210,51 +81626,79 @@ func (m *WorkItemMutation) ResetEdge(name string) error {
 // WorkRequestMutation represents an operation that mutates the WorkRequest nodes in the graph.
 type WorkRequestMutation struct {
 	config
-	op                     Op
-	typ                    string
-	id                     *int
-	created_at             *time.Time
-	updated_at             *time.Time
-	identity               *string
-	retry_epoch            *int64
-	addretry_epoch         *int64
-	segment_ids            *[]int
-	appendsegment_ids      []int
-	stage                  *string
-	backend_id             *int
-	addbackend_id          *int
-	candidate_id           *string
-	logical_attempt        *int
-	addlogical_attempt     *int
-	members                *json.RawMessage
-	appendmembers          json.RawMessage
-	debits                 *json.RawMessage
-	appenddebits           json.RawMessage
-	glossary_receipt       *json.RawMessage
-	appendglossary_receipt json.RawMessage
-	usage_record_id        *int
-	addusage_record_id     *int
-	budget_model           *string
-	input_digest           *string
-	state                  *string
-	usage_known            *bool
-	input_tokens           *int64
-	addinput_tokens        *int64
-	output_tokens          *int64
-	addoutput_tokens       *int64
-	duration_ms            *int64
-	addduration_ms         *int64
-	last_error             *string
-	clearedFields          map[string]struct{}
-	job                    *int
-	clearedjob             bool
-	resource               *int
-	clearedresource        bool
-	round                  *int
-	clearedround           bool
-	done                   bool
-	oldValue               func(context.Context) (*WorkRequest, error)
-	predicates             []predicate.WorkRequest
+	op                         Op
+	typ                        string
+	id                         *int
+	created_at                 *time.Time
+	updated_at                 *time.Time
+	identity                   *string
+	retry_epoch                *int64
+	addretry_epoch             *int64
+	segment_ids                *[]int
+	appendsegment_ids          []int
+	stage                      *string
+	backend_id                 *int
+	addbackend_id              *int
+	candidate_id               *string
+	logical_attempt            *int
+	addlogical_attempt         *int
+	members                    *json.RawMessage
+	appendmembers              json.RawMessage
+	debits                     *json.RawMessage
+	appenddebits               json.RawMessage
+	glossary_receipt           *json.RawMessage
+	appendglossary_receipt     json.RawMessage
+	freeze_payload             *[]byte
+	freeze_bytes               *int64
+	addfreeze_bytes            *int64
+	response_payload           *[]byte
+	response_bytes             *int64
+	addresponse_bytes          *int64
+	response_format_version    *int
+	addresponse_format_version *int
+	snapshot_digest            *string
+	freeze_digest              *string
+	response_digest            *string
+	corrected_targets          *[]byte
+	corrected_target_index     *[]byte
+	corrected_target_bytes     *int64
+	addcorrected_target_bytes  *int64
+	corrected_target_digest    *string
+	promotion_members          *json.RawMessage
+	appendpromotion_members    json.RawMessage
+	promotion_cursor           *int
+	addpromotion_cursor        *int
+	promotion_count            *int
+	addpromotion_count         *int
+	business_bound             *int64
+	addbusiness_bound          *int64
+	response_truncated         *bool
+	promotion_state            *string
+	promotion_status           *[]byte
+	handoff_at                 *time.Time
+	usage_record_id            *int
+	addusage_record_id         *int
+	budget_model               *string
+	input_digest               *string
+	state                      *string
+	usage_known                *bool
+	input_tokens               *int64
+	addinput_tokens            *int64
+	output_tokens              *int64
+	addoutput_tokens           *int64
+	duration_ms                *int64
+	addduration_ms             *int64
+	last_error                 *string
+	clearedFields              map[string]struct{}
+	job                        *int
+	clearedjob                 bool
+	resource                   *int
+	clearedresource            bool
+	round                      *int
+	clearedround               bool
+	done                       bool
+	oldValue                   func(context.Context) (*WorkRequest, error)
+	predicates                 []predicate.WorkRequest
 }
 
 var _ ent.Mutation = (*WorkRequestMutation)(nil)
@@ -82057,6 +82501,973 @@ func (m *WorkRequestMutation) ResetGlossaryReceipt() {
 	delete(m.clearedFields, workrequest.FieldGlossaryReceipt)
 }
 
+// SetFreezePayload sets the "freeze_payload" field.
+func (m *WorkRequestMutation) SetFreezePayload(b []byte) {
+	m.freeze_payload = &b
+}
+
+// FreezePayload returns the value of the "freeze_payload" field in the mutation.
+func (m *WorkRequestMutation) FreezePayload() (r []byte, exists bool) {
+	v := m.freeze_payload
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFreezePayload returns the old "freeze_payload" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldFreezePayload(ctx context.Context) (v []byte, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFreezePayload is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFreezePayload requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFreezePayload: %w", err)
+	}
+	return oldValue.FreezePayload, nil
+}
+
+// ClearFreezePayload clears the value of the "freeze_payload" field.
+func (m *WorkRequestMutation) ClearFreezePayload() {
+	m.freeze_payload = nil
+	m.clearedFields[workrequest.FieldFreezePayload] = struct{}{}
+}
+
+// FreezePayloadCleared returns if the "freeze_payload" field was cleared in this mutation.
+func (m *WorkRequestMutation) FreezePayloadCleared() bool {
+	_, ok := m.clearedFields[workrequest.FieldFreezePayload]
+	return ok
+}
+
+// ResetFreezePayload resets all changes to the "freeze_payload" field.
+func (m *WorkRequestMutation) ResetFreezePayload() {
+	m.freeze_payload = nil
+	delete(m.clearedFields, workrequest.FieldFreezePayload)
+}
+
+// SetFreezeBytes sets the "freeze_bytes" field.
+func (m *WorkRequestMutation) SetFreezeBytes(i int64) {
+	m.freeze_bytes = &i
+	m.addfreeze_bytes = nil
+}
+
+// FreezeBytes returns the value of the "freeze_bytes" field in the mutation.
+func (m *WorkRequestMutation) FreezeBytes() (r int64, exists bool) {
+	v := m.freeze_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFreezeBytes returns the old "freeze_bytes" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldFreezeBytes(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFreezeBytes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFreezeBytes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFreezeBytes: %w", err)
+	}
+	return oldValue.FreezeBytes, nil
+}
+
+// AddFreezeBytes adds i to the "freeze_bytes" field.
+func (m *WorkRequestMutation) AddFreezeBytes(i int64) {
+	if m.addfreeze_bytes != nil {
+		*m.addfreeze_bytes += i
+	} else {
+		m.addfreeze_bytes = &i
+	}
+}
+
+// AddedFreezeBytes returns the value that was added to the "freeze_bytes" field in this mutation.
+func (m *WorkRequestMutation) AddedFreezeBytes() (r int64, exists bool) {
+	v := m.addfreeze_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFreezeBytes resets all changes to the "freeze_bytes" field.
+func (m *WorkRequestMutation) ResetFreezeBytes() {
+	m.freeze_bytes = nil
+	m.addfreeze_bytes = nil
+}
+
+// SetResponsePayload sets the "response_payload" field.
+func (m *WorkRequestMutation) SetResponsePayload(b []byte) {
+	m.response_payload = &b
+}
+
+// ResponsePayload returns the value of the "response_payload" field in the mutation.
+func (m *WorkRequestMutation) ResponsePayload() (r []byte, exists bool) {
+	v := m.response_payload
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponsePayload returns the old "response_payload" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldResponsePayload(ctx context.Context) (v []byte, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponsePayload is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponsePayload requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponsePayload: %w", err)
+	}
+	return oldValue.ResponsePayload, nil
+}
+
+// ClearResponsePayload clears the value of the "response_payload" field.
+func (m *WorkRequestMutation) ClearResponsePayload() {
+	m.response_payload = nil
+	m.clearedFields[workrequest.FieldResponsePayload] = struct{}{}
+}
+
+// ResponsePayloadCleared returns if the "response_payload" field was cleared in this mutation.
+func (m *WorkRequestMutation) ResponsePayloadCleared() bool {
+	_, ok := m.clearedFields[workrequest.FieldResponsePayload]
+	return ok
+}
+
+// ResetResponsePayload resets all changes to the "response_payload" field.
+func (m *WorkRequestMutation) ResetResponsePayload() {
+	m.response_payload = nil
+	delete(m.clearedFields, workrequest.FieldResponsePayload)
+}
+
+// SetResponseBytes sets the "response_bytes" field.
+func (m *WorkRequestMutation) SetResponseBytes(i int64) {
+	m.response_bytes = &i
+	m.addresponse_bytes = nil
+}
+
+// ResponseBytes returns the value of the "response_bytes" field in the mutation.
+func (m *WorkRequestMutation) ResponseBytes() (r int64, exists bool) {
+	v := m.response_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseBytes returns the old "response_bytes" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldResponseBytes(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseBytes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseBytes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseBytes: %w", err)
+	}
+	return oldValue.ResponseBytes, nil
+}
+
+// AddResponseBytes adds i to the "response_bytes" field.
+func (m *WorkRequestMutation) AddResponseBytes(i int64) {
+	if m.addresponse_bytes != nil {
+		*m.addresponse_bytes += i
+	} else {
+		m.addresponse_bytes = &i
+	}
+}
+
+// AddedResponseBytes returns the value that was added to the "response_bytes" field in this mutation.
+func (m *WorkRequestMutation) AddedResponseBytes() (r int64, exists bool) {
+	v := m.addresponse_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetResponseBytes resets all changes to the "response_bytes" field.
+func (m *WorkRequestMutation) ResetResponseBytes() {
+	m.response_bytes = nil
+	m.addresponse_bytes = nil
+}
+
+// SetResponseFormatVersion sets the "response_format_version" field.
+func (m *WorkRequestMutation) SetResponseFormatVersion(i int) {
+	m.response_format_version = &i
+	m.addresponse_format_version = nil
+}
+
+// ResponseFormatVersion returns the value of the "response_format_version" field in the mutation.
+func (m *WorkRequestMutation) ResponseFormatVersion() (r int, exists bool) {
+	v := m.response_format_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseFormatVersion returns the old "response_format_version" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldResponseFormatVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseFormatVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseFormatVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseFormatVersion: %w", err)
+	}
+	return oldValue.ResponseFormatVersion, nil
+}
+
+// AddResponseFormatVersion adds i to the "response_format_version" field.
+func (m *WorkRequestMutation) AddResponseFormatVersion(i int) {
+	if m.addresponse_format_version != nil {
+		*m.addresponse_format_version += i
+	} else {
+		m.addresponse_format_version = &i
+	}
+}
+
+// AddedResponseFormatVersion returns the value that was added to the "response_format_version" field in this mutation.
+func (m *WorkRequestMutation) AddedResponseFormatVersion() (r int, exists bool) {
+	v := m.addresponse_format_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetResponseFormatVersion resets all changes to the "response_format_version" field.
+func (m *WorkRequestMutation) ResetResponseFormatVersion() {
+	m.response_format_version = nil
+	m.addresponse_format_version = nil
+}
+
+// SetSnapshotDigest sets the "snapshot_digest" field.
+func (m *WorkRequestMutation) SetSnapshotDigest(s string) {
+	m.snapshot_digest = &s
+}
+
+// SnapshotDigest returns the value of the "snapshot_digest" field in the mutation.
+func (m *WorkRequestMutation) SnapshotDigest() (r string, exists bool) {
+	v := m.snapshot_digest
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSnapshotDigest returns the old "snapshot_digest" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldSnapshotDigest(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSnapshotDigest is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSnapshotDigest requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSnapshotDigest: %w", err)
+	}
+	return oldValue.SnapshotDigest, nil
+}
+
+// ResetSnapshotDigest resets all changes to the "snapshot_digest" field.
+func (m *WorkRequestMutation) ResetSnapshotDigest() {
+	m.snapshot_digest = nil
+}
+
+// SetFreezeDigest sets the "freeze_digest" field.
+func (m *WorkRequestMutation) SetFreezeDigest(s string) {
+	m.freeze_digest = &s
+}
+
+// FreezeDigest returns the value of the "freeze_digest" field in the mutation.
+func (m *WorkRequestMutation) FreezeDigest() (r string, exists bool) {
+	v := m.freeze_digest
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFreezeDigest returns the old "freeze_digest" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldFreezeDigest(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFreezeDigest is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFreezeDigest requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFreezeDigest: %w", err)
+	}
+	return oldValue.FreezeDigest, nil
+}
+
+// ResetFreezeDigest resets all changes to the "freeze_digest" field.
+func (m *WorkRequestMutation) ResetFreezeDigest() {
+	m.freeze_digest = nil
+}
+
+// SetResponseDigest sets the "response_digest" field.
+func (m *WorkRequestMutation) SetResponseDigest(s string) {
+	m.response_digest = &s
+}
+
+// ResponseDigest returns the value of the "response_digest" field in the mutation.
+func (m *WorkRequestMutation) ResponseDigest() (r string, exists bool) {
+	v := m.response_digest
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseDigest returns the old "response_digest" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldResponseDigest(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseDigest is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseDigest requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseDigest: %w", err)
+	}
+	return oldValue.ResponseDigest, nil
+}
+
+// ResetResponseDigest resets all changes to the "response_digest" field.
+func (m *WorkRequestMutation) ResetResponseDigest() {
+	m.response_digest = nil
+}
+
+// SetCorrectedTargets sets the "corrected_targets" field.
+func (m *WorkRequestMutation) SetCorrectedTargets(b []byte) {
+	m.corrected_targets = &b
+}
+
+// CorrectedTargets returns the value of the "corrected_targets" field in the mutation.
+func (m *WorkRequestMutation) CorrectedTargets() (r []byte, exists bool) {
+	v := m.corrected_targets
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCorrectedTargets returns the old "corrected_targets" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldCorrectedTargets(ctx context.Context) (v []byte, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCorrectedTargets is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCorrectedTargets requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCorrectedTargets: %w", err)
+	}
+	return oldValue.CorrectedTargets, nil
+}
+
+// ClearCorrectedTargets clears the value of the "corrected_targets" field.
+func (m *WorkRequestMutation) ClearCorrectedTargets() {
+	m.corrected_targets = nil
+	m.clearedFields[workrequest.FieldCorrectedTargets] = struct{}{}
+}
+
+// CorrectedTargetsCleared returns if the "corrected_targets" field was cleared in this mutation.
+func (m *WorkRequestMutation) CorrectedTargetsCleared() bool {
+	_, ok := m.clearedFields[workrequest.FieldCorrectedTargets]
+	return ok
+}
+
+// ResetCorrectedTargets resets all changes to the "corrected_targets" field.
+func (m *WorkRequestMutation) ResetCorrectedTargets() {
+	m.corrected_targets = nil
+	delete(m.clearedFields, workrequest.FieldCorrectedTargets)
+}
+
+// SetCorrectedTargetIndex sets the "corrected_target_index" field.
+func (m *WorkRequestMutation) SetCorrectedTargetIndex(b []byte) {
+	m.corrected_target_index = &b
+}
+
+// CorrectedTargetIndex returns the value of the "corrected_target_index" field in the mutation.
+func (m *WorkRequestMutation) CorrectedTargetIndex() (r []byte, exists bool) {
+	v := m.corrected_target_index
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCorrectedTargetIndex returns the old "corrected_target_index" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldCorrectedTargetIndex(ctx context.Context) (v []byte, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCorrectedTargetIndex is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCorrectedTargetIndex requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCorrectedTargetIndex: %w", err)
+	}
+	return oldValue.CorrectedTargetIndex, nil
+}
+
+// ClearCorrectedTargetIndex clears the value of the "corrected_target_index" field.
+func (m *WorkRequestMutation) ClearCorrectedTargetIndex() {
+	m.corrected_target_index = nil
+	m.clearedFields[workrequest.FieldCorrectedTargetIndex] = struct{}{}
+}
+
+// CorrectedTargetIndexCleared returns if the "corrected_target_index" field was cleared in this mutation.
+func (m *WorkRequestMutation) CorrectedTargetIndexCleared() bool {
+	_, ok := m.clearedFields[workrequest.FieldCorrectedTargetIndex]
+	return ok
+}
+
+// ResetCorrectedTargetIndex resets all changes to the "corrected_target_index" field.
+func (m *WorkRequestMutation) ResetCorrectedTargetIndex() {
+	m.corrected_target_index = nil
+	delete(m.clearedFields, workrequest.FieldCorrectedTargetIndex)
+}
+
+// SetCorrectedTargetBytes sets the "corrected_target_bytes" field.
+func (m *WorkRequestMutation) SetCorrectedTargetBytes(i int64) {
+	m.corrected_target_bytes = &i
+	m.addcorrected_target_bytes = nil
+}
+
+// CorrectedTargetBytes returns the value of the "corrected_target_bytes" field in the mutation.
+func (m *WorkRequestMutation) CorrectedTargetBytes() (r int64, exists bool) {
+	v := m.corrected_target_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCorrectedTargetBytes returns the old "corrected_target_bytes" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldCorrectedTargetBytes(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCorrectedTargetBytes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCorrectedTargetBytes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCorrectedTargetBytes: %w", err)
+	}
+	return oldValue.CorrectedTargetBytes, nil
+}
+
+// AddCorrectedTargetBytes adds i to the "corrected_target_bytes" field.
+func (m *WorkRequestMutation) AddCorrectedTargetBytes(i int64) {
+	if m.addcorrected_target_bytes != nil {
+		*m.addcorrected_target_bytes += i
+	} else {
+		m.addcorrected_target_bytes = &i
+	}
+}
+
+// AddedCorrectedTargetBytes returns the value that was added to the "corrected_target_bytes" field in this mutation.
+func (m *WorkRequestMutation) AddedCorrectedTargetBytes() (r int64, exists bool) {
+	v := m.addcorrected_target_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCorrectedTargetBytes resets all changes to the "corrected_target_bytes" field.
+func (m *WorkRequestMutation) ResetCorrectedTargetBytes() {
+	m.corrected_target_bytes = nil
+	m.addcorrected_target_bytes = nil
+}
+
+// SetCorrectedTargetDigest sets the "corrected_target_digest" field.
+func (m *WorkRequestMutation) SetCorrectedTargetDigest(s string) {
+	m.corrected_target_digest = &s
+}
+
+// CorrectedTargetDigest returns the value of the "corrected_target_digest" field in the mutation.
+func (m *WorkRequestMutation) CorrectedTargetDigest() (r string, exists bool) {
+	v := m.corrected_target_digest
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCorrectedTargetDigest returns the old "corrected_target_digest" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldCorrectedTargetDigest(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCorrectedTargetDigest is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCorrectedTargetDigest requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCorrectedTargetDigest: %w", err)
+	}
+	return oldValue.CorrectedTargetDigest, nil
+}
+
+// ResetCorrectedTargetDigest resets all changes to the "corrected_target_digest" field.
+func (m *WorkRequestMutation) ResetCorrectedTargetDigest() {
+	m.corrected_target_digest = nil
+}
+
+// SetPromotionMembers sets the "promotion_members" field.
+func (m *WorkRequestMutation) SetPromotionMembers(jm json.RawMessage) {
+	m.promotion_members = &jm
+	m.appendpromotion_members = nil
+}
+
+// PromotionMembers returns the value of the "promotion_members" field in the mutation.
+func (m *WorkRequestMutation) PromotionMembers() (r json.RawMessage, exists bool) {
+	v := m.promotion_members
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPromotionMembers returns the old "promotion_members" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldPromotionMembers(ctx context.Context) (v json.RawMessage, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPromotionMembers is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPromotionMembers requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPromotionMembers: %w", err)
+	}
+	return oldValue.PromotionMembers, nil
+}
+
+// AppendPromotionMembers adds jm to the "promotion_members" field.
+func (m *WorkRequestMutation) AppendPromotionMembers(jm json.RawMessage) {
+	m.appendpromotion_members = append(m.appendpromotion_members, jm...)
+}
+
+// AppendedPromotionMembers returns the list of values that were appended to the "promotion_members" field in this mutation.
+func (m *WorkRequestMutation) AppendedPromotionMembers() (json.RawMessage, bool) {
+	if len(m.appendpromotion_members) == 0 {
+		return nil, false
+	}
+	return m.appendpromotion_members, true
+}
+
+// ClearPromotionMembers clears the value of the "promotion_members" field.
+func (m *WorkRequestMutation) ClearPromotionMembers() {
+	m.promotion_members = nil
+	m.appendpromotion_members = nil
+	m.clearedFields[workrequest.FieldPromotionMembers] = struct{}{}
+}
+
+// PromotionMembersCleared returns if the "promotion_members" field was cleared in this mutation.
+func (m *WorkRequestMutation) PromotionMembersCleared() bool {
+	_, ok := m.clearedFields[workrequest.FieldPromotionMembers]
+	return ok
+}
+
+// ResetPromotionMembers resets all changes to the "promotion_members" field.
+func (m *WorkRequestMutation) ResetPromotionMembers() {
+	m.promotion_members = nil
+	m.appendpromotion_members = nil
+	delete(m.clearedFields, workrequest.FieldPromotionMembers)
+}
+
+// SetPromotionCursor sets the "promotion_cursor" field.
+func (m *WorkRequestMutation) SetPromotionCursor(i int) {
+	m.promotion_cursor = &i
+	m.addpromotion_cursor = nil
+}
+
+// PromotionCursor returns the value of the "promotion_cursor" field in the mutation.
+func (m *WorkRequestMutation) PromotionCursor() (r int, exists bool) {
+	v := m.promotion_cursor
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPromotionCursor returns the old "promotion_cursor" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldPromotionCursor(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPromotionCursor is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPromotionCursor requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPromotionCursor: %w", err)
+	}
+	return oldValue.PromotionCursor, nil
+}
+
+// AddPromotionCursor adds i to the "promotion_cursor" field.
+func (m *WorkRequestMutation) AddPromotionCursor(i int) {
+	if m.addpromotion_cursor != nil {
+		*m.addpromotion_cursor += i
+	} else {
+		m.addpromotion_cursor = &i
+	}
+}
+
+// AddedPromotionCursor returns the value that was added to the "promotion_cursor" field in this mutation.
+func (m *WorkRequestMutation) AddedPromotionCursor() (r int, exists bool) {
+	v := m.addpromotion_cursor
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPromotionCursor resets all changes to the "promotion_cursor" field.
+func (m *WorkRequestMutation) ResetPromotionCursor() {
+	m.promotion_cursor = nil
+	m.addpromotion_cursor = nil
+}
+
+// SetPromotionCount sets the "promotion_count" field.
+func (m *WorkRequestMutation) SetPromotionCount(i int) {
+	m.promotion_count = &i
+	m.addpromotion_count = nil
+}
+
+// PromotionCount returns the value of the "promotion_count" field in the mutation.
+func (m *WorkRequestMutation) PromotionCount() (r int, exists bool) {
+	v := m.promotion_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPromotionCount returns the old "promotion_count" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldPromotionCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPromotionCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPromotionCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPromotionCount: %w", err)
+	}
+	return oldValue.PromotionCount, nil
+}
+
+// AddPromotionCount adds i to the "promotion_count" field.
+func (m *WorkRequestMutation) AddPromotionCount(i int) {
+	if m.addpromotion_count != nil {
+		*m.addpromotion_count += i
+	} else {
+		m.addpromotion_count = &i
+	}
+}
+
+// AddedPromotionCount returns the value that was added to the "promotion_count" field in this mutation.
+func (m *WorkRequestMutation) AddedPromotionCount() (r int, exists bool) {
+	v := m.addpromotion_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPromotionCount resets all changes to the "promotion_count" field.
+func (m *WorkRequestMutation) ResetPromotionCount() {
+	m.promotion_count = nil
+	m.addpromotion_count = nil
+}
+
+// SetBusinessBound sets the "business_bound" field.
+func (m *WorkRequestMutation) SetBusinessBound(i int64) {
+	m.business_bound = &i
+	m.addbusiness_bound = nil
+}
+
+// BusinessBound returns the value of the "business_bound" field in the mutation.
+func (m *WorkRequestMutation) BusinessBound() (r int64, exists bool) {
+	v := m.business_bound
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBusinessBound returns the old "business_bound" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldBusinessBound(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBusinessBound is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBusinessBound requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBusinessBound: %w", err)
+	}
+	return oldValue.BusinessBound, nil
+}
+
+// AddBusinessBound adds i to the "business_bound" field.
+func (m *WorkRequestMutation) AddBusinessBound(i int64) {
+	if m.addbusiness_bound != nil {
+		*m.addbusiness_bound += i
+	} else {
+		m.addbusiness_bound = &i
+	}
+}
+
+// AddedBusinessBound returns the value that was added to the "business_bound" field in this mutation.
+func (m *WorkRequestMutation) AddedBusinessBound() (r int64, exists bool) {
+	v := m.addbusiness_bound
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBusinessBound resets all changes to the "business_bound" field.
+func (m *WorkRequestMutation) ResetBusinessBound() {
+	m.business_bound = nil
+	m.addbusiness_bound = nil
+}
+
+// SetResponseTruncated sets the "response_truncated" field.
+func (m *WorkRequestMutation) SetResponseTruncated(b bool) {
+	m.response_truncated = &b
+}
+
+// ResponseTruncated returns the value of the "response_truncated" field in the mutation.
+func (m *WorkRequestMutation) ResponseTruncated() (r bool, exists bool) {
+	v := m.response_truncated
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResponseTruncated returns the old "response_truncated" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldResponseTruncated(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResponseTruncated is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResponseTruncated requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResponseTruncated: %w", err)
+	}
+	return oldValue.ResponseTruncated, nil
+}
+
+// ResetResponseTruncated resets all changes to the "response_truncated" field.
+func (m *WorkRequestMutation) ResetResponseTruncated() {
+	m.response_truncated = nil
+}
+
+// SetPromotionState sets the "promotion_state" field.
+func (m *WorkRequestMutation) SetPromotionState(s string) {
+	m.promotion_state = &s
+}
+
+// PromotionState returns the value of the "promotion_state" field in the mutation.
+func (m *WorkRequestMutation) PromotionState() (r string, exists bool) {
+	v := m.promotion_state
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPromotionState returns the old "promotion_state" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldPromotionState(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPromotionState is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPromotionState requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPromotionState: %w", err)
+	}
+	return oldValue.PromotionState, nil
+}
+
+// ResetPromotionState resets all changes to the "promotion_state" field.
+func (m *WorkRequestMutation) ResetPromotionState() {
+	m.promotion_state = nil
+}
+
+// SetPromotionStatus sets the "promotion_status" field.
+func (m *WorkRequestMutation) SetPromotionStatus(b []byte) {
+	m.promotion_status = &b
+}
+
+// PromotionStatus returns the value of the "promotion_status" field in the mutation.
+func (m *WorkRequestMutation) PromotionStatus() (r []byte, exists bool) {
+	v := m.promotion_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPromotionStatus returns the old "promotion_status" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldPromotionStatus(ctx context.Context) (v []byte, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPromotionStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPromotionStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPromotionStatus: %w", err)
+	}
+	return oldValue.PromotionStatus, nil
+}
+
+// ClearPromotionStatus clears the value of the "promotion_status" field.
+func (m *WorkRequestMutation) ClearPromotionStatus() {
+	m.promotion_status = nil
+	m.clearedFields[workrequest.FieldPromotionStatus] = struct{}{}
+}
+
+// PromotionStatusCleared returns if the "promotion_status" field was cleared in this mutation.
+func (m *WorkRequestMutation) PromotionStatusCleared() bool {
+	_, ok := m.clearedFields[workrequest.FieldPromotionStatus]
+	return ok
+}
+
+// ResetPromotionStatus resets all changes to the "promotion_status" field.
+func (m *WorkRequestMutation) ResetPromotionStatus() {
+	m.promotion_status = nil
+	delete(m.clearedFields, workrequest.FieldPromotionStatus)
+}
+
+// SetHandoffAt sets the "handoff_at" field.
+func (m *WorkRequestMutation) SetHandoffAt(t time.Time) {
+	m.handoff_at = &t
+}
+
+// HandoffAt returns the value of the "handoff_at" field in the mutation.
+func (m *WorkRequestMutation) HandoffAt() (r time.Time, exists bool) {
+	v := m.handoff_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldHandoffAt returns the old "handoff_at" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldHandoffAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldHandoffAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldHandoffAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldHandoffAt: %w", err)
+	}
+	return oldValue.HandoffAt, nil
+}
+
+// ClearHandoffAt clears the value of the "handoff_at" field.
+func (m *WorkRequestMutation) ClearHandoffAt() {
+	m.handoff_at = nil
+	m.clearedFields[workrequest.FieldHandoffAt] = struct{}{}
+}
+
+// HandoffAtCleared returns if the "handoff_at" field was cleared in this mutation.
+func (m *WorkRequestMutation) HandoffAtCleared() bool {
+	_, ok := m.clearedFields[workrequest.FieldHandoffAt]
+	return ok
+}
+
+// ResetHandoffAt resets all changes to the "handoff_at" field.
+func (m *WorkRequestMutation) ResetHandoffAt() {
+	m.handoff_at = nil
+	delete(m.clearedFields, workrequest.FieldHandoffAt)
+}
+
 // SetUsageRecordID sets the "usage_record_id" field.
 func (m *WorkRequestMutation) SetUsageRecordID(i int) {
 	m.usage_record_id = &i
@@ -82603,7 +84014,7 @@ func (m *WorkRequestMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *WorkRequestMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 44)
 	if m.created_at != nil {
 		fields = append(fields, workrequest.FieldCreatedAt)
 	}
@@ -82648,6 +84059,66 @@ func (m *WorkRequestMutation) Fields() []string {
 	}
 	if m.glossary_receipt != nil {
 		fields = append(fields, workrequest.FieldGlossaryReceipt)
+	}
+	if m.freeze_payload != nil {
+		fields = append(fields, workrequest.FieldFreezePayload)
+	}
+	if m.freeze_bytes != nil {
+		fields = append(fields, workrequest.FieldFreezeBytes)
+	}
+	if m.response_payload != nil {
+		fields = append(fields, workrequest.FieldResponsePayload)
+	}
+	if m.response_bytes != nil {
+		fields = append(fields, workrequest.FieldResponseBytes)
+	}
+	if m.response_format_version != nil {
+		fields = append(fields, workrequest.FieldResponseFormatVersion)
+	}
+	if m.snapshot_digest != nil {
+		fields = append(fields, workrequest.FieldSnapshotDigest)
+	}
+	if m.freeze_digest != nil {
+		fields = append(fields, workrequest.FieldFreezeDigest)
+	}
+	if m.response_digest != nil {
+		fields = append(fields, workrequest.FieldResponseDigest)
+	}
+	if m.corrected_targets != nil {
+		fields = append(fields, workrequest.FieldCorrectedTargets)
+	}
+	if m.corrected_target_index != nil {
+		fields = append(fields, workrequest.FieldCorrectedTargetIndex)
+	}
+	if m.corrected_target_bytes != nil {
+		fields = append(fields, workrequest.FieldCorrectedTargetBytes)
+	}
+	if m.corrected_target_digest != nil {
+		fields = append(fields, workrequest.FieldCorrectedTargetDigest)
+	}
+	if m.promotion_members != nil {
+		fields = append(fields, workrequest.FieldPromotionMembers)
+	}
+	if m.promotion_cursor != nil {
+		fields = append(fields, workrequest.FieldPromotionCursor)
+	}
+	if m.promotion_count != nil {
+		fields = append(fields, workrequest.FieldPromotionCount)
+	}
+	if m.business_bound != nil {
+		fields = append(fields, workrequest.FieldBusinessBound)
+	}
+	if m.response_truncated != nil {
+		fields = append(fields, workrequest.FieldResponseTruncated)
+	}
+	if m.promotion_state != nil {
+		fields = append(fields, workrequest.FieldPromotionState)
+	}
+	if m.promotion_status != nil {
+		fields = append(fields, workrequest.FieldPromotionStatus)
+	}
+	if m.handoff_at != nil {
+		fields = append(fields, workrequest.FieldHandoffAt)
 	}
 	if m.usage_record_id != nil {
 		fields = append(fields, workrequest.FieldUsageRecordID)
@@ -82714,6 +84185,46 @@ func (m *WorkRequestMutation) Field(name string) (ent.Value, bool) {
 		return m.Debits()
 	case workrequest.FieldGlossaryReceipt:
 		return m.GlossaryReceipt()
+	case workrequest.FieldFreezePayload:
+		return m.FreezePayload()
+	case workrequest.FieldFreezeBytes:
+		return m.FreezeBytes()
+	case workrequest.FieldResponsePayload:
+		return m.ResponsePayload()
+	case workrequest.FieldResponseBytes:
+		return m.ResponseBytes()
+	case workrequest.FieldResponseFormatVersion:
+		return m.ResponseFormatVersion()
+	case workrequest.FieldSnapshotDigest:
+		return m.SnapshotDigest()
+	case workrequest.FieldFreezeDigest:
+		return m.FreezeDigest()
+	case workrequest.FieldResponseDigest:
+		return m.ResponseDigest()
+	case workrequest.FieldCorrectedTargets:
+		return m.CorrectedTargets()
+	case workrequest.FieldCorrectedTargetIndex:
+		return m.CorrectedTargetIndex()
+	case workrequest.FieldCorrectedTargetBytes:
+		return m.CorrectedTargetBytes()
+	case workrequest.FieldCorrectedTargetDigest:
+		return m.CorrectedTargetDigest()
+	case workrequest.FieldPromotionMembers:
+		return m.PromotionMembers()
+	case workrequest.FieldPromotionCursor:
+		return m.PromotionCursor()
+	case workrequest.FieldPromotionCount:
+		return m.PromotionCount()
+	case workrequest.FieldBusinessBound:
+		return m.BusinessBound()
+	case workrequest.FieldResponseTruncated:
+		return m.ResponseTruncated()
+	case workrequest.FieldPromotionState:
+		return m.PromotionState()
+	case workrequest.FieldPromotionStatus:
+		return m.PromotionStatus()
+	case workrequest.FieldHandoffAt:
+		return m.HandoffAt()
 	case workrequest.FieldUsageRecordID:
 		return m.UsageRecordID()
 	case workrequest.FieldBudgetModel:
@@ -82771,6 +84282,46 @@ func (m *WorkRequestMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldDebits(ctx)
 	case workrequest.FieldGlossaryReceipt:
 		return m.OldGlossaryReceipt(ctx)
+	case workrequest.FieldFreezePayload:
+		return m.OldFreezePayload(ctx)
+	case workrequest.FieldFreezeBytes:
+		return m.OldFreezeBytes(ctx)
+	case workrequest.FieldResponsePayload:
+		return m.OldResponsePayload(ctx)
+	case workrequest.FieldResponseBytes:
+		return m.OldResponseBytes(ctx)
+	case workrequest.FieldResponseFormatVersion:
+		return m.OldResponseFormatVersion(ctx)
+	case workrequest.FieldSnapshotDigest:
+		return m.OldSnapshotDigest(ctx)
+	case workrequest.FieldFreezeDigest:
+		return m.OldFreezeDigest(ctx)
+	case workrequest.FieldResponseDigest:
+		return m.OldResponseDigest(ctx)
+	case workrequest.FieldCorrectedTargets:
+		return m.OldCorrectedTargets(ctx)
+	case workrequest.FieldCorrectedTargetIndex:
+		return m.OldCorrectedTargetIndex(ctx)
+	case workrequest.FieldCorrectedTargetBytes:
+		return m.OldCorrectedTargetBytes(ctx)
+	case workrequest.FieldCorrectedTargetDigest:
+		return m.OldCorrectedTargetDigest(ctx)
+	case workrequest.FieldPromotionMembers:
+		return m.OldPromotionMembers(ctx)
+	case workrequest.FieldPromotionCursor:
+		return m.OldPromotionCursor(ctx)
+	case workrequest.FieldPromotionCount:
+		return m.OldPromotionCount(ctx)
+	case workrequest.FieldBusinessBound:
+		return m.OldBusinessBound(ctx)
+	case workrequest.FieldResponseTruncated:
+		return m.OldResponseTruncated(ctx)
+	case workrequest.FieldPromotionState:
+		return m.OldPromotionState(ctx)
+	case workrequest.FieldPromotionStatus:
+		return m.OldPromotionStatus(ctx)
+	case workrequest.FieldHandoffAt:
+		return m.OldHandoffAt(ctx)
 	case workrequest.FieldUsageRecordID:
 		return m.OldUsageRecordID(ctx)
 	case workrequest.FieldBudgetModel:
@@ -82903,6 +84454,146 @@ func (m *WorkRequestMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetGlossaryReceipt(v)
 		return nil
+	case workrequest.FieldFreezePayload:
+		v, ok := value.([]byte)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFreezePayload(v)
+		return nil
+	case workrequest.FieldFreezeBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFreezeBytes(v)
+		return nil
+	case workrequest.FieldResponsePayload:
+		v, ok := value.([]byte)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponsePayload(v)
+		return nil
+	case workrequest.FieldResponseBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseBytes(v)
+		return nil
+	case workrequest.FieldResponseFormatVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseFormatVersion(v)
+		return nil
+	case workrequest.FieldSnapshotDigest:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSnapshotDigest(v)
+		return nil
+	case workrequest.FieldFreezeDigest:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFreezeDigest(v)
+		return nil
+	case workrequest.FieldResponseDigest:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseDigest(v)
+		return nil
+	case workrequest.FieldCorrectedTargets:
+		v, ok := value.([]byte)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCorrectedTargets(v)
+		return nil
+	case workrequest.FieldCorrectedTargetIndex:
+		v, ok := value.([]byte)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCorrectedTargetIndex(v)
+		return nil
+	case workrequest.FieldCorrectedTargetBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCorrectedTargetBytes(v)
+		return nil
+	case workrequest.FieldCorrectedTargetDigest:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCorrectedTargetDigest(v)
+		return nil
+	case workrequest.FieldPromotionMembers:
+		v, ok := value.(json.RawMessage)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPromotionMembers(v)
+		return nil
+	case workrequest.FieldPromotionCursor:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPromotionCursor(v)
+		return nil
+	case workrequest.FieldPromotionCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPromotionCount(v)
+		return nil
+	case workrequest.FieldBusinessBound:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBusinessBound(v)
+		return nil
+	case workrequest.FieldResponseTruncated:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResponseTruncated(v)
+		return nil
+	case workrequest.FieldPromotionState:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPromotionState(v)
+		return nil
+	case workrequest.FieldPromotionStatus:
+		v, ok := value.([]byte)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPromotionStatus(v)
+		return nil
+	case workrequest.FieldHandoffAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetHandoffAt(v)
+		return nil
 	case workrequest.FieldUsageRecordID:
 		v, ok := value.(int)
 		if !ok {
@@ -82983,6 +84674,27 @@ func (m *WorkRequestMutation) AddedFields() []string {
 	if m.addlogical_attempt != nil {
 		fields = append(fields, workrequest.FieldLogicalAttempt)
 	}
+	if m.addfreeze_bytes != nil {
+		fields = append(fields, workrequest.FieldFreezeBytes)
+	}
+	if m.addresponse_bytes != nil {
+		fields = append(fields, workrequest.FieldResponseBytes)
+	}
+	if m.addresponse_format_version != nil {
+		fields = append(fields, workrequest.FieldResponseFormatVersion)
+	}
+	if m.addcorrected_target_bytes != nil {
+		fields = append(fields, workrequest.FieldCorrectedTargetBytes)
+	}
+	if m.addpromotion_cursor != nil {
+		fields = append(fields, workrequest.FieldPromotionCursor)
+	}
+	if m.addpromotion_count != nil {
+		fields = append(fields, workrequest.FieldPromotionCount)
+	}
+	if m.addbusiness_bound != nil {
+		fields = append(fields, workrequest.FieldBusinessBound)
+	}
 	if m.addusage_record_id != nil {
 		fields = append(fields, workrequest.FieldUsageRecordID)
 	}
@@ -83009,6 +84721,20 @@ func (m *WorkRequestMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedBackendID()
 	case workrequest.FieldLogicalAttempt:
 		return m.AddedLogicalAttempt()
+	case workrequest.FieldFreezeBytes:
+		return m.AddedFreezeBytes()
+	case workrequest.FieldResponseBytes:
+		return m.AddedResponseBytes()
+	case workrequest.FieldResponseFormatVersion:
+		return m.AddedResponseFormatVersion()
+	case workrequest.FieldCorrectedTargetBytes:
+		return m.AddedCorrectedTargetBytes()
+	case workrequest.FieldPromotionCursor:
+		return m.AddedPromotionCursor()
+	case workrequest.FieldPromotionCount:
+		return m.AddedPromotionCount()
+	case workrequest.FieldBusinessBound:
+		return m.AddedBusinessBound()
 	case workrequest.FieldUsageRecordID:
 		return m.AddedUsageRecordID()
 	case workrequest.FieldInputTokens:
@@ -83046,6 +84772,55 @@ func (m *WorkRequestMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddLogicalAttempt(v)
+		return nil
+	case workrequest.FieldFreezeBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFreezeBytes(v)
+		return nil
+	case workrequest.FieldResponseBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddResponseBytes(v)
+		return nil
+	case workrequest.FieldResponseFormatVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddResponseFormatVersion(v)
+		return nil
+	case workrequest.FieldCorrectedTargetBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCorrectedTargetBytes(v)
+		return nil
+	case workrequest.FieldPromotionCursor:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPromotionCursor(v)
+		return nil
+	case workrequest.FieldPromotionCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPromotionCount(v)
+		return nil
+	case workrequest.FieldBusinessBound:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBusinessBound(v)
 		return nil
 	case workrequest.FieldUsageRecordID:
 		v, ok := value.(int)
@@ -83092,6 +84867,27 @@ func (m *WorkRequestMutation) ClearedFields() []string {
 	if m.FieldCleared(workrequest.FieldGlossaryReceipt) {
 		fields = append(fields, workrequest.FieldGlossaryReceipt)
 	}
+	if m.FieldCleared(workrequest.FieldFreezePayload) {
+		fields = append(fields, workrequest.FieldFreezePayload)
+	}
+	if m.FieldCleared(workrequest.FieldResponsePayload) {
+		fields = append(fields, workrequest.FieldResponsePayload)
+	}
+	if m.FieldCleared(workrequest.FieldCorrectedTargets) {
+		fields = append(fields, workrequest.FieldCorrectedTargets)
+	}
+	if m.FieldCleared(workrequest.FieldCorrectedTargetIndex) {
+		fields = append(fields, workrequest.FieldCorrectedTargetIndex)
+	}
+	if m.FieldCleared(workrequest.FieldPromotionMembers) {
+		fields = append(fields, workrequest.FieldPromotionMembers)
+	}
+	if m.FieldCleared(workrequest.FieldPromotionStatus) {
+		fields = append(fields, workrequest.FieldPromotionStatus)
+	}
+	if m.FieldCleared(workrequest.FieldHandoffAt) {
+		fields = append(fields, workrequest.FieldHandoffAt)
+	}
 	if m.FieldCleared(workrequest.FieldUsageRecordID) {
 		fields = append(fields, workrequest.FieldUsageRecordID)
 	}
@@ -83117,6 +84913,27 @@ func (m *WorkRequestMutation) ClearField(name string) error {
 		return nil
 	case workrequest.FieldGlossaryReceipt:
 		m.ClearGlossaryReceipt()
+		return nil
+	case workrequest.FieldFreezePayload:
+		m.ClearFreezePayload()
+		return nil
+	case workrequest.FieldResponsePayload:
+		m.ClearResponsePayload()
+		return nil
+	case workrequest.FieldCorrectedTargets:
+		m.ClearCorrectedTargets()
+		return nil
+	case workrequest.FieldCorrectedTargetIndex:
+		m.ClearCorrectedTargetIndex()
+		return nil
+	case workrequest.FieldPromotionMembers:
+		m.ClearPromotionMembers()
+		return nil
+	case workrequest.FieldPromotionStatus:
+		m.ClearPromotionStatus()
+		return nil
+	case workrequest.FieldHandoffAt:
+		m.ClearHandoffAt()
 		return nil
 	case workrequest.FieldUsageRecordID:
 		m.ClearUsageRecordID()
@@ -83173,6 +84990,66 @@ func (m *WorkRequestMutation) ResetField(name string) error {
 		return nil
 	case workrequest.FieldGlossaryReceipt:
 		m.ResetGlossaryReceipt()
+		return nil
+	case workrequest.FieldFreezePayload:
+		m.ResetFreezePayload()
+		return nil
+	case workrequest.FieldFreezeBytes:
+		m.ResetFreezeBytes()
+		return nil
+	case workrequest.FieldResponsePayload:
+		m.ResetResponsePayload()
+		return nil
+	case workrequest.FieldResponseBytes:
+		m.ResetResponseBytes()
+		return nil
+	case workrequest.FieldResponseFormatVersion:
+		m.ResetResponseFormatVersion()
+		return nil
+	case workrequest.FieldSnapshotDigest:
+		m.ResetSnapshotDigest()
+		return nil
+	case workrequest.FieldFreezeDigest:
+		m.ResetFreezeDigest()
+		return nil
+	case workrequest.FieldResponseDigest:
+		m.ResetResponseDigest()
+		return nil
+	case workrequest.FieldCorrectedTargets:
+		m.ResetCorrectedTargets()
+		return nil
+	case workrequest.FieldCorrectedTargetIndex:
+		m.ResetCorrectedTargetIndex()
+		return nil
+	case workrequest.FieldCorrectedTargetBytes:
+		m.ResetCorrectedTargetBytes()
+		return nil
+	case workrequest.FieldCorrectedTargetDigest:
+		m.ResetCorrectedTargetDigest()
+		return nil
+	case workrequest.FieldPromotionMembers:
+		m.ResetPromotionMembers()
+		return nil
+	case workrequest.FieldPromotionCursor:
+		m.ResetPromotionCursor()
+		return nil
+	case workrequest.FieldPromotionCount:
+		m.ResetPromotionCount()
+		return nil
+	case workrequest.FieldBusinessBound:
+		m.ResetBusinessBound()
+		return nil
+	case workrequest.FieldResponseTruncated:
+		m.ResetResponseTruncated()
+		return nil
+	case workrequest.FieldPromotionState:
+		m.ResetPromotionState()
+		return nil
+	case workrequest.FieldPromotionStatus:
+		m.ResetPromotionStatus()
+		return nil
+	case workrequest.FieldHandoffAt:
+		m.ResetHandoffAt()
 		return nil
 	case workrequest.FieldUsageRecordID:
 		m.ResetUsageRecordID()

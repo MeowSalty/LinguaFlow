@@ -91,7 +91,7 @@ func TestMigrateExecutionPreservesSnapshotsAndCredentials(t *testing.T) {
 	if after.Status != service.JobStatusPaused || after.ProgressTotal != 40 || after.ProgressCompleted != 17 || !after.UpdatedAt.Equal(job.UpdatedAt) || !after.CreatedAt.Equal(job.CreatedAt) {
 		t.Fatal("migration changed job status, checkpoint, or original timestamps")
 	}
-	spec, err := service.GetSnapshot(after)
+	spec, err := readFrozenExecutionTest(after)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestMigrateExecutionPreservesDeletedBackendHistory(t *testing.T) {
 	client.Job.UpdateOneID(job.ID).SetStatus(service.JobStatusCompleted).ExecX(ctx)
 	runLegacyExecutionMigration(t, ctx, client, credentials.keys)
 	after := client.Job.GetX(ctx, job.ID)
-	spec, err := service.GetSnapshot(after)
+	spec, err := readFrozenExecutionTest(after)
 	if err != nil || after.Status != service.JobStatusCompleted {
 		t.Fatalf("deleted backend history became unreadable: %v", err)
 	}

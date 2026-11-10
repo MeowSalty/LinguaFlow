@@ -8,6 +8,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 // resetWorkEpoch only touches unfinished members in resources actually reset
@@ -19,7 +20,13 @@ func resetWorkEpoch(ctx context.Context, tx *ent.Client, jobID int, epoch int64)
 	}
 	for _, row := range rows {
 		state := "pending"
-		if row.CandidateID != "" {
+		pendingResponse, err := workstate.HasPendingResponse(ctx, tx, row)
+		if err != nil {
+			return err
+		}
+		if pendingResponse {
+			state = "response_pending"
+		} else if row.CandidateID != "" {
 			valid, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(row.CandidateID), workcandidate.StateIn("pending_alignment", "ready_to_commit")).Exist(ctx)
 			if err != nil {
 				return err

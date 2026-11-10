@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"unicode/utf8"
@@ -79,4 +80,34 @@ func PromptValues(req Request, m *PromptMeasure, suffix string) (system, user an
 
 type PromptWireSizer interface {
 	MeasureRequestPrompt(Request, PromptMeasure) (int64, error)
+}
+
+func MeasureRequestPrompt(b Backend, req Request, m PromptMeasure) (int64, error) {
+	if e := m.Validate(); e != nil {
+		return 0, e
+	}
+	for hops := 0; hops < 64; hops++ {
+		if s, ok := b.(PromptWireSizer); ok {
+			return s.MeasureRequestPrompt(req, m)
+		}
+		if w, ok := b.(interface{ Backend() Backend }); ok {
+			b = w.Backend()
+			continue
+		}
+		req.System, req.User = "", ""
+		n, e := MeasureRequest(b, req)
+		if e != nil {
+			return 0, e
+		}
+		s, u := m.SystemJSONBytes-2, m.UserJSONBytes-2
+		if u > math.MaxInt64-s {
+			return 0, &BuildCapacityError{"prompt wire arithmetic"}
+		}
+		extra := s + u
+		if extra < 0 || extra > math.MaxInt64-n {
+			return 0, &BuildCapacityError{"prompt wire arithmetic"}
+		}
+		return n + extra, nil
+	}
+	return 0, fmt.Errorf("backend wrapper nesting exceeds limit")
 }

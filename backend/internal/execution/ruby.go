@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	SnapshotSchemaVersion       = 3
-	SnapshotDefaultsVersion     = 3
+	SnapshotSchemaVersion       = 4
+	SnapshotDefaultsVersion     = 4
 	DefaultRubyRetryConcurrency = 1
 	DefaultRubyBatchSize        = 1
 	DefaultRubyBatchWaitMS      = 25
@@ -21,8 +21,7 @@ const (
 type ConcurrencyModel string
 
 const (
-	LegacyRoundShared ConcurrencyModel = "legacy_round_shared"
-	StageSeparated    ConcurrencyModel = "stage_separated"
+	StageSeparated ConcurrencyModel = "stage_separated"
 )
 
 // ConcurrencyModelForSpec identifies frozen execution semantics, independently
@@ -31,14 +30,10 @@ func ConcurrencyModelForSpec(spec *JobExecutionSnapshot) (ConcurrencyModel, erro
 	if spec == nil {
 		return "", errors.New("missing execution snapshot")
 	}
-	if spec.SchemaVersion == 1 && spec.DefaultsVersion == 1 {
-		return LegacyRoundShared, nil
+	if err := ValidateExecutionFormat(spec.SchemaVersion, spec.DefaultsVersion, spec.ResponseFormatVersion); err != nil {
+		return "", err
 	}
-	if (spec.SchemaVersion == 2 && spec.DefaultsVersion == 2) ||
-		(spec.SchemaVersion == SnapshotSchemaVersion && spec.DefaultsVersion == SnapshotDefaultsVersion) {
-		return StageSeparated, nil
-	}
-	return "", errors.New("unsupported or missing execution snapshot version")
+	return StageSeparated, nil
 }
 
 // RubyRetryBatchConfig contains resolved content limits. They are upper bounds;
@@ -69,10 +64,9 @@ func ResolveRubyRetryBatch(batchSize, maxWordsPerBatch, waitMS *int) (RubyRetryB
 	return config, nil
 }
 
-// EffectiveRubyRetryBatch reads validated frozen values. Older snapshots always
-// keep their historical single-segment behavior, even if newer fields appear.
+// EffectiveRubyRetryBatch reads validated current frozen values.
 func EffectiveRubyRetryBatch(spec *JobExecutionSnapshot) RubyRetryBatchConfig {
-	if spec == nil || spec.SchemaVersion != SnapshotSchemaVersion || spec.DefaultsVersion != SnapshotDefaultsVersion || spec.RubyRetry == nil || !spec.RubyRetry.Enabled {
+	if spec == nil || spec.RubyRetry == nil || !spec.RubyRetry.Enabled {
 		return RubyRetryBatchConfig{BatchSize: 1}
 	}
 	rr := spec.RubyRetry
@@ -80,7 +74,7 @@ func EffectiveRubyRetryBatch(spec *JobExecutionSnapshot) RubyRetryBatchConfig {
 }
 
 func EffectiveRubyBatchProtocolVersion(spec *JobExecutionSnapshot) int {
-	if spec == nil || spec.SchemaVersion != SnapshotSchemaVersion || spec.DefaultsVersion != SnapshotDefaultsVersion {
+	if spec == nil {
 		return 0
 	}
 	return spec.RubyBatchProtocolVersion
@@ -96,12 +90,8 @@ func ResolveRubyRetryConcurrency(input *int) (int, error) {
 	return *input, nil
 }
 
-// EffectiveRubyProtocolVersion adapts old frozen snapshots without modifying
-// them. New snapshots must carry the explicit protocol and validator versions.
+// EffectiveRubyProtocolVersion reads the explicit current protocol version.
 func EffectiveRubyProtocolVersion(spec *JobExecutionSnapshot) int {
-	if spec != nil && spec.SchemaVersion == 1 && spec.DefaultsVersion == 1 {
-		return 1
-	}
 	if spec == nil {
 		return 0
 	}

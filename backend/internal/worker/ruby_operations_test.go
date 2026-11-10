@@ -108,8 +108,12 @@ func TestRubyOperationsVisibleThroughHTTPAndExitDrain(t *testing.T) {
 		t.Fatal("exit barrier:", ctx.Err())
 	}
 	stages, err = f.jobs.GetJobStageCounts(ctx, f.ownerID, f.jobID)
-	if err != nil || stages.DrainingRequests != 0 || stages.PendingAlignment != 1 {
+	if err != nil || stages.DrainingRequests != 0 || stages.SavingRequests != 0 || stages.PendingAlignment != 0 || stages.ConfirmedWork != 0 {
 		t.Fatalf("saved but not yet paused=%+v err=%v", stages, err)
+	}
+	raw := f.client.WorkRequest.Query().OnlyX(ctx)
+	if raw.State != "completed" || raw.PromotionState != "response_pending" || raw.PromotionCursor != 0 || len(raw.ResponsePayload) == 0 || len(raw.FreezePayload) == 0 {
+		t.Fatalf("pause drain did not leave reliable unpromoted work: %+v", raw)
 	}
 	if err := checkRubyOperation(ctx, f, service.JobStatusPausing); err != nil {
 		t.Fatal(err)
@@ -133,18 +137,26 @@ func TestRubyOperationsVisibleWhileSavingCandidate(t *testing.T) {
 	observed := false
 	_, _, err := f.execute(t, 0, gate, func(store *roundStore) pipeline.RoundStore {
 		return &rubyPipelineFaultStore{roundStore: store, afterSave: func(ctx context.Context, _ *pipeline.Candidate) error {
+			if observed {
+				return nil
+			}
 			if _, err := f.jobs.PauseJob(ctx, f.ownerID, f.jobID); err != nil {
 				return err
 			}
 			gate.Pause()
-			// The save acknowledgement has not returned. Network completion and
-			// a durable draft alone must not hide this task from discovery.
+			// The promotion acknowledgement has not returned, but raw handoff
+			// already acknowledged usage and completed the network drain. The
+			// durable draft still must not hide this task from discovery.
 			stages, err := f.jobs.GetJobStageCounts(ctx, f.ownerID, f.jobID)
 			if err != nil {
 				return err
 			}
-			if stages.MainRequests != 0 || stages.SavingRequests != 1 || stages.DrainingRequests != 1 || stages.PendingAlignment != 1 {
+			if stages.MainRequests != 0 || stages.SavingRequests != 0 || stages.DrainingRequests != 0 || stages.PendingAlignment != 1 || stages.ConfirmedWork != 0 {
 				return fmt.Errorf("saving barrier stages=%+v", stages)
+			}
+			raw := f.client.WorkRequest.Query().OnlyX(ctx)
+			if raw.State != "completed" || raw.PromotionState != "promoted" || raw.PromotionCursor != 1 {
+				return fmt.Errorf("promotion acknowledgement lost reliable cursor: %+v", raw)
 			}
 			observed = true
 			return checkRubyOperation(ctx, f, service.JobStatusPausing)

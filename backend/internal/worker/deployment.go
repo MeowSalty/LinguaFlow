@@ -17,6 +17,7 @@ func PipelineRuntime(cfg config.PipelineConfig, logger *slog.Logger) (PipelineCo
 	limits := PipelineConfig{MaxInflightWeight: int64(cfg.MaxInflightWeightMB) * 1024 * 1024, MaxInflightResources: cfg.MaxInflightResources}
 	limits.Candidates = pipeline.CandidateLimits{Segments: cfg.CandidateWindowSegments, Bytes: int64(cfg.CandidateWindowMB) << 20, ItemBytes: int64(cfg.MaxCandidateMB) << 20}
 	limits.MaxResponseBytes = int64(cfg.MaxResponseMB) << 20
+	limits.ResponseHandoffBytes = int64(cfg.ResponseHandoffMB) << 20
 	if cfg.RssLimitMB == 0 {
 		return limits, nil
 	}
@@ -38,6 +39,9 @@ func (f *EngineFactory) SetPipelineLimits(limits PipelineConfig) {
 	}
 	if limits.MaxResponseBytes != 0 {
 		f.maxResponseBytes = limits.MaxResponseBytes
+	}
+	if limits.ResponseHandoffBytes != 0 {
+		f.responseHandoffBytes = limits.ResponseHandoffBytes
 	}
 }
 

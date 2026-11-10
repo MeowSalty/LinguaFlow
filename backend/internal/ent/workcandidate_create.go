@@ -148,6 +148,34 @@ func (_c *WorkCandidateCreate) SetNillableBaselineTarget(v *string) *WorkCandida
 	return _c
 }
 
+// SetBaselineDigest sets the "baseline_digest" field.
+func (_c *WorkCandidateCreate) SetBaselineDigest(v string) *WorkCandidateCreate {
+	_c.mutation.SetBaselineDigest(v)
+	return _c
+}
+
+// SetNillableBaselineDigest sets the "baseline_digest" field if the given value is not nil.
+func (_c *WorkCandidateCreate) SetNillableBaselineDigest(v *string) *WorkCandidateCreate {
+	if v != nil {
+		_c.SetBaselineDigest(*v)
+	}
+	return _c
+}
+
+// SetBaselineTargetIsNull sets the "baseline_target_is_null" field.
+func (_c *WorkCandidateCreate) SetBaselineTargetIsNull(v bool) *WorkCandidateCreate {
+	_c.mutation.SetBaselineTargetIsNull(v)
+	return _c
+}
+
+// SetNillableBaselineTargetIsNull sets the "baseline_target_is_null" field if the given value is not nil.
+func (_c *WorkCandidateCreate) SetNillableBaselineTargetIsNull(v *bool) *WorkCandidateCreate {
+	if v != nil {
+		_c.SetBaselineTargetIsNull(*v)
+	}
+	return _c
+}
+
 // SetBaselineStatus sets the "baseline_status" field.
 func (_c *WorkCandidateCreate) SetBaselineStatus(v string) *WorkCandidateCreate {
 	_c.mutation.SetBaselineStatus(v)
@@ -179,6 +207,26 @@ func (_c *WorkCandidateCreate) SetNillablePayloadBytes(v *int64) *WorkCandidateC
 	if v != nil {
 		_c.SetPayloadBytes(*v)
 	}
+	return _c
+}
+
+// SetGrowthReserved sets the "growth_reserved" field.
+func (_c *WorkCandidateCreate) SetGrowthReserved(v bool) *WorkCandidateCreate {
+	_c.mutation.SetGrowthReserved(v)
+	return _c
+}
+
+// SetNillableGrowthReserved sets the "growth_reserved" field if the given value is not nil.
+func (_c *WorkCandidateCreate) SetNillableGrowthReserved(v *bool) *WorkCandidateCreate {
+	if v != nil {
+		_c.SetGrowthReserved(*v)
+	}
+	return _c
+}
+
+// SetPipelineHeader sets the "pipeline_header" field.
+func (_c *WorkCandidateCreate) SetPipelineHeader(v []byte) *WorkCandidateCreate {
+	_c.mutation.SetPipelineHeader(v)
 	return _c
 }
 
@@ -244,6 +292,14 @@ func (_c *WorkCandidateCreate) defaults() {
 		v := workcandidate.DefaultParentRequestID
 		_c.mutation.SetParentRequestID(v)
 	}
+	if _, ok := _c.mutation.BaselineDigest(); !ok {
+		v := workcandidate.DefaultBaselineDigest
+		_c.mutation.SetBaselineDigest(v)
+	}
+	if _, ok := _c.mutation.BaselineTargetIsNull(); !ok {
+		v := workcandidate.DefaultBaselineTargetIsNull
+		_c.mutation.SetBaselineTargetIsNull(v)
+	}
 	if _, ok := _c.mutation.State(); !ok {
 		v := workcandidate.DefaultState
 		_c.mutation.SetState(v)
@@ -251,6 +307,10 @@ func (_c *WorkCandidateCreate) defaults() {
 	if _, ok := _c.mutation.PayloadBytes(); !ok {
 		v := workcandidate.DefaultPayloadBytes
 		_c.mutation.SetPayloadBytes(v)
+	}
+	if _, ok := _c.mutation.GrowthReserved(); !ok {
+		v := workcandidate.DefaultGrowthReserved
+		_c.mutation.SetGrowthReserved(v)
 	}
 }
 
@@ -329,6 +389,12 @@ func (_c *WorkCandidateCreate) check() error {
 			return &ValidationError{Name: "baseline_version", err: fmt.Errorf(`ent: validator failed for field "WorkCandidate.baseline_version": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.BaselineDigest(); !ok {
+		return &ValidationError{Name: "baseline_digest", err: errors.New(`ent: missing required field "WorkCandidate.baseline_digest"`)}
+	}
+	if _, ok := _c.mutation.BaselineTargetIsNull(); !ok {
+		return &ValidationError{Name: "baseline_target_is_null", err: errors.New(`ent: missing required field "WorkCandidate.baseline_target_is_null"`)}
+	}
 	if _, ok := _c.mutation.BaselineStatus(); !ok {
 		return &ValidationError{Name: "baseline_status", err: errors.New(`ent: missing required field "WorkCandidate.baseline_status"`)}
 	}
@@ -342,6 +408,9 @@ func (_c *WorkCandidateCreate) check() error {
 		if err := workcandidate.PayloadBytesValidator(v); err != nil {
 			return &ValidationError{Name: "payload_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkCandidate.payload_bytes": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.GrowthReserved(); !ok {
+		return &ValidationError{Name: "growth_reserved", err: errors.New(`ent: missing required field "WorkCandidate.growth_reserved"`)}
 	}
 	if len(_c.mutation.WorkItemIDs()) == 0 {
 		return &ValidationError{Name: "work_item", err: errors.New(`ent: missing required edge "WorkCandidate.work_item"`)}
@@ -420,6 +489,14 @@ func (_c *WorkCandidateCreate) createSpec() (*WorkCandidate, *sqlgraph.CreateSpe
 		_spec.SetField(workcandidate.FieldBaselineTarget, field.TypeString, value)
 		_node.BaselineTarget = &value
 	}
+	if value, ok := _c.mutation.BaselineDigest(); ok {
+		_spec.SetField(workcandidate.FieldBaselineDigest, field.TypeString, value)
+		_node.BaselineDigest = value
+	}
+	if value, ok := _c.mutation.BaselineTargetIsNull(); ok {
+		_spec.SetField(workcandidate.FieldBaselineTargetIsNull, field.TypeBool, value)
+		_node.BaselineTargetIsNull = value
+	}
 	if value, ok := _c.mutation.BaselineStatus(); ok {
 		_spec.SetField(workcandidate.FieldBaselineStatus, field.TypeString, value)
 		_node.BaselineStatus = value
@@ -431,6 +508,14 @@ func (_c *WorkCandidateCreate) createSpec() (*WorkCandidate, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.PayloadBytes(); ok {
 		_spec.SetField(workcandidate.FieldPayloadBytes, field.TypeInt64, value)
 		_node.PayloadBytes = value
+	}
+	if value, ok := _c.mutation.GrowthReserved(); ok {
+		_spec.SetField(workcandidate.FieldGrowthReserved, field.TypeBool, value)
+		_node.GrowthReserved = value
+	}
+	if value, ok := _c.mutation.PipelineHeader(); ok {
+		_spec.SetField(workcandidate.FieldPipelineHeader, field.TypeBytes, value)
+		_node.PipelineHeader = value
 	}
 	if value, ok := _c.mutation.Payload(); ok {
 		_spec.SetField(workcandidate.FieldPayload, field.TypeJSON, value)

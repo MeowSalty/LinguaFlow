@@ -3,6 +3,7 @@ package preview
 import (
 	"context"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -16,5 +17,9 @@ func (NoopTM) Search(_ context.Context, _, _, _ string) ([]tm.Match, error) {
 }
 
 func (NoopTM) Add(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+
+func (NoopTM) VisitMatchesBounded(context.Context, string, string, string, *backend.BuildBounds, func(context.Context, func() error) error, func(tm.Match) error) error {
 	return nil
 }

@@ -54,68 +54,161 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 	if len(candidates) == 0 {
 		return update
 	}
-	backends, logicalBudget, templates, textMode, roundIndex := alignmentSettings(round.Handler)
+	backends, budget, templates, textMode, roundIndex := alignmentSettings(round.Handler)
 	var remote []*Candidate
 	for _, c := range candidates {
 		if needsAlignmentAttempt(round, c) {
 			remote = append(remote, c)
-		} else {
-			c.Ready = true
 		}
 	}
+	var resp *backend.Response
+	var callErr error
+	var user, system string
+	req := backend.Request{}
+	var requestedMembers []progress.AlignmentMemberEvent
+	var diagnostics []string
+	var envelopeInvalid bool
+	var unknownMembers int
+	var start time.Time
 	if len(remote) > 0 {
 		batched := len(remote) > 1
-		c := remote[0]
-		user := c.Alignment.AlignmentRequest(rawSource(&c.Segment), c.Alignment.Missing())
-		system := templates.JSON
-		req := backend.Request{User: user, JSONSchema: ruby.AlignmentJSONSchemaForProtocol(c.Alignment.ProtocolVersion)}
+		first := remote[0]
+		system = templates.JSON
 		if textMode {
 			system = templates.Text
 			req.ResponseFormat = "none"
-			req.JSONSchema = nil
 		}
 		if batched {
-			members := make([]ruby.AlignmentBatchMember, 0, len(remote))
-			for _, member := range remote {
-				members = append(members, ruby.AlignmentBatchMember{WorkID: member.WorkID, CandidateID: member.ID, Source: rawSource(&member.Segment), Alignment: member.Alignment})
-			}
-			var err error
-			user, err = ruby.AlignmentBatchRequest(members)
-			if err != nil {
-				update.err = err
-				return update
-			}
 			system = templates.BatchJSON
-			req.User, req.JSONSchema = user, ruby.AlignmentBatchJSONSchema()
 			if textMode {
 				system = templates.BatchText
-				req.JSONSchema = nil
 			}
 		}
-		req.System = system
-		session := &requestSession{runtime: w.runtime, store: w.store, reporter: w.reporter, intent: RequestIntent{
-			Stage: backend.RequestStageAlignment, CandidateID: c.ID,
-			Pool: c.PoolIndex, LogicalAttempt: c.LogicalAttempt, NetworkAttempt: c.NetworkAttempt,
-			Phase: "alignment", RoundIndex: roundIndex, ResourceID: storeResourceID(w.store),
-		}}
-		for _, member := range remote {
-			session.intent.Indices = append(session.intent.Indices, member.Index)
-			session.intent.Members = append(session.intent.Members, RequestMember{Index: member.Index, WorkID: member.WorkID, CandidateID: member.ID, CandidateVersion: member.Version, Pool: member.PoolIndex, LogicalAttempt: member.LogicalAttempt, NetworkAttempt: member.NetworkAttempt})
+		session := &requestSession{runtime: w.runtime, store: w.store, reporter: w.reporter, intent: RequestIntent{Stage: backend.RequestStageAlignment, CandidateID: first.ID, Pool: first.PoolIndex, LogicalAttempt: first.LogicalAttempt, NetworkAttempt: first.NetworkAttempt, Phase: "alignment", RoundIndex: roundIndex, ResourceID: storeResourceID(w.store)}}
+		for _, c := range remote {
+			session.intent.Indices = append(session.intent.Indices, c.Index)
+			session.intent.Members = append(session.intent.Members, RequestMember{Bytes: c.StoredBytes, Index: c.Index, WorkID: c.WorkID, CandidateID: c.ID, CandidateVersion: c.Version, Pool: c.PoolIndex, LogicalAttempt: c.LogicalAttempt, NetworkAttempt: c.NetworkAttempt})
 		}
 		if batched {
 			session.intent.CandidateID = ""
 		}
 		w.session = session
+		frames := make([]CandidateFrame, len(remote))
+		for i, c := range remote {
+			f, e := loadCandidateFrame(ctx, w.store, c.ID, w.runtime.Window.limits.ItemBytes)
+			if e != nil {
+				update.err = e
+				return update
+			}
+			if f.Version != c.Version {
+				update.err = ErrCandidateStale
+				return update
+			}
+			frames[i] = f
+			w.runtime.Admission.ObserveOwned("candidate", c.ID+"/aux-input", int64(cap(f.Payload)))
+			defer w.runtime.Admission.ObserveOwned("candidate", c.ID+"/aux-input", 0)
+		}
+		var measured backend.PromptMeasure
+		render := func(count bool) (string, error) {
+			var user string
+			err := w.runtime.Run(ctx, func() error {
+				page := int64(len(system))
+				for _, f := range frames {
+					var e error
+					page, e = boundedSum(page, int64(len(f.Payload)))
+					if e != nil {
+						return e
+					}
+				}
+				b, e := backend.NewBuildBounds(w.runtime.Window.limits.ItemBytes, page)
+				if e != nil {
+					return e
+				}
+				if e = b.ReserveNodes(int64(len(frames)), 64); e != nil {
+					return e
+				}
+				members := make([]ruby.AlignmentBatchMember, 0, len(frames))
+				var singleton *Candidate
+				for _, f := range frames {
+					c, e := DecodeCandidateFrame(b, f)
+					if e != nil {
+						return e
+					}
+					singleton = c
+					members = append(members, ruby.AlignmentBatchMember{WorkID: c.WorkID, CandidateID: c.ID, Source: rawSource(&c.Segment), Alignment: c.Alignment})
+				}
+				if !textMode {
+					if batched {
+						req.JSONSchema, e = ruby.AlignmentBatchJSONSchemaBounded(b)
+					} else {
+						req.JSONSchema, e = ruby.AlignmentJSONSchemaForProtocolBounded(b, singleton.Alignment.ProtocolVersion)
+					}
+					if e != nil {
+						return e
+					}
+				}
+				claim := func(m backend.PromptMeasure) error {
+					if count {
+						measured = m
+						return errMeasureOnly
+					}
+					if m != measured {
+						return backend.ErrBuildCapacity
+					}
+					return nil
+				}
+				maxInput := max(int64(len(system))+page, int64(len(frames))*w.runtime.Window.limits.ItemBytes)
+				if batched {
+					user, e = ruby.AlignmentBatchRequestWithCreditsBounded(b, members, system, maxInput, claim)
+				} else {
+					missing, missingErr := singleton.Alignment.MissingBounded(b)
+					if missingErr != nil {
+						return missingErr
+					}
+					user, e = singleton.Alignment.AlignmentRequestWithCreditsBounded(b, rawSource(&singleton.Segment), missing, system, maxInput, claim)
+				}
+				return e
+			})
+			return user, err
+		}
+		_, e := render(true)
+		if !errors.Is(e, errMeasureOnly) {
+			update.err = e
+			return update
+		}
 		callCtx := session.Context(ctx)
-		start := time.Now()
-		resp, callErr := backends[0].Translate(callCtx, req)
+		if e = preclaimAux(callCtx, backends[0], session, req, measured); e != nil {
+			if d := workDeferred(e); d != nil {
+				update.waitCapacity = d
+			} else if errors.Is(e, backend.ErrDispatchPaused) {
+				update.paused = true
+			} else {
+				update.err = e
+			}
+			return update
+		}
+		user, e = render(false)
+		for _, c := range remote {
+			w.runtime.Admission.ObserveOwned("candidate", c.ID+"/aux-input", 0)
+		}
+		frames = nil
+		if e != nil {
+			update.err = e
+			return update
+		}
+		req.System, req.User = system, user
+		start = time.Now()
+		resp, callErr = backends[0].Translate(callCtx, req)
+		if resp != nil {
+			w.runtime.Admission.ObserveOwned("aux", session.intent.ID+"/text", int64(len(resp.Text)))
+			defer w.runtime.Admission.ObserveOwned("aux", session.intent.ID+"/text", 0)
+		}
 		if d := workDeferred(callErr); d != nil {
 			update.waitCapacity = d
 			return update
 		}
 		if !session.handoffDeadline.IsZero() {
-			ctx = callCtx
-			ctx = persistence.WithDeadline(ctx, session.handoffDeadline)
+			ctx = persistence.WithDeadline(callCtx, session.handoffDeadline)
 		}
 		if resp == nil && callErr == nil {
 			callErr = &backend.EmptyResponseError{BackendName: backends[0].Name()}
@@ -132,96 +225,198 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 			update.err = ctx.Err()
 			return update
 		}
-		var batchResult ruby.AlignmentBatchResult
-		if callErr == nil && batched {
-			if textMode {
-				batchResult = ruby.ParseAlignmentBatchText(resp.Text)
-			} else {
-				batchResult = ruby.ParseAlignmentBatchJSON(resp.Text)
-			}
-		}
-		for _, c := range remote {
-			c.NetworkAttempt += session.calls
-			if session.lastID != "" {
-				c.LastAlignmentRequestID = session.lastID
-			}
-			if callErr != nil {
-				if backend.IsRetryable(callErr) && c.NetworkAttempt < max(1, round.Retry.MaxAttempts) {
-					c.NextAttemptAt = time.Now().Add(backend.RetryDelay(round.Retry, c.NetworkAttempt-1, callErr))
-				} else {
-					c.Ready = true
-				}
-				continue
-			}
-			var entries []ruby.OutputEntry
-			batchFault := false
-			if batched {
-				key := ruby.AlignmentBatchKey{WorkID: c.WorkID, CandidateID: c.ID}
-				var found bool
-				entries, found = batchResult.Entries[key]
-				batchFault = !found || batchResult.Invalid[key]
-				if batchFault {
-					entries = nil
-				}
-			} else if c.Alignment.ProtocolVersion == ruby.ProtocolV2 {
-				if textMode {
-					entries = ruby.ParseAlignmentTextV2(resp.Text)
-				} else {
-					entries, _ = ruby.ParseAlignmentJSONV2(resp.Text)
-				}
-			} else {
-				if textMode {
-					entries = ruby.ParseAlignmentTextLegacy(resp.Text)
-				} else {
-					entries, _, _ = repair.TryRepairRubyAlignmentForState(resp.Text, repairOptions(round.Handler))
-				}
-			}
-			p := c.Alignment.ApplyOutput(itemIDs(c.Alignment.Missing()), entries, c.Alignment.ProtocolVersion == ruby.ProtocolV2)
-			c.LogicalAttempt++
-			c.NetworkAttempt = 0
-			c.NextAttemptAt = time.Time{}
-			remaining := len(c.Alignment.Missing())
-			batchFault = batchFault || (batched && resp.Truncated && remaining > 0)
-			if batchFault {
-				c.ForceSingleAlignment = true
-			}
-			c.Ready = remaining == 0 || c.LogicalAttempt >= logicalBudget || (p.Added == 0 && !batchFault)
-		}
 		if resp != nil {
 			update.inputTokens = resp.Usage.PromptTokens
 			update.outputTokens = resp.Usage.CompletionTokens
 		}
-		if obs, ok := w.reporter.(progress.BatchObserver); ok {
-			evt := progress.BatchEvent{Stage: "ruby_alignment", SegmentCount: len(remote), BackendName: backends[0].Name(), Status: "success", DurationMs: time.Since(start).Milliseconds(), RoundIndex: roundIndex, SystemPrompt: system, UserMessage: user, ResponseFormat: req.ResponseFormat, JSONSchema: req.JSONSchema, InputTokens: update.inputTokens, OutputTokens: update.outputTokens}
-			if batched {
-				evt.ProtocolDiagnostics = append([]string(nil), batchResult.Diagnostics...)
-				evt.EnvelopeInvalid = batchResult.EnvelopeInvalid
-				requested := make(map[ruby.AlignmentBatchKey]bool, len(remote))
-				for _, member := range remote {
-					requested[ruby.AlignmentBatchKey{WorkID: member.WorkID, CandidateID: member.ID}] = true
+	}
+	isRemote := map[string]int{}
+	for i, c := range remote {
+		isRemote[c.ID] = i
+	}
+	for _, original := range candidates {
+		frame, e := loadCandidateFrame(ctx, w.store, original.ID, w.runtime.Window.limits.ItemBytes)
+		if e != nil {
+			update.err = e
+			return update
+		}
+		w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-output", int64(cap(frame.Payload)))
+		defer w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-output", 0)
+		if frame.Version != original.Version {
+			update.err = ErrCandidateStale
+			return update
+		}
+		var c *Candidate
+		e = w.runtime.Run(ctx, func() error {
+			input := int64(len(frame.Payload))
+			if resp != nil {
+				var e error
+				input, e = boundedSum(input, int64(len(resp.Text)))
+				if e != nil {
+					return e
 				}
-				unknown := make(map[ruby.AlignmentBatchKey]bool)
-				for key := range batchResult.Entries {
-					if !requested[key] {
-						unknown[key] = true
-					}
-				}
-				for key := range batchResult.Invalid {
-					if !requested[key] {
-						unknown[key] = true
-					}
-				}
-				evt.UnknownAlignmentMembers = len(unknown)
 			}
-			for i, member := range remote {
-				evt.SegmentIDs = append(evt.SegmentIDs, member.Segment.ID)
-				evt.VerifiedItems += len(member.Alignment.Verified)
-				evt.MissingItems += len(member.Alignment.Missing())
-				evt.AlignmentMembers = append(evt.AlignmentMembers, progress.AlignmentMemberEvent{WorkID: member.WorkID, CandidateID: member.ID, CandidateVersion: member.Version, ParentRequestID: member.ParentRequestID, LogicalAttempt: member.LogicalAttempt, NetworkAttempt: session.intent.Members[i].NetworkAttempt + session.calls, VerifiedItems: len(member.Alignment.Verified), MissingItems: len(member.Alignment.Missing()), ForceSingle: member.ForceSingleAlignment})
+			b, e := backend.NewBuildBounds(w.runtime.Window.limits.ItemBytes, input)
+			if e != nil {
+				return e
 			}
-			if !batched {
-				evt.ParentRequestID, evt.CandidateID, evt.CandidateVersion = c.ParentRequestID, c.ID, c.Version
-				evt.LogicalAttempt, evt.NetworkAttempt = c.LogicalAttempt, session.intent.NetworkAttempt+session.calls
+			c, e = DecodeCandidateFrame(b, frame)
+			if e != nil {
+				return e
+			}
+			remoteIndex, needsRemote := isRemote[c.ID]
+			if !needsRemote {
+				c.Ready = true
+			} else {
+				// The durable frame may already include this dispatched request's
+				// debit. Reconcile with the frozen pre-dispatch member baseline;
+				// do not add the same network attempt to the persisted counter again.
+				c.NetworkAttempt = max(c.NetworkAttempt, w.session.intent.Members[remoteIndex].NetworkAttempt+w.session.calls)
+				if w.session.lastID != "" {
+					c.LastAlignmentRequestID = w.session.lastID
+				}
+				if callErr != nil {
+					if backend.IsRetryable(callErr) && c.NetworkAttempt < max(1, round.Retry.MaxAttempts) {
+						c.NextAttemptAt = time.Now().Add(backend.RetryDelay(round.Retry, c.NetworkAttempt-1, callErr))
+					} else {
+						c.Ready = true
+					}
+				} else {
+					var entries []ruby.OutputEntry
+					fault := false
+					if len(remote) > 1 {
+						var batch ruby.AlignmentBatchResult
+						if textMode {
+							batch, e = ruby.ParseAlignmentBatchTextBounded(b, resp.Text)
+						} else {
+							batch, e = ruby.ParseAlignmentBatchJSONBounded(b, resp.Text)
+						}
+						if e != nil {
+							return e
+						}
+						key := ruby.AlignmentBatchKey{WorkID: c.WorkID, CandidateID: c.ID}
+						entries, needsRemote = batch.Entries[key]
+						fault = !needsRemote || batch.Invalid[key]
+						if fault {
+							entries = nil
+						}
+						if remoteIndex == 0 {
+							diagnostics = append([]string(nil), batch.Diagnostics...)
+							envelopeInvalid = batch.EnvelopeInvalid
+							requested := map[ruby.AlignmentBatchKey]bool{}
+							for _, m := range remote {
+								requested[ruby.AlignmentBatchKey{WorkID: m.WorkID, CandidateID: m.ID}] = true
+							}
+							unknown := map[ruby.AlignmentBatchKey]bool{}
+							for k := range batch.Entries {
+								if !requested[k] {
+									unknown[k] = true
+								}
+							}
+							for k := range batch.Invalid {
+								if !requested[k] {
+									unknown[k] = true
+								}
+							}
+							unknownMembers = len(unknown)
+						}
+					} else {
+						if textMode {
+							entries, e = ruby.ParseAlignmentTextV2Bounded(b, resp.Text)
+						} else {
+							entries, e = ruby.ParseAlignmentJSONV2Bounded(b, resp.Text)
+						}
+						if e != nil {
+							return e
+						}
+					}
+					missing, e := c.Alignment.MissingBounded(b)
+					if e != nil {
+						return e
+					}
+					p, e := c.Alignment.ApplyOutputBounded(b, itemIDs(missing), entries, true)
+					if e != nil {
+						return e
+					}
+					missing, e = c.Alignment.MissingBounded(b)
+					if e != nil {
+						return e
+					}
+					c.LogicalAttempt++
+					c.NetworkAttempt = 0
+					c.NextAttemptAt = time.Time{}
+					fault = fault || len(remote) > 1 && resp.Truncated && len(missing) > 0
+					if fault {
+						c.ForceSingleAlignment = true
+					}
+					c.Ready = len(missing) == 0 || c.LogicalAttempt >= budget || p.Added == 0 && !fault
+				}
+				missing, e := c.Alignment.MissingBounded(b)
+				if e != nil {
+					return e
+				}
+				requestedMembers = append(requestedMembers, progress.AlignmentMemberEvent{WorkID: c.WorkID, CandidateID: c.ID, CandidateVersion: c.Version, ParentRequestID: c.ParentRequestID, LogicalAttempt: c.LogicalAttempt, NetworkAttempt: w.session.intent.Members[remoteIndex].NetworkAttempt + w.session.calls, VerifiedItems: len(c.Alignment.Verified), MissingItems: len(missing), ForceSingle: c.ForceSingleAlignment})
+			}
+			c.Version++
+			c.PendingSave = true
+			return c.SealAndCompact(b, w.runtime.Window.limits.ItemBytes)
+		})
+		frame = CandidateFrame{}
+		w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-output", 0)
+		if e != nil {
+			update.err = e
+			return update
+		}
+		*original = *c
+		w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-saved", int64(cap(original.PreparedPayload)))
+		defer w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-saved", 0)
+		if validator, ok := w.store.(interface {
+			ValidateCandidate(context.Context, *Candidate) (bool, error)
+		}); ok {
+			valid, e := validator.ValidateCandidate(ctx, original)
+			if e != nil {
+				update.err = e
+				return update
+			}
+			if !valid {
+				original.Version--
+				if update.stale == nil {
+					update.stale = map[int]bool{}
+				}
+				update.stale[original.Index] = true
+				continue
+			}
+		}
+		if e = w.saveCandidate(ctx, original); e != nil {
+			if errors.Is(e, ErrCandidateStale) {
+				original.Version--
+				if update.stale == nil {
+					update.stale = map[int]bool{}
+				}
+				update.stale[original.Index] = true
+				continue
+			}
+			update.err = e
+			return update
+		}
+	}
+	if len(remote) > 0 {
+		if observer, ok := w.reporter.(progress.BatchObserver); ok {
+			evt := progress.BatchEvent{Stage: "ruby_alignment", SegmentCount: len(remote), BackendName: backends[0].Name(), Status: "success", DurationMs: time.Since(start).Milliseconds(), RoundIndex: roundIndex, SystemPrompt: system, UserMessage: user, ResponseFormat: req.ResponseFormat, JSONSchema: req.JSONSchema, InputTokens: update.inputTokens, OutputTokens: update.outputTokens, AlignmentMembers: requestedMembers, ProtocolDiagnostics: diagnostics, EnvelopeInvalid: envelopeInvalid, UnknownAlignmentMembers: unknownMembers}
+			for _, c := range remote {
+				evt.SegmentIDs = append(evt.SegmentIDs, c.Segment.ID)
+			}
+			for _, m := range requestedMembers {
+				evt.VerifiedItems += m.VerifiedItems
+				evt.MissingItems += m.MissingItems
+			}
+			if len(remote) == 1 {
+				c := remote[0]
+				evt.ParentRequestID = c.ParentRequestID
+				evt.CandidateID = c.ID
+				evt.CandidateVersion = c.Version
+				evt.LogicalAttempt = c.LogicalAttempt
+				evt.NetworkAttempt = w.session.intent.NetworkAttempt + w.session.calls
 			}
 			if resp != nil {
 				evt.ResponseContent = resp.Text
@@ -236,49 +431,20 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 			} else if evt.MissingItems > 0 {
 				evt.Status = "partial"
 			}
-			obs.OnBatchEvent(evt)
+			observer.OnBatchEvent(evt)
 		}
 	}
-	for _, c := range candidates {
-		if validator, ok := w.store.(interface {
-			ValidateCandidate(context.Context, *Candidate) (bool, error)
-		}); ok {
-			valid, err := validator.ValidateCandidate(ctx, c)
-			if err != nil {
-				update.err = err
-				return update
-			}
-			if !valid {
-				if update.stale == nil {
-					update.stale = make(map[int]bool)
-				}
-				update.stale[c.Index] = true
-				continue
-			}
-		}
-		if err := w.saveCandidate(ctx, c); err != nil {
-			if errors.Is(err, ErrCandidateStale) {
-				// Retire from the previous version after saving other members.
-				// RetireStale checks the durable version if an earlier save
-				// committed but its acknowledgement was lost before this edit.
-				c.Version--
-				if update.stale == nil {
-					update.stale = make(map[int]bool)
-				}
-				update.stale[c.Index] = true
-				continue
-			}
-			update.err = err
-			return update
-		}
+	if err := w.finish(nil); err != nil {
+		update.err = err
 	}
 	return update
 }
 
 func (w *AlignmentWorker) saveCandidate(ctx context.Context, c *Candidate) error {
-	c.Version++
-	c.DTOVersion = CandidateDTOVersion
-	data, err := c.Encode()
+	if !c.PendingSave {
+		return ErrCandidateStale
+	}
+	data, err := c.EncodeBounded(w.runtime.Window.limits.ItemBytes, 0)
 	if err != nil {
 		return err
 	}
@@ -288,7 +454,13 @@ func (w *AlignmentWorker) saveCandidate(ctx context.Context, c *Candidate) error
 	if err = w.runtime.SaveNamed(ctx, candidateSaveMetadata("candidate", w.store, c), func(saveCtx context.Context) error { return w.store.Save(saveCtx, c) }); err != nil {
 		return err
 	}
-	return w.runtime.Window.Resize(c.ID, int64(len(data)))
+	if err := w.runtime.Window.Resize(c.ID, int64(len(data))); err != nil {
+		return err
+	}
+	c.PendingSave = false
+	c.PreparedPayload = nil
+	w.runtime.Admission.ObserveOwned("candidate", c.ID+"/aux-saved", 0)
+	return nil
 }
 
 func alignmentSettings(handler RoundHandler) ([]backend.Backend, int, prompt.RubyTemplates, bool, int) {

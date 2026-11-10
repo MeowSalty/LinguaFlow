@@ -1016,51 +1016,51 @@ func init() {
 	// job.DefaultPauseRequested holds the default value on creation for the pause_requested field.
 	job.DefaultPauseRequested = jobDescPauseRequested.Default.(bool)
 	// jobDescProjectID is the schema descriptor for project_id field.
-	jobDescProjectID := jobFields[2].Descriptor()
+	jobDescProjectID := jobFields[3].Descriptor()
 	// job.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	job.ProjectIDValidator = jobDescProjectID.Validators[0].(func(int) error)
 	// jobDescStatus is the schema descriptor for status field.
-	jobDescStatus := jobFields[3].Descriptor()
+	jobDescStatus := jobFields[4].Descriptor()
 	// job.DefaultStatus holds the default value on creation for the status field.
 	job.DefaultStatus = jobDescStatus.Default.(string)
 	// jobDescTriggerType is the schema descriptor for trigger_type field.
-	jobDescTriggerType := jobFields[4].Descriptor()
+	jobDescTriggerType := jobFields[5].Descriptor()
 	// job.DefaultTriggerType holds the default value on creation for the trigger_type field.
 	job.DefaultTriggerType = jobDescTriggerType.Default.(string)
 	// jobDescExecutionPlanID is the schema descriptor for execution_plan_id field.
-	jobDescExecutionPlanID := jobFields[5].Descriptor()
+	jobDescExecutionPlanID := jobFields[6].Descriptor()
 	// job.ExecutionPlanIDValidator is a validator for the "execution_plan_id" field. It is called by the builders before save.
 	job.ExecutionPlanIDValidator = jobDescExecutionPlanID.Validators[0].(func(int) error)
 	// jobDescExecutionConfig is the schema descriptor for execution_config field.
-	jobDescExecutionConfig := jobFields[6].Descriptor()
+	jobDescExecutionConfig := jobFields[7].Descriptor()
 	// job.DefaultExecutionConfig holds the default value on creation for the execution_config field.
 	job.DefaultExecutionConfig = jobDescExecutionConfig.Default.(func() map[string]interface{})
 	// jobDescResourceCount is the schema descriptor for resource_count field.
-	jobDescResourceCount := jobFields[7].Descriptor()
+	jobDescResourceCount := jobFields[8].Descriptor()
 	// job.DefaultResourceCount holds the default value on creation for the resource_count field.
 	job.DefaultResourceCount = jobDescResourceCount.Default.(int)
 	// job.ResourceCountValidator is a validator for the "resource_count" field. It is called by the builders before save.
 	job.ResourceCountValidator = jobDescResourceCount.Validators[0].(func(int) error)
 	// jobDescCompletedResources is the schema descriptor for completed_resources field.
-	jobDescCompletedResources := jobFields[8].Descriptor()
+	jobDescCompletedResources := jobFields[9].Descriptor()
 	// job.DefaultCompletedResources holds the default value on creation for the completed_resources field.
 	job.DefaultCompletedResources = jobDescCompletedResources.Default.(int)
 	// job.CompletedResourcesValidator is a validator for the "completed_resources" field. It is called by the builders before save.
 	job.CompletedResourcesValidator = jobDescCompletedResources.Validators[0].(func(int) error)
 	// jobDescFailedResources is the schema descriptor for failed_resources field.
-	jobDescFailedResources := jobFields[9].Descriptor()
+	jobDescFailedResources := jobFields[10].Descriptor()
 	// job.DefaultFailedResources holds the default value on creation for the failed_resources field.
 	job.DefaultFailedResources = jobDescFailedResources.Default.(int)
 	// job.FailedResourcesValidator is a validator for the "failed_resources" field. It is called by the builders before save.
 	job.FailedResourcesValidator = jobDescFailedResources.Validators[0].(func(int) error)
 	// jobDescProgressTotal is the schema descriptor for progress_total field.
-	jobDescProgressTotal := jobFields[10].Descriptor()
+	jobDescProgressTotal := jobFields[11].Descriptor()
 	// job.DefaultProgressTotal holds the default value on creation for the progress_total field.
 	job.DefaultProgressTotal = jobDescProgressTotal.Default.(int64)
 	// job.ProgressTotalValidator is a validator for the "progress_total" field. It is called by the builders before save.
 	job.ProgressTotalValidator = jobDescProgressTotal.Validators[0].(func(int64) error)
 	// jobDescProgressCompleted is the schema descriptor for progress_completed field.
-	jobDescProgressCompleted := jobFields[11].Descriptor()
+	jobDescProgressCompleted := jobFields[12].Descriptor()
 	// job.DefaultProgressCompleted holds the default value on creation for the progress_completed field.
 	job.DefaultProgressCompleted = jobDescProgressCompleted.Default.(int64)
 	// job.ProgressCompletedValidator is a validator for the "progress_completed" field. It is called by the builders before save.
@@ -2862,16 +2862,28 @@ func init() {
 	workcandidateDescBaselineVersion := workcandidateFields[9].Descriptor()
 	// workcandidate.BaselineVersionValidator is a validator for the "baseline_version" field. It is called by the builders before save.
 	workcandidate.BaselineVersionValidator = workcandidateDescBaselineVersion.Validators[0].(func(int64) error)
+	// workcandidateDescBaselineDigest is the schema descriptor for baseline_digest field.
+	workcandidateDescBaselineDigest := workcandidateFields[11].Descriptor()
+	// workcandidate.DefaultBaselineDigest holds the default value on creation for the baseline_digest field.
+	workcandidate.DefaultBaselineDigest = workcandidateDescBaselineDigest.Default.(string)
+	// workcandidateDescBaselineTargetIsNull is the schema descriptor for baseline_target_is_null field.
+	workcandidateDescBaselineTargetIsNull := workcandidateFields[12].Descriptor()
+	// workcandidate.DefaultBaselineTargetIsNull holds the default value on creation for the baseline_target_is_null field.
+	workcandidate.DefaultBaselineTargetIsNull = workcandidateDescBaselineTargetIsNull.Default.(bool)
 	// workcandidateDescState is the schema descriptor for state field.
-	workcandidateDescState := workcandidateFields[12].Descriptor()
+	workcandidateDescState := workcandidateFields[14].Descriptor()
 	// workcandidate.DefaultState holds the default value on creation for the state field.
 	workcandidate.DefaultState = workcandidateDescState.Default.(string)
 	// workcandidateDescPayloadBytes is the schema descriptor for payload_bytes field.
-	workcandidateDescPayloadBytes := workcandidateFields[13].Descriptor()
+	workcandidateDescPayloadBytes := workcandidateFields[15].Descriptor()
 	// workcandidate.DefaultPayloadBytes holds the default value on creation for the payload_bytes field.
 	workcandidate.DefaultPayloadBytes = workcandidateDescPayloadBytes.Default.(int64)
 	// workcandidate.PayloadBytesValidator is a validator for the "payload_bytes" field. It is called by the builders before save.
 	workcandidate.PayloadBytesValidator = workcandidateDescPayloadBytes.Validators[0].(func(int64) error)
+	// workcandidateDescGrowthReserved is the schema descriptor for growth_reserved field.
+	workcandidateDescGrowthReserved := workcandidateFields[16].Descriptor()
+	// workcandidate.DefaultGrowthReserved holds the default value on creation for the growth_reserved field.
+	workcandidate.DefaultGrowthReserved = workcandidateDescGrowthReserved.Default.(bool)
 	workitemMixin := schema.WorkItem{}.Mixin()
 	workitemMixinFields0 := workitemMixin[0].Fields()
 	_ = workitemMixinFields0
@@ -2913,52 +2925,60 @@ func init() {
 	workitemDescState := workitemFields[5].Descriptor()
 	// workitem.DefaultState holds the default value on creation for the state field.
 	workitem.DefaultState = workitemDescState.Default.(string)
+	// workitemDescMemberOwned is the schema descriptor for member_owned field.
+	workitemDescMemberOwned := workitemFields[6].Descriptor()
+	// workitem.DefaultMemberOwned holds the default value on creation for the member_owned field.
+	workitem.DefaultMemberOwned = workitemDescMemberOwned.Default.(bool)
 	// workitemDescCandidateID is the schema descriptor for candidate_id field.
-	workitemDescCandidateID := workitemFields[6].Descriptor()
+	workitemDescCandidateID := workitemFields[7].Descriptor()
 	// workitem.DefaultCandidateID holds the default value on creation for the candidate_id field.
 	workitem.DefaultCandidateID = workitemDescCandidateID.Default.(string)
+	// workitemDescResponseRequestID is the schema descriptor for response_request_id field.
+	workitemDescResponseRequestID := workitemFields[8].Descriptor()
+	// workitem.DefaultResponseRequestID holds the default value on creation for the response_request_id field.
+	workitem.DefaultResponseRequestID = workitemDescResponseRequestID.Default.(string)
 	// workitemDescPoolIndex is the schema descriptor for pool_index field.
-	workitemDescPoolIndex := workitemFields[7].Descriptor()
+	workitemDescPoolIndex := workitemFields[9].Descriptor()
 	// workitem.DefaultPoolIndex holds the default value on creation for the pool_index field.
 	workitem.DefaultPoolIndex = workitemDescPoolIndex.Default.(int)
 	// workitem.PoolIndexValidator is a validator for the "pool_index" field. It is called by the builders before save.
 	workitem.PoolIndexValidator = workitemDescPoolIndex.Validators[0].(func(int) error)
 	// workitemDescMainAttempts is the schema descriptor for main_attempts field.
-	workitemDescMainAttempts := workitemFields[8].Descriptor()
+	workitemDescMainAttempts := workitemFields[10].Descriptor()
 	// workitem.DefaultMainAttempts holds the default value on creation for the main_attempts field.
 	workitem.DefaultMainAttempts = workitemDescMainAttempts.Default.(int)
 	// workitem.MainAttemptsValidator is a validator for the "main_attempts" field. It is called by the builders before save.
 	workitem.MainAttemptsValidator = workitemDescMainAttempts.Validators[0].(func(int) error)
 	// workitemDescAlignmentAttempts is the schema descriptor for alignment_attempts field.
-	workitemDescAlignmentAttempts := workitemFields[9].Descriptor()
+	workitemDescAlignmentAttempts := workitemFields[11].Descriptor()
 	// workitem.DefaultAlignmentAttempts holds the default value on creation for the alignment_attempts field.
 	workitem.DefaultAlignmentAttempts = workitemDescAlignmentAttempts.Default.(int)
 	// workitem.AlignmentAttemptsValidator is a validator for the "alignment_attempts" field. It is called by the builders before save.
 	workitem.AlignmentAttemptsValidator = workitemDescAlignmentAttempts.Validators[0].(func(int) error)
 	// workitemDescNetworkAttempts is the schema descriptor for network_attempts field.
-	workitemDescNetworkAttempts := workitemFields[10].Descriptor()
+	workitemDescNetworkAttempts := workitemFields[12].Descriptor()
 	// workitem.DefaultNetworkAttempts holds the default value on creation for the network_attempts field.
 	workitem.DefaultNetworkAttempts = workitemDescNetworkAttempts.Default.(int)
 	// workitem.NetworkAttemptsValidator is a validator for the "network_attempts" field. It is called by the builders before save.
 	workitem.NetworkAttemptsValidator = workitemDescNetworkAttempts.Validators[0].(func(int) error)
 	// workitemDescMainNetworkAttempts is the schema descriptor for main_network_attempts field.
-	workitemDescMainNetworkAttempts := workitemFields[11].Descriptor()
+	workitemDescMainNetworkAttempts := workitemFields[13].Descriptor()
 	// workitem.DefaultMainNetworkAttempts holds the default value on creation for the main_network_attempts field.
 	workitem.DefaultMainNetworkAttempts = workitemDescMainNetworkAttempts.Default.(int)
 	// workitem.MainNetworkAttemptsValidator is a validator for the "main_network_attempts" field. It is called by the builders before save.
 	workitem.MainNetworkAttemptsValidator = workitemDescMainNetworkAttempts.Validators[0].(func(int) error)
 	// workitemDescAlignmentNetworkAttempts is the schema descriptor for alignment_network_attempts field.
-	workitemDescAlignmentNetworkAttempts := workitemFields[12].Descriptor()
+	workitemDescAlignmentNetworkAttempts := workitemFields[14].Descriptor()
 	// workitem.DefaultAlignmentNetworkAttempts holds the default value on creation for the alignment_network_attempts field.
 	workitem.DefaultAlignmentNetworkAttempts = workitemDescAlignmentNetworkAttempts.Default.(int)
 	// workitem.AlignmentNetworkAttemptsValidator is a validator for the "alignment_network_attempts" field. It is called by the builders before save.
 	workitem.AlignmentNetworkAttemptsValidator = workitemDescAlignmentNetworkAttempts.Validators[0].(func(int) error)
 	// workitemDescPromptPhase is the schema descriptor for prompt_phase field.
-	workitemDescPromptPhase := workitemFields[13].Descriptor()
+	workitemDescPromptPhase := workitemFields[15].Descriptor()
 	// workitem.DefaultPromptPhase holds the default value on creation for the prompt_phase field.
 	workitem.DefaultPromptPhase = workitemDescPromptPhase.Default.(string)
 	// workitemDescLastError is the schema descriptor for last_error field.
-	workitemDescLastError := workitemFields[15].Descriptor()
+	workitemDescLastError := workitemFields[17].Descriptor()
 	// workitem.DefaultLastError holds the default value on creation for the last_error field.
 	workitem.DefaultLastError = workitemDescLastError.Default.(string)
 	workrequestMixin := schema.WorkRequest{}.Mixin()
@@ -3014,46 +3034,112 @@ func init() {
 	workrequest.DefaultLogicalAttempt = workrequestDescLogicalAttempt.Default.(int)
 	// workrequest.LogicalAttemptValidator is a validator for the "logical_attempt" field. It is called by the builders before save.
 	workrequest.LogicalAttemptValidator = workrequestDescLogicalAttempt.Validators[0].(func(int) error)
+	// workrequestDescFreezeBytes is the schema descriptor for freeze_bytes field.
+	workrequestDescFreezeBytes := workrequestFields[14].Descriptor()
+	// workrequest.DefaultFreezeBytes holds the default value on creation for the freeze_bytes field.
+	workrequest.DefaultFreezeBytes = workrequestDescFreezeBytes.Default.(int64)
+	// workrequest.FreezeBytesValidator is a validator for the "freeze_bytes" field. It is called by the builders before save.
+	workrequest.FreezeBytesValidator = workrequestDescFreezeBytes.Validators[0].(func(int64) error)
+	// workrequestDescResponseBytes is the schema descriptor for response_bytes field.
+	workrequestDescResponseBytes := workrequestFields[16].Descriptor()
+	// workrequest.DefaultResponseBytes holds the default value on creation for the response_bytes field.
+	workrequest.DefaultResponseBytes = workrequestDescResponseBytes.Default.(int64)
+	// workrequest.ResponseBytesValidator is a validator for the "response_bytes" field. It is called by the builders before save.
+	workrequest.ResponseBytesValidator = workrequestDescResponseBytes.Validators[0].(func(int64) error)
+	// workrequestDescResponseFormatVersion is the schema descriptor for response_format_version field.
+	workrequestDescResponseFormatVersion := workrequestFields[17].Descriptor()
+	// workrequest.DefaultResponseFormatVersion holds the default value on creation for the response_format_version field.
+	workrequest.DefaultResponseFormatVersion = workrequestDescResponseFormatVersion.Default.(int)
+	// workrequest.ResponseFormatVersionValidator is a validator for the "response_format_version" field. It is called by the builders before save.
+	workrequest.ResponseFormatVersionValidator = workrequestDescResponseFormatVersion.Validators[0].(func(int) error)
+	// workrequestDescSnapshotDigest is the schema descriptor for snapshot_digest field.
+	workrequestDescSnapshotDigest := workrequestFields[18].Descriptor()
+	// workrequest.DefaultSnapshotDigest holds the default value on creation for the snapshot_digest field.
+	workrequest.DefaultSnapshotDigest = workrequestDescSnapshotDigest.Default.(string)
+	// workrequestDescFreezeDigest is the schema descriptor for freeze_digest field.
+	workrequestDescFreezeDigest := workrequestFields[19].Descriptor()
+	// workrequest.DefaultFreezeDigest holds the default value on creation for the freeze_digest field.
+	workrequest.DefaultFreezeDigest = workrequestDescFreezeDigest.Default.(string)
+	// workrequestDescResponseDigest is the schema descriptor for response_digest field.
+	workrequestDescResponseDigest := workrequestFields[20].Descriptor()
+	// workrequest.DefaultResponseDigest holds the default value on creation for the response_digest field.
+	workrequest.DefaultResponseDigest = workrequestDescResponseDigest.Default.(string)
+	// workrequestDescCorrectedTargetBytes is the schema descriptor for corrected_target_bytes field.
+	workrequestDescCorrectedTargetBytes := workrequestFields[23].Descriptor()
+	// workrequest.DefaultCorrectedTargetBytes holds the default value on creation for the corrected_target_bytes field.
+	workrequest.DefaultCorrectedTargetBytes = workrequestDescCorrectedTargetBytes.Default.(int64)
+	// workrequest.CorrectedTargetBytesValidator is a validator for the "corrected_target_bytes" field. It is called by the builders before save.
+	workrequest.CorrectedTargetBytesValidator = workrequestDescCorrectedTargetBytes.Validators[0].(func(int64) error)
+	// workrequestDescCorrectedTargetDigest is the schema descriptor for corrected_target_digest field.
+	workrequestDescCorrectedTargetDigest := workrequestFields[24].Descriptor()
+	// workrequest.DefaultCorrectedTargetDigest holds the default value on creation for the corrected_target_digest field.
+	workrequest.DefaultCorrectedTargetDigest = workrequestDescCorrectedTargetDigest.Default.(string)
+	// workrequestDescPromotionCursor is the schema descriptor for promotion_cursor field.
+	workrequestDescPromotionCursor := workrequestFields[26].Descriptor()
+	// workrequest.DefaultPromotionCursor holds the default value on creation for the promotion_cursor field.
+	workrequest.DefaultPromotionCursor = workrequestDescPromotionCursor.Default.(int)
+	// workrequest.PromotionCursorValidator is a validator for the "promotion_cursor" field. It is called by the builders before save.
+	workrequest.PromotionCursorValidator = workrequestDescPromotionCursor.Validators[0].(func(int) error)
+	// workrequestDescPromotionCount is the schema descriptor for promotion_count field.
+	workrequestDescPromotionCount := workrequestFields[27].Descriptor()
+	// workrequest.DefaultPromotionCount holds the default value on creation for the promotion_count field.
+	workrequest.DefaultPromotionCount = workrequestDescPromotionCount.Default.(int)
+	// workrequest.PromotionCountValidator is a validator for the "promotion_count" field. It is called by the builders before save.
+	workrequest.PromotionCountValidator = workrequestDescPromotionCount.Validators[0].(func(int) error)
+	// workrequestDescBusinessBound is the schema descriptor for business_bound field.
+	workrequestDescBusinessBound := workrequestFields[28].Descriptor()
+	// workrequest.DefaultBusinessBound holds the default value on creation for the business_bound field.
+	workrequest.DefaultBusinessBound = workrequestDescBusinessBound.Default.(int64)
+	// workrequest.BusinessBoundValidator is a validator for the "business_bound" field. It is called by the builders before save.
+	workrequest.BusinessBoundValidator = workrequestDescBusinessBound.Validators[0].(func(int64) error)
+	// workrequestDescResponseTruncated is the schema descriptor for response_truncated field.
+	workrequestDescResponseTruncated := workrequestFields[29].Descriptor()
+	// workrequest.DefaultResponseTruncated holds the default value on creation for the response_truncated field.
+	workrequest.DefaultResponseTruncated = workrequestDescResponseTruncated.Default.(bool)
+	// workrequestDescPromotionState is the schema descriptor for promotion_state field.
+	workrequestDescPromotionState := workrequestFields[30].Descriptor()
+	// workrequest.DefaultPromotionState holds the default value on creation for the promotion_state field.
+	workrequest.DefaultPromotionState = workrequestDescPromotionState.Default.(string)
 	// workrequestDescUsageRecordID is the schema descriptor for usage_record_id field.
-	workrequestDescUsageRecordID := workrequestFields[13].Descriptor()
+	workrequestDescUsageRecordID := workrequestFields[33].Descriptor()
 	// workrequest.UsageRecordIDValidator is a validator for the "usage_record_id" field. It is called by the builders before save.
 	workrequest.UsageRecordIDValidator = workrequestDescUsageRecordID.Validators[0].(func(int) error)
 	// workrequestDescBudgetModel is the schema descriptor for budget_model field.
-	workrequestDescBudgetModel := workrequestFields[14].Descriptor()
+	workrequestDescBudgetModel := workrequestFields[34].Descriptor()
 	// workrequest.BudgetModelValidator is a validator for the "budget_model" field. It is called by the builders before save.
 	workrequest.BudgetModelValidator = workrequestDescBudgetModel.Validators[0].(func(string) error)
 	// workrequestDescInputDigest is the schema descriptor for input_digest field.
-	workrequestDescInputDigest := workrequestFields[15].Descriptor()
+	workrequestDescInputDigest := workrequestFields[35].Descriptor()
 	// workrequest.InputDigestValidator is a validator for the "input_digest" field. It is called by the builders before save.
 	workrequest.InputDigestValidator = workrequestDescInputDigest.Validators[0].(func(string) error)
 	// workrequestDescState is the schema descriptor for state field.
-	workrequestDescState := workrequestFields[16].Descriptor()
+	workrequestDescState := workrequestFields[36].Descriptor()
 	// workrequest.DefaultState holds the default value on creation for the state field.
 	workrequest.DefaultState = workrequestDescState.Default.(string)
 	// workrequestDescUsageKnown is the schema descriptor for usage_known field.
-	workrequestDescUsageKnown := workrequestFields[17].Descriptor()
+	workrequestDescUsageKnown := workrequestFields[37].Descriptor()
 	// workrequest.DefaultUsageKnown holds the default value on creation for the usage_known field.
 	workrequest.DefaultUsageKnown = workrequestDescUsageKnown.Default.(bool)
 	// workrequestDescInputTokens is the schema descriptor for input_tokens field.
-	workrequestDescInputTokens := workrequestFields[18].Descriptor()
+	workrequestDescInputTokens := workrequestFields[38].Descriptor()
 	// workrequest.DefaultInputTokens holds the default value on creation for the input_tokens field.
 	workrequest.DefaultInputTokens = workrequestDescInputTokens.Default.(int64)
 	// workrequest.InputTokensValidator is a validator for the "input_tokens" field. It is called by the builders before save.
 	workrequest.InputTokensValidator = workrequestDescInputTokens.Validators[0].(func(int64) error)
 	// workrequestDescOutputTokens is the schema descriptor for output_tokens field.
-	workrequestDescOutputTokens := workrequestFields[19].Descriptor()
+	workrequestDescOutputTokens := workrequestFields[39].Descriptor()
 	// workrequest.DefaultOutputTokens holds the default value on creation for the output_tokens field.
 	workrequest.DefaultOutputTokens = workrequestDescOutputTokens.Default.(int64)
 	// workrequest.OutputTokensValidator is a validator for the "output_tokens" field. It is called by the builders before save.
 	workrequest.OutputTokensValidator = workrequestDescOutputTokens.Validators[0].(func(int64) error)
 	// workrequestDescDurationMs is the schema descriptor for duration_ms field.
-	workrequestDescDurationMs := workrequestFields[20].Descriptor()
+	workrequestDescDurationMs := workrequestFields[40].Descriptor()
 	// workrequest.DefaultDurationMs holds the default value on creation for the duration_ms field.
 	workrequest.DefaultDurationMs = workrequestDescDurationMs.Default.(int64)
 	// workrequest.DurationMsValidator is a validator for the "duration_ms" field. It is called by the builders before save.
 	workrequest.DurationMsValidator = workrequestDescDurationMs.Validators[0].(func(int64) error)
 	// workrequestDescLastError is the schema descriptor for last_error field.
-	workrequestDescLastError := workrequestFields[21].Descriptor()
+	workrequestDescLastError := workrequestFields[41].Descriptor()
 	// workrequest.DefaultLastError holds the default value on creation for the last_error field.
 	workrequest.DefaultLastError = workrequestDescLastError.Default.(string)
 }

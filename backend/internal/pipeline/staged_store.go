@@ -9,21 +9,14 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 // ErrCandidateStale lets storage report a failed content CAS without exposing
 // database types. Other members of the same received batch can still be saved.
 var ErrCandidateStale = errors.New("candidate baseline changed")
 
-type WorkCursor struct {
-	Pool           int
-	Attempt        int
-	LogicalAttempt int
-	NetworkAttempt int
-	Phase          string
-	State          string
-	NextAttemptAt  time.Time
-}
+type WorkCursor = model.RoundWorkCursor
 type CursorTransition struct {
 	Index  int
 	Cursor WorkCursor
@@ -37,25 +30,30 @@ type RoundRecovery struct {
 }
 
 type RequestIntent struct {
-	RoundIndex     int
-	ResourceID     int
-	ID             string
-	Stage          backend.RequestStage
-	BackendID      int
-	Indices        []int
-	CandidateID    string
-	Pool           int
-	Attempt        int
-	LogicalAttempt int
-	NetworkAttempt int
-	Phase          string
-	InputDigest    string
-	Members        []RequestMember
+	RoundIndex       int
+	ResourceID       int
+	ID               string
+	Stage            backend.RequestStage
+	BackendID        int
+	Indices          []int
+	CandidateID      string
+	Pool             int
+	Attempt          int
+	LogicalAttempt   int
+	NetworkAttempt   int
+	Phase            string
+	InputDigest      string
+	Members          []RequestMember
+	FreezePayload    []byte
+	SnapshotDigest   string
+	PromotionMembers []ResponseMember
+	BusinessBound    int64
 }
 
 // RequestMember freezes one candidate's identity and pre-dispatch attempt
 // cursor. A batch shares a request, never its members' attempt counters.
 type RequestMember struct {
+	Bytes            int64
 	Index            int
 	WorkID           string
 	CandidateID      string
@@ -88,6 +86,8 @@ const (
 // RoundStore is the persistence boundary consumed by the staged executor.
 // The database adapter owns identity mapping and all transactional acceptance.
 type RoundStore interface {
+	CanonicalRoundStore
+	CandidatePayloadStore
 	Committer
 	Load(context.Context) (RoundRecovery, error)
 	Seal(context.Context, []int) (RoundRecovery, error)
@@ -97,6 +97,10 @@ type RoundStore interface {
 	Cursors(context.Context, []CursorTransition) error
 	Reserve(context.Context, RequestIntent) error
 	Record(context.Context, string, RequestRecord) error
+	HandoffResponse(context.Context, MainResponse) error
+	ResponseHeaders(context.Context, int, int) ([]MainResponseHeader, int, error)
+	Response(context.Context, string, int64, int64, int64) (MainResponse, error)
+	PromoteMember(context.Context, string, int, *Candidate, WorkCursor, string) error
 }
 
 // Committer confirms one candidate atomically. Infrastructure owns version
@@ -114,16 +118,19 @@ type RequestAborter interface {
 // MemoryRoundStore gives synchronous entrypoints exactly the same candidate and
 // confirmation contract without manufacturing Job checkpoints or durable recovery.
 type MemoryRoundStore struct {
-	mu         sync.Mutex
-	state      RoundRecovery
-	candidates map[string][]byte
-	confirmed  map[string]bool
-	apply      func(context.Context, BatchResult) error
-	identity   string
+	mu          sync.Mutex
+	state       RoundRecovery
+	candidates  map[string][]byte
+	headers     map[string]CandidateHeader
+	confirmed   map[string]bool
+	apply       func(context.Context, BatchResult) error
+	identity    string
+	requests    map[string]*memoryResponse
+	nextRequest int
 }
 
 func NewMemoryRoundStore(apply func(context.Context, BatchResult) error) *MemoryRoundStore {
-	return &MemoryRoundStore{state: RoundRecovery{Cursors: map[int]WorkCursor{}}, candidates: map[string][]byte{}, confirmed: map[string]bool{}, apply: apply, identity: NewWorkID()}
+	return &MemoryRoundStore{state: RoundRecovery{Cursors: map[int]WorkCursor{}}, candidates: map[string][]byte{}, headers: map[string]CandidateHeader{}, confirmed: map[string]bool{}, requests: map[string]*memoryResponse{}, apply: apply, identity: NewWorkID()}
 }
 
 func (s *MemoryRoundStore) WorkIdentity(index int) string {
@@ -182,6 +189,7 @@ func (s *MemoryRoundStore) Save(_ context.Context, c *Candidate) error {
 	}
 	s.candidates[c.ID] = payload
 	c.StoredBytes = int64(len(payload))
+	s.headers[c.ID] = HeaderForCandidate(c)
 	s.state.Cursors[c.Index] = WorkCursor{Pool: c.PoolIndex, Attempt: c.MainAttempt, LogicalAttempt: c.LogicalAttempt, NetworkAttempt: c.NetworkAttempt, NextAttemptAt: c.NextAttemptAt, State: "candidate"}
 	return nil
 }
@@ -193,9 +201,6 @@ func (s *MemoryRoundStore) Cursors(_ context.Context, transitions []CursorTransi
 	}
 	return nil
 }
-func (s *MemoryRoundStore) Reserve(context.Context, RequestIntent) error        { return nil }
-func (s *MemoryRoundStore) Record(context.Context, string, RequestRecord) error { return nil }
-func (s *MemoryRoundStore) AbortRequest(context.Context, string) error          { return nil }
 func (s *MemoryRoundStore) Commit(ctx context.Context, c *Candidate, result TranslatedSegment) (CommitOutcome, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

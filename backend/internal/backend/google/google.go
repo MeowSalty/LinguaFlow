@@ -32,7 +32,10 @@ const (
 
 type Backend struct {
 	name           string
-	client         *genai.Client
+	httpClient     *http.Client
+	baseURL        string
+	apiKey         string
+	responseBytes  int64
 	model          string
 	maxTokens      int64
 	timeout        time.Duration
@@ -48,180 +51,6 @@ func (b *Backend) Name() string {
 		return b.name
 	}
 	return TypeName + ":" + b.model
-}
-
-func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
-	model, contents, cfg, err := b.buildCfg(req)
-	if err != nil {
-		return nil, err
-	}
-	if b.stream {
-		return b.translateStream(ctx, model, contents, cfg)
-	}
-	resp, err := b.client.Models.GenerateContent(ctx, model, contents, cfg)
-	if err != nil {
-		return nil, wrapGoogleError(err)
-	}
-	if resp == nil {
-		return nil, emptyResponseError(b, "", 0)
-	}
-	promptTokens := int64(0)
-	if resp.UsageMetadata != nil {
-		promptTokens = int64(resp.UsageMetadata.PromptTokenCount)
-	}
-	if len(resp.Candidates) == 0 {
-		return nil, emptyResponseError(b, "", promptTokens)
-	}
-	finishReason := resp.Candidates[0].FinishReason
-
-	text := resp.Text()
-	if text == "" {
-		return nil, emptyResponseError(b, string(finishReason), promptTokens)
-	}
-
-	usage := backend.Usage{}
-	if um := resp.UsageMetadata; um != nil {
-		usage.PromptTokens = int64(um.PromptTokenCount)
-		usage.CompletionTokens = int64(um.CandidatesTokenCount)
-		usage.TotalTokens = int64(um.TotalTokenCount)
-	}
-
-	return &backend.Response{
-		Text:  text,
-		Usage: usage,
-		Raw:   resp,
-		// 截断（finish_reason=MAX_TOKENS）时部分文本仍有效：带 Truncated 标志返回，
-		// 由上层修复链抢救前缀、缺失部分走重跑通道，而非整体丢弃报错。
-		Truncated: finishReason == genai.FinishReasonMaxTokens,
-	}, nil
-}
-
-func (b *Backend) translateStream(ctx context.Context, model string, contents []*genai.Content, cfg *genai.GenerateContentConfig) (*backend.Response, error) {
-	// genai sendStreamRequest 在拿到响应头后就会 cancel HTTPOptions.Timeout 对应的 context，
-	// 导致 body 迭代中途失败。流式路径改用调用方 ctx 覆盖整段累积过程。
-	if b.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, b.timeout)
-		defer cancel()
-	}
-
-	var buf strings.Builder
-	var usage *genai.GenerateContentResponseUsageMetadata
-	var finish genai.FinishReason
-	var last *genai.GenerateContentResponse
-
-	for resp, err := range b.client.Models.GenerateContentStream(ctx, model, contents, cfg) {
-		if err != nil {
-			return nil, wrapGoogleError(err)
-		}
-		if t := resp.Text(); t != "" {
-			buf.WriteString(t)
-		}
-		if resp.UsageMetadata != nil {
-			usage = resp.UsageMetadata
-		}
-		if len(resp.Candidates) > 0 {
-			finish = resp.Candidates[0].FinishReason
-		}
-		last = resp
-	}
-
-	text := buf.String()
-	if text == "" {
-		promptTokens := int64(0)
-		if usage != nil {
-			promptTokens = int64(usage.PromptTokenCount)
-		}
-		return nil, emptyResponseError(b, string(finish), promptTokens)
-	}
-
-	outUsage := backend.Usage{}
-	if usage != nil {
-		outUsage.PromptTokens = int64(usage.PromptTokenCount)
-		outUsage.CompletionTokens = int64(usage.CandidatesTokenCount)
-		outUsage.TotalTokens = int64(usage.TotalTokenCount)
-	}
-
-	return &backend.Response{
-		Text:  text,
-		Usage: outUsage,
-		Raw:   last,
-		// 流式同理：截断（finish_reason=MAX_TOKENS）时累积文本仍有效，
-		// 带 Truncated 标志交由上层修复链处理，而非整体丢弃报错。
-		Truncated: finish == genai.FinishReasonMaxTokens,
-	}, nil
-}
-
-func (b *Backend) buildCfg(req backend.Request) (string, []*genai.Content, *genai.GenerateContentConfig, error) {
-	model := req.Model
-	if model == "" {
-		model = b.model
-	}
-	maxTok := req.MaxTokens
-	if maxTok == 0 {
-		maxTok = b.maxTokens
-	}
-
-	rf := req.ResponseFormat
-	if rf == "" {
-		rf = b.responseFormat
-	}
-	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone, "":
-	default:
-		return "", nil, nil, fmt.Errorf("google: unknown response_format %q", rf)
-	}
-
-	sysText := req.System
-	if rf == respFmtJSONObject {
-		// Gemini json_object 模式不带 schema，用 system 指令模拟纯 JSON 输出
-		sysText += "\n\nRespond with a single valid JSON object and nothing else."
-	}
-
-	cfg := &genai.GenerateContentConfig{
-		SystemInstruction: genai.NewContentFromText(sysText, genai.RoleUser),
-	}
-	if req.Temperature != nil {
-		cfg.Temperature = genai.Ptr(float32(*req.Temperature))
-	} else if b.temperature != nil {
-		cfg.Temperature = genai.Ptr(float32(*b.temperature))
-	}
-	if req.TopP != nil {
-		cfg.TopP = genai.Ptr(float32(*req.TopP))
-	} else if b.topP != nil {
-		cfg.TopP = genai.Ptr(float32(*b.topP))
-	}
-	if maxTok > 0 {
-		cfg.MaxOutputTokens = int32(maxTok)
-	}
-
-	switch rf {
-	case respFmtJSONSchema:
-		cfg.ResponseMIMEType = "application/json"
-		if req.JSONSchema != nil {
-			// SDK 支持直接传 map 作为 raw JSON schema，与 LinguaFlow 协议零转换
-			cfg.ResponseJsonSchema = req.JSONSchema
-		}
-	case respFmtJSONObject:
-		cfg.ResponseMIMEType = "application/json"
-	case respFmtText, respFmtNone, "":
-		// 不约束，沿用 Gemini 默认 text/plain
-	}
-
-	if b.thinking.Set {
-		if b.thinking.Level == backend.ThinkingOff {
-			// 协议无 ThinkingLevel 关闭档，显式关闭 = thinkingBudget 0。
-			cfg.ThinkingConfig = &genai.ThinkingConfig{ThinkingBudget: genai.Ptr(int32(0))}
-		} else {
-			// 仅设 ThinkingLevel；不设 ThinkingBudget / IncludeThoughts（默认不返回 thoughts）。
-			cfg.ThinkingConfig = &genai.ThinkingConfig{
-				ThinkingLevel: toGoogleThinkingLevel(b.thinking.Level),
-			}
-		}
-	}
-
-	contents := []*genai.Content{genai.NewContentFromText(req.User, genai.RoleUser)}
-	return model, contents, cfg, nil
 }
 
 func toGoogleThinkingLevel(level backend.ThinkingLevel) genai.ThinkingLevel {
@@ -298,37 +127,17 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	if err != nil || t < 0 {
 		return nil, errors.New("google: invalid timeout")
 	}
-	stream := backend.BoolOpt(opts, "stream", false)
-	headers := make(http.Header)
-	headers.Set("User-Agent", backend.ClientUserAgent())
-	headers.Set("X-Client-Name", backend.ClientName())
-	headers.Set("X-Client-Version", backend.ClientVersion())
-	cc := &genai.ClientConfig{
-		APIKey:     apiKey,
-		Backend:    genai.BackendGeminiAPI,
-		HTTPClient: cfg.HTTPClient,
-	}
-	cc.HTTPOptions.Headers = headers
-	// 仅非流式设置 HTTPOptions.Timeout：流式下 SDK 会在 body 读完前 cancel。
-	if t > 0 && !stream {
-		cc.HTTPOptions.Timeout = &t
-	}
-	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
-		cc.HTTPOptions.BaseURL = u
-	}
-	client, err := genai.NewClient(context.Background(), cc)
-	if err != nil {
-		return nil, fmt.Errorf("google: new client: %w", err)
-	}
-
 	b := &Backend{
 		name:           cfg.Name,
-		client:         client,
+		httpClient:     cfg.HTTPClient,
+		baseURL:        backend.StringOpt(opts, "base_url", ""),
+		apiKey:         apiKey,
+		responseBytes:  cfg.MaxResponseBytes,
 		model:          model,
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
 		timeout:        t,
 		responseFormat: rf,
-		stream:         stream,
+		stream:         backend.BoolOpt(opts, "stream", false),
 		thinking:       thinking,
 	}
 	if v, ok := opts["temperature"].(float64); ok {

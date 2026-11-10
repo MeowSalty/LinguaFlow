@@ -106,6 +106,7 @@ var serverFields = []serverField{
 	field("server.pipeline.candidate_window_mb", "LINGUAFLOW_PIPELINE_CANDIDATE_WINDOW_MB", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Pipeline.CandidateWindowMB }),
 	field("server.pipeline.max_candidate_mb", "LINGUAFLOW_PIPELINE_MAX_CANDIDATE_MB", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Pipeline.MaxCandidateMB }),
 	field("server.pipeline.max_response_mb", "LINGUAFLOW_PIPELINE_MAX_RESPONSE_MB", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Pipeline.MaxResponseMB }),
+	field("server.pipeline.response_handoff_mb", "LINGUAFLOW_PIPELINE_RESPONSE_HANDOFF_MB", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Pipeline.ResponseHandoffMB }),
 	field("server.pipeline.rss_limit_mb", "LINGUAFLOW_PIPELINE_RSS_LIMIT_MB", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Pipeline.RssLimitMB }),
 	field("server.preview.max_concurrency", "LINGUAFLOW_PREVIEW_MAX_CONCURRENCY", "integer", "serve/local", false, func(r *ResolvedServer) *int { return &r.Config.Preview.MaxConcurrency }),
 	field("server.preview.timeout", "LINGUAFLOW_PREVIEW_TIMEOUT", "duration", "serve/local", false, func(r *ResolvedServer) *time.Duration { return &r.Config.Preview.Timeout }),

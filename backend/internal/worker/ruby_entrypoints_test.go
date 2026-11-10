@@ -306,18 +306,39 @@ func TestRubyEntryFactorySharesAllowanceAcrossRounds(t *testing.T) {
 	}
 	defer e.Close()
 	var permits []*backend.RequestPermit
+	var prepared, candidateIDs []string
+	runtime := e.Rounds()[0].Runtime
 	defer func() {
 		for _, permit := range permits {
 			permit.Release()
 		}
+		for _, id := range prepared {
+			runtime.Admission.ReleasePrepared(id)
+		}
+		for _, id := range candidateIDs {
+			runtime.Admission.ReleaseBudgetEntry(id)
+		}
 	}()
-	runtime := e.Rounds()[0].Runtime
 	if runtime == nil || e.Rounds()[1].Runtime != runtime {
 		t.Fatal("one invocation created per-round runtimes")
 	}
 	admit := func(round int, stage backend.RequestStage, expected bool) {
 		t.Helper()
-		permit, _, err := runtime.Admission.TryAdmit(context.Background(), backend.RequestAdmissionIntent{RoundIndex: round, BackendID: 1, Stage: stage}, runtime.Gate)
+		id := fmt.Sprintf("entry-budget-%d", len(prepared)+len(candidateIDs))
+		intent := backend.RequestAdmissionIntent{RequestID: id, RoundIndex: round, BackendID: 1, Stage: stage}
+		if stage == backend.RequestStageMain {
+			if ok, err := runtime.Admission.PrepareMain(id, round, 0, 0, 32, 0, false); err != nil || !ok {
+				t.Fatalf("prepare entry main budget: %v/%v", ok, err)
+			}
+			prepared = append(prepared, id)
+		} else {
+			if err := runtime.Admission.RestoreBudgetEntry(id, backend.PipelineBudgetEntry{Count: 1, Bytes: 1024, Durable: true}); err != nil {
+				t.Fatal(err)
+			}
+			candidateIDs = append(candidateIDs, id)
+			intent.CandidateIDs, intent.InputBytes = []string{id}, 32
+		}
+		permit, _, err := runtime.Admission.TryAdmit(context.Background(), intent, runtime.Gate)
 		if permit != nil {
 			permits = append(permits, permit)
 		}

@@ -90,7 +90,8 @@ func (f *pauseMemoryFixture) release() {
 func (f *pauseMemoryFixture) observe() {
 	w := f.runtime.Window
 	w.mu.Lock()
-	windowBytes, windowSegments, reservedBytes := w.bytes, w.count, int64(0)
+	snapshot := w.ledger.PipelineSnapshot()
+	windowBytes, windowSegments, reservedBytes := snapshot.CandidateBytes+snapshot.GrowthBytes, snapshot.Segments, int64(0)
 	for _, entry := range w.entries {
 		if entry.reservation {
 			reservedBytes += entry.bytes

@@ -21,7 +21,8 @@ func TestRoundStoreWindowHeaderUsesDurableScopeIdentity(t *testing.T) {
 	consumer := w.EnterScope(store.ResourceIdentity(), store.RoundIdentity())
 	defer consumer.Leave()
 	consumer.RecoveryComplete()
-	if result, _ := w.TryReserveOwned("current", 16, store.ResourceIdentity(), consumer); result != pipeline.WindowPinnedLimit {
+	count := pipeline.DefaultCandidateLimits().Segments - 1
+	if result, _ := w.TryReserveOwned("current", count, store.ResourceIdentity(), consumer); result != pipeline.WindowPinnedLimit {
 		t.Fatalf("real header/store identities did not establish fixed pin: %v", result)
 	}
 	if err := w.ClaimRecovered(header.ID, header.PayloadBytes, consumer); err == nil {
@@ -32,7 +33,7 @@ func TestRoundStoreWindowHeaderUsesDurableScopeIdentity(t *testing.T) {
 	if err := w.ClaimRecovered(header.ID, header.PayloadBytes, future); err != nil {
 		t.Fatal(err)
 	}
-	if result, _ := w.TryReserveOwned("while_active", 16, store.ResourceIdentity(), consumer); result != pipeline.WindowBusy {
+	if result, _ := w.TryReserveOwned("while_active", count, store.ResourceIdentity(), consumer); result != pipeline.WindowBusy {
 		t.Fatalf("active future consumer treated as fixed occupancy: %v", result)
 	}
 	header.DTOVersion++

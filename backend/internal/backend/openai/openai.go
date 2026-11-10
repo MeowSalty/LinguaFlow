@@ -11,7 +11,6 @@ import (
 
 	openaigo "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
-	"github.com/openai/openai-go/v3/shared"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
@@ -43,6 +42,7 @@ type Backend struct {
 	topP           *float64
 	stream         bool
 	thinking       backend.Thinking
+	responseBytes  int64
 }
 
 // Name 由 BackendConfig.Name 注入；这里使用 type/model 作 fallback。
@@ -51,80 +51,6 @@ func (b *Backend) Name() string {
 		return b.name
 	}
 	return TypeName + ":" + b.model
-}
-
-func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
-	params, err := b.buildParams(req)
-	if err != nil {
-		return nil, err
-	}
-	callOpts := b.callOpts()
-	if b.stream {
-		return b.translateStream(ctx, params, callOpts)
-	}
-	resp, err := b.client.Chat.Completions.New(ctx, params, callOpts...)
-	if err != nil {
-		return nil, wrapOpenAIError(err)
-	}
-	if len(resp.Choices) == 0 {
-		return nil, emptyChoicesError(b.Name(), b.model, "", resp.Usage.PromptTokens)
-	}
-	choice := resp.Choices[0]
-	// content_filter / 空补全常返回一个 choice 但 Message.Content 为空。对齐
-	// anthropic/google：归为 EmptyResponseError（不可重试），转入 shrink/fallback，
-	// 而非把空文本当作成功响应。
-	if choice.Message.Content == "" {
-		return nil, emptyChoicesError(b.Name(), b.model, choice.FinishReason, resp.Usage.PromptTokens)
-	}
-	return &backend.Response{
-		Text: choice.Message.Content,
-		Usage: backend.Usage{
-			PromptTokens:     resp.Usage.PromptTokens,
-			CompletionTokens: resp.Usage.CompletionTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
-		},
-		Raw: resp,
-		// 截断（finish_reason=length）时部分文本仍有效：带 Truncated 标志返回，
-		// 由上层修复链抢救前缀、缺失部分走重跑通道。
-		Truncated: choice.FinishReason == finishReasonLength,
-	}, nil
-}
-
-func (b *Backend) translateStream(ctx context.Context, params openaigo.ChatCompletionNewParams, callOpts []option.RequestOption) (*backend.Response, error) {
-	params.StreamOptions = openaigo.ChatCompletionStreamOptionsParam{
-		IncludeUsage: openaigo.Bool(true),
-	}
-	stream := b.client.Chat.Completions.NewStreaming(ctx, params, callOpts...)
-	defer stream.Close()
-
-	acc := openaigo.ChatCompletionAccumulator{}
-	for stream.Next() {
-		acc.AddChunk(stream.Current())
-	}
-	if err := stream.Err(); err != nil {
-		return nil, wrapOpenAIError(err)
-	}
-	if len(acc.Choices) == 0 {
-		return nil, emptyChoicesError(b.Name(), b.model, "", acc.Usage.PromptTokens)
-	}
-	choice := acc.Choices[0]
-	// 流式同理：choice 非空但累计内容为空（content_filter 常见形态）需归为
-	// EmptyResponseError，与非流式路径保持一致。
-	if choice.Message.Content == "" {
-		return nil, emptyChoicesError(b.Name(), b.model, choice.FinishReason, acc.Usage.PromptTokens)
-	}
-	return &backend.Response{
-		Text: choice.Message.Content,
-		Usage: backend.Usage{
-			PromptTokens:     acc.Usage.PromptTokens,
-			CompletionTokens: acc.Usage.CompletionTokens,
-			TotalTokens:      acc.Usage.TotalTokens,
-		},
-		Raw: acc.ChatCompletion,
-		// 流式同理：截断（finish_reason=length）时累积文本仍有效，
-		// 带 Truncated 标志交由上层修复链处理，与非流式路径保持一致。
-		Truncated: choice.FinishReason == finishReasonLength,
-	}, nil
 }
 
 // emptyChoicesError 构造带诊断信息的 EmptyResponseError：无 choices 时 finishReason
@@ -137,73 +63,6 @@ func emptyChoicesError(name, model, finishReason string, promptTokens int64) err
 		FinishReason: finishReason,
 		PromptTokens: promptTokens,
 	}
-}
-
-func (b *Backend) buildParams(req backend.Request) (openaigo.ChatCompletionNewParams, error) {
-	model := req.Model
-	if model == "" {
-		model = b.model
-	}
-	maxTok := req.MaxTokens
-	if maxTok == 0 {
-		maxTok = b.maxTokens
-	}
-
-	params := openaigo.ChatCompletionNewParams{
-		Model: shared.ChatModel(model),
-		Messages: []openaigo.ChatCompletionMessageParamUnion{
-			openaigo.SystemMessage(req.System),
-			openaigo.UserMessage(req.User),
-		},
-	}
-	if req.Temperature != nil {
-		params.Temperature = openaigo.Float(*req.Temperature)
-	} else if b.temperature != nil {
-		params.Temperature = openaigo.Float(*b.temperature)
-	}
-	if req.TopP != nil {
-		params.TopP = openaigo.Float(*req.TopP)
-	} else if b.topP != nil {
-		params.TopP = openaigo.Float(*b.topP)
-	}
-	if maxTok > 0 {
-		params.MaxTokens = openaigo.Int(maxTok)
-	}
-
-	rf := req.ResponseFormat
-	if rf == "" {
-		rf = b.responseFormat
-	}
-	switch rf {
-	case respFmtJSONSchema:
-		params.ResponseFormat = openaigo.ChatCompletionNewParamsResponseFormatUnion{
-			OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
-				JSONSchema: shared.ResponseFormatJSONSchemaJSONSchemaParam{
-					Name:   "linguaflow_translations",
-					Strict: openaigo.Bool(true),
-					Schema: req.JSONSchema,
-				},
-			},
-		}
-	case respFmtJSONObject:
-		params.ResponseFormat = openaigo.ChatCompletionNewParamsResponseFormatUnion{
-			OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
-		}
-	case respFmtText, respFmtNone, "":
-		// 不设置 ResponseFormat，让网关用默认。
-	default:
-		return params, fmt.Errorf("openai: unknown response_format %q", rf)
-	}
-	if b.thinking.Set {
-		if b.thinking.Level == backend.ThinkingOff {
-			// off：开关开启 + 显式关闭，映射为协议原生 reasoning_effort=none。
-			params.ReasoningEffort = shared.ReasoningEffortNone
-		} else {
-			// minimal/low/medium/high 与 shared.ReasoningEffort 字面一致。
-			params.ReasoningEffort = shared.ReasoningEffort(b.thinking.Level)
-		}
-	}
-	return params, nil
 }
 
 func (b *Backend) callOpts() []option.RequestOption {
@@ -273,6 +132,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	}
 	b := &Backend{
 		name:           cfg.Name,
+		responseBytes:  cfg.MaxResponseBytes,
 		client:         openaigo.NewClient(clientOpts...),
 		model:          model,
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", 0),

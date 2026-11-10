@@ -76,6 +76,18 @@ func (_u *JobUpdate) SetNillablePauseRequested(v *bool) *JobUpdate {
 	return _u
 }
 
+// SetPipelineRuntimeState sets the "pipeline_runtime_state" field.
+func (_u *JobUpdate) SetPipelineRuntimeState(v []byte) *JobUpdate {
+	_u.mutation.SetPipelineRuntimeState(v)
+	return _u
+}
+
+// ClearPipelineRuntimeState clears the value of the "pipeline_runtime_state" field.
+func (_u *JobUpdate) ClearPipelineRuntimeState() *JobUpdate {
+	_u.mutation.ClearPipelineRuntimeState()
+	return _u
+}
+
 // SetProjectID sets the "project_id" field.
 func (_u *JobUpdate) SetProjectID(v int) *JobUpdate {
 	_u.mutation.SetProjectID(v)
@@ -629,6 +641,12 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.PauseRequested(); ok {
 		_spec.SetField(job.FieldPauseRequested, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.PipelineRuntimeState(); ok {
+		_spec.SetField(job.FieldPipelineRuntimeState, field.TypeBytes, value)
+	}
+	if _u.mutation.PipelineRuntimeStateCleared() {
+		_spec.ClearField(job.FieldPipelineRuntimeState, field.TypeBytes)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)
 	}
@@ -996,6 +1014,18 @@ func (_u *JobUpdateOne) SetNillablePauseRequested(v *bool) *JobUpdateOne {
 	if v != nil {
 		_u.SetPauseRequested(*v)
 	}
+	return _u
+}
+
+// SetPipelineRuntimeState sets the "pipeline_runtime_state" field.
+func (_u *JobUpdateOne) SetPipelineRuntimeState(v []byte) *JobUpdateOne {
+	_u.mutation.SetPipelineRuntimeState(v)
+	return _u
+}
+
+// ClearPipelineRuntimeState clears the value of the "pipeline_runtime_state" field.
+func (_u *JobUpdateOne) ClearPipelineRuntimeState() *JobUpdateOne {
+	_u.mutation.ClearPipelineRuntimeState()
 	return _u
 }
 
@@ -1581,6 +1611,12 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	}
 	if value, ok := _u.mutation.PauseRequested(); ok {
 		_spec.SetField(job.FieldPauseRequested, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PipelineRuntimeState(); ok {
+		_spec.SetField(job.FieldPipelineRuntimeState, field.TypeBytes, value)
+	}
+	if _u.mutation.PipelineRuntimeStateCleared() {
+		_spec.ClearField(job.FieldPipelineRuntimeState, field.TypeBytes)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)

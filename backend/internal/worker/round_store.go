@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -26,7 +27,7 @@ type roundStore struct {
 	store      *workstate.Store
 	scope      workstate.Scope
 	indexToID  map[int]int
-	idToIndex  map[int]int
+	canonical  *pipeline.Document
 	snapshot   *service.JobExecutionSnapshot
 	round      int
 	digest     string
@@ -40,16 +41,13 @@ type roundStore struct {
 func newRoundStore(client *ent.Client, scope workstate.Scope, indices map[int]int, snapshot *service.JobExecutionSnapshot, round int, qaEngine *qa.Engine, autoReject bool, driver string, memory tm.TranslationMemory, onCommit func()) *roundStore {
 	data, _ := json.Marshal(snapshot)
 	hash := sha256.Sum256(data)
-	s := &roundStore{client: client, store: workstate.NewStore(client), scope: scope, indexToID: indices, idToIndex: map[int]int{}, snapshot: snapshot, round: round, digest: hex.EncodeToString(hash[:]), qa: qaEngine, autoReject: autoReject, driver: driver, memory: memory, onCommit: onCommit}
-	for idx, id := range indices {
-		s.idToIndex[id] = idx
-	}
+	s := &roundStore{client: client, store: workstate.NewStore(client), scope: scope, indexToID: indices, snapshot: snapshot, round: round, digest: hex.EncodeToString(hash[:]), qa: qaEngine, autoReject: autoReject, driver: driver, memory: memory, onCommit: onCommit}
 	return s
 }
 func (s *roundStore) ResourceIdentity() int { return s.scope.ResourceID }
 func (s *roundStore) RoundIdentity() int    { return s.scope.RoundID }
 func (s *roundStore) WorkIdentity(index int) string {
-	id, ok := s.indexToID[index]
+	id, ok := s.segmentID(index)
 	if !ok {
 		return ""
 	}
@@ -75,21 +73,21 @@ func (s *roundStore) recovery(state workstate.RoundState) (pipeline.RoundRecover
 		return r, permanentStoreError{fmt.Errorf("sealed manifest has %d members but total is %d: %w", len(state.Members), state.Total, workstate.ErrManifest)}
 	}
 	for _, id := range state.Members {
-		idx, ok := s.idToIndex[id]
+		idx, ok := s.segmentIndex(id)
 		if !ok {
 			return r, permanentStoreError{workstate.ErrManifest}
 		}
 		r.Members = append(r.Members, idx)
 	}
 	for _, id := range state.Completed {
-		idx, ok := s.idToIndex[id]
+		idx, ok := s.segmentIndex(id)
 		if !ok {
 			return r, permanentStoreError{workstate.ErrManifest}
 		}
 		r.Completed = append(r.Completed, idx)
 	}
 	for _, w := range state.Work {
-		idx, ok := s.idToIndex[w.SegmentID]
+		idx, ok := s.segmentIndex(w.SegmentID)
 		if !ok {
 			return r, permanentStoreError{workstate.ErrManifest}
 		}
@@ -117,7 +115,7 @@ func (s *roundStore) Seal(ctx context.Context, indices []int) (pipeline.RoundRec
 	ids := make([]int, len(indices))
 	for i, idx := range indices {
 		var ok bool
-		ids[i], ok = s.indexToID[idx]
+		ids[i], ok = s.segmentID(idx)
 		if !ok {
 			return pipeline.RoundRecovery{}, permanentStoreError{workstate.ErrManifest}
 		}
@@ -142,7 +140,7 @@ func (s *roundStore) Candidates(ctx context.Context, after, limit int) ([]*pipel
 		if err != nil {
 			return nil, after, permanentStoreError{err}
 		}
-		idx, ok := s.idToIndex[row.SegmentID]
+		idx, ok := s.segmentIndex(row.SegmentID)
 		if !ok || c.Segment.DBID != row.SegmentID || c.ID != row.ID || c.Version != row.Version {
 			return nil, after, permanentStoreError{workstate.ErrManifest}
 		}
@@ -181,6 +179,9 @@ func (s *roundStore) Candidates(ctx context.Context, after, limit int) ([]*pipel
 	return candidates, next, nil
 }
 func candidateBaseline(c *pipeline.Candidate) *string {
+	if c.BaselineDigest != "" {
+		return nil
+	}
 	if c.Segment.TargetIsNull {
 		return nil
 	}
@@ -188,6 +189,10 @@ func candidateBaseline(c *pipeline.Candidate) *string {
 	return &target
 }
 func (s *roundStore) Save(ctx context.Context, c *pipeline.Candidate) error {
+	payloadLimit := pipeline.DefaultCandidateLimits().ItemBytes
+	if runtime := pipeline.ExecutionRuntimeFromContext(ctx); runtime != nil {
+		payloadLimit = runtime.BudgetLimits().Item
+	}
 	c.RetryEpoch = s.scope.RetryEpoch
 	if c.WorkID == "" {
 		c.WorkID = s.WorkIdentity(c.Index)
@@ -196,6 +201,11 @@ func (s *roundStore) Save(ctx context.Context, c *pipeline.Candidate) error {
 		return permanentStoreError{workstate.ErrManifest}
 	}
 	payload, err := c.Encode()
+	if err != nil {
+		return permanentStoreError{err}
+	}
+	c.StoredBytes = int64(len(payload))
+	header, err := c.EncodeHeader()
 	if err != nil {
 		return permanentStoreError{err}
 	}
@@ -220,7 +230,7 @@ func (s *roundStore) Save(ctx context.Context, c *pipeline.Candidate) error {
 	}
 	// The payload and its successor budget/deadline form one handoff. A
 	// failure must leave neither a hidden draft nor unaccounted window bytes.
-	err = s.store.SaveCandidateWithCursor(ctx, workstate.Candidate{ID: c.ID, WorkID: c.WorkID, LastAlignmentRequestID: c.LastAlignmentRequestID, ParentRequestID: c.ParentRequestID, Version: c.Version, Scope: s.scope, SegmentID: c.Segment.DBID, DTOVersion: c.DTOVersion, Mode: c.Mode, SnapshotDigest: s.digest, BaselineVersion: c.Segment.ContentVersion, BaselineTarget: candidateBaseline(c), BaselineStatus: c.BaselineStatus, State: state, Payload: payload}, cur)
+	err = s.store.SaveCandidateWithCursor(ctx, workstate.Candidate{PayloadLimit: payloadLimit, PipelineHeader: header, ID: c.ID, WorkID: c.WorkID, LastAlignmentRequestID: c.LastAlignmentRequestID, ParentRequestID: c.ParentRequestID, Version: c.Version, Scope: s.scope, SegmentID: c.Segment.DBID, DTOVersion: c.DTOVersion, Mode: c.Mode, SnapshotDigest: s.digest, BaselineVersion: c.Segment.ContentVersion, BaselineTarget: candidateBaseline(c), BaselineDigest: c.BaselineDigest, BaselineTargetIsNull: c.Segment.TargetIsNull, BaselineStatus: c.BaselineStatus, State: state, Payload: payload}, cur)
 	if err == nil {
 		c.StoredBytes = int64(len(payload))
 	}
@@ -259,7 +269,11 @@ func (s *roundStore) retryAttempts() int {
 	return 0
 }
 func (s *roundStore) current(ctx context.Context, index int) (workstate.Cursor, error) {
-	return s.store.LoadCursor(ctx, s.scope, s.indexToID[index])
+	id, ok := s.segmentID(index)
+	if !ok {
+		return workstate.Cursor{}, workstate.ErrManifest
+	}
+	return s.store.LoadCursor(ctx, s.scope, id)
 }
 func cursorTransition(current workstate.Cursor, next pipeline.WorkCursor) (workstate.Cursor, error) {
 	if next.Pool > current.PoolIndex {
@@ -286,9 +300,15 @@ func cursorTransition(current workstate.Cursor, next pipeline.WorkCursor) (works
 	return current, nil
 }
 func (s *roundStore) Cursors(ctx context.Context, transitions []pipeline.CursorTransition) error {
+	return s.failureCursors(ctx, "", transitions)
+}
+func (s *roundStore) FailureCursors(ctx context.Context, requestID string, transitions []pipeline.CursorTransition) error {
+	return s.failureCursors(ctx, requestID, transitions)
+}
+func (s *roundStore) failureCursors(ctx context.Context, requestID string, transitions []pipeline.CursorTransition) error {
 	ids := make([]int, len(transitions))
 	for i, t := range transitions {
-		id, ok := s.indexToID[t.Index]
+		id, ok := s.segmentID(t.Index)
 		if !ok {
 			return permanentStoreError{workstate.ErrManifest}
 		}
@@ -306,12 +326,15 @@ func (s *roundStore) Cursors(ctx context.Context, transitions []pipeline.CursorT
 		}
 		next = append(next, workstate.CursorTransition{SegmentID: ids[i], Cursor: cursor})
 	}
+	if requestID != "" {
+		return s.classify(s.store.SaveFailureCursors(ctx, s.scope, requestID, next))
+	}
 	return s.classify(s.store.SaveCursors(ctx, s.scope, next))
 }
 func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) error {
 	ids := make([]int, len(in.Indices))
 	for i, idx := range in.Indices {
-		id, ok := s.indexToID[idx]
+		id, ok := s.segmentID(idx)
 		if !ok {
 			return permanentStoreError{workstate.ErrManifest}
 		}
@@ -343,15 +366,22 @@ func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) err
 			return s.classify(err)
 		}
 	}
-	model := "legacy_round_shared"
-	if s.snapshot.SchemaVersion >= 2 {
-		model = "stage_separated"
-	}
+	model := "stage_separated"
 	req := workstate.Request{ID: in.ID, CandidateID: in.CandidateID, Scope: s.scope, SegmentIDs: ids, Stage: string(in.Stage), BackendID: in.BackendID, BudgetModel: model, InputDigest: in.InputDigest,
 		MainAttempt: in.Stage == backend.RequestStageMain && in.Phase != "prompt_upgrade", AlignmentAttempt: in.Stage == backend.RequestStageAlignment && in.NetworkAttempt == 0,
 		MaxMainAttempts: min(max(1, retry+1), 3), MaxAlignmentAttempts: max(1, rubyBudget)}
+	if len(in.PromotionMembers) > 0 {
+		req.FreezePayload, req.SnapshotDigest, req.BusinessBound = in.FreezePayload, s.digest, in.BusinessBound
+		for _, m := range in.PromotionMembers {
+			id, ok := s.segmentID(m.Index)
+			if !ok {
+				return permanentStoreError{workstate.ErrManifest}
+			}
+			req.PromotionMembers = append(req.PromotionMembers, workstate.PromotionMember{SegmentID: id, WorkID: s.WorkIdentity(m.Index), CandidateID: m.CandidateID, BaselineVersion: m.BaselineVersion, BaselineTarget: m.BaselineTarget, BaselineStatus: m.BaselineStatus, SourceGeneration: s.scope.SourceGeneration, SourceRevisionID: s.scope.SourceRevisionID})
+		}
+	}
 	for _, m := range in.Members {
-		id, ok := s.indexToID[m.Index]
+		id, ok := s.segmentID(m.Index)
 		if !ok {
 			return permanentStoreError{workstate.ErrManifest}
 		}
@@ -418,16 +448,33 @@ func (s *roundStore) ValidateCandidate(ctx context.Context, c *pipeline.Candidat
 		return false, s.classify(err)
 	}
 	sameTarget := (row.TargetText == nil && c.Segment.TargetIsNull) || (row.TargetText != nil && !c.Segment.TargetIsNull && *row.TargetText == c.BaselineTarget)
+	if c.BaselineDigest != "" {
+		sum := sha256.New()
+		if row.TargetText != nil {
+			_, _ = io.WriteString(sum, *row.TargetText)
+		}
+		sameTarget = c.Segment.TargetIsNull == (row.TargetText == nil) && c.BaselineDigest == hex.EncodeToString(sum.Sum(nil))
+	}
 	return row.ContentVersion == c.Segment.ContentVersion && string(row.Status) == c.BaselineStatus && sameTarget, nil
 }
-func (s *roundStore) Commit(ctx context.Context, c *pipeline.Candidate, result pipeline.TranslatedSegment) (pipeline.CommitOutcome, error) {
-	issues := append([]qa.QualityIssue(nil), result.Issues...)
+func (s *roundStore) PrepareCandidateCommit(ctx context.Context, b *backend.BuildBounds, c *pipeline.Candidate, result pipeline.TranslatedSegment) (pipeline.TranslatedSegment, error) {
+	issues := result.Issues
 	status := string(service.SegmentStatusTranslated)
 	noop := false
 	clearReview := false
 	if c.Mode == pipeline.RoundModeTranslate {
 		if s.qa != nil {
-			issues = append(issues, s.qa.Run(ctx, buildQACheckInputs(pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{result}}))...)
+			if err := b.ReserveNodes(1, 256); err != nil {
+				return result, err
+			}
+			fresh, err := s.qa.RunBounded(ctx, b, buildQACheckInputs(pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{result}}))
+			if err != nil {
+				return result, err
+			}
+			if err = b.ReserveNodes(int64(len(issues)+len(fresh)), 256); err != nil {
+				return result, err
+			}
+			issues = append(issues, fresh...)
 		}
 		if s.snapshot.AutoApprove {
 			status = string(service.SegmentStatusApproved)
@@ -439,17 +486,54 @@ func (s *roundStore) Commit(ctx context.Context, c *pipeline.Candidate, result p
 	} else {
 		status = c.BaselineStatus
 		noop = result.TargetText == c.BaselineTarget
+		if c.BaselineDigest != "" {
+			sum := sha256.New()
+			_, _ = io.WriteString(sum, result.TargetText)
+			noop = !c.Segment.TargetIsNull && c.BaselineDigest == hex.EncodeToString(sum.Sum(nil))
+		}
 		if !noop {
 			var fresh []qa.QualityIssue
 			if s.qa != nil {
-				fresh = s.qa.Run(ctx, buildQACheckInputs(pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{result}}))
+				if err := b.ReserveNodes(1, 256); err != nil {
+					return result, err
+				}
+				var err error
+				fresh, err = s.qa.RunBounded(ctx, b, buildQACheckInputs(pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{result}}))
+				if err != nil {
+					return result, err
+				}
 			}
-			issues = qa.ReviseFinalIssues(c.Segment.Issues, fresh, s.snapshot.Rounds[s.round].Revise.IssueCodes, s.qa != nil)
+			var err error
+			issues, err = qa.ReviseFinalIssuesBounded(b, result.Issues, fresh, s.snapshot.Rounds[s.round].Revise.IssueCodes, s.qa != nil)
+			if err != nil {
+				return result, err
+			}
 		} else {
-			issues = c.Segment.Issues
+			issues = result.Issues
 		}
 	}
-	committed, err := s.store.Commit(ctx, workstate.CommitInput{Scope: s.scope, SegmentID: c.Segment.DBID, CommitID: c.ID, CandidateID: c.ID, CandidateVersion: c.Version, BaselineVersion: c.Segment.ContentVersion, BaselineTarget: candidateBaseline(c), BaselineStatus: c.BaselineStatus, Target: result.TargetText, Status: status, Issues: issues, ClearReview: clearReview, Noop: noop})
+	result.Issues = issues
+	result.PreparedStatus = status
+	result.PreparedNoop = noop
+	result.PreparedClearReview = clearReview
+	result.CommitPrepared = true
+	return result, nil
+}
+func (s *roundStore) Commit(ctx context.Context, c *pipeline.Candidate, result pipeline.TranslatedSegment) (pipeline.CommitOutcome, error) {
+	if !result.CommitPrepared {
+		b, e := backend.NewBuildBounds(pipeline.DefaultCandidateLimits().ItemBytes, 0)
+		if e != nil {
+			return "", e
+		}
+		var err error
+		result, err = s.PrepareCandidateCommit(ctx, b, c, result)
+		if err != nil {
+			return "", err
+		}
+	}
+	status, noop, clearReview := result.PreparedStatus, result.PreparedNoop, result.PreparedClearReview
+	issues := result.Issues
+	committed, err := s.store.Commit(ctx, workstate.CommitInput{Scope: s.scope, SegmentID: c.Segment.DBID, CommitID: c.ID, CandidateID: c.ID, CandidateVersion: c.Version, BaselineVersion: c.Segment.ContentVersion, BaselineTarget: candidateBaseline(c), BaselineDigest: c.BaselineDigest, BaselineTargetIsNull: c.Segment.TargetIsNull, BaselineStatus: c.BaselineStatus, Target: result.TargetText, Status: status, Issues: issues, IssuesPayload: result.IssuesPayload, ClearReview: clearReview, Noop: noop})
 	outcome := pipeline.CommitOutcome(committed.Outcome)
 	if err != nil {
 		return outcome, s.classify(err)

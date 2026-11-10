@@ -91,7 +91,7 @@ func convertProfile(raw []byte) (execution.ProfileSpec, error) {
 		return out, err
 	}
 	out.SchemaVersion = targetSchemaVersion
-	return out, execution.ValidateProfile(out)
+	return out, validateFrozenProfile(out)
 }
 
 func semanticCodes() []string {
@@ -144,7 +144,7 @@ func freezeExecution(out execution.JobExecutionSnapshot) (*execution.ResolvedExe
 	for i, round := range out.Rounds {
 		out.Sources = append(out.Sources, frozenSource("round", strconv.Itoa(i), round))
 	}
-	if err := execution.ValidateSpec(&out); err != nil {
+	if err := validateFrozenExecution(&out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -157,7 +157,7 @@ func frozenSource(kind, id string, data any) execution.AssetSource {
 }
 
 // Materialize only defaults that the v0.13.0 provider adapters supplied. The
-// current target validator verifies the completed result without choosing them.
+// frozen target validator verifies the completed result without choosing them.
 func freezeBackendOptions(provider string, input map[string]any) (map[string]any, error) {
 	if !supportedProvider(provider) {
 		return nil, errors.New("unsupported legacy provider")

@@ -975,6 +975,9 @@ func (s *JobService) recoverLegacyJob(ctx context.Context, id int) (bool, error)
 	if current.Status != JobStatusPending && current.Status != JobStatusRunning && current.Status != JobStatusPausing {
 		return false, nil
 	}
+	if err := execution.ValidateExecutionConfigFormat(current.ExecutionConfig); err != nil {
+		return false, nil
+	}
 	var sourceErr error
 	for _, item := range current.Edges.JobResources {
 		if item.Status != JobResourceStatusPending && item.Status != JobResourceStatusRunning {
@@ -2090,6 +2093,9 @@ func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
 	if job == nil || len(job.ExecutionConfig) == 0 {
 		return nil, errors.New("missing execution snapshot")
 	}
+	if err := execution.ValidateExecutionConfigFormat(job.ExecutionConfig); err != nil {
+		return nil, err
+	}
 	raw, err := json.Marshal(job.ExecutionConfig)
 	if err != nil {
 		return nil, fmt.Errorf("marshal execution config: %w", err)
@@ -2102,6 +2108,16 @@ func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
 		return nil, err
 	}
 	return &snap, nil
+}
+
+// CheckExecutionFormat is read-only and runs before translation queue claims.
+// Historical queries and explicit cancellation/deletion do not call it.
+func (s *JobService) CheckExecutionFormat(ctx context.Context, jobID int) error {
+	row, err := s.client.Job.Query().Where(job.IDEQ(jobID)).Select(job.FieldID, job.FieldExecutionConfig).Only(ctx)
+	if err != nil {
+		return err
+	}
+	return execution.ValidateExecutionConfigFormat(row.ExecutionConfig)
 }
 
 // GetExecutionSnapshot 从任务获取执行快照。

@@ -102,6 +102,9 @@ func saveCursorRows(ctx context.Context, tx *ent.Client, scope Scope, transition
 			}
 			if c.State != "" {
 				u.SetState(c.State)
+				if c.State == "resolved" || c.State == "unresolved" || c.State == "stale" || c.State == "rejected" || c.State == "cancelled" {
+					u.SetMemberOwned(false)
+				}
 			}
 			if c.PromptPhase != "" {
 				u.SetPromptPhase(c.PromptPhase)
@@ -118,7 +121,7 @@ func saveCursorRows(ctx context.Context, tx *ent.Client, scope Scope, transition
 				return err
 			}
 			if c.State == "rejected" || c.State == "stale" || c.State == "unresolved" {
-				if _, err := tx.WorkCandidate.Update().Where(workcandidate.WorkItemIDIn(g.ids[start:end]...)).SetState(c.State).ClearPayload().SetPayloadBytes(0).Save(ctx); err != nil {
+				if _, err := tx.WorkCandidate.Update().Where(workcandidate.WorkItemIDIn(g.ids[start:end]...)).SetState(c.State).ClearPayload().SetGrowthReserved(false).SetPayloadBytes(0).Save(ctx); err != nil {
 					return err
 				}
 			}
@@ -200,6 +203,12 @@ func checkedUpdate(ctx context.Context, update *ent.WorkItemUpdate, expected int
 }
 
 func (s *Store) SaveCursors(ctx context.Context, scope Scope, transitions []CursorTransition) error {
+	return s.saveCursors(ctx, scope, "", transitions)
+}
+func (s *Store) SaveFailureCursors(ctx context.Context, scope Scope, requestID string, transitions []CursorTransition) error {
+	return s.saveCursors(ctx, scope, requestID, transitions)
+}
+func (s *Store) saveCursors(ctx context.Context, scope Scope, requestID string, transitions []CursorTransition) error {
 	if len(transitions) == 0 {
 		return nil
 	}
@@ -222,7 +231,38 @@ func (s *Store) SaveCursors(ctx context.Context, scope Scope, transitions []Curs
 		if err != nil {
 			return err
 		}
-		return saveCursorRows(ctx, tx, scope, transitions, rows, expected)
+		if err := saveCursorRows(ctx, tx, scope, transitions, rows, expected); err != nil {
+			return err
+		}
+		if requestID != "" {
+			j, err := tx.Job.Get(ctx, scope.JobID)
+			if err != nil {
+				return err
+			}
+			state, err := decodeRuntimeState(j.PipelineRuntimeState)
+			if err != nil {
+				return err
+			}
+			if state.ProgressID == requestID {
+				state.ProgressID = ""
+				state.ResponseID = ""
+				if state.BusinessOwner == requestID {
+					state.BusinessOwner = ""
+				}
+				for _, t := range transitions {
+					if t.Cursor.State == "pending" {
+						if state.ProgressID != "" {
+							return ErrManifest
+						}
+						state.ProgressID = "member:" + WorkIdentity(scope, t.SegmentID)
+					}
+				}
+				if err := saveRuntimeState(ctx, tx, scope.JobID, state); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
 	return s.finishUnknown(ctx, scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
 		rows, err := queryMemberRows(ctx, tx, scope, ids, true, true)

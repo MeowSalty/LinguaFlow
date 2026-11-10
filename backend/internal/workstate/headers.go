@@ -2,7 +2,9 @@ package workstate
 
 import (
 	"context"
+	"entgo.io/ent/dialect/sql"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
@@ -13,6 +15,8 @@ import (
 // CandidateHeader contains no source/target or serialized DTO. Recovery can
 // rebuild window accounting before decoding any candidate bodies.
 type CandidateHeader struct {
+	GrowthReserved bool
+	PipelineHeader []byte
 	DatabaseID     int
 	ID             string
 	Version        int64
@@ -26,13 +30,26 @@ type CandidateHeader struct {
 }
 
 func (s *Store) LoadCandidateHeaders(ctx context.Context, jobID, afterID, limit int) ([]CandidateHeader, int, error) {
+	state, err := s.LoadRuntimeState(ctx, jobID)
+	if err != nil {
+		return nil, afterID, err
+	}
 	if limit < 1 || limit > 256 {
 		return nil, afterID, fmt.Errorf("invalid candidate header page")
 	}
+	invalid, err := s.client.WorkCandidate.Query().Where(workcandidate.IDGT(afterID), workcandidate.StateIn("pending_alignment", "ready_to_commit"), workcandidate.HasWorkItemWith(workitem.JobIDEQ(jobID)), predicate.WorkCandidate(func(q *sql.Selector) {
+		q.Where(sql.ExprP("LENGTH("+q.C(workcandidate.FieldPipelineHeader)+") > ?", 2048))
+	})).Exist(ctx)
+	if err != nil {
+		return nil, afterID, err
+	}
+	if invalid {
+		return nil, afterID, ErrManifest
+	}
 	rows, err := s.client.WorkCandidate.Query().Where(workcandidate.IDGT(afterID), workcandidate.StateIn("pending_alignment", "ready_to_commit"), workcandidate.HasWorkItemWith(workitem.JobIDEQ(jobID))).
-		Select(workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldVersion, workcandidate.FieldWorkItemID, workcandidate.FieldDtoVersion, workcandidate.FieldPayloadBytes, workcandidate.FieldState, workcandidate.FieldSnapshotDigest, workcandidate.FieldMode, workcandidate.FieldSourceGeneration, workcandidate.FieldSourceRevisionID).
+		Select(workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldVersion, workcandidate.FieldWorkItemID, workcandidate.FieldDtoVersion, workcandidate.FieldPayloadBytes, workcandidate.FieldGrowthReserved, workcandidate.FieldState, workcandidate.FieldSnapshotDigest, workcandidate.FieldMode, workcandidate.FieldSourceGeneration, workcandidate.FieldSourceRevisionID, workcandidate.FieldPipelineHeader).
 		Order(ent.Asc(workcandidate.FieldID)).Limit(limit).WithWorkItem(func(q *ent.WorkItemQuery) {
-		q.Select(workitem.FieldID, workitem.FieldJobID, workitem.FieldResourceID, workitem.FieldJobRoundID, workitem.FieldSegmentID, workitem.FieldRetryEpoch)
+		q.Select(workitem.FieldID, workitem.FieldJobID, workitem.FieldResourceID, workitem.FieldJobRoundID, workitem.FieldSegmentID, workitem.FieldRetryEpoch, workitem.FieldAlignmentAttempts, workitem.FieldAlignmentNetworkAttempts)
 	}).All(ctx)
 	if err != nil {
 		return nil, afterID, err
@@ -43,7 +60,7 @@ func (s *Store) LoadCandidateHeaders(ctx context.Context, jobID, afterID, limit 
 		if w == nil {
 			return nil, afterID, ErrManifest
 		}
-		result = append(result, CandidateHeader{DatabaseID: row.ID, ID: row.Identity, Version: row.Version, Scope: Scope{JobID: w.JobID, ResourceID: w.ResourceID, RoundID: w.JobRoundID, RetryEpoch: w.RetryEpoch, SourceGeneration: row.SourceGeneration, SourceRevisionID: row.SourceRevisionID}, SegmentID: w.SegmentID, DTOVersion: row.DtoVersion, PayloadBytes: row.PayloadBytes, State: row.State, SnapshotDigest: row.SnapshotDigest, Mode: row.Mode})
+		result = append(result, CandidateHeader{GrowthReserved: row.GrowthReserved || w.AlignmentAttempts > 0 || w.AlignmentNetworkAttempts > 0 || state.ProgressID == row.Identity, PipelineHeader: row.PipelineHeader, DatabaseID: row.ID, ID: row.Identity, Version: row.Version, Scope: Scope{JobID: w.JobID, ResourceID: w.ResourceID, RoundID: w.JobRoundID, RetryEpoch: w.RetryEpoch, SourceGeneration: row.SourceGeneration, SourceRevisionID: row.SourceRevisionID}, SegmentID: w.SegmentID, DTOVersion: row.DtoVersion, PayloadBytes: row.PayloadBytes, State: row.State, SnapshotDigest: row.SnapshotDigest, Mode: row.Mode})
 		afterID = row.ID
 	}
 	return result, afterID, nil

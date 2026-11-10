@@ -9,7 +9,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
 const ignoredStrategyMarker = "synthetic-private-legacy-strategy-marker"
@@ -154,7 +153,7 @@ func TestSourceRoundStrategyMigrationMatchesRemovedFieldBaseline(t *testing.T) {
 			if bytes.Contains(legacyJSON, []byte(ignoredStrategyMarker)) || bytes.Contains(legacyJSON, []byte("snapshot-original-secret")) {
 				t.Fatal("ignored payload or plaintext credential survived migration")
 			}
-			snapshot, err := service.GetSnapshot(legacyAfter)
+			snapshot, err := readFrozenExecutionTest(legacyAfter)
 			if err != nil {
 				t.Fatal(err)
 			}

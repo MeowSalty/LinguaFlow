@@ -5,6 +5,7 @@ import "github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 type JobExecutionSnapshot struct {
 	SchemaVersion            int           `json:"schema_version"`
 	DefaultsVersion          int           `json:"defaults_version"`
+	ResponseFormatVersion    int           `json:"response_format_version"`
 	Sources                  []AssetSource `json:"sources"`
 	RubyTemplates            RubyTemplates `json:"ruby_templates"`
 	RubyProtocolVersion      int           `json:"ruby_protocol_version,omitempty"`

@@ -47,6 +47,7 @@ type ReviseHandler struct {
 
 	RoundIndex          int // execution plan round index, set by caller
 	prepareOnly         bool
+	buildBounds         *backend.BuildBounds
 	RubyProtocolVersion int
 
 	// Protector/Ruby* 与 TranslateHandler 同名同语义（protect 规则与 ruby 配置
@@ -119,6 +120,16 @@ func (h *ReviseHandler) buildProtectedInputs(
 	idxs []int,
 	codes map[string]struct{},
 ) ([]prompt.ReviseSegment, []reviseProtectState, map[string][]prompt.RubyAnnotation, error) {
+	b, err := candidateBounds(h.buildBounds)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err = b.ReserveNodes(int64(len(idxs)), 128); err != nil {
+		return nil, nil, nil, err
+	}
+	if err = b.ReserveNodes(int64(len(idxs)), 64); err != nil {
+		return nil, nil, nil, err
+	}
 	segments := make([]prompt.ReviseSegment, 0, len(idxs))
 	states := make([]reviseProtectState, len(idxs))
 	var rubyAnns map[string][]prompt.RubyAnnotation
@@ -129,21 +140,31 @@ func (h *ReviseHandler) buildProtectedInputs(
 		target := seg.Target
 		if h.RubyEnabled {
 			var items []ruby.Item
-			target, items = extractTargetRuby(target)
+			var extractErr error
+			items, target, extractErr = ruby.ExtractBounded(b, target)
+			if extractErr != nil {
+				return nil, nil, nil, extractErr
+			}
 			if len(items) > 0 {
 				st.rubyItems = items
+				if err := b.ReserveNodes(int64(len(items)), 64); err != nil {
+					return nil, nil, nil, err
+				}
 				anns := make([]prompt.RubyAnnotation, len(items))
 				for i, it := range items {
 					anns[i] = prompt.RubyAnnotation{ID: it.ID, Base: it.SourceBase, Text: it.SourceText}
 				}
 				if rubyAnns == nil {
+					if err := b.ReserveNodes(int64(len(idxs))+1, 128); err != nil {
+						return nil, nil, nil, err
+					}
 					rubyAnns = make(map[string][]prompt.RubyAnnotation)
 				}
 				rubyAnns[seg.ID] = anns
 			}
 		}
 
-		protectedTarget, mapping, err := protect.ProtectText(h.Protector, target)
+		protectedTarget, mapping, err := protect.ProtectTextBounded(b, h.Protector, target, b.OutputLimit())
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("protect target segment %d: %w", idx, err)
 		}
@@ -151,7 +172,11 @@ func (h *ReviseHandler) buildProtectedInputs(
 
 		source := seg.Source
 		if h.RubyEnabled {
-			source = ruby.StripRubyTags(source)
+			var stripErr error
+			source, stripErr = ruby.StripRubyTextBounded(b, source)
+			if stripErr != nil {
+				return nil, nil, nil, stripErr
+			}
 			st.strippedSource = source
 		}
 
@@ -165,7 +190,14 @@ func (h *ReviseHandler) buildProtectedInputs(
 			}
 			snippet := ""
 			if issue.Span != nil {
-				snippet = mapSnippetToProtectedForm(issue.Span.MatchedText, mapping)
+				var snippetErr error
+				snippet, snippetErr = mapSnippetToProtectedFormBounded(b, issue.Span.MatchedText, mapping)
+				if snippetErr != nil {
+					return nil, nil, nil, snippetErr
+				}
+			}
+			if err := b.ReserveNodes(2, 128); err != nil {
+				return nil, nil, nil, err
 			}
 			issues = append(issues, prompt.ReviseIssue{Code: issue.Code, Message: issue.Message, Snippet: snippet})
 		}

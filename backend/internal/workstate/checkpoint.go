@@ -3,6 +3,7 @@ package workstate
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -36,14 +37,24 @@ func EffectiveProgress(status string, total, completed int64) int64 {
 // ReconcileJob is the single cache calculation, used after migration, state
 // transitions and deletions. The caller holds LockJob in this transaction.
 func ReconcileJob(ctx context.Context, tx *ent.Client, jobID int) error {
-	rows, err := tx.JobRound.Query().Where(jobround.JobIDEQ(jobID)).All(ctx)
-	if err != nil {
-		return err
-	}
 	var total, completed int64
-	for _, row := range rows {
-		total += int64(row.SegmentTotal)
-		completed += EffectiveProgress(row.Status, int64(row.SegmentTotal), int64(row.SegmentCompleted))
+	for after := 0; ; {
+		rows, err := tx.JobRound.Query().Where(jobround.JobIDEQ(jobID), jobround.IDGT(after)).Select(jobround.FieldID, jobround.FieldStatus, jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted).Order(ent.Asc(jobround.FieldID)).Limit(16).All(ctx)
+		if err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, row := range rows {
+			effective := EffectiveProgress(row.Status, int64(row.SegmentTotal), int64(row.SegmentCompleted))
+			if int64(row.SegmentTotal) > math.MaxInt64-total || effective > math.MaxInt64-completed {
+				return ErrBudget
+			}
+			total += int64(row.SegmentTotal)
+			completed += effective
+			after = row.ID
+		}
 	}
 	return updateJobProgress(ctx, tx, jobID, total, completed)
 }
@@ -62,63 +73,78 @@ func updateJobProgress(ctx context.Context, tx *ent.Client, jobID int, total, co
 }
 
 func Calibrate(ctx context.Context, tx *ent.Client, jobID int) error {
-	rows, err := tx.JobRound.Query().Where(jobround.JobIDEQ(jobID)).Order(ent.Asc(jobround.FieldID)).All(ctx)
-	if err != nil {
-		return err
-	}
-	completed, total := map[int]int{}, map[int]int{}
-	for start := 0; start < len(rows); start += bulkIDs {
-		end := min(start+bulkIDs, len(rows))
-		ids := make([]int, 0, end-start)
-		sealed := make([]int, 0, end-start)
-		for _, row := range rows[start:end] {
-			ids = append(ids, row.ID)
-			if row.ManifestSealed {
-				sealed = append(sealed, row.ID)
-			}
-		}
-		var counts []struct {
-			RoundID int `json:"job_round_id"`
-			Count   int `json:"count"`
-		}
-		if err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDIn(ids...)).GroupBy(jobroundsegment.FieldJobRoundID).Aggregate(ent.Count()).Scan(ctx, &counts); err != nil {
+	var jobTotal, jobCompleted int64
+	after := 0
+	for {
+		rows, err := tx.JobRound.Query().Where(jobround.JobIDEQ(jobID), jobround.IDGT(after)).Order(ent.Asc(jobround.FieldID)).Select(jobround.FieldID, jobround.FieldStatus, jobround.FieldManifestSealed, jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted).Limit(16).All(ctx)
+		if err != nil {
 			return err
 		}
-		for _, count := range counts {
-			completed[count.RoundID] = count.Count
+		if len(rows) == 0 {
+			break
 		}
-		if len(sealed) > 0 {
-			counts = nil
-			if err := tx.WorkItem.Query().Where(workitem.JobRoundIDIn(sealed...)).GroupBy(workitem.FieldJobRoundID).Aggregate(ent.Count()).Scan(ctx, &counts); err != nil {
+		completed, total := map[int]int{}, map[int]int{}
+		for start := 0; start < len(rows); start += bulkIDs {
+			end := min(start+bulkIDs, len(rows))
+			ids := make([]int, 0, end-start)
+			sealed := make([]int, 0, end-start)
+			for _, row := range rows[start:end] {
+				ids = append(ids, row.ID)
+				if row.ManifestSealed {
+					sealed = append(sealed, row.ID)
+				}
+			}
+			var counts []struct {
+				RoundID int `json:"job_round_id"`
+				Count   int `json:"count"`
+			}
+			if err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDIn(ids...)).GroupBy(jobroundsegment.FieldJobRoundID).Aggregate(ent.Count()).Scan(ctx, &counts); err != nil {
 				return err
 			}
 			for _, count := range counts {
-				total[count.RoundID] = count.Count
+				completed[count.RoundID] = count.Count
 			}
+			if len(sealed) > 0 {
+				counts = nil
+				if err := tx.WorkItem.Query().Where(workitem.JobRoundIDIn(sealed...)).GroupBy(workitem.FieldJobRoundID).Aggregate(ent.Count()).Scan(ctx, &counts); err != nil {
+					return err
+				}
+				for _, count := range counts {
+					total[count.RoundID] = count.Count
+				}
+			}
+		}
+		for _, row := range rows {
+			n := completed[row.ID]
+			t := row.SegmentTotal
+			if row.ManifestSealed {
+				t = total[row.ID]
+				if t < n {
+					return fmt.Errorf("%w: round %d has completion outside manifest", ErrManifest, row.ID)
+				}
+			}
+			if n != row.SegmentCompleted || t != row.SegmentTotal {
+				matched, err := tx.JobRound.Update().Where(jobround.IDEQ(row.ID), jobround.JobIDEQ(jobID), jobround.SegmentCompletedEQ(row.SegmentCompleted), jobround.SegmentTotalEQ(row.SegmentTotal)).SetSegmentCompleted(n).SetSegmentTotal(t).Save(ctx)
+				if err != nil {
+					return err
+				}
+				if matched != 1 {
+					return ErrManifest
+				}
+			}
+			if int64(t) > math.MaxInt64-jobTotal {
+				return ErrBudget
+			}
+			jobTotal += int64(t)
+			effective := EffectiveProgress(row.Status, int64(t), int64(n))
+			if effective > math.MaxInt64-jobCompleted {
+				return ErrBudget
+			}
+			jobCompleted += effective
+			after = row.ID
 		}
 	}
-	var jobTotal, jobCompleted int64
-	for _, row := range rows {
-		n := completed[row.ID]
-		t := row.SegmentTotal
-		if row.ManifestSealed {
-			t = total[row.ID]
-			if t < n {
-				return fmt.Errorf("%w: round %d has completion outside manifest", ErrManifest, row.ID)
-			}
-		}
-		if n != row.SegmentCompleted || t != row.SegmentTotal {
-			matched, err := tx.JobRound.Update().Where(jobround.IDEQ(row.ID), jobround.JobIDEQ(jobID), jobround.SegmentCompletedEQ(row.SegmentCompleted), jobround.SegmentTotalEQ(row.SegmentTotal)).SetSegmentCompleted(n).SetSegmentTotal(t).Save(ctx)
-			if err != nil {
-				return err
-			}
-			if matched != 1 {
-				return ErrManifest
-			}
-		}
-		jobTotal += int64(t)
-		jobCompleted += EffectiveProgress(row.Status, int64(t), int64(n))
-	}
+
 	return updateJobProgress(ctx, tx, jobID, jobTotal, jobCompleted)
 }
 
@@ -129,7 +155,7 @@ func Confirm(ctx context.Context, tx *ent.Client, jobID, roundID int, facts []Co
 }
 
 func confirm(ctx context.Context, tx *ent.Client, jobID, roundID int, facts []Confirmation, enrich bool) (int, error) {
-	row, err := tx.JobRound.Get(ctx, roundID)
+	row, err := loadCheckpointRound(ctx, tx, roundID)
 	if err != nil {
 		return 0, err
 	}
@@ -165,7 +191,7 @@ func confirm(ctx context.Context, tx *ent.Client, jobID, roundID int, facts []Co
 	sort.Ints(ids)
 	for start := 0; start < len(ids); start += bulkIDs {
 		end := min(start+bulkIDs, len(ids))
-		existing, err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(roundID), jobroundsegment.SegmentIDIn(ids[start:end]...)).All(ctx)
+		existing, err := loadCheckpointFacts(ctx, tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(roundID), jobroundsegment.SegmentIDIn(ids[start:end]...)))
 		if err != nil {
 			return 0, err
 		}
@@ -280,7 +306,7 @@ func confirmationConflict(a, b Confirmation) bool {
 }
 
 func SetRoundStatus(ctx context.Context, tx *ent.Client, roundID int, allowed []string, status string) error {
-	row, err := tx.JobRound.Get(ctx, roundID)
+	row, err := loadCheckpointRound(ctx, tx, roundID)
 	if ent.IsNotFound(err) {
 		return nil
 	}
@@ -316,7 +342,7 @@ func SetRoundStatus(ctx context.Context, tx *ent.Client, roundID int, allowed []
 // InitializeTotal is the compatibility path for modes not producing private
 // candidates. It propagates failure instead of performing partial writes.
 func InitializeTotal(ctx context.Context, tx *ent.Client, jobID, roundID, total int) error {
-	row, err := tx.JobRound.Get(ctx, roundID)
+	row, err := loadCheckpointRound(ctx, tx, roundID)
 	if err != nil {
 		return err
 	}

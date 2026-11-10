@@ -253,6 +253,335 @@ func (_u *WorkRequestUpdate) ClearGlossaryReceipt() *WorkRequestUpdate {
 	return _u
 }
 
+// SetFreezePayload sets the "freeze_payload" field.
+func (_u *WorkRequestUpdate) SetFreezePayload(v []byte) *WorkRequestUpdate {
+	_u.mutation.SetFreezePayload(v)
+	return _u
+}
+
+// ClearFreezePayload clears the value of the "freeze_payload" field.
+func (_u *WorkRequestUpdate) ClearFreezePayload() *WorkRequestUpdate {
+	_u.mutation.ClearFreezePayload()
+	return _u
+}
+
+// SetFreezeBytes sets the "freeze_bytes" field.
+func (_u *WorkRequestUpdate) SetFreezeBytes(v int64) *WorkRequestUpdate {
+	_u.mutation.ResetFreezeBytes()
+	_u.mutation.SetFreezeBytes(v)
+	return _u
+}
+
+// SetNillableFreezeBytes sets the "freeze_bytes" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableFreezeBytes(v *int64) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetFreezeBytes(*v)
+	}
+	return _u
+}
+
+// AddFreezeBytes adds value to the "freeze_bytes" field.
+func (_u *WorkRequestUpdate) AddFreezeBytes(v int64) *WorkRequestUpdate {
+	_u.mutation.AddFreezeBytes(v)
+	return _u
+}
+
+// SetResponsePayload sets the "response_payload" field.
+func (_u *WorkRequestUpdate) SetResponsePayload(v []byte) *WorkRequestUpdate {
+	_u.mutation.SetResponsePayload(v)
+	return _u
+}
+
+// ClearResponsePayload clears the value of the "response_payload" field.
+func (_u *WorkRequestUpdate) ClearResponsePayload() *WorkRequestUpdate {
+	_u.mutation.ClearResponsePayload()
+	return _u
+}
+
+// SetResponseBytes sets the "response_bytes" field.
+func (_u *WorkRequestUpdate) SetResponseBytes(v int64) *WorkRequestUpdate {
+	_u.mutation.ResetResponseBytes()
+	_u.mutation.SetResponseBytes(v)
+	return _u
+}
+
+// SetNillableResponseBytes sets the "response_bytes" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableResponseBytes(v *int64) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetResponseBytes(*v)
+	}
+	return _u
+}
+
+// AddResponseBytes adds value to the "response_bytes" field.
+func (_u *WorkRequestUpdate) AddResponseBytes(v int64) *WorkRequestUpdate {
+	_u.mutation.AddResponseBytes(v)
+	return _u
+}
+
+// SetResponseFormatVersion sets the "response_format_version" field.
+func (_u *WorkRequestUpdate) SetResponseFormatVersion(v int) *WorkRequestUpdate {
+	_u.mutation.ResetResponseFormatVersion()
+	_u.mutation.SetResponseFormatVersion(v)
+	return _u
+}
+
+// SetNillableResponseFormatVersion sets the "response_format_version" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableResponseFormatVersion(v *int) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetResponseFormatVersion(*v)
+	}
+	return _u
+}
+
+// AddResponseFormatVersion adds value to the "response_format_version" field.
+func (_u *WorkRequestUpdate) AddResponseFormatVersion(v int) *WorkRequestUpdate {
+	_u.mutation.AddResponseFormatVersion(v)
+	return _u
+}
+
+// SetSnapshotDigest sets the "snapshot_digest" field.
+func (_u *WorkRequestUpdate) SetSnapshotDigest(v string) *WorkRequestUpdate {
+	_u.mutation.SetSnapshotDigest(v)
+	return _u
+}
+
+// SetNillableSnapshotDigest sets the "snapshot_digest" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableSnapshotDigest(v *string) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetSnapshotDigest(*v)
+	}
+	return _u
+}
+
+// SetFreezeDigest sets the "freeze_digest" field.
+func (_u *WorkRequestUpdate) SetFreezeDigest(v string) *WorkRequestUpdate {
+	_u.mutation.SetFreezeDigest(v)
+	return _u
+}
+
+// SetNillableFreezeDigest sets the "freeze_digest" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableFreezeDigest(v *string) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetFreezeDigest(*v)
+	}
+	return _u
+}
+
+// SetResponseDigest sets the "response_digest" field.
+func (_u *WorkRequestUpdate) SetResponseDigest(v string) *WorkRequestUpdate {
+	_u.mutation.SetResponseDigest(v)
+	return _u
+}
+
+// SetNillableResponseDigest sets the "response_digest" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableResponseDigest(v *string) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetResponseDigest(*v)
+	}
+	return _u
+}
+
+// SetCorrectedTargets sets the "corrected_targets" field.
+func (_u *WorkRequestUpdate) SetCorrectedTargets(v []byte) *WorkRequestUpdate {
+	_u.mutation.SetCorrectedTargets(v)
+	return _u
+}
+
+// ClearCorrectedTargets clears the value of the "corrected_targets" field.
+func (_u *WorkRequestUpdate) ClearCorrectedTargets() *WorkRequestUpdate {
+	_u.mutation.ClearCorrectedTargets()
+	return _u
+}
+
+// SetCorrectedTargetIndex sets the "corrected_target_index" field.
+func (_u *WorkRequestUpdate) SetCorrectedTargetIndex(v []byte) *WorkRequestUpdate {
+	_u.mutation.SetCorrectedTargetIndex(v)
+	return _u
+}
+
+// ClearCorrectedTargetIndex clears the value of the "corrected_target_index" field.
+func (_u *WorkRequestUpdate) ClearCorrectedTargetIndex() *WorkRequestUpdate {
+	_u.mutation.ClearCorrectedTargetIndex()
+	return _u
+}
+
+// SetCorrectedTargetBytes sets the "corrected_target_bytes" field.
+func (_u *WorkRequestUpdate) SetCorrectedTargetBytes(v int64) *WorkRequestUpdate {
+	_u.mutation.ResetCorrectedTargetBytes()
+	_u.mutation.SetCorrectedTargetBytes(v)
+	return _u
+}
+
+// SetNillableCorrectedTargetBytes sets the "corrected_target_bytes" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableCorrectedTargetBytes(v *int64) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetCorrectedTargetBytes(*v)
+	}
+	return _u
+}
+
+// AddCorrectedTargetBytes adds value to the "corrected_target_bytes" field.
+func (_u *WorkRequestUpdate) AddCorrectedTargetBytes(v int64) *WorkRequestUpdate {
+	_u.mutation.AddCorrectedTargetBytes(v)
+	return _u
+}
+
+// SetCorrectedTargetDigest sets the "corrected_target_digest" field.
+func (_u *WorkRequestUpdate) SetCorrectedTargetDigest(v string) *WorkRequestUpdate {
+	_u.mutation.SetCorrectedTargetDigest(v)
+	return _u
+}
+
+// SetNillableCorrectedTargetDigest sets the "corrected_target_digest" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableCorrectedTargetDigest(v *string) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetCorrectedTargetDigest(*v)
+	}
+	return _u
+}
+
+// SetPromotionMembers sets the "promotion_members" field.
+func (_u *WorkRequestUpdate) SetPromotionMembers(v json.RawMessage) *WorkRequestUpdate {
+	_u.mutation.SetPromotionMembers(v)
+	return _u
+}
+
+// AppendPromotionMembers appends value to the "promotion_members" field.
+func (_u *WorkRequestUpdate) AppendPromotionMembers(v json.RawMessage) *WorkRequestUpdate {
+	_u.mutation.AppendPromotionMembers(v)
+	return _u
+}
+
+// ClearPromotionMembers clears the value of the "promotion_members" field.
+func (_u *WorkRequestUpdate) ClearPromotionMembers() *WorkRequestUpdate {
+	_u.mutation.ClearPromotionMembers()
+	return _u
+}
+
+// SetPromotionCursor sets the "promotion_cursor" field.
+func (_u *WorkRequestUpdate) SetPromotionCursor(v int) *WorkRequestUpdate {
+	_u.mutation.ResetPromotionCursor()
+	_u.mutation.SetPromotionCursor(v)
+	return _u
+}
+
+// SetNillablePromotionCursor sets the "promotion_cursor" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillablePromotionCursor(v *int) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetPromotionCursor(*v)
+	}
+	return _u
+}
+
+// AddPromotionCursor adds value to the "promotion_cursor" field.
+func (_u *WorkRequestUpdate) AddPromotionCursor(v int) *WorkRequestUpdate {
+	_u.mutation.AddPromotionCursor(v)
+	return _u
+}
+
+// SetPromotionCount sets the "promotion_count" field.
+func (_u *WorkRequestUpdate) SetPromotionCount(v int) *WorkRequestUpdate {
+	_u.mutation.ResetPromotionCount()
+	_u.mutation.SetPromotionCount(v)
+	return _u
+}
+
+// SetNillablePromotionCount sets the "promotion_count" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillablePromotionCount(v *int) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetPromotionCount(*v)
+	}
+	return _u
+}
+
+// AddPromotionCount adds value to the "promotion_count" field.
+func (_u *WorkRequestUpdate) AddPromotionCount(v int) *WorkRequestUpdate {
+	_u.mutation.AddPromotionCount(v)
+	return _u
+}
+
+// SetBusinessBound sets the "business_bound" field.
+func (_u *WorkRequestUpdate) SetBusinessBound(v int64) *WorkRequestUpdate {
+	_u.mutation.ResetBusinessBound()
+	_u.mutation.SetBusinessBound(v)
+	return _u
+}
+
+// SetNillableBusinessBound sets the "business_bound" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableBusinessBound(v *int64) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetBusinessBound(*v)
+	}
+	return _u
+}
+
+// AddBusinessBound adds value to the "business_bound" field.
+func (_u *WorkRequestUpdate) AddBusinessBound(v int64) *WorkRequestUpdate {
+	_u.mutation.AddBusinessBound(v)
+	return _u
+}
+
+// SetResponseTruncated sets the "response_truncated" field.
+func (_u *WorkRequestUpdate) SetResponseTruncated(v bool) *WorkRequestUpdate {
+	_u.mutation.SetResponseTruncated(v)
+	return _u
+}
+
+// SetNillableResponseTruncated sets the "response_truncated" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableResponseTruncated(v *bool) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetResponseTruncated(*v)
+	}
+	return _u
+}
+
+// SetPromotionState sets the "promotion_state" field.
+func (_u *WorkRequestUpdate) SetPromotionState(v string) *WorkRequestUpdate {
+	_u.mutation.SetPromotionState(v)
+	return _u
+}
+
+// SetNillablePromotionState sets the "promotion_state" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillablePromotionState(v *string) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetPromotionState(*v)
+	}
+	return _u
+}
+
+// SetPromotionStatus sets the "promotion_status" field.
+func (_u *WorkRequestUpdate) SetPromotionStatus(v []byte) *WorkRequestUpdate {
+	_u.mutation.SetPromotionStatus(v)
+	return _u
+}
+
+// ClearPromotionStatus clears the value of the "promotion_status" field.
+func (_u *WorkRequestUpdate) ClearPromotionStatus() *WorkRequestUpdate {
+	_u.mutation.ClearPromotionStatus()
+	return _u
+}
+
+// SetHandoffAt sets the "handoff_at" field.
+func (_u *WorkRequestUpdate) SetHandoffAt(v time.Time) *WorkRequestUpdate {
+	_u.mutation.SetHandoffAt(v)
+	return _u
+}
+
+// SetNillableHandoffAt sets the "handoff_at" field if the given value is not nil.
+func (_u *WorkRequestUpdate) SetNillableHandoffAt(v *time.Time) *WorkRequestUpdate {
+	if v != nil {
+		_u.SetHandoffAt(*v)
+	}
+	return _u
+}
+
+// ClearHandoffAt clears the value of the "handoff_at" field.
+func (_u *WorkRequestUpdate) ClearHandoffAt() *WorkRequestUpdate {
+	_u.mutation.ClearHandoffAt()
+	return _u
+}
+
 // SetUsageRecordID sets the "usage_record_id" field.
 func (_u *WorkRequestUpdate) SetUsageRecordID(v int) *WorkRequestUpdate {
 	_u.mutation.ResetUsageRecordID()
@@ -535,6 +864,41 @@ func (_u *WorkRequestUpdate) check() error {
 			return &ValidationError{Name: "logical_attempt", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.logical_attempt": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FreezeBytes(); ok {
+		if err := workrequest.FreezeBytesValidator(v); err != nil {
+			return &ValidationError{Name: "freeze_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.freeze_bytes": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ResponseBytes(); ok {
+		if err := workrequest.ResponseBytesValidator(v); err != nil {
+			return &ValidationError{Name: "response_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.response_bytes": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ResponseFormatVersion(); ok {
+		if err := workrequest.ResponseFormatVersionValidator(v); err != nil {
+			return &ValidationError{Name: "response_format_version", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.response_format_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CorrectedTargetBytes(); ok {
+		if err := workrequest.CorrectedTargetBytesValidator(v); err != nil {
+			return &ValidationError{Name: "corrected_target_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.corrected_target_bytes": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PromotionCursor(); ok {
+		if err := workrequest.PromotionCursorValidator(v); err != nil {
+			return &ValidationError{Name: "promotion_cursor", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.promotion_cursor": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PromotionCount(); ok {
+		if err := workrequest.PromotionCountValidator(v); err != nil {
+			return &ValidationError{Name: "promotion_count", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.promotion_count": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BusinessBound(); ok {
+		if err := workrequest.BusinessBoundValidator(v); err != nil {
+			return &ValidationError{Name: "business_bound", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.business_bound": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UsageRecordID(); ok {
 		if err := workrequest.UsageRecordIDValidator(v); err != nil {
 			return &ValidationError{Name: "usage_record_id", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.usage_record_id": %w`, err)}
@@ -665,6 +1029,113 @@ func (_u *WorkRequestUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	}
 	if _u.mutation.GlossaryReceiptCleared() {
 		_spec.ClearField(workrequest.FieldGlossaryReceipt, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.FreezePayload(); ok {
+		_spec.SetField(workrequest.FieldFreezePayload, field.TypeBytes, value)
+	}
+	if _u.mutation.FreezePayloadCleared() {
+		_spec.ClearField(workrequest.FieldFreezePayload, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.FreezeBytes(); ok {
+		_spec.SetField(workrequest.FieldFreezeBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedFreezeBytes(); ok {
+		_spec.AddField(workrequest.FieldFreezeBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.ResponsePayload(); ok {
+		_spec.SetField(workrequest.FieldResponsePayload, field.TypeBytes, value)
+	}
+	if _u.mutation.ResponsePayloadCleared() {
+		_spec.ClearField(workrequest.FieldResponsePayload, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.ResponseBytes(); ok {
+		_spec.SetField(workrequest.FieldResponseBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedResponseBytes(); ok {
+		_spec.AddField(workrequest.FieldResponseBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.ResponseFormatVersion(); ok {
+		_spec.SetField(workrequest.FieldResponseFormatVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedResponseFormatVersion(); ok {
+		_spec.AddField(workrequest.FieldResponseFormatVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SnapshotDigest(); ok {
+		_spec.SetField(workrequest.FieldSnapshotDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.FreezeDigest(); ok {
+		_spec.SetField(workrequest.FieldFreezeDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ResponseDigest(); ok {
+		_spec.SetField(workrequest.FieldResponseDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CorrectedTargets(); ok {
+		_spec.SetField(workrequest.FieldCorrectedTargets, field.TypeBytes, value)
+	}
+	if _u.mutation.CorrectedTargetsCleared() {
+		_spec.ClearField(workrequest.FieldCorrectedTargets, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.CorrectedTargetIndex(); ok {
+		_spec.SetField(workrequest.FieldCorrectedTargetIndex, field.TypeBytes, value)
+	}
+	if _u.mutation.CorrectedTargetIndexCleared() {
+		_spec.ClearField(workrequest.FieldCorrectedTargetIndex, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.CorrectedTargetBytes(); ok {
+		_spec.SetField(workrequest.FieldCorrectedTargetBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCorrectedTargetBytes(); ok {
+		_spec.AddField(workrequest.FieldCorrectedTargetBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CorrectedTargetDigest(); ok {
+		_spec.SetField(workrequest.FieldCorrectedTargetDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PromotionMembers(); ok {
+		_spec.SetField(workrequest.FieldPromotionMembers, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedPromotionMembers(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, workrequest.FieldPromotionMembers, value)
+		})
+	}
+	if _u.mutation.PromotionMembersCleared() {
+		_spec.ClearField(workrequest.FieldPromotionMembers, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.PromotionCursor(); ok {
+		_spec.SetField(workrequest.FieldPromotionCursor, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPromotionCursor(); ok {
+		_spec.AddField(workrequest.FieldPromotionCursor, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.PromotionCount(); ok {
+		_spec.SetField(workrequest.FieldPromotionCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPromotionCount(); ok {
+		_spec.AddField(workrequest.FieldPromotionCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.BusinessBound(); ok {
+		_spec.SetField(workrequest.FieldBusinessBound, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBusinessBound(); ok {
+		_spec.AddField(workrequest.FieldBusinessBound, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.ResponseTruncated(); ok {
+		_spec.SetField(workrequest.FieldResponseTruncated, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PromotionState(); ok {
+		_spec.SetField(workrequest.FieldPromotionState, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PromotionStatus(); ok {
+		_spec.SetField(workrequest.FieldPromotionStatus, field.TypeBytes, value)
+	}
+	if _u.mutation.PromotionStatusCleared() {
+		_spec.ClearField(workrequest.FieldPromotionStatus, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.HandoffAt(); ok {
+		_spec.SetField(workrequest.FieldHandoffAt, field.TypeTime, value)
+	}
+	if _u.mutation.HandoffAtCleared() {
+		_spec.ClearField(workrequest.FieldHandoffAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.UsageRecordID(); ok {
 		_spec.SetField(workrequest.FieldUsageRecordID, field.TypeInt, value)
@@ -1036,6 +1507,335 @@ func (_u *WorkRequestUpdateOne) ClearGlossaryReceipt() *WorkRequestUpdateOne {
 	return _u
 }
 
+// SetFreezePayload sets the "freeze_payload" field.
+func (_u *WorkRequestUpdateOne) SetFreezePayload(v []byte) *WorkRequestUpdateOne {
+	_u.mutation.SetFreezePayload(v)
+	return _u
+}
+
+// ClearFreezePayload clears the value of the "freeze_payload" field.
+func (_u *WorkRequestUpdateOne) ClearFreezePayload() *WorkRequestUpdateOne {
+	_u.mutation.ClearFreezePayload()
+	return _u
+}
+
+// SetFreezeBytes sets the "freeze_bytes" field.
+func (_u *WorkRequestUpdateOne) SetFreezeBytes(v int64) *WorkRequestUpdateOne {
+	_u.mutation.ResetFreezeBytes()
+	_u.mutation.SetFreezeBytes(v)
+	return _u
+}
+
+// SetNillableFreezeBytes sets the "freeze_bytes" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableFreezeBytes(v *int64) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetFreezeBytes(*v)
+	}
+	return _u
+}
+
+// AddFreezeBytes adds value to the "freeze_bytes" field.
+func (_u *WorkRequestUpdateOne) AddFreezeBytes(v int64) *WorkRequestUpdateOne {
+	_u.mutation.AddFreezeBytes(v)
+	return _u
+}
+
+// SetResponsePayload sets the "response_payload" field.
+func (_u *WorkRequestUpdateOne) SetResponsePayload(v []byte) *WorkRequestUpdateOne {
+	_u.mutation.SetResponsePayload(v)
+	return _u
+}
+
+// ClearResponsePayload clears the value of the "response_payload" field.
+func (_u *WorkRequestUpdateOne) ClearResponsePayload() *WorkRequestUpdateOne {
+	_u.mutation.ClearResponsePayload()
+	return _u
+}
+
+// SetResponseBytes sets the "response_bytes" field.
+func (_u *WorkRequestUpdateOne) SetResponseBytes(v int64) *WorkRequestUpdateOne {
+	_u.mutation.ResetResponseBytes()
+	_u.mutation.SetResponseBytes(v)
+	return _u
+}
+
+// SetNillableResponseBytes sets the "response_bytes" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableResponseBytes(v *int64) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetResponseBytes(*v)
+	}
+	return _u
+}
+
+// AddResponseBytes adds value to the "response_bytes" field.
+func (_u *WorkRequestUpdateOne) AddResponseBytes(v int64) *WorkRequestUpdateOne {
+	_u.mutation.AddResponseBytes(v)
+	return _u
+}
+
+// SetResponseFormatVersion sets the "response_format_version" field.
+func (_u *WorkRequestUpdateOne) SetResponseFormatVersion(v int) *WorkRequestUpdateOne {
+	_u.mutation.ResetResponseFormatVersion()
+	_u.mutation.SetResponseFormatVersion(v)
+	return _u
+}
+
+// SetNillableResponseFormatVersion sets the "response_format_version" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableResponseFormatVersion(v *int) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetResponseFormatVersion(*v)
+	}
+	return _u
+}
+
+// AddResponseFormatVersion adds value to the "response_format_version" field.
+func (_u *WorkRequestUpdateOne) AddResponseFormatVersion(v int) *WorkRequestUpdateOne {
+	_u.mutation.AddResponseFormatVersion(v)
+	return _u
+}
+
+// SetSnapshotDigest sets the "snapshot_digest" field.
+func (_u *WorkRequestUpdateOne) SetSnapshotDigest(v string) *WorkRequestUpdateOne {
+	_u.mutation.SetSnapshotDigest(v)
+	return _u
+}
+
+// SetNillableSnapshotDigest sets the "snapshot_digest" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableSnapshotDigest(v *string) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetSnapshotDigest(*v)
+	}
+	return _u
+}
+
+// SetFreezeDigest sets the "freeze_digest" field.
+func (_u *WorkRequestUpdateOne) SetFreezeDigest(v string) *WorkRequestUpdateOne {
+	_u.mutation.SetFreezeDigest(v)
+	return _u
+}
+
+// SetNillableFreezeDigest sets the "freeze_digest" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableFreezeDigest(v *string) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetFreezeDigest(*v)
+	}
+	return _u
+}
+
+// SetResponseDigest sets the "response_digest" field.
+func (_u *WorkRequestUpdateOne) SetResponseDigest(v string) *WorkRequestUpdateOne {
+	_u.mutation.SetResponseDigest(v)
+	return _u
+}
+
+// SetNillableResponseDigest sets the "response_digest" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableResponseDigest(v *string) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetResponseDigest(*v)
+	}
+	return _u
+}
+
+// SetCorrectedTargets sets the "corrected_targets" field.
+func (_u *WorkRequestUpdateOne) SetCorrectedTargets(v []byte) *WorkRequestUpdateOne {
+	_u.mutation.SetCorrectedTargets(v)
+	return _u
+}
+
+// ClearCorrectedTargets clears the value of the "corrected_targets" field.
+func (_u *WorkRequestUpdateOne) ClearCorrectedTargets() *WorkRequestUpdateOne {
+	_u.mutation.ClearCorrectedTargets()
+	return _u
+}
+
+// SetCorrectedTargetIndex sets the "corrected_target_index" field.
+func (_u *WorkRequestUpdateOne) SetCorrectedTargetIndex(v []byte) *WorkRequestUpdateOne {
+	_u.mutation.SetCorrectedTargetIndex(v)
+	return _u
+}
+
+// ClearCorrectedTargetIndex clears the value of the "corrected_target_index" field.
+func (_u *WorkRequestUpdateOne) ClearCorrectedTargetIndex() *WorkRequestUpdateOne {
+	_u.mutation.ClearCorrectedTargetIndex()
+	return _u
+}
+
+// SetCorrectedTargetBytes sets the "corrected_target_bytes" field.
+func (_u *WorkRequestUpdateOne) SetCorrectedTargetBytes(v int64) *WorkRequestUpdateOne {
+	_u.mutation.ResetCorrectedTargetBytes()
+	_u.mutation.SetCorrectedTargetBytes(v)
+	return _u
+}
+
+// SetNillableCorrectedTargetBytes sets the "corrected_target_bytes" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableCorrectedTargetBytes(v *int64) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetCorrectedTargetBytes(*v)
+	}
+	return _u
+}
+
+// AddCorrectedTargetBytes adds value to the "corrected_target_bytes" field.
+func (_u *WorkRequestUpdateOne) AddCorrectedTargetBytes(v int64) *WorkRequestUpdateOne {
+	_u.mutation.AddCorrectedTargetBytes(v)
+	return _u
+}
+
+// SetCorrectedTargetDigest sets the "corrected_target_digest" field.
+func (_u *WorkRequestUpdateOne) SetCorrectedTargetDigest(v string) *WorkRequestUpdateOne {
+	_u.mutation.SetCorrectedTargetDigest(v)
+	return _u
+}
+
+// SetNillableCorrectedTargetDigest sets the "corrected_target_digest" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableCorrectedTargetDigest(v *string) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetCorrectedTargetDigest(*v)
+	}
+	return _u
+}
+
+// SetPromotionMembers sets the "promotion_members" field.
+func (_u *WorkRequestUpdateOne) SetPromotionMembers(v json.RawMessage) *WorkRequestUpdateOne {
+	_u.mutation.SetPromotionMembers(v)
+	return _u
+}
+
+// AppendPromotionMembers appends value to the "promotion_members" field.
+func (_u *WorkRequestUpdateOne) AppendPromotionMembers(v json.RawMessage) *WorkRequestUpdateOne {
+	_u.mutation.AppendPromotionMembers(v)
+	return _u
+}
+
+// ClearPromotionMembers clears the value of the "promotion_members" field.
+func (_u *WorkRequestUpdateOne) ClearPromotionMembers() *WorkRequestUpdateOne {
+	_u.mutation.ClearPromotionMembers()
+	return _u
+}
+
+// SetPromotionCursor sets the "promotion_cursor" field.
+func (_u *WorkRequestUpdateOne) SetPromotionCursor(v int) *WorkRequestUpdateOne {
+	_u.mutation.ResetPromotionCursor()
+	_u.mutation.SetPromotionCursor(v)
+	return _u
+}
+
+// SetNillablePromotionCursor sets the "promotion_cursor" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillablePromotionCursor(v *int) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetPromotionCursor(*v)
+	}
+	return _u
+}
+
+// AddPromotionCursor adds value to the "promotion_cursor" field.
+func (_u *WorkRequestUpdateOne) AddPromotionCursor(v int) *WorkRequestUpdateOne {
+	_u.mutation.AddPromotionCursor(v)
+	return _u
+}
+
+// SetPromotionCount sets the "promotion_count" field.
+func (_u *WorkRequestUpdateOne) SetPromotionCount(v int) *WorkRequestUpdateOne {
+	_u.mutation.ResetPromotionCount()
+	_u.mutation.SetPromotionCount(v)
+	return _u
+}
+
+// SetNillablePromotionCount sets the "promotion_count" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillablePromotionCount(v *int) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetPromotionCount(*v)
+	}
+	return _u
+}
+
+// AddPromotionCount adds value to the "promotion_count" field.
+func (_u *WorkRequestUpdateOne) AddPromotionCount(v int) *WorkRequestUpdateOne {
+	_u.mutation.AddPromotionCount(v)
+	return _u
+}
+
+// SetBusinessBound sets the "business_bound" field.
+func (_u *WorkRequestUpdateOne) SetBusinessBound(v int64) *WorkRequestUpdateOne {
+	_u.mutation.ResetBusinessBound()
+	_u.mutation.SetBusinessBound(v)
+	return _u
+}
+
+// SetNillableBusinessBound sets the "business_bound" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableBusinessBound(v *int64) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetBusinessBound(*v)
+	}
+	return _u
+}
+
+// AddBusinessBound adds value to the "business_bound" field.
+func (_u *WorkRequestUpdateOne) AddBusinessBound(v int64) *WorkRequestUpdateOne {
+	_u.mutation.AddBusinessBound(v)
+	return _u
+}
+
+// SetResponseTruncated sets the "response_truncated" field.
+func (_u *WorkRequestUpdateOne) SetResponseTruncated(v bool) *WorkRequestUpdateOne {
+	_u.mutation.SetResponseTruncated(v)
+	return _u
+}
+
+// SetNillableResponseTruncated sets the "response_truncated" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableResponseTruncated(v *bool) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetResponseTruncated(*v)
+	}
+	return _u
+}
+
+// SetPromotionState sets the "promotion_state" field.
+func (_u *WorkRequestUpdateOne) SetPromotionState(v string) *WorkRequestUpdateOne {
+	_u.mutation.SetPromotionState(v)
+	return _u
+}
+
+// SetNillablePromotionState sets the "promotion_state" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillablePromotionState(v *string) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetPromotionState(*v)
+	}
+	return _u
+}
+
+// SetPromotionStatus sets the "promotion_status" field.
+func (_u *WorkRequestUpdateOne) SetPromotionStatus(v []byte) *WorkRequestUpdateOne {
+	_u.mutation.SetPromotionStatus(v)
+	return _u
+}
+
+// ClearPromotionStatus clears the value of the "promotion_status" field.
+func (_u *WorkRequestUpdateOne) ClearPromotionStatus() *WorkRequestUpdateOne {
+	_u.mutation.ClearPromotionStatus()
+	return _u
+}
+
+// SetHandoffAt sets the "handoff_at" field.
+func (_u *WorkRequestUpdateOne) SetHandoffAt(v time.Time) *WorkRequestUpdateOne {
+	_u.mutation.SetHandoffAt(v)
+	return _u
+}
+
+// SetNillableHandoffAt sets the "handoff_at" field if the given value is not nil.
+func (_u *WorkRequestUpdateOne) SetNillableHandoffAt(v *time.Time) *WorkRequestUpdateOne {
+	if v != nil {
+		_u.SetHandoffAt(*v)
+	}
+	return _u
+}
+
+// ClearHandoffAt clears the value of the "handoff_at" field.
+func (_u *WorkRequestUpdateOne) ClearHandoffAt() *WorkRequestUpdateOne {
+	_u.mutation.ClearHandoffAt()
+	return _u
+}
+
 // SetUsageRecordID sets the "usage_record_id" field.
 func (_u *WorkRequestUpdateOne) SetUsageRecordID(v int) *WorkRequestUpdateOne {
 	_u.mutation.ResetUsageRecordID()
@@ -1331,6 +2131,41 @@ func (_u *WorkRequestUpdateOne) check() error {
 			return &ValidationError{Name: "logical_attempt", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.logical_attempt": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FreezeBytes(); ok {
+		if err := workrequest.FreezeBytesValidator(v); err != nil {
+			return &ValidationError{Name: "freeze_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.freeze_bytes": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ResponseBytes(); ok {
+		if err := workrequest.ResponseBytesValidator(v); err != nil {
+			return &ValidationError{Name: "response_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.response_bytes": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ResponseFormatVersion(); ok {
+		if err := workrequest.ResponseFormatVersionValidator(v); err != nil {
+			return &ValidationError{Name: "response_format_version", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.response_format_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CorrectedTargetBytes(); ok {
+		if err := workrequest.CorrectedTargetBytesValidator(v); err != nil {
+			return &ValidationError{Name: "corrected_target_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.corrected_target_bytes": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PromotionCursor(); ok {
+		if err := workrequest.PromotionCursorValidator(v); err != nil {
+			return &ValidationError{Name: "promotion_cursor", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.promotion_cursor": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.PromotionCount(); ok {
+		if err := workrequest.PromotionCountValidator(v); err != nil {
+			return &ValidationError{Name: "promotion_count", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.promotion_count": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BusinessBound(); ok {
+		if err := workrequest.BusinessBoundValidator(v); err != nil {
+			return &ValidationError{Name: "business_bound", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.business_bound": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UsageRecordID(); ok {
 		if err := workrequest.UsageRecordIDValidator(v); err != nil {
 			return &ValidationError{Name: "usage_record_id", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.usage_record_id": %w`, err)}
@@ -1478,6 +2313,113 @@ func (_u *WorkRequestUpdateOne) sqlSave(ctx context.Context) (_node *WorkRequest
 	}
 	if _u.mutation.GlossaryReceiptCleared() {
 		_spec.ClearField(workrequest.FieldGlossaryReceipt, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.FreezePayload(); ok {
+		_spec.SetField(workrequest.FieldFreezePayload, field.TypeBytes, value)
+	}
+	if _u.mutation.FreezePayloadCleared() {
+		_spec.ClearField(workrequest.FieldFreezePayload, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.FreezeBytes(); ok {
+		_spec.SetField(workrequest.FieldFreezeBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedFreezeBytes(); ok {
+		_spec.AddField(workrequest.FieldFreezeBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.ResponsePayload(); ok {
+		_spec.SetField(workrequest.FieldResponsePayload, field.TypeBytes, value)
+	}
+	if _u.mutation.ResponsePayloadCleared() {
+		_spec.ClearField(workrequest.FieldResponsePayload, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.ResponseBytes(); ok {
+		_spec.SetField(workrequest.FieldResponseBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedResponseBytes(); ok {
+		_spec.AddField(workrequest.FieldResponseBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.ResponseFormatVersion(); ok {
+		_spec.SetField(workrequest.FieldResponseFormatVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedResponseFormatVersion(); ok {
+		_spec.AddField(workrequest.FieldResponseFormatVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SnapshotDigest(); ok {
+		_spec.SetField(workrequest.FieldSnapshotDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.FreezeDigest(); ok {
+		_spec.SetField(workrequest.FieldFreezeDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ResponseDigest(); ok {
+		_spec.SetField(workrequest.FieldResponseDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CorrectedTargets(); ok {
+		_spec.SetField(workrequest.FieldCorrectedTargets, field.TypeBytes, value)
+	}
+	if _u.mutation.CorrectedTargetsCleared() {
+		_spec.ClearField(workrequest.FieldCorrectedTargets, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.CorrectedTargetIndex(); ok {
+		_spec.SetField(workrequest.FieldCorrectedTargetIndex, field.TypeBytes, value)
+	}
+	if _u.mutation.CorrectedTargetIndexCleared() {
+		_spec.ClearField(workrequest.FieldCorrectedTargetIndex, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.CorrectedTargetBytes(); ok {
+		_spec.SetField(workrequest.FieldCorrectedTargetBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCorrectedTargetBytes(); ok {
+		_spec.AddField(workrequest.FieldCorrectedTargetBytes, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.CorrectedTargetDigest(); ok {
+		_spec.SetField(workrequest.FieldCorrectedTargetDigest, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PromotionMembers(); ok {
+		_spec.SetField(workrequest.FieldPromotionMembers, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedPromotionMembers(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, workrequest.FieldPromotionMembers, value)
+		})
+	}
+	if _u.mutation.PromotionMembersCleared() {
+		_spec.ClearField(workrequest.FieldPromotionMembers, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.PromotionCursor(); ok {
+		_spec.SetField(workrequest.FieldPromotionCursor, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPromotionCursor(); ok {
+		_spec.AddField(workrequest.FieldPromotionCursor, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.PromotionCount(); ok {
+		_spec.SetField(workrequest.FieldPromotionCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPromotionCount(); ok {
+		_spec.AddField(workrequest.FieldPromotionCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.BusinessBound(); ok {
+		_spec.SetField(workrequest.FieldBusinessBound, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBusinessBound(); ok {
+		_spec.AddField(workrequest.FieldBusinessBound, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.ResponseTruncated(); ok {
+		_spec.SetField(workrequest.FieldResponseTruncated, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PromotionState(); ok {
+		_spec.SetField(workrequest.FieldPromotionState, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PromotionStatus(); ok {
+		_spec.SetField(workrequest.FieldPromotionStatus, field.TypeBytes, value)
+	}
+	if _u.mutation.PromotionStatusCleared() {
+		_spec.ClearField(workrequest.FieldPromotionStatus, field.TypeBytes)
+	}
+	if value, ok := _u.mutation.HandoffAt(); ok {
+		_spec.SetField(workrequest.FieldHandoffAt, field.TypeTime, value)
+	}
+	if _u.mutation.HandoffAtCleared() {
+		_spec.ClearField(workrequest.FieldHandoffAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.UsageRecordID(); ok {
 		_spec.SetField(workrequest.FieldUsageRecordID, field.TypeInt, value)

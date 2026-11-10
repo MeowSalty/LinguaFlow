@@ -15,7 +15,6 @@ type RequestStage string
 const (
 	RequestStageMain      RequestStage = "main"
 	RequestStageAlignment RequestStage = "alignment"
-	DefaultMaxCompletions              = 16
 )
 
 var (
@@ -33,20 +32,20 @@ type DispatchGate interface {
 
 // RequestAdmissionConfig belongs to one Job or one synchronous engine call.
 // MainConcurrency is shared across that round's resources. AlignmentConcurrency
-// is shared across every resource and round in this scope. LegacyRoundShared
-// instead charges both stages to the originating round's main budget.
+// is shared across every resource and round in this scope.
 type RequestAdmissionConfig struct {
 	MainConcurrency      map[int]int
 	AlignmentConcurrency int
-	LegacyRoundShared    bool
-	MaxCompletions       int
 }
 
 type RequestAdmissionIntent struct {
-	RoundIndex int
-	ResourceID int
-	BackendID  int
-	Stage      RequestStage
+	RequestID    string
+	CandidateIDs []string
+	InputBytes   int64
+	RoundIndex   int
+	ResourceID   int
+	BackendID    int
+	Stage        RequestStage
 }
 
 // AdmissionWait describes a currently unavailable permit. A coordinator can skip
@@ -65,10 +64,13 @@ type AdmissionWait struct {
 // execute immediately when a permit is granted. Admission never queues permits.
 // The lock order is gate -> admission -> limiter pool; release never reverses it.
 type RequestAdmission struct {
+	budget      *pipelineBudget
 	mu          sync.Mutex
 	pool        *LimiterPool
 	config      RequestAdmissionConfig
 	main        map[int]int
+	mainResults map[int]int
+	auxResults  int
 	alignment   int
 	completions int
 	closed      bool
@@ -82,11 +84,8 @@ type RequestAdmission struct {
 }
 
 func NewRequestAdmission(pool *LimiterPool, config RequestAdmissionConfig) (*RequestAdmission, error) {
-	if config.AlignmentConcurrency < 0 || config.MaxCompletions < 0 {
+	if config.AlignmentConcurrency < 0 {
 		return nil, errors.New("request admission capacities must not be negative")
-	}
-	if config.MaxCompletions == 0 {
-		config.MaxCompletions = DefaultMaxCompletions
 	}
 	limits := make(map[int]int, len(config.MainConcurrency))
 	for round, capacity := range config.MainConcurrency {
@@ -97,7 +96,7 @@ func NewRequestAdmission(pool *LimiterPool, config RequestAdmissionConfig) (*Req
 	}
 	config.MainConcurrency = limits
 	return &RequestAdmission{
-		pool: pool, config: config, main: make(map[int]int), changed: make(chan struct{}),
+		pool: pool, config: config, main: make(map[int]int), mainResults: make(map[int]int), changed: make(chan struct{}),
 		queue: make(chan *admissionRequest), queueWake: make(chan struct{}, 1), stopped: make(chan struct{}),
 	}, nil
 }
@@ -130,23 +129,21 @@ func (a *RequestAdmission) ReadyHint(ctx context.Context, intent RequestAdmissio
 	if a.closed {
 		return w, ErrAdmissionClosed
 	}
-	limit, ok := a.config.MainConcurrency[intent.RoundIndex]
+	_, ok := a.config.MainConcurrency[intent.RoundIndex]
 	if !ok {
 		return w, fmt.Errorf("request round %d has no frozen budget", intent.RoundIndex)
 	}
-	shared := intent.Stage == RequestStageMain || a.config.LegacyRoundShared
+	shared := intent.Stage == RequestStageMain
 	if !shared && a.config.AlignmentConcurrency == 0 {
 		return w, errors.New("alignment request has no frozen budget")
 	}
 	if intent.Stage != RequestStageMain && intent.Stage != RequestStageAlignment {
 		return w, fmt.Errorf("unsupported stage %q", intent.Stage)
 	}
-	if a.completions >= a.config.MaxCompletions {
-		w.Reason = "completion_capacity"
-	} else if shared && a.main[intent.RoundIndex] >= limit {
-		w.Reason = "main_concurrency"
-	} else if !shared && a.alignment >= a.config.AlignmentConcurrency {
-		w.Reason = "alignment_concurrency"
+	_, reason, err := a.capacityLocked(intent, false)
+	w.Reason = reason
+	if err != nil {
+		return w, err
 	}
 	if a.pool != nil {
 		a.pool.mu.Lock()
@@ -191,7 +188,7 @@ func (a *RequestAdmission) tryAdmit(ctx context.Context, intent RequestAdmission
 	if _, ok := a.config.MainConcurrency[intent.RoundIndex]; !ok {
 		return nil, wait, fmt.Errorf("request round %d has no frozen budget", intent.RoundIndex)
 	}
-	shared := intent.Stage == RequestStageMain || a.config.LegacyRoundShared
+	shared := intent.Stage == RequestStageMain
 	if !shared && a.config.AlignmentConcurrency == 0 {
 		return nil, wait, errors.New("alignment request has no frozen budget")
 	}
@@ -218,19 +215,9 @@ func (a *RequestAdmission) tryAdmit(ctx context.Context, intent RequestAdmission
 			admissionErr = ErrAdmissionClosed
 			return false
 		}
-		if a.completions >= a.config.MaxCompletions {
-			wait.Reason = "completion_capacity"
-			return false
-		}
-		if shared && a.main[intent.RoundIndex] >= a.config.MainConcurrency[intent.RoundIndex] {
-			wait.Reason = "main_concurrency"
-			if a.config.LegacyRoundShared {
-				wait.Reason = "legacy_round_concurrency"
-			}
-			return false
-		}
-		if !shared && a.alignment >= a.config.AlignmentConcurrency {
-			wait.Reason = "alignment_concurrency"
+		lane, reason, capacityErr := a.capacityLocked(intent, true)
+		wait.Reason, admissionErr = reason, capacityErr
+		if capacityErr != nil || reason != "" {
 			return false
 		}
 		if a.pool != nil {
@@ -245,8 +232,13 @@ func (a *RequestAdmission) tryAdmit(ctx context.Context, intent RequestAdmission
 		}
 		if shared {
 			a.main[intent.RoundIndex]++
+			a.mainResults[intent.RoundIndex]++
 		} else {
 			a.alignment++
+			a.auxResults++
+		}
+		if a.budget != nil {
+			a.budget.applyGrant(intent, lane)
 		}
 		a.completions++
 		a.version++
@@ -370,6 +362,12 @@ func (p *RequestPermit) Release() {
 		a := p.admission
 		a.mu.Lock()
 		a.completions--
+		if p.shared {
+			a.mainResults[p.intent.RoundIndex]--
+		} else {
+			a.auxResults--
+		}
+		a.releaseRequestBudgetLocked(p.intent)
 		a.notifyLocked()
 		a.mu.Unlock()
 	})
