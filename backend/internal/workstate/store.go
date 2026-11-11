@@ -7,6 +7,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"sort"
 
+	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -28,16 +30,39 @@ func candidatePayloadLimit(c Candidate) int64 {
 	}
 	return 1 << 20
 }
-func candidateReadPayload(ctx context.Context, tx *ent.Client, old *ent.WorkCandidate, limit int64) error {
-	if old.PayloadBytes < 0 || old.PayloadBytes > limit {
-		return backend.ErrBuildCapacity
+
+// candidatePayloadMatches verifies a retained version without copying its body
+// into the response owner. PostgreSQL JSONB compares semantic values directly;
+// SQLite's canonical writer permits its JSON whitespace normalization.
+func candidatePayloadMatches(ctx context.Context, tx *ent.Client, old *ent.WorkCandidate, payload []byte, limit int64) (bool, error) {
+	if old.PayloadBytes < 0 || old.PayloadBytes > limit || int64(len(payload)) > limit {
+		return false, backend.ErrBuildCapacity
 	}
-	payload, err := tx.WorkCandidate.Query().Where(workcandidate.IDEQ(old.ID), workcandidate.PayloadBytesLTE(limit)).Select(workcandidate.FieldID, workcandidate.FieldPayload).Only(ctx)
-	if err != nil {
-		return err
+	return tx.WorkCandidate.Query().Where(workcandidate.IDEQ(old.ID), workcandidate.VersionEQ(old.Version), func(sel *sql.Selector) {
+		sel.Where(candidateJSONEquality(sel, payload))
+	}).Exist(ctx)
+}
+
+func candidateJSONEquality(sel *sql.Selector, payload []byte) *sql.Predicate {
+	return storageJSONEquality(sel, workcandidate.FieldPayload, payload, false)
+}
+
+func storageJSONEquality(sel *sql.Selector, field string, payload []byte, nullable bool) *sql.Predicate {
+	column := sel.C(field)
+	if sel.Dialect() == "postgres" {
+		if nullable {
+			column = "COALESCE(" + column + ",'null'::jsonb)"
+		}
+		return sql.P(func(b *sql.Builder) {
+			b.WriteString(column).WriteString(" = CAST(").Arg(string(payload)).WriteString(" AS JSONB)")
+		})
 	}
-	old.Payload = payload.Payload
-	return nil
+	if nullable {
+		column = "COALESCE(" + column + ",'null')"
+	}
+	return sql.P(func(b *sql.Builder) {
+		b.WriteString("json(" + column + ") = json(").Arg(string(payload)).WriteString(")")
+	})
 }
 
 func NewStore(client *ent.Client) *Store { return &Store{client: client} }
@@ -332,7 +357,7 @@ func (s *Store) saveCandidate(ctx context.Context, c Candidate, cursor *Cursor) 
 	if int64(len(c.Payload)) > candidatePayloadLimit(c) {
 		return backend.ErrBuildCapacity
 	}
-	if c.ID == "" || c.Version < 1 || c.DTOVersion < 1 || c.SnapshotDigest == "" || !json.Valid(c.Payload) {
+	if c.ID == "" || len(c.ID) > 128 || len(c.WorkID) > 128 || len(c.ParentRequestID) > 128 || c.Version < 1 || c.DTOVersion < 1 || c.SnapshotDigest == "" || !json.Valid(c.Payload) {
 		return fmt.Errorf("invalid candidate")
 	}
 	if c.State == "" {
@@ -364,10 +389,11 @@ func (s *Store) saveCandidate(ctx context.Context, c Candidate, cursor *Cursor) 
 		if err != nil {
 			return false, err
 		}
-		if err := candidateReadPayload(ctx, tx, row, candidatePayloadLimit(c)); err != nil {
-			return false, err
+		equal, equalErr := candidatePayloadMatches(ctx, tx, row, c.Payload, candidatePayloadLimit(c))
+		if equalErr != nil {
+			return false, equalErr
 		}
-		if row.WorkItemID != w.ID || row.Version != c.Version || row.SnapshotDigest != c.SnapshotDigest || row.DtoVersion != c.DTOVersion || row.Mode != c.Mode || row.BaselineVersion != c.BaselineVersion || row.State != c.State || string(row.Payload) != string(c.Payload) {
+		if row.WorkItemID != w.ID || row.Version != c.Version || row.SnapshotDigest != c.SnapshotDigest || row.DtoVersion != c.DTOVersion || row.Mode != c.Mode || row.BaselineVersion != c.BaselineVersion || row.State != c.State || !equal {
 			if row.WorkItemID == w.ID && row.Version < c.Version {
 				return false, nil
 			}
@@ -394,11 +420,6 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 	old, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Select(candidateSaveFields...).Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
 		return err
-	}
-	if old != nil {
-		if err := candidateReadPayload(ctx, tx, old, candidatePayloadLimit(c)); err != nil {
-			return err
-		}
 	}
 	j, err := tx.Job.Get(ctx, c.Scope.JobID)
 	if err != nil {
@@ -428,7 +449,11 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 			return ErrCandidateVersion
 		}
 		if c.Version == old.Version {
-			if string(c.Payload) != string(old.Payload) || c.State != old.State {
+			equal, equalErr := candidatePayloadMatches(ctx, tx, old, c.Payload, candidatePayloadLimit(c))
+			if equalErr != nil {
+				return equalErr
+			}
+			if !equal || c.State != old.State {
 				return ErrCandidateVersion
 			}
 			return nil
@@ -478,20 +503,37 @@ func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old
 			LastAlignmentRequestID string
 		}
 		validSaved := false
+		lastAlignmentMatches := false
 		if len(old.PipelineHeader) > 0 && len(old.PipelineHeader) <= 2048 {
 			b, e := backend.NewBuildBounds(2048, 0)
 			validSaved = e == nil && b.DecodeJSON(old.PipelineHeader, &saved) == nil && saved.RetryEpoch == c.Scope.RetryEpoch
+			lastAlignmentMatches = saved.LastAlignmentRequestID == c.LastAlignmentRequestID
 		} else {
-			var legacy struct {
-				RetryEpoch             int64  `json:"retry_epoch"`
-				LastAlignmentRequestID string `json:"last_alignment_request_id"`
+			// Legacy lifecycle proof is also scalar: do not read the old Q body
+			// after an already paid request merely to inspect two fields.
+			proof := tx.WorkCandidate.Query().Where(workcandidate.IDEQ(old.ID), workcandidate.VersionEQ(old.Version), func(sel *sql.Selector) {
+				sel.Where(sqljson.ValueEQ(sel.C(workcandidate.FieldPayload), c.Scope.RetryEpoch, sqljson.Path("retry_epoch")))
+			})
+			var err error
+			validSaved, err = proof.Clone().Exist(ctx)
+			if err != nil {
+				return err
 			}
-			validSaved = json.Unmarshal(old.Payload, &legacy) == nil && legacy.RetryEpoch == c.Scope.RetryEpoch
-			saved.RetryEpoch = legacy.RetryEpoch
-			saved.LastAlignmentRequestID = legacy.LastAlignmentRequestID
+			lastAlignmentMatches, err = proof.Where(func(sel *sql.Selector) {
+				sel.Where(sqljson.ValueEQ(sel.C(workcandidate.FieldPayload), c.LastAlignmentRequestID, sqljson.Path("last_alignment_request_id")))
+			}).Exist(ctx)
+			if err != nil {
+				return err
+			}
 		}
-		if validSaved && old.Version == c.Version && old.State == c.State && string(old.Payload) == string(c.Payload) {
-			return nil
+		if validSaved && old.Version == c.Version && old.State == c.State {
+			equal, equalErr := candidatePayloadMatches(ctx, tx, old, c.Payload, candidatePayloadLimit(c))
+			if equalErr != nil {
+				return equalErr
+			}
+			if equal {
+				return nil
+			}
 		}
 		w, err := member(ctx, tx, c.Scope, c.SegmentID)
 		if err != nil {
@@ -508,7 +550,7 @@ func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old
 			// A locally exhausted candidate may be finalized without another
 			// invocation. Its already saved response supplies the authorization;
 			// it does not authorize clearing any newer network debit.
-			if validSaved && saved.LastAlignmentRequestID == c.LastAlignmentRequestID {
+			if validSaved && lastAlignmentMatches {
 				ok, err = alignmentProof(ctx, tx, c.Scope, w, c.LastAlignmentRequestID, c.WorkID, old.Version, false)
 				if err != nil {
 					return err

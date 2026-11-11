@@ -284,7 +284,7 @@ func runHandoffPersistedBorrower(t *testing.T, lowered bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.EpisodeActive != lowered {
+	if state.ProgressID != c.ID {
 		t.Fatalf("borrower fixture debt classification: lowered%v state%+v", lowered, state)
 	}
 	a := acceptanceGrowthAdmission(t)
@@ -310,11 +310,11 @@ func runHandoffPersistedBorrower(t *testing.T, lowered bool) {
 		t.Error("restart header lost persisted borrower full Q reservation")
 	}
 	reloaded, err := NewStore(client).LoadRuntimeState(ctx, scope.JobID)
-	if err != nil || reloaded.ProgressID != c.ID || reloaded.Generation != state.Generation || reloaded.N0 != state.N0 || reloaded.B0 != state.B0 || reloaded.J0 != state.J0 {
+	if err != nil || reloaded.ProgressID != c.ID || reloaded != state {
 		t.Fatalf("Pause/restart rolled borrower episode: %+v/%+v %v", state, reloaded, err)
 	}
 	if _, err := store.BeginRuntimeProgress(ctx, scope.JobID, "second-owner", r.ID, scope.ResourceID, 0, limits); err == nil {
 		t.Error("Pause admitted a second progress owner")
 	}
-	t.Logf("persisted_borrower=%s Q=%d episode_active=%v N0=%d B0=%d J0=%d restart_growth_reserved=%v", c.ID, limits.Item, state.EpisodeActive, state.N0, state.B0, state.J0, headers[0].GrowthReserved)
+	t.Logf("persisted_borrower=%s Q=%d progress=%s restart_growth_reserved=%v", c.ID, limits.Item, state.ProgressID, headers[0].GrowthReserved)
 }

@@ -2,6 +2,7 @@ package workstate
 
 import (
 	"context"
+	"entgo.io/ent/dialect/sql"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -31,38 +32,41 @@ type StageCounts struct {
 }
 
 func ReadStageCounts(ctx context.Context, client *ent.Client, jobID int) (*StageCounts, error) {
-	row, err := client.Job.Query().Where(job.IDEQ(jobID)).Select(job.FieldID, job.FieldStatus, job.FieldPauseRequested, job.FieldRetryEpoch).Only(ctx)
+	var facts []struct {
+		RetryEpoch int64 `json:"retry_epoch"`
+		Draining   bool  `json:"draining"`
+	}
+	err := client.Job.Query().Where(job.IDEQ(jobID)).Modify(func(s *sql.Selector) {
+		s.Select(s.C(job.FieldRetryEpoch), sql.As("CASE WHEN "+s.C(job.FieldPauseRequested)+" OR "+s.C(job.FieldStatus)+"='pausing' THEN TRUE ELSE FALSE END", "draining"))
+	}).Scan(ctx, &facts)
 	if err != nil {
 		return nil, err
 	}
+	if len(facts) != 1 {
+		return nil, ErrManifest
+	}
+	row := facts[0]
 	confirmed, err := client.JobRoundSegment.Query().Where(jobroundsegment.HasJobRoundWith(jobround.JobIDEQ(jobID))).Count(ctx)
 	if err != nil {
 		return nil, err
 	}
 	counts := &StageCounts{ConfirmedWork: int64(confirmed), AsOf: timeutil.NowUTC()}
-	var requests []struct {
-		State string `json:"state"`
-		Stage string `json:"stage"`
-		Count int    `json:"count"`
-	}
-	err = client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.RetryEpochEQ(row.RetryEpoch), workrequest.StateIn("sent", "received", "unknown")).GroupBy(workrequest.FieldState, workrequest.FieldStage).Aggregate(ent.Count()).Scan(ctx, &requests)
+	requests := client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.RetryEpochEQ(row.RetryEpoch))
+	counts.UnknownRequests, err = requests.Clone().Where(workrequest.StateEQ("unknown")).Count(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, request := range requests {
-		if request.State == "unknown" {
-			counts.UnknownRequests += request.Count
-			continue
-		}
-		if request.State == "received" {
-			counts.SavingRequests += request.Count
-			continue
-		}
-		if request.Stage == "alignment" || request.Stage == "ruby_alignment" {
-			counts.AlignmentRequests += request.Count
-		} else {
-			counts.MainRequests += request.Count
-		}
+	counts.SavingRequests, err = requests.Clone().Where(workrequest.StateEQ("received")).Count(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts.AlignmentRequests, err = requests.Clone().Where(workrequest.StateEQ("sent"), workrequest.StageIn("alignment", "ruby_alignment")).Count(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts.MainRequests, err = requests.Clone().Where(workrequest.StateEQ("sent"), workrequest.StageNotIn("alignment", "ruby_alignment")).Count(ctx)
+	if err != nil {
+		return nil, err
 	}
 	var candidates []struct {
 		State string `json:"state"`
@@ -79,7 +83,7 @@ func ReadStageCounts(ctx context.Context, client *ent.Client, jobID int) (*Stage
 			counts.ReadyToCommit = candidate.Count
 		}
 	}
-	if row.PauseRequested || row.Status == "pausing" {
+	if row.Draining {
 		counts.DrainingRequests = counts.MainRequests + counts.AlignmentRequests + counts.SavingRequests
 	}
 	return counts, nil

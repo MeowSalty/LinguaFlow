@@ -126,7 +126,7 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 			changed := row.TargetText == nil || *row.TargetText != in.Target || string(row.Status) != status || !reflect.DeepEqual(row.QualityIssues, in.Issues) || (in.ClearReview && row.ReviewComment != nil)
 			if in.IssuesPayload != nil {
 				same, err := tx.Segment.Query().Where(segment.IDEQ(row.ID), func(s *sql.Selector) {
-					s.Where(sql.ExprP("COALESCE(quality_issues, 'null') = CAST(? AS TEXT)", in.IssuesPayload))
+					s.Where(storageJSONEquality(s, segment.FieldQualityIssues, in.IssuesPayload, true))
 				}).Exist(ctx)
 				if err != nil {
 					return err

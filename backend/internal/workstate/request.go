@@ -18,7 +18,7 @@ import (
 // ReserveRequest debits each member once before admission. Repeating the same
 // identity is idempotent; a new batch identity never refreshes member budgets.
 func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
-	if r.ID == "" || len(r.SegmentIDs) == 0 || r.Stage == "" || r.InputDigest == "" || r.BudgetModel == "" {
+	if r.ID == "" || len(r.ID) > 128 || len(r.SegmentIDs) == 0 || len(r.SegmentIDs) > 65536 || r.Stage == "" || r.InputDigest == "" || len(r.InputDigest) > 128 || r.BudgetModel == "" {
 		return fmt.Errorf("invalid request reservation")
 	}
 	ids := append([]int(nil), r.SegmentIDs...)
@@ -62,8 +62,14 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 		}
 		old, err := projectedRequest(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(r.ID))).Only(ctx)
 		if err == nil {
-			if len(promotionPayload) > 0 && (old.FreezeDigest != payloadDigest(r.FreezePayload) || old.SnapshotDigest != r.SnapshotDigest || string(old.PromotionMembers) != string(promotionPayload) || old.BusinessBound != r.BusinessBound) {
-				return ErrManifest
+			if len(promotionPayload) > 0 {
+				equal, err := promotionMembersMatch(ctx, tx, old, promotionPayload)
+				if err != nil {
+					return err
+				}
+				if old.FreezeDigest != payloadDigest(r.FreezePayload) || old.SnapshotDigest != r.SnapshotDigest || !equal || old.BusinessBound != r.BusinessBound {
+					return ErrManifest
+				}
 			}
 			oldMembers, err := decodeRequestMembers(old.Members)
 			if err != nil {

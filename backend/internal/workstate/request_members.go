@@ -35,7 +35,7 @@ func normalizedMembers(r Request, ids []int) ([]RequestMember, error) {
 	members := append([]RequestMember(nil), r.Members...)
 	sort.Slice(members, func(i, j int) bool { return members[i].SegmentID < members[j].SegmentID })
 	for i, m := range members {
-		if m.SegmentID != ids[i] || m.WorkID != WorkIdentity(r.Scope, m.SegmentID) || m.CandidateID == "" || m.CandidateVersion < 1 || m.Pool < 0 || m.LogicalAttempt < 0 || m.NetworkAttempt < 0 {
+		if m.SegmentID != ids[i] || m.WorkID != WorkIdentity(r.Scope, m.SegmentID) || len(m.WorkID) > 128 || m.CandidateID == "" || len(m.CandidateID) > 128 || m.CandidateVersion < 1 || m.Pool < 0 || m.LogicalAttempt < 0 || m.NetworkAttempt < 0 {
 			return nil, ErrManifest
 		}
 		if i > 0 && m.Pool != members[0].Pool {

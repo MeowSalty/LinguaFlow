@@ -159,7 +159,7 @@ func (s *Store) abortRequest(ctx context.Context, scope *Scope, id string) error
 				}
 			}
 		}
-		n, err := tx.WorkRequest.Update().Where(workrequest.IDEQ(row.ID), workrequest.StateEQ("reserved")).SetState("cancelled_before_dispatch").SetLastError("").Save(ctx)
+		n, err := tx.WorkRequest.Update().Where(workrequest.IDEQ(row.ID), workrequest.StateEQ("reserved")).SetState("cancelled_before_dispatch").SetLastError("").ClearFreezePayload().SetFreezeBytes(0).ClearPromotionMembers().SetBusinessBound(0).Save(ctx)
 		if err != nil {
 			return err
 		}

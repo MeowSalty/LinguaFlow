@@ -24,6 +24,7 @@ type CandidateHeader struct {
 	SegmentID      int
 	DTOVersion     int
 	PayloadBytes   int64
+	StoredBytes    int64
 	State          string
 	SnapshotDigest string
 	Mode           string
@@ -38,7 +39,7 @@ func (s *Store) LoadCandidateHeaders(ctx context.Context, jobID, afterID, limit 
 		return nil, afterID, fmt.Errorf("invalid candidate header page")
 	}
 	invalid, err := s.client.WorkCandidate.Query().Where(workcandidate.IDGT(afterID), workcandidate.StateIn("pending_alignment", "ready_to_commit"), workcandidate.HasWorkItemWith(workitem.JobIDEQ(jobID)), predicate.WorkCandidate(func(q *sql.Selector) {
-		q.Where(sql.ExprP("LENGTH("+q.C(workcandidate.FieldPipelineHeader)+") > ?", 2048))
+		q.Where(sql.Or(projectedLengthPredicate(q, workcandidate.FieldPipelineHeader, ">", 2048), projectedLengthPredicate(q, workcandidate.FieldPayload, ">", CandidateReadBytes)))
 	})).Exist(ctx)
 	if err != nil {
 		return nil, afterID, err

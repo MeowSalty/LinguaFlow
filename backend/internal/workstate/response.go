@@ -1,18 +1,21 @@
 package workstate
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"entgo.io/ent/dialect/sql"
 	"fmt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"io"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
@@ -48,6 +51,7 @@ type ResponseHandoff struct {
 
 // ResponseHeader is small enough to restore ownership without reading bodies.
 type ResponseHeader struct {
+	MetadataBytes  int64
 	DatabaseID     int
 	RequestID      string
 	Scope          Scope
@@ -113,10 +117,10 @@ func validatePromotionMembers(scope Scope, ids []int, members []PromotionMember)
 
 func decodePromotionMembers(row *ent.WorkRequest) ([]PromotionMember, error) {
 	var members []PromotionMember
-	if row.PromotionCount < 1 || row.PromotionCount > 65536 || len(row.PromotionMembers) > row.PromotionCount*1024 {
+	if row.PromotionCount < 1 || row.PromotionCount > 65536 || len(row.PromotionMembers) > row.PromotionCount*4096 {
 		return nil, ErrManifest
 	}
-	b, err := backend.NewBuildBounds(int64(row.PromotionCount)*1024, 0)
+	b, err := backend.NewBuildBounds(int64(row.PromotionCount)*4096, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -134,11 +138,7 @@ func decodePromotionMembers(row *ent.WorkRequest) ([]PromotionMember, error) {
 }
 
 func guardExecution(ctx context.Context, tx *ent.Client, jobID int) error {
-	j, err := tx.Job.Get(ctx, jobID)
-	if err != nil {
-		return err
-	}
-	return execution.ValidateExecutionConfigFormat(j.ExecutionConfig)
+	return CheckExecution(ctx, tx, jobID)
 }
 
 // HandoffResponse makes a complete response, accounting and all pending member
@@ -170,8 +170,15 @@ func (s *Store) HandoffResponse(ctx context.Context, in ResponseHandoff) error {
 		if err != nil {
 			return err
 		}
+		membersEqual := true
+		if row.FreezeDigest != "" || row.ResponseDigest != "" {
+			membersEqual, err = promotionMembersMatch(ctx, tx, row, encoded)
+			if err != nil {
+				return err
+			}
+		}
 		if row.ResponseDigest != "" {
-			if row.State != "completed" || row.ResponseFormatVersion != execution.ResponseFormatVersion || row.FreezeDigest != freezeDigest || row.ResponseDigest != responseDigest || row.SnapshotDigest != in.SnapshotDigest || !bytes.Equal(row.PromotionMembers, encoded) {
+			if row.State != "completed" || row.ResponseFormatVersion != execution.ResponseFormatVersion || row.FreezeDigest != freezeDigest || row.ResponseDigest != responseDigest || row.SnapshotDigest != in.SnapshotDigest || !membersEqual {
 				return ErrManifest
 			}
 			return nil
@@ -179,7 +186,7 @@ func (s *Store) HandoffResponse(ctx context.Context, in ResponseHandoff) error {
 		if row.State == "failed" || row.State == "cancelled_before_dispatch" {
 			return ErrStopped
 		}
-		if row.FreezeDigest != "" && (row.FreezeDigest != freezeDigest || row.SnapshotDigest != in.SnapshotDigest || !bytes.Equal(row.PromotionMembers, encoded)) {
+		if row.FreezeDigest != "" && (row.FreezeDigest != freezeDigest || row.SnapshotDigest != in.SnapshotDigest || !membersEqual) {
 			return ErrManifest
 		}
 		for _, m := range in.Members {
@@ -239,13 +246,27 @@ func (s *Store) LoadResponseHeaders(ctx context.Context, jobID, after, limit int
 	if limit < 1 || limit > 256 {
 		return nil, after, ErrManifest
 	}
+	invalid, err := s.client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.IDGT(after), workrequest.StateEQ("completed"), workrequest.PromotionStateIn("response_pending", "glossary_processed"), predicate.WorkRequest(func(q *sql.Selector) {
+		q.Where(sql.Or(sql.ExprP(projectedByteLength(q, workrequest.FieldFreezePayload)+" != "+q.C(workrequest.FieldFreezeBytes)), sql.ExprP(projectedByteLength(q, workrequest.FieldResponsePayload)+" != "+q.C(workrequest.FieldResponseBytes)), sql.ExprP(projectedByteLength(q, workrequest.FieldCorrectedTargets)+" != "+q.C(workrequest.FieldCorrectedTargetBytes))))
+	})).Exist(ctx)
+	if err != nil {
+		return nil, after, err
+	}
+	if invalid {
+		return nil, after, ErrManifest
+	}
 	rows, err := s.client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.IDGT(after), workrequest.StateEQ("completed"), workrequest.PromotionStateIn("response_pending", "glossary_processed")).Select(workrequest.FieldID, workrequest.FieldIdentity, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldSnapshotDigest, workrequest.FieldFreezeDigest, workrequest.FieldResponseDigest, workrequest.FieldFreezeBytes, workrequest.FieldResponseBytes, workrequest.FieldCorrectedTargetBytes, workrequest.FieldBusinessBound, workrequest.FieldPromotionCount, workrequest.FieldPromotionCursor, workrequest.FieldPromotionState, workrequest.FieldResponseTruncated).Order(ent.Asc(workrequest.FieldID)).Limit(limit).All(ctx)
 	if err != nil {
 		return nil, after, err
 	}
 	out := make([]ResponseHeader, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, responseHeader(row))
+		h := responseHeader(row)
+		h.MetadataBytes, err = loadRequestMetadata(ctx, s.client, row.Identity)
+		if err != nil {
+			return nil, after, err
+		}
+		out = append(out, h)
 		after = row.ID
 	}
 	return out, after, nil
@@ -262,7 +283,15 @@ func (s *Store) LoadResponse(ctx context.Context, requestID string, maxFreeze, m
 	if row.FreezeBytes <= 0 || row.FreezeBytes > maxFreeze || row.ResponseBytes <= 0 || row.ResponseBytes > maxResponse || row.CorrectedTargetBytes > maxBusiness {
 		return StoredResponse{}, fmt.Errorf("saved response exceeds configured capacity")
 	}
-	row, err = s.client.WorkRequest.Query().Where(workrequest.IDEQ(row.ID), workrequest.FreezeBytesLTE(maxFreeze), workrequest.ResponseBytesLTE(maxResponse), workrequest.CorrectedTargetBytesLTE(maxBusiness)).Only(ctx)
+	row, err = s.client.WorkRequest.Query().Where(workrequest.IDEQ(row.ID), workrequest.FreezeBytesLTE(maxFreeze), workrequest.ResponseBytesLTE(maxResponse), workrequest.CorrectedTargetBytesLTE(maxBusiness), func(sel *sql.Selector) {
+		sel.Where(requestMetadataBounds(sel))
+		for _, bound := range []struct {
+			field string
+			max   int64
+		}{{workrequest.FieldFreezePayload, maxFreeze}, {workrequest.FieldResponsePayload, maxResponse}, {workrequest.FieldCorrectedTargets, maxBusiness}} {
+			sel.Where(projectedLengthPredicate(sel, bound.field, "<=", bound.max))
+		}
+	}).Only(ctx)
 	if err != nil {
 		return StoredResponse{}, err
 	}
@@ -273,15 +302,23 @@ func (s *Store) LoadResponse(ctx context.Context, requestID string, maxFreeze, m
 	if row.CorrectedTargetBytes > 0 && payloadDigest(row.CorrectedTargets) != row.CorrectedTargetDigest {
 		return StoredResponse{}, ErrManifest
 	}
+	if err := validateResponseReceipt(row.GlossaryReceipt, row.Identity); err != nil {
+		return StoredResponse{}, err
+	}
 	members, err := decodePromotionMembers(row)
 	if err != nil {
 		return StoredResponse{}, err
 	}
-	return StoredResponse{ResponseHeader: responseHeader(row), FreezePayload: row.FreezePayload, ResponsePayload: row.ResponsePayload, CorrectedTargets: row.CorrectedTargets, CorrectedIndex: row.CorrectedTargetIndex, CorrectedDigest: row.CorrectedTargetDigest, Members: members, Receipt: row.GlossaryReceipt}, nil
+	header := responseHeader(row)
+	header.MetadataBytes, err = loadRequestMetadata(ctx, s.client, row.Identity)
+	if err != nil {
+		return StoredResponse{}, err
+	}
+	return StoredResponse{ResponseHeader: header, FreezePayload: row.FreezePayload, ResponsePayload: row.ResponsePayload, CorrectedTargets: row.CorrectedTargets, CorrectedIndex: row.CorrectedTargetIndex, CorrectedDigest: row.CorrectedTargetDigest, Members: members, Receipt: row.GlossaryReceipt}, nil
 }
 
 func (s *Store) LoadResponseMember(ctx context.Context, id string, cursor int) (PromotionMember, error) {
-	r, err := s.client.WorkRequest.Query().Where(workrequest.IdentityEQ(id)).Select(workrequest.FieldID, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldSegmentIds, workrequest.FieldPromotionMembers, workrequest.FieldPromotionCount, workrequest.FieldPromotionCursor, workrequest.FieldPromotionStatus).Only(ctx)
+	r, err := s.client.WorkRequest.Query().Where(workrequest.IdentityEQ(id), func(sel *sql.Selector) { sel.Where(requestMetadataBounds(sel)) }).Select(workrequest.FieldID, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldSegmentIds, workrequest.FieldPromotionMembers, workrequest.FieldPromotionCount, workrequest.FieldPromotionCursor, workrequest.FieldPromotionStatus).Only(ctx)
 	if err != nil {
 		return PromotionMember{}, err
 	}
@@ -311,30 +348,39 @@ func HasPendingResponse(ctx context.Context, tx *ent.Client, w *ent.WorkItem) (b
 	}
 	for i := r.PromotionCursor; i < len(members); i++ {
 		if members[i].SegmentID == w.SegmentID {
-			j, err := tx.Job.Get(ctx, w.JobID)
-			if err != nil {
-				return false, err
-			}
-			digest, err := ExecutionSnapshotDigest(j.ExecutionConfig)
-			if err != nil {
-				return false, err
+			digest := executionDigest(ctx)
+			if digest == "" {
+				config, err := LoadExecutionConfig(ctx, tx, w.JobID, ExecutionDefinitionReadLimit)
+				if err != nil {
+					return false, err
+				}
+				digest, err = ExecutionSnapshotDigest(config)
+				if err != nil {
+					return false, err
+				}
 			}
 			if digest != r.SnapshotDigest {
 				return false, ErrManifest
 			}
-			resource, err := tx.Resource.Get(ctx, w.ResourceID)
+			resourceRow, err := tx.Resource.Query().Where(resource.IDEQ(w.ResourceID)).Select(resource.FieldID, resource.FieldSourceGeneration, resource.FieldCurrentSourceRevisionID).Only(ctx)
 			if err != nil {
 				return false, err
 			}
 			m := members[i]
-			if m.SourceGeneration != resource.SourceGeneration || !sameInt(m.SourceRevisionID, resource.CurrentSourceRevisionID) {
+			if m.SourceGeneration != resourceRow.SourceGeneration || !sameInt(m.SourceRevisionID, resourceRow.CurrentSourceRevisionID) {
 				return false, ErrStale
 			}
-			segment, err := tx.Segment.Get(ctx, w.SegmentID)
+			// The baseline is a byte digest, so comparison belongs in SQL. No
+			// source/meta/quality JSON or target body is copied into the retry path.
+			segmentMatches, err := tx.Segment.Query().Where(segment.IDEQ(w.SegmentID), segment.ContentVersionEQ(m.BaselineVersion), segment.StatusEQ(segment.Status(m.BaselineStatus))).Exist(ctx)
 			if err != nil {
 				return false, err
 			}
-			if segment.ContentVersion != m.BaselineVersion || !samePromotionBaseline(m, segment.TargetText) || string(segment.Status) != m.BaselineStatus {
+			baseline, err := promotionBaselineMatchesSQL(ctx, tx, w.SegmentID, m)
+			if err != nil {
+				return false, err
+			}
+			if !segmentMatches || !baseline {
 				return false, ErrStale
 			}
 			return true, nil
@@ -493,15 +539,21 @@ func verifyPromotedMember(ctx context.Context, tx *ent.Client, r *ent.WorkReques
 		return nil
 	}
 	c := in.Candidate
-	row, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(m.CandidateID)).Only(ctx)
+	row, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(m.CandidateID)).Select(candidateSaveFields...).Only(ctx)
 	if err != nil {
 		return err
 	}
 	if r.PromotionStatus[in.Cursor] != 1 || row.WorkItemID != w.ID || row.Version < c.Version || row.ParentRequestID != r.Identity || row.SnapshotDigest != c.SnapshotDigest {
 		return errUnverifiable
 	}
-	if row.Version == c.Version && !bytes.Equal(row.Payload, c.Payload) {
-		return errUnverifiable
+	if row.Version == c.Version {
+		equal, err := candidatePayloadMatches(ctx, tx, row, c.Payload, candidatePayloadLimit(*c))
+		if err != nil {
+			return err
+		}
+		if !equal {
+			return errUnverifiable
+		}
 	}
 	return nil
 }
@@ -580,5 +632,11 @@ var requestFactFields = func() []string {
 }()
 
 func projectedRequest(q *ent.WorkRequestQuery) *ent.WorkRequestQuery {
-	return q.Select(requestFactFields...).WorkRequestQuery
+	return q.Where(func(sel *sql.Selector) { sel.Where(requestMetadataBounds(sel)) }).Select(requestFactFields...).WorkRequestQuery
+}
+
+func promotionMembersMatch(ctx context.Context, tx *ent.Client, row *ent.WorkRequest, payload []byte) (bool, error) {
+	return tx.WorkRequest.Query().Where(workrequest.IDEQ(row.ID), workrequest.IdentityEQ(row.Identity), func(sel *sql.Selector) {
+		sel.Where(storageJSONEquality(sel, workrequest.FieldPromotionMembers, payload, false))
+	}).Exist(ctx)
 }
