@@ -2,6 +2,8 @@ package workstate
 
 import (
 	"context"
+
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -22,21 +24,37 @@ func (s *Store) LoadRoundMembersPage(ctx context.Context, scope Scope, after, li
 	if limit < 1 || limit > 16 {
 		return nil, after, ErrManifest
 	}
-	q := s.client.WorkItem.Query().Where(workitem.JobIDEQ(scope.JobID), workitem.ResourceIDEQ(scope.ResourceID), workitem.JobRoundIDEQ(scope.RoundID), func(sel *sql.Selector) { sel.Where(sql.GT(sel.C(workitem.FieldSegmentID), after)) })
+	q := s.client.WorkItem.Query().Where(func(sel *sql.Selector) {
+		page := sql.Table(workitem.Table).As("member_page")
+		ids := sql.Dialect(sel.Dialect()).Select(page.C(workitem.FieldID)).From(page).
+			Where(sql.And(sql.EQ(page.C(workitem.FieldJobID), scope.JobID), sql.EQ(page.C(workitem.FieldResourceID), scope.ResourceID), sql.EQ(page.C(workitem.FieldJobRoundID), scope.RoundID), sql.GT(page.C(workitem.FieldSegmentID), after))).
+			OrderBy(page.C(workitem.FieldSegmentID)).Limit(limit)
+		sel.Where(sql.In(sel.C(workitem.FieldID), ids))
+	})
 	var sizes []struct {
 		Bytes int64 `json:"bytes"`
+		Count int   `json:"count"`
 	}
 	if err := q.Clone().Aggregate(func(sel *sql.Selector) string {
-		return sql.As("COALESCE(MAX(length(CAST("+sel.C(workitem.FieldState)+" AS BLOB))+length(CAST("+sel.C(workitem.FieldPromptPhase)+" AS BLOB))),0)", "bytes")
-	}).Scan(ctx, &sizes); err != nil {
+		return sql.As("COALESCE(MAX("+roundMemberCursorBytes(sel)+"),0)", "bytes")
+	}, func(*sql.Selector) string { return sql.As(sql.Count("*"), "count") }).Scan(ctx, &sizes); err != nil {
 		return nil, after, err
 	}
 	if len(sizes) != 1 || sizes[0].Bytes > 128 {
 		return nil, after, ErrManifest
 	}
-	rows, err := q.Select(workitem.FieldID, workitem.FieldSegmentID, workitem.FieldRetryEpoch, workitem.FieldState, workitem.FieldPoolIndex, workitem.FieldMainAttempts, workitem.FieldAlignmentAttempts, workitem.FieldAlignmentNetworkAttempts, workitem.FieldPromptPhase, workitem.FieldNextAttemptAt).Order(ent.Asc(workitem.FieldSegmentID)).Limit(limit).All(ctx)
+	// Recheck in the SELECT as well: a scalar growing after the preflight must
+	// never enter Go, and a changed page must fail rather than omit a member.
+	rows, err := q.Where(func(sel *sql.Selector) {
+		sel.Where(sql.P(func(builder *sql.Builder) {
+			builder.WriteString(roundMemberCursorBytes(sel)).WriteOp(sql.OpLTE).Arg(128)
+		}))
+	}).Select(workitem.FieldID, workitem.FieldSegmentID, workitem.FieldRetryEpoch, workitem.FieldState, workitem.FieldPoolIndex, workitem.FieldMainAttempts, workitem.FieldAlignmentAttempts, workitem.FieldAlignmentNetworkAttempts, workitem.FieldPromptPhase, workitem.FieldNextAttemptAt).Order(ent.Asc(workitem.FieldSegmentID)).Limit(limit).All(ctx)
 	if err != nil {
 		return nil, after, err
+	}
+	if len(rows) != sizes[0].Count {
+		return nil, after, ErrManifest
 	}
 	out := make([]Work, 0, len(rows))
 	for _, r := range rows {
@@ -47,4 +65,13 @@ func (s *Store) LoadRoundMembersPage(ctx context.Context, scope Scope, after, li
 		after = r.SegmentID
 	}
 	return out, after, nil
+}
+
+func roundMemberCursorBytes(sel *sql.Selector) string {
+	state := "COALESCE(" + sel.C(workitem.FieldState) + ",'')"
+	phase := "COALESCE(" + sel.C(workitem.FieldPromptPhase) + ",'')"
+	if sel.Dialect() == dialect.Postgres {
+		return "octet_length(" + state + ")+octet_length(" + phase + ")"
+	}
+	return "length(CAST(" + state + " AS BLOB))+length(CAST(" + phase + " AS BLOB))"
 }
