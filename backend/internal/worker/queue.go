@@ -114,7 +114,7 @@ func (q *Queue) enqueueChecked(ctx context.Context, taskID int, check func(conte
 	if taskID <= 0 {
 		return false, ErrInvalidTaskID
 	}
-	guard, err := q.lifecycle.Lock(ctx, q.kind, taskID)
+	guard, err := q.lifecycle.LockRegistration(ctx, q.kind, taskID)
 	if err != nil {
 		return false, err
 	}
