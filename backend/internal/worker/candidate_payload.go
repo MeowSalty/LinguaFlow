@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
@@ -44,7 +45,7 @@ func (s *roundStore) CandidateHeaders(ctx context.Context, after, limit int) ([]
 	}
 }
 func (s *roundStore) Candidate(ctx context.Context, id string, maxBytes int64) (*pipeline.Candidate, error) {
-	row, err := s.store.LoadCandidatePayload(ctx, s.scope, id, maxBytes)
+	row, err := s.loadCandidatePayload(ctx, id, maxBytes)
 	if err != nil {
 		return nil, s.classify(err)
 	}
@@ -105,7 +106,7 @@ func (s *roundStore) reconcileCandidate(ctx context.Context, c *pipeline.Candida
 }
 
 func (s *roundStore) CandidateFrame(ctx context.Context, id string, maxBytes int64) (pipeline.CandidateFrame, error) {
-	row, err := s.store.LoadCandidatePayload(ctx, s.scope, id, maxBytes)
+	row, err := s.loadCandidatePayload(ctx, id, maxBytes)
 	if err != nil {
 		return pipeline.CandidateFrame{}, s.classify(err)
 	}
@@ -125,4 +126,33 @@ func (s *roundStore) CandidateFrame(ctx context.Context, id string, maxBytes int
 		f.Next = *cur.NextAttemptAt
 	}
 	return f, nil
+}
+
+func (s *roundStore) loadCandidatePayload(ctx context.Context, id string, maxBytes int64) (workstate.Candidate, error) {
+	var lease *service.ExecutionInputLease
+	runtime := pipeline.ExecutionRuntimeFromContext(ctx)
+	reserve := func(bytes int64) (func(), error) {
+		credit, err := service.ExecutionInputAllocationBound(bytes, 1)
+		if err != nil {
+			return nil, err
+		}
+		if runtime != nil && runtime.Admission != nil {
+			release, owned, err := runtime.Admission.BorrowCandidateRead(id, credit)
+			if err != nil || owned {
+				return release, err
+			}
+		}
+		lease, err = service.NewExecutionInputLease(ctx, credit)
+		if err != nil {
+			return nil, err
+		}
+		return lease.Close, nil
+	}
+	build := func(fn func() error) error {
+		if lease != nil {
+			return lease.RunBuild(ctx, fn)
+		}
+		return runtime.Run(ctx, fn)
+	}
+	return s.store.LoadCandidatePayloadReserved(ctx, s.scope, id, maxBytes, reserve, build)
 }

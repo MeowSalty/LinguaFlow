@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 )
@@ -33,6 +34,8 @@ type EngineFactory struct {
 	maxResponseBytes     int64
 	responseHandoffBytes int64
 	runtimePolicy        pipeline.RuntimePolicy
+	rootBudget           *resourcebudget.RootBudget
+	prepareActor         func(context.Context, int) error
 }
 
 func NewEngineFactory(logger *slog.Logger, limiterPool *backend.LimiterPool, clients ...telemetry.HTTPClientFactory) *EngineFactory {
@@ -94,6 +97,19 @@ func (f *EngineFactory) BuildEngineWithConfig(
 			return nil, err
 		}
 		runtime.Lifetime = workerLifetime(ctx)
+		if f.rootBudget != nil {
+			scope := service.ExecutionScope(ctx)
+			if f.prepareActor != nil {
+				if err := f.prepareActor(ctx, scope.ActorID); err != nil {
+					runtime.Close()
+					return nil, err
+				}
+			}
+			if err := runtime.Admission.AttachRootBudget(f.rootBudget, scope); err != nil {
+				runtime.Close()
+				return nil, err
+			}
+		}
 	}
 	var owned []backend.Backend
 	success := false

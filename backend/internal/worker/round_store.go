@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
@@ -62,7 +63,7 @@ func (s *roundStore) classify(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, workstate.ErrStale) || errors.Is(err, workstate.ErrStopped) || errors.Is(err, workstate.ErrManifest) || errors.Is(err, workstate.ErrCandidateVersion) || errors.Is(err, workstate.ErrBudget) || database.Classify(s.driver, err).Category == database.CategoryStructural {
+	if errors.Is(err, resourcebudget.ErrCapacity) || errors.Is(err, resourcebudget.ErrIdentity) || errors.Is(err, workstate.ErrStale) || errors.Is(err, workstate.ErrStopped) || errors.Is(err, workstate.ErrManifest) || errors.Is(err, workstate.ErrCandidateVersion) || errors.Is(err, workstate.ErrBudget) || database.Classify(s.driver, err).Category == database.CategoryStructural {
 		return permanentStoreError{err}
 	}
 	return err

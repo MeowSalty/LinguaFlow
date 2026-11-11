@@ -34,7 +34,7 @@ func (s *roundStore) HandoffResponse(ctx context.Context, in pipeline.MainRespon
 }
 
 func pipelineResponseHeader(h workstate.ResponseHeader) pipeline.MainResponseHeader {
-	return pipeline.MainResponseHeader{ID: h.RequestID, DatabaseID: h.DatabaseID, ResourceID: h.Scope.ResourceID, RoundID: h.Scope.RoundID, SnapshotDigest: h.SnapshotDigest, FreezeDigest: h.FreezeDigest, ResponseDigest: h.ResponseDigest, FreezeBytes: h.FreezeBytes, ResponseBytes: h.ResponseBytes, CorrectedBytes: h.CorrectedBytes, BusinessBound: h.BusinessBound, MemberCount: h.MemberCount, Cursor: h.Cursor, Phase: h.Phase, Truncated: h.Truncated}
+	return pipeline.MainResponseHeader{MetadataBytes: h.MetadataBytes, ID: h.RequestID, DatabaseID: h.DatabaseID, ResourceID: h.Scope.ResourceID, RoundID: h.Scope.RoundID, SnapshotDigest: h.SnapshotDigest, FreezeDigest: h.FreezeDigest, ResponseDigest: h.ResponseDigest, FreezeBytes: h.FreezeBytes, ResponseBytes: h.ResponseBytes, CorrectedBytes: h.CorrectedBytes, BusinessBound: h.BusinessBound, MemberCount: h.MemberCount, Cursor: h.Cursor, Phase: h.Phase, Truncated: h.Truncated}
 }
 
 func (s *roundStore) ResponseHeaders(ctx context.Context, after, limit int) ([]pipeline.MainResponseHeader, int, error) {

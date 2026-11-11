@@ -2,77 +2,50 @@ package worker
 
 import (
 	"context"
-	"fmt"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"strconv"
 )
 
-// Reload the original document in place. ORM rows are released page by page;
-// only the canonical source/target/metadata become long-lived input M.
+// Reload within one bounded source snapshot, retaining the lease until every
+// document consumer has joined.
 func (r *JobRunner) loadCanonicalDocument(ctx context.Context, resource int, doc *pipeline.Document) error {
-	count, err := r.client.Segment.Query().Where(segment.ResourceIDEQ(resource)).Count(ctx)
+	rows, lease, err := service.LoadExecutionSegments(ctx, r.client, resource)
 	if err != nil {
 		return err
 	}
-	if len(doc.Segments) != count {
-		doc.Segments = make([]pipeline.Segment, count)
-	}
-	afterIndex, afterID, filled := 0, 0, 0
-	for {
-		q := r.client.Segment.Query().Where(segment.ResourceIDEQ(resource))
-		if afterID > 0 {
-			q.Where(segment.Or(segment.SegmentIndexGT(afterIndex), segment.And(segment.SegmentIndexEQ(afterIndex), segment.IDGT(afterID))))
+	var next []pipeline.Segment
+	success := false
+	defer func() {
+		if !success {
+			lease.Close()
 		}
-		page, err := q.Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).Limit(16).All(ctx)
-		if err != nil {
-			return err
-		}
-		if len(page) == 0 {
-			break
-		}
-		for _, row := range page {
-			if filled >= len(doc.Segments) {
-				return fmt.Errorf("source document membership changed during load")
+	}()
+	err = lease.RunBuild(ctx, func() error {
+		next = make([]pipeline.Segment, len(rows))
+		for i, row := range rows {
+			meta, err := service.ExecutionSegmentMeta(ctx, row)
+			if err != nil {
+				return err
 			}
-			seg := pipeline.Segment{DBID: row.ID, DBIndex: row.SegmentIndex, CompletionModes: doc.Segments[filled].CompletionModes, OriginalSource: row.SourceText, ID: strconv.Itoa(row.SegmentIndex), ContentVersion: row.ContentVersion, TargetIsNull: row.TargetText == nil, Source: row.SourceText, Status: string(row.Status), Issues: row.QualityIssues, Translate: true}
+			seg := pipeline.Segment{DBID: row.ID, DBIndex: row.SegmentIndex, OriginalSource: row.SourceText, ID: strconv.Itoa(row.SegmentIndex), ContentVersion: row.ContentVersion, TargetIsNull: row.TargetText == nil, Source: row.SourceText, Status: string(row.Status), Issues: row.QualityIssues, Translate: true, Meta: meta}
+			if i < len(doc.Segments) {
+				seg.CompletionModes = doc.Segments[i].CompletionModes
+			}
 			if row.TargetText != nil {
 				seg.Target = *row.TargetText
 			}
-			if row.Meta != nil && *row.Meta != "" {
-				runtime := pipeline.ExecutionRuntimeFromContext(ctx)
-				if runtime == nil {
-					return fmt.Errorf("canonical load has no execution runtime")
-				}
-				err = runtime.Run(ctx, func() error {
-					b, e := backend.NewBuildBounds(runtime.BudgetLimits().Item, int64(len(*row.Meta)))
-					if e != nil {
-						return e
-					}
-					if e = b.ReserveText(int64(len(*row.Meta)), int64(len(*row.Meta))); e != nil {
-						return e
-					}
-					if e = b.DecodeJSON([]byte(*row.Meta), &seg.Meta); e != nil {
-						return e
-					}
-					_, e = canonicalMetadataNumbers(b, seg.Meta)
-					return e
-				})
-				if err != nil {
-					return err
-				}
-			}
-			doc.Segments[filled] = seg
-			filled++
-			afterIndex, afterID = row.SegmentIndex, row.ID
+			next[i] = seg
 		}
-		page = nil
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-	if filled != count {
-		return fmt.Errorf("source document membership changed during load")
-	}
+	doc.Segments = next
+	service.ReplaceExecutionDocumentLease(ctx, lease)
+	success = true
 	return nil
 }
 func canonicalDBIdentity(doc *pipeline.Document, index int) (int, bool) {

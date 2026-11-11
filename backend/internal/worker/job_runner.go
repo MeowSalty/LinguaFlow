@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -22,10 +23,12 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/sysmem"
@@ -54,7 +57,11 @@ type JobRunner struct {
 	// pipeCfg 流水线准入预算（字节配额与资源数上限）。
 	pipeCfg PipelineConfig
 	// rssFuse 进程级 RSS 双水位保险丝；nil 时禁用。
-	rssFuse *sysmem.Gate
+	rssFuse             *sysmem.Gate
+	rootBudget          *resourcebudget.RootBudget
+	prepareActor        func(context.Context, int) error
+	budgetSource        workstate.InventorySource
+	budgetInventoryLock sync.Locker
 
 	// per-job 取消注册表：jobID → 取消句柄（包装结构体使 defer 可按值
 	// 身份比较删除——cancel 函数本身只能与 nil 比较）
@@ -206,10 +213,11 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		r.mu.Unlock()
 	}()
 
-	exec, err := r.jobs.LoadJobExecution(jobCtx, jobID)
+	jobCtx, exec, snapshot, registry, definitionClose, err := r.loadJobDefinition(jobCtx, jobID)
 	if err != nil {
 		return err
 	}
+	defer definitionClose()
 	// 二次校验：任务可能在入队后、执行前被取消或暂停
 	if exec.Job.Status == service.JobStatusCancelled || exec.Job.Status == service.JobStatusPaused || exec.Job.PauseRequested || exec.Job.Status == "pausing" {
 		r.logger.Info("job already cancelled or paused, skipping", "job_id", jobID, "status", exec.Job.Status)
@@ -222,17 +230,8 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		}
 	}
 
-	snapshot, err := r.jobs.GetExecutionSnapshot(jobCtx, jobID)
-	if err != nil {
-		return err
-	}
-
 	if len(pending) > 0 {
 		// 流水线编排：轮次行注册表、暂停闸门、准入预算、站位信号量。
-		registry, err := loadJobRounds(jobCtx, r.client, jobID)
-		if err != nil {
-			return err
-		}
 		// 暂停闸门先于 MarkJobRunning 注册：消除「DB 已 running 但 gate 尚未
 		// 注册」窗口内暂停请求的静默丢失（PauseTask 查不到 gate 返回 false）。
 		// 翻转前到达的暂停走 pending→paused 直接翻转，随后 MarkJobRunning
@@ -261,11 +260,61 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		if err := requestRuntime.SetResponseLimits(r.pipeCfg.MaxResponseBytes, r.pipeCfg.ResponseHandoffBytes); err != nil {
 			return err
 		}
+		if r.dbDriver == "postgres" {
+			if err := requestRuntime.Admission.SetStorageRepresentationBound(postgresCandidateStorageBound); err != nil {
+				return err
+			}
+		}
+		if err := requestRuntime.Admission.SetCandidateReadAllocationBound(func(physical int64) (int64, error) { return service.ExecutionInputAllocationBound(physical, 1) }); err != nil {
+			return err
+		}
 		requestRuntime.JobID = jobID
 		if err := requestRuntime.ConfigureEpisodeStore(jobCtx, jobID, workstate.NewStore(r.client)); err != nil {
 			return err
 		}
 		defer requestRuntime.Close()
+		var storageBudget *workstate.StorageBudget
+		defer func() {
+			if storageBudget != nil {
+				returnErr = errors.Join(returnErr, storageBudget.Close())
+			}
+		}()
+		inventorySource := r.budgetSource
+		if inventorySource.DB == nil {
+			inventorySource = workstate.InventorySource{DB: r.client, Driver: r.dbDriver, ItemBytes: requestRuntime.BudgetLimits().Item}
+		}
+		inventoryReady := false
+		defer func() {
+			if !inventoryReady {
+				return
+			}
+			// Every resource exit has joined before this defer. Reconcile actual
+			// retained SQL backing before unloading the runtime attachment.
+			factCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			if r.budgetInventoryLock != nil {
+				r.budgetInventoryLock.Lock()
+				defer r.budgetInventoryLock.Unlock()
+			}
+			s, c, g, h, err := inventorySource.Runtime(factCtx, jobID)
+			if err == nil {
+				var metadata int64
+				metadata, err = inventorySource.Metadata(factCtx, jobID)
+				if err == nil {
+					err = requestRuntime.Admission.ResetInventoryAfterJoin(s, c, g, h, metadata)
+				}
+			}
+			if err != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("joined inventory reconciliation: %w", err))
+			}
+		}()
+		if r.rootBudget != nil {
+			if r.prepareActor != nil {
+				if err := r.prepareActor(jobCtx, exec.ActorUserID); err != nil {
+					return err
+				}
+			}
+		}
 		defer func() {
 			lifetime := workerLifetime(ctx)
 			if lifetime.Err() != nil {
@@ -273,6 +322,9 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 			}
 			cleanupCtx, cancel := context.WithTimeout(lifetime, 30*time.Second)
 			defer cancel()
+			if storageBudget != nil {
+				cleanupCtx = workstate.WithStorageBudget(cleanupCtx, storageBudget)
+			}
 			j, err := r.client.Job.Get(cleanupCtx, jobID)
 			if err != nil || j.Status != "cancelled" {
 				return
@@ -288,6 +340,8 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		// Reconstruct aggregate occupancy from headers before admitting a resource.
 		// Recovery never materializes all persisted candidate bodies at once.
 		draftResources := make(map[int]bool)
+		var inventoryMembers, inventoryCandidates, inventoryGrowth, inventoryHandoff int64
+		var savedBusinessHeader *workstate.ResponseHeader
 		rowToRound := map[int]int{}
 		for _, rounds := range registry.rounds {
 			for index, info := range rounds {
@@ -303,18 +357,20 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 				break
 			}
 			for _, header := range headers {
-				index, ok := rowToRound[header.Scope.RoundID]
+				_, ok := rowToRound[header.Scope.RoundID]
 				if !ok {
 					return workstate.ErrManifest
 				}
-				if err := requestRuntime.Admission.RestoreResponseOwner(header.RequestID, index, header.Scope.ResourceID, header.FreezeBytes, header.ResponseBytes, header.BusinessBound); err != nil {
-					return err
+				if requestRuntime.Admission.RuntimeState().BusinessOwner == header.RequestID {
+					copy := header
+					savedBusinessHeader = &copy
 				}
-				if err := requestRuntime.Admission.RestoreResponseBusiness(header.RequestID, header.CorrectedBytes); err != nil {
-					return err
-				}
-				if err := requestRuntime.Window.RestoreRaw(header.RequestID, header.MemberCount-header.Cursor, header.Scope.ResourceID, header.Scope.RoundID, nil); err != nil {
-					return err
+				inventoryMembers += int64(header.MemberCount - header.Cursor)
+				for _, n := range []int64{header.FreezeBytes, header.ResponseBytes, header.CorrectedBytes, backend.RequestMetadataBytes} {
+					if n < 0 || n > math.MaxInt64-inventoryHandoff {
+						return backend.ErrPipelineCapacity
+					}
+					inventoryHandoff += n
 				}
 				draftResources[header.Scope.ResourceID] = true
 			}
@@ -332,9 +388,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 				break
 			}
 			for _, h := range headers {
-				if err := requestRuntime.Window.RestoreRaw(h.Identity, 1, h.Scope.ResourceID, h.Scope.RoundID, nil); err != nil {
-					return err
-				}
+				inventoryMembers++
 				draftResources[h.Scope.ResourceID] = true
 			}
 			if next <= after {
@@ -351,8 +405,20 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 				break
 			}
 			for _, header := range headers {
-				if err := restoreCandidateHeader(requestRuntime.Window, header); err != nil {
-					return err
+				if header.DTOVersion != pipeline.CandidateDTOVersion || header.PayloadBytes < 0 {
+					return workstate.ErrManifest
+				}
+				inventoryMembers++
+				if header.PayloadBytes > math.MaxInt64-inventoryCandidates {
+					return backend.ErrPipelineCapacity
+				}
+				inventoryCandidates += header.PayloadBytes
+				if header.GrowthReserved {
+					growth := max(int64(0), requestRuntime.BudgetLimits().Item-header.PayloadBytes)
+					if growth > math.MaxInt64-inventoryGrowth {
+						return backend.ErrPipelineCapacity
+					}
+					inventoryGrowth += growth
 				}
 				draftResources[header.Scope.ResourceID] = true
 			}
@@ -360,6 +426,45 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 				return fmt.Errorf("candidate recovery headers did not advance")
 			}
 			after = next
+		}
+		// Headers validate bounded metadata and identify replay scope. SQL scalar
+		// facts include retained freezes in non-replay states as well.
+		inventoryMembers, inventoryCandidates, inventoryGrowth, inventoryHandoff, err = inventorySource.Runtime(jobCtx, jobID)
+		if err != nil {
+			return err
+		}
+		if err := requestRuntime.Admission.RestoreInventory(inventoryMembers, inventoryCandidates, inventoryGrowth, inventoryHandoff); err != nil {
+			return err
+		}
+		metadata, err := inventorySource.Metadata(jobCtx, jobID)
+		if err != nil {
+			return err
+		}
+		if err = requestRuntime.Admission.RestoreRootMetadata(metadata); err != nil {
+			return err
+		}
+		if r.rootBudget != nil {
+			scope := resourcebudget.Scope{ActorID: exec.ActorUserID, JobID: jobID}
+			if err := requestRuntime.Admission.AttachRootBudget(r.rootBudget, scope); err != nil {
+				return err
+			}
+			storageBudget = &workstate.StorageBudget{Root: r.rootBudget, Source: inventorySource, Scope: scope, InventoryLock: r.budgetInventoryLock, Credit: requestRuntime.Admission}
+			jobCtx = workstate.WithStorageBudget(jobCtx, storageBudget)
+		}
+		inventoryReady = true
+		if header := savedBusinessHeader; header != nil {
+			if err := requestRuntime.Admission.RestoreRequestMetadata(header.RequestID, header.MemberCount, header.MetadataBytes); err != nil {
+				return err
+			}
+			if err := requestRuntime.Admission.RestoreResponseOwner(header.RequestID, rowToRound[header.Scope.RoundID], header.Scope.ResourceID, header.FreezeBytes, header.ResponseBytes, header.BusinessBound); err != nil {
+				return err
+			}
+			if err := requestRuntime.Admission.RestoreResponseBusiness(header.RequestID, header.CorrectedBytes); err != nil {
+				return err
+			}
+			if err := requestRuntime.Window.RestoreRaw(header.RequestID, header.MemberCount-header.Cursor, header.Scope.ResourceID, header.Scope.RoundID, nil); err != nil {
+				return err
+			}
 		}
 		hasDraft := func(item *ent.JobResource) bool {
 			return item.Edges.Resource != nil && draftResources[item.Edges.Resource.ID]
@@ -400,7 +505,10 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 			active--
 			if errors.Is(done.err, pipeline.ErrResourceYield) {
 				if len(queue) == 0 && active == 0 {
-					drainErr = fmt.Errorf("candidate capacity is owned by work outside runnable resources")
+					drainErr = fmt.Errorf("%w: candidate capacity is owned by work outside runnable resources", backend.ErrPipelineCapacity)
+					if err := r.jobs.MarkJobResourceFailed(jobCtx, jobID, done.item.ID, drainErr); err != nil {
+						drainErr = errors.Join(drainErr, err)
+					}
 				} else {
 					queue = append(queue, done.item)
 				}
@@ -411,6 +519,11 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		if drainErr != nil {
 			// A failed response save is not a safe pause. Preserve the persisted
 			// pause intent and return the storage failure for recovery/diagnosis.
+			if workerLifetime(ctx).Err() == nil {
+				finishCtx, cancel := context.WithTimeout(workerLifetime(ctx), 30*time.Second)
+				defer cancel()
+				drainErr = errors.Join(drainErr, r.jobs.ReconcileJob(finishCtx, jobID))
+			}
 			return drainErr
 		}
 
@@ -433,6 +546,12 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 	reconcileErr := r.jobs.ReconcileJob(reconcileCtx, jobID)
 	r.eventBroker.Purge(jobID)
 	return reconcileErr
+}
+
+// DTO/Q is canonical JSON; the adapter independently commits enough K for
+// PostgreSQL's normalized JSONB projection before a provider request is sent.
+func postgresCandidateStorageBound(canonicalMax int64) (int64, error) {
+	return persistence.JSONStorageBound(persistence.StoragePostgresJSONB, canonicalMax, 65536, workstate.CandidateReadBytes)
 }
 
 // roundConcurrency 从快照提取某轮的站位容量（concurrency 字段）。
@@ -623,6 +742,8 @@ func (r *JobRunner) processJobResource(
 ) (retErr error) {
 	job := exec.Job
 	ctx = context.WithValue(ctx, jobWriteScopeKey{}, jobWriteScope{jobID: job.ID, epoch: job.RetryEpoch})
+	ctx = service.WithExecutionInputBudget(ctx, r.rootBudget, resourcebudget.Scope{ActorID: exec.ActorUserID, JobID: job.ID}, r.pipeCfg.ResponseHandoffBytes)
+	defer service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
 	if registry == nil {
 		var err error
 		registry, err = loadJobRounds(ctx, r.client, job.ID)
@@ -1651,10 +1772,11 @@ func (r *JobRunner) persistDuplicateSourceDivergence(ctx context.Context, resour
 	if len(expectedSource) != 0 {
 		generation = expectedSource[0]
 	}
-	_, rows, err := r.loadSegments(ctx, resourceID, nil)
+	rows, lease, err := service.LoadExecutionSegments(ctx, r.client, resourceID)
 	if err != nil {
 		return fmt.Errorf("load segments for duplicate source QA: %w", err)
 	}
+	defer lease.Close()
 	inputs := make([]qa.CheckInput, 0, len(rows))
 	for _, row := range rows {
 		target := ""
@@ -1730,7 +1852,8 @@ func (r *JobRunner) buildRuntimeGlossary(ctx context.Context, projectRow *ent.Pr
 	if !enabled {
 		return glossary.Nop{}, nil
 	}
-	return service.NewDatabaseGlossary(ctx, r.client, projectRow)
+	g, _, err := service.LoadExecutionGlossary(ctx, r.client, projectRow, true)
+	return g, err
 }
 
 // buildRuntimeTM 根据配置构建运行时翻译记忆，未启用则返回空实现。
@@ -1743,28 +1866,6 @@ func (r *JobRunner) buildRuntimeTM(projectRow *ent.Project, enabled bool) (tm.Tr
 		return nil, err
 	}
 	return tm.NewSQLite(r.client, scope)
-}
-
-// loadSegments 从数据库加载指定资源的所有片段，并按 selectedIDs 过滤。
-func (r *JobRunner) loadSegments(ctx context.Context, resourceID int, selectedIDs []int) ([]*ent.Segment, []*ent.Segment, error) {
-	allRows, err := r.client.Segment.Query().
-		Where(segment.ResourceIDEQ(resourceID)).
-		Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(selectedIDs) == 0 {
-		return allRows, allRows, nil
-	}
-	selectedRows, err := r.client.Segment.Query().
-		Where(segment.IDIn(selectedIDs...), segment.ResourceIDEQ(resourceID)).
-		Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	return selectedRows, allRows, nil
 }
 
 // clampInt64ToInt 将 int64 安全地转换为 int，超过 math.MaxInt32 时截断。
