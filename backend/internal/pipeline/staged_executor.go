@@ -265,9 +265,16 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				}
 			}
 		}
-		// A storage worker closes dispatch before posting its failure event.
+		// Terminal storage failures stop shared dispatch.
 		// Preserve that cause when the coordinator observed the derived closure
 		// first; independent errors and caller cancellation remain authoritative.
+		if storageFailure(e.err) && ctx.Err() == nil && !errors.Is(e.err, context.Canceled) && !errors.Is(e.err, backend.ErrDispatchPaused) {
+			// Candidate commits can fail without a request session, whose failure
+			// hook normally stops shared dispatch. Wake other resource producers
+			// that are waiting on this response's full ownership, while keeping
+			// the reliable saver and already admitted response facts available.
+			runtime.stopDispatch()
+		}
 		if e.err != nil && (firstErr == nil || storageFailure(e.err) && ctx.Err() == nil && (firstErr == backend.ErrAdmissionClosed || firstErr == context.Canceled)) {
 			firstErr = e.err
 			cancel()
