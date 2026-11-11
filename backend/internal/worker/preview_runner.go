@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -61,7 +60,23 @@ func (r *PreviewRunner) RunPreview(
 	allSegments []*ent.Segment,
 	targetSegmentIdx int,
 	sourceOverride string,
-) (*service.PreviewResult, error) {
+) (out *service.PreviewResult, runnerErr error) {
+	if snapshot == nil {
+		return nil, fmt.Errorf("preview: snapshot is nil")
+	}
+	var inputErr error
+	ctx, documentLease, inputErr := prepareWorkerInputs(ctx, r, allSegments, sourceOverride, len(snapshot.Rounds), r.factory.maxResponseBytes)
+	if inputErr != nil {
+		return nil, inputErr
+	}
+	defer func() {
+		if runnerErr != nil {
+			service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
+		}
+	}()
+	if r.factory.rootBudget != nil {
+		defer func() { _ = r.factory.rootBudget.ForgetActor(service.ExecutionScope(ctx).ActorID) }()
+	}
 	if len(snapshot.Rounds) == 0 {
 		return nil, errors.New("preview: execution plan has no rounds")
 	}
@@ -95,7 +110,10 @@ func (r *PreviewRunner) RunPreview(
 	}
 
 	engineCfg := BuildEngineConfig(snapshot)
-	runtimeGlossary := r.buildPreviewGlossary(ctx, projectRow, engineCfg.Glossary.Enabled)
+	runtimeGlossary, inputErr := r.buildPreviewGlossary(ctx, projectRow, engineCfg.Glossary.Enabled)
+	if inputErr != nil {
+		return nil, inputErr
+	}
 	translationMemory := r.buildPreviewTM(engineCfg.TMEnabled)
 
 	var qaEngine *qa.Engine
@@ -106,18 +124,51 @@ func (r *PreviewRunner) RunPreview(
 		qaEngine = qa.NewEngine(qaCfg, r.logger)
 	}
 
-	collector := preview.NewMemoryCollector()
+	collectorCtx := ctx
+	ctx, cancelCollector := context.WithCancel(ctx)
+	defer cancelCollector()
+	collector := preview.NewBoundedMemoryCollector(collectorCtx, preview.CollectorBudget{Reserve: documentLease.RetainPayload, Release: documentLease.ReleasePayload, RunBuild: documentLease.RunBuild, Cancel: cancelCollector})
+	_ = documentLease.RetainBacking(func() { _ = collector.Close() })
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: translationMemory}
 	eng, err := r.factory.BuildEngine(ctx, snapshot, resources, collector)
 	if err != nil {
 		return nil, fmt.Errorf("preview: build engine: %w", err)
 	}
 	defer func() { _ = eng.Close() }()
+	defer func() {
+		if e := collector.Err(); e != nil {
+			runnerErr = e
+		}
+		if runnerErr != nil {
+			out = &service.PreviewResult{Status: "failed", Metrics: CollectMeterMetrics(eng)}
+		}
+	}()
 
 	// 基于完整的资源快照构建内存 Document。
 	// 全部分段都作为上下文纳入；只有目标分段参与翻译。
-	inputs := r.buildSegmentInputs(allSegments, targetSegmentIdx, sourceOverride)
-	doc := pipeline.BuildDocumentFromSegments(inputs, snapshot.SourceLang, snapshot.TargetLang, resourceRow.Format)
+	inputs, inputErr := r.buildSegmentInputs(ctx, allSegments, targetSegmentIdx, sourceOverride)
+	if inputErr != nil {
+		return nil, inputErr
+	}
+	var doc *pipeline.Document
+	_ = documentLease.RetainBacking(func() {
+		if doc != nil {
+			clear(doc.Segments)
+			doc.Segments = nil
+			doc.Vars = nil
+			doc.ResolvedIndices = nil
+		}
+		doc = nil
+	})
+	inputErr = documentLease.RunBuild(ctx, func() error {
+		doc = pipeline.BuildDocumentFromSegments(inputs, snapshot.SourceLang, snapshot.TargetLang, resourceRow.Format)
+		return nil
+	})
+	if inputErr != nil {
+		return nil, inputErr
+	}
+	clear(inputs)
+	inputs = nil
 
 	// 仅把目标分段标记为待翻译。
 	targetDocIdx := -1
@@ -176,7 +227,13 @@ func (r *PreviewRunner) RunPreview(
 		// 能看到 adjudicate/语义 QA 的结果，模拟 JobRunner 的“从 DB 重载”模式。
 		if roundIdx > 0 {
 			inputs := r.buildSegmentInputsFromDoc(doc)
-			doc = pipeline.BuildDocumentFromSegments(inputs, snapshot.SourceLang, snapshot.TargetLang, resourceRow.Format)
+			if e := documentLease.RunBuild(ctx, func() error {
+				doc = pipeline.BuildDocumentFromSegments(inputs, snapshot.SourceLang, snapshot.TargetLang, resourceRow.Format)
+				return nil
+			}); e != nil {
+				return nil, e
+			}
+			clear(inputs)
 		}
 
 		// 非目标段恒为上下文（Translate=false）。
@@ -251,6 +308,9 @@ func (r *PreviewRunner) RunPreview(
 		}
 
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
+		if isExecutionCapacity(roundErr) {
+			return nil, roundErr
+		}
 		duration := time.Since(roundStart)
 
 		summary := service.PreviewRoundSummary{
@@ -276,15 +336,16 @@ func (r *PreviewRunner) RunPreview(
 			// translate/adjudicate 轮失败即为终态。
 			metrics := CollectMeterMetrics(eng)
 			return &service.PreviewResult{
-				Status:       "failed",
-				SegmentID:    targetSeg.ID,
-				SourceText:   previewSource,
-				Baseline:     baseline,
-				Snapshot:     snapshot,
-				Metrics:      metrics,
-				Collector:    collector,
-				RoundSummary: append(roundSummaries, summary),
-				Warnings:     append(warnings, fmt.Sprintf("terminal round %d (%s) failed: %s", roundIdx, round.Mode, roundErr)),
+				ExecutionInputOwnership: service.ExecutionInputOwner(ctx),
+				Status:                  "failed",
+				SegmentID:               targetSeg.ID,
+				SourceText:              previewSource,
+				Baseline:                baseline,
+				Snapshot:                snapshot,
+				Metrics:                 metrics,
+				Collector:               collector,
+				RoundSummary:            append(roundSummaries, summary),
+				Warnings:                append(warnings, fmt.Sprintf("terminal round %d (%s) failed: %s", roundIdx, round.Mode, roundErr)),
 			}, nil
 		}
 
@@ -332,17 +393,18 @@ func (r *PreviewRunner) RunPreview(
 	resultStatus := derivePreviewStatus(targetText, roundSummaries, warnings)
 
 	return &service.PreviewResult{
-		Status:        resultStatus,
-		SegmentID:     targetSeg.ID,
-		SourceText:    previewSource,
-		TargetText:    targetText,
-		QualityIssues: finalIssues,
-		Baseline:      baseline,
-		Snapshot:      snapshot,
-		Metrics:       metrics,
-		Collector:     collector,
-		RoundSummary:  roundSummaries,
-		Warnings:      warnings,
+		ExecutionInputOwnership: service.ExecutionInputOwner(ctx),
+		Status:                  resultStatus,
+		SegmentID:               targetSeg.ID,
+		SourceText:              previewSource,
+		TargetText:              targetText,
+		QualityIssues:           finalIssues,
+		Baseline:                baseline,
+		Snapshot:                snapshot,
+		Metrics:                 metrics,
+		Collector:               collector,
+		RoundSummary:            roundSummaries,
+		Warnings:                warnings,
 	}, nil
 }
 
@@ -395,16 +457,12 @@ func (r *PreviewRunner) runDuplicateSourceDivergence(doc *pipeline.Document, tar
 	return targetIssues
 }
 
-func (r *PreviewRunner) buildPreviewGlossary(ctx context.Context, projectRow *ent.Project, enabled bool) glossary.Glossary {
+func (r *PreviewRunner) buildPreviewGlossary(ctx context.Context, projectRow *ent.Project, enabled bool) (glossary.Glossary, error) {
 	if !enabled {
-		return glossary.Nop{}
+		return glossary.Nop{}, nil
 	}
-	base, err := service.NewDatabaseGlossary(ctx, r.client, projectRow)
-	if err != nil {
-		r.logger.Warn("preview: failed to load database glossary, using empty base", "err", err)
-		return preview.NewOverlayGlossary(nil)
-	}
-	return preview.NewOverlayGlossary(base)
+	g, _, err := service.LoadExecutionGlossary(ctx, r.client, projectRow, false)
+	return g, err
 }
 
 func (r *PreviewRunner) buildPreviewTM(enabled bool) tm.TranslationMemory {
@@ -416,12 +474,12 @@ func (r *PreviewRunner) buildPreviewTM(enabled bool) tm.TranslationMemory {
 
 // buildSegmentInputs 把数据库分段转换为 pipeline.SegmentInput，
 // 若提供 sourceOverride 则将其应用于目标分段。
-func (r *PreviewRunner) buildSegmentInputs(rows []*ent.Segment, targetIdx int, sourceOverride string) []pipeline.SegmentInput {
+func (r *PreviewRunner) buildSegmentInputs(ctx context.Context, rows []*ent.Segment, targetIdx int, sourceOverride string) ([]pipeline.SegmentInput, error) {
 	inputs := make([]pipeline.SegmentInput, len(rows))
 	for i, row := range rows {
-		var meta map[string]any
-		if row.Meta != nil {
-			_ = json.Unmarshal([]byte(*row.Meta), &meta)
+		meta, err := service.ExecutionSegmentMeta(ctx, row)
+		if err != nil {
+			return nil, err
 		}
 		target := ""
 		if row.TargetText != nil {
@@ -445,7 +503,7 @@ func (r *PreviewRunner) buildSegmentInputs(rows []*ent.Segment, targetIdx int, s
 			Status:     status,
 		}
 	}
-	return inputs
+	return inputs, nil
 }
 
 // buildSegmentInputsFromDoc 把内存中的 Document 转回 SegmentInputs，

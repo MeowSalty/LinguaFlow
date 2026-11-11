@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -49,7 +48,23 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 	qaConfig qa.Config,
 	repairOpts repair.Options,
 	synthesized bool,
-) (*service.RevisionPreviewResult, error) {
+) (out *service.RevisionPreviewResult, runnerErr error) {
+	if snapshot == nil {
+		return nil, errors.New("revision preview: snapshot is nil")
+	}
+	var inputErr error
+	ctx, documentLease, inputErr := prepareWorkerInputs(ctx, r, allSegments, "", len(snapshot.Rounds), r.factory.maxResponseBytes)
+	if inputErr != nil {
+		return nil, inputErr
+	}
+	defer func() {
+		if runnerErr != nil {
+			service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
+		}
+	}()
+	if r.factory.rootBudget != nil {
+		defer func() { _ = r.factory.rootBudget.ForgetActor(service.ExecutionScope(ctx).ActorID) }()
+	}
 	if snapshot == nil || len(snapshot.Rounds) != 1 || snapshot.Rounds[0].Mode != "revise" {
 		return nil, errors.New("revision preview: snapshot must contain one revise round")
 	}
@@ -63,9 +78,9 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 	}
 	inputs := make([]pipeline.SegmentInput, len(allSegments))
 	for i, row := range allSegments {
-		var meta map[string]any
-		if row.Meta != nil {
-			_ = json.Unmarshal([]byte(*row.Meta), &meta)
+		meta, err := service.ExecutionSegmentMeta(ctx, row)
+		if err != nil {
+			return nil, err
 		}
 		target := ""
 		if row.TargetText != nil {
@@ -80,18 +95,42 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 			Status:     string(row.Status),
 		}
 	}
-	doc := pipeline.BuildDocumentFromSegments(inputs, snapshot.SourceLang, snapshot.TargetLang, resourceRow.Format)
+	var doc *pipeline.Document
+	_ = documentLease.RetainBacking(func() {
+		if doc != nil {
+			clear(doc.Segments)
+			doc.Segments = nil
+			doc.Vars = nil
+			doc.ResolvedIndices = nil
+		}
+		doc = nil
+	})
+	if e := documentLease.RunBuild(ctx, func() error {
+		doc = pipeline.BuildDocumentFromSegments(inputs, snapshot.SourceLang, snapshot.TargetLang, resourceRow.Format)
+		return nil
+	}); e != nil {
+		return nil, e
+	}
+	clear(inputs)
+	inputs = nil
 	for i := range doc.Segments {
 		doc.Segments[i].Translate = i == targetSegmentIdx
 	}
 
-	qaConfig.Glossary = r.buildRevisionGlossary(ctx, projectRow, snapshot.GlossaryEnabled)
+	qaConfig.Glossary, inputErr = r.buildRevisionGlossary(ctx, projectRow, snapshot.GlossaryEnabled)
+	if inputErr != nil {
+		return nil, inputErr
+	}
 	qaConfig.Format = resourceRow.Format
 	var qaEngine *qa.Engine
 	if qaConfig.Enabled {
 		qaEngine = qa.NewEngine(qaConfig, r.logger)
 	}
-	collector := preview.NewMemoryCollector()
+	collectorCtx := ctx
+	ctx, cancelCollector := context.WithCancel(ctx)
+	defer cancelCollector()
+	collector := preview.NewBoundedMemoryCollector(collectorCtx, preview.CollectorBudget{Reserve: documentLease.RetainPayload, Release: documentLease.ReleasePayload, RunBuild: documentLease.RunBuild, Cancel: cancelCollector})
+	_ = documentLease.RetainBacking(func() { _ = collector.Close() })
 	// 执行 snapshot 已裁剪为单 revise 轮，但顶层 Strategy（计划级物化）天然存活。
 	// Repair 用服务层显式派生的 repairOpts 覆盖；Ruby 读顶层 Strategy，
 	// 保证预览与真实作业行为一致。
@@ -109,6 +148,14 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 		return nil, fmt.Errorf("revision preview: build engine: %w", err)
 	}
 	defer func() { _ = eng.Close() }()
+	defer func() {
+		if e := collector.Err(); e != nil {
+			runnerErr = e
+		}
+		if runnerErr != nil {
+			out = &service.RevisionPreviewResult{Status: "failed", Metrics: CollectMeterMetrics(eng)}
+		}
+	}()
 
 	result, execErr := eng.ExecuteRound(ctx, 0, doc,
 		engine.WithSegmentFilter([]int{targetSegmentIdx}),
@@ -116,6 +163,9 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 		// 送进 prompt 的目标集合严格一致（服务层已收窄为请求 code 交集）。
 		engine.WithBatchHandler(buildReviseBatchHandlerCommon(doc, qaEngine, targetSegmentIdx, roundSnapshot.Revise.IssueCodes)),
 	)
+	if isExecutionCapacity(execErr) {
+		return nil, execErr
+	}
 	summary := service.RevisionRoundSummary{
 		Index:       0,
 		Mode:        "revise",
@@ -129,15 +179,16 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 			warning = "round 0 (revise) cancelled"
 		}
 		return &service.RevisionPreviewResult{
-			Status:        "failed",
-			SegmentID:     allSegments[targetSegmentIdx].ID,
-			SourceText:    allSegments[targetSegmentIdx].SourceText,
-			TargetText:    doc.Segments[targetSegmentIdx].Target,
-			QualityIssues: doc.Segments[targetSegmentIdx].Issues,
-			Metrics:       CollectMeterMetrics(eng),
-			Collector:     collector,
-			RoundSummary:  []service.RevisionRoundSummary{summary},
-			Warnings:      []string{warning},
+			ExecutionInputOwnership: service.ExecutionInputOwner(ctx),
+			Status:                  "failed",
+			SegmentID:               allSegments[targetSegmentIdx].ID,
+			SourceText:              allSegments[targetSegmentIdx].SourceText,
+			TargetText:              doc.Segments[targetSegmentIdx].Target,
+			QualityIssues:           doc.Segments[targetSegmentIdx].Issues,
+			Metrics:                 CollectMeterMetrics(eng),
+			Collector:               collector,
+			RoundSummary:            []service.RevisionRoundSummary{summary},
+			Warnings:                []string{warning},
 		}, nil
 	}
 	if result.FailedBatchCount > 0 || result.UnresolvedCount > 0 || len(result.Unresolved) > 0 {
@@ -154,27 +205,24 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 		status = "partial"
 	}
 	return &service.RevisionPreviewResult{
-		Status:        status,
-		SegmentID:     allSegments[targetSegmentIdx].ID,
-		SourceText:    allSegments[targetSegmentIdx].SourceText,
-		TargetText:    target.Target,
-		QualityIssues: target.Issues,
-		Metrics:       CollectMeterMetrics(eng),
-		Collector:     collector,
-		RoundSummary:  []service.RevisionRoundSummary{summary},
+		ExecutionInputOwnership: service.ExecutionInputOwner(ctx),
+		Status:                  status,
+		SegmentID:               allSegments[targetSegmentIdx].ID,
+		SourceText:              allSegments[targetSegmentIdx].SourceText,
+		TargetText:              target.Target,
+		QualityIssues:           target.Issues,
+		Metrics:                 CollectMeterMetrics(eng),
+		Collector:               collector,
+		RoundSummary:            []service.RevisionRoundSummary{summary},
 	}, nil
 }
 
-func (r *RevisionPreviewRunner) buildRevisionGlossary(ctx context.Context, projectRow *ent.Project, enabled bool) glossary.Glossary {
+func (r *RevisionPreviewRunner) buildRevisionGlossary(ctx context.Context, projectRow *ent.Project, enabled bool) (glossary.Glossary, error) {
 	if !enabled {
-		return glossary.Nop{}
+		return glossary.Nop{}, nil
 	}
-	base, err := service.NewDatabaseGlossary(ctx, r.client, projectRow)
-	if err != nil {
-		r.logger.Warn("revision preview: failed to load database glossary, using empty base", "err", err)
-		return preview.NewOverlayGlossary(nil)
-	}
-	return preview.NewOverlayGlossary(base)
+	g, _, err := service.LoadExecutionGlossary(ctx, r.client, projectRow, false)
+	return g, err
 }
 
 func (r *RevisionPreviewRunner) buildRevisionTM(_ bool) tm.TranslationMemory {

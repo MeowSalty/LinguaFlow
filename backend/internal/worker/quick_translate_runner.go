@@ -40,7 +40,23 @@ func NewQuickTranslateRunner(logger *slog.Logger, client *ent.Client, limiterPoo
 
 // Run 执行单段即时翻译。输入来自 QuickTranslateService 已组装好的 snapshot 与术语表，
 // 构造单段内存 Document，跑完所有轮次后返回纯内存结果。
-func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslateRunnerInput) (*service.QuickTranslateResult, error) {
+func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslateRunnerInput) (out *service.QuickTranslateResult, runnerErr error) {
+	if in.Snapshot == nil {
+		return nil, fmt.Errorf("quick translate: snapshot is nil")
+	}
+	var inputErr error
+	ctx, documentLease, inputErr := prepareWorkerInputs(ctx, r, nil, in.SourceText, len(in.Snapshot.Rounds), r.factory.maxResponseBytes)
+	if inputErr != nil {
+		return nil, inputErr
+	}
+	defer func() {
+		if runnerErr != nil {
+			service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
+		}
+	}()
+	if r.factory.rootBudget != nil {
+		defer func() { _ = r.factory.rootBudget.ForgetActor(service.ExecutionScope(ctx).ActorID) }()
+	}
 	if len(in.Snapshot.Rounds) == 0 {
 		return nil, errors.New("quick translate: execution plan has no rounds")
 	}
@@ -66,13 +82,25 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 		qaEngine = qa.NewEngine(qaCfg, r.logger)
 	}
 
-	collector := preview.NewMemoryCollector()
+	collectorCtx := ctx
+	ctx, cancelCollector := context.WithCancel(ctx)
+	defer cancelCollector()
+	collector := preview.NewBoundedMemoryCollector(collectorCtx, preview.CollectorBudget{Reserve: documentLease.RetainPayload, Release: documentLease.ReleasePayload, RunBuild: documentLease.RunBuild, Cancel: cancelCollector})
+	_ = documentLease.RetainBacking(func() { _ = collector.Close() })
 	resources := engine.RuntimeResources{Glossary: in.Glossary, TM: preview.NoopTM{}}
 	eng, err := r.factory.BuildEngine(ctx, in.Snapshot, resources, collector)
 	if err != nil {
 		return nil, fmt.Errorf("quick translate: build engine: %w", err)
 	}
 	defer func() { _ = eng.Close() }()
+	defer func() {
+		if e := collector.Err(); e != nil {
+			runnerErr = e
+		}
+		if runnerErr != nil {
+			out = &service.QuickTranslateResult{Status: "failed", Metrics: CollectMeterMetrics(eng)}
+		}
+	}()
 
 	// 构造单段内存 Document。
 	inputs := []pipeline.SegmentInput{{
@@ -80,7 +108,24 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 		SourceText: in.SourceText,
 		Status:     string(service.SegmentStatusPending),
 	}}
-	doc := pipeline.BuildDocumentFromSegments(inputs, in.SourceLang, in.TargetLang, in.Format)
+	var doc *pipeline.Document
+	_ = documentLease.RetainBacking(func() {
+		if doc != nil {
+			clear(doc.Segments)
+			doc.Segments = nil
+			doc.Vars = nil
+			doc.ResolvedIndices = nil
+		}
+		doc = nil
+	})
+	if e := documentLease.RunBuild(ctx, func() error {
+		doc = pipeline.BuildDocumentFromSegments(inputs, in.SourceLang, in.TargetLang, in.Format)
+		return nil
+	}); e != nil {
+		return nil, e
+	}
+	clear(inputs)
+	inputs = nil
 	targetDocIdx := 0
 	doc.Segments[0].Translate = true
 
@@ -130,7 +175,13 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 				Issues:     prev.Issues,
 				Status:     prev.Status,
 			}}
-			doc = pipeline.BuildDocumentFromSegments(inputs, in.SourceLang, in.TargetLang, in.Format)
+			if e := documentLease.RunBuild(ctx, func() error {
+				doc = pipeline.BuildDocumentFromSegments(inputs, in.SourceLang, in.TargetLang, in.Format)
+				return nil
+			}); e != nil {
+				return nil, e
+			}
+			clear(inputs)
 		}
 
 		// 决定目标段是否本轮翻译。
@@ -194,6 +245,9 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 		}
 
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
+		if isExecutionCapacity(roundErr) {
+			return nil, roundErr
+		}
 		duration := time.Since(roundStart)
 
 		summary := service.PreviewRoundSummary{
@@ -219,12 +273,13 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 			// translate/adjudicate 失败为终端错误。
 			metrics := CollectMeterMetrics(eng)
 			return &service.QuickTranslateResult{
-				Status:       "failed",
-				SourceText:   in.SourceText,
-				Metrics:      metrics,
-				Collector:    collector,
-				RoundSummary: append(roundSummaries, summary),
-				Warnings:     append(warnings, fmt.Sprintf("terminal round %d (%s) failed: %s", roundIdx, round.Mode, roundErr)),
+				ExecutionInputOwnership: service.ExecutionInputOwner(ctx),
+				Status:                  "failed",
+				SourceText:              in.SourceText,
+				Metrics:                 metrics,
+				Collector:               collector,
+				RoundSummary:            append(roundSummaries, summary),
+				Warnings:                append(warnings, fmt.Sprintf("terminal round %d (%s) failed: %s", roundIdx, round.Mode, roundErr)),
 			}, nil
 		}
 
@@ -265,14 +320,15 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 	resultStatus := derivePreviewStatus(targetText, roundSummaries, warnings)
 
 	return &service.QuickTranslateResult{
-		Status:        resultStatus,
-		SourceText:    in.SourceText,
-		TargetText:    targetText,
-		QualityIssues: finalIssues,
-		RoundSummary:  roundSummaries,
-		Metrics:       metrics,
-		Collector:     collector,
-		Warnings:      warnings,
+		ExecutionInputOwnership: service.ExecutionInputOwner(ctx),
+		Status:                  resultStatus,
+		SourceText:              in.SourceText,
+		TargetText:              targetText,
+		QualityIssues:           finalIssues,
+		RoundSummary:            roundSummaries,
+		Metrics:                 metrics,
+		Collector:               collector,
+		Warnings:                warnings,
 	}, nil
 }
 
