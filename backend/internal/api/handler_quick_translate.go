@@ -16,7 +16,10 @@ func (s *Server) handleQuickTranslate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req QuickTranslateRequest
-	if !s.decodeJSON(w, r, &req) {
+	request, releaseInput, decoded := s.decodeExecutionJSON(w, r, authUser.User.ID, &req)
+	r = request
+	defer releaseInput()
+	if !decoded {
 		return
 	}
 	input := service.QuickTranslateInput{
@@ -63,7 +66,8 @@ func (s *Server) handleQuickTranslate(w http.ResponseWriter, r *http.Request) {
 		s.writeQuickTranslateServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toQuickTranslateResponse(result))
+	defer result.ReleaseExecutionInputs()
+	s.writeExecutionJSON(w, r, http.StatusOK, toQuickTranslateResponse(result))
 }
 
 func (s *Server) writeQuickTranslateServiceError(w http.ResponseWriter, r *http.Request, err error) {

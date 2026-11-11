@@ -25,7 +25,7 @@ import (
 func storageAPIServer(t *testing.T) (*Server, *ent.Client, *ent.User, *ent.Project, *credential.Keyring) {
 	t.Helper()
 	s, client, u := newTestServer(t)
-	cfg := config.DefaultServerConfig()
+	cfg := testServerConfig()
 	cfg.DataDir = t.TempDir()
 	cfg.Storage.Enabled = true
 	cfg.Storage.Initialization.CapacityBytes = config.QuotaInput{Set: true}

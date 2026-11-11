@@ -33,7 +33,10 @@ func (s *Server) handlePreviewResourceSegmentRevision(w http.ResponseWriter, r *
 	}
 
 	var req SegmentRevisionPreviewRequest
-	if !s.decodeJSON(w, r, &req) {
+	request, releaseInput, decoded := s.decodeExecutionJSON(w, r, authUser.User.ID, &req)
+	r = request
+	defer releaseInput()
+	if !decoded {
 		return
 	}
 	input := service.RevisionPreviewInput{
@@ -62,7 +65,8 @@ func (s *Server) handlePreviewResourceSegmentRevision(w http.ResponseWriter, r *
 		s.writeRevisionPreviewServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toSegmentRevisionPreviewResponse(result))
+	defer result.ReleaseExecutionInputs()
+	s.writeExecutionJSON(w, r, http.StatusOK, toSegmentRevisionPreviewResponse(result))
 }
 
 func (s *Server) writeRevisionPreviewServiceError(w http.ResponseWriter, r *http.Request, err error) {

@@ -262,6 +262,6 @@ func TestHandler_SearchReplaceResourceNotFound404(t *testing.T) {
 
 // newSRServerCfg 构造最小 ServerConfig 仅满足 handler 路径校验。
 func newSRServerCfg() *config.ServerConfig {
-	cfg := config.DefaultServerConfig()
+	cfg := testServerConfig()
 	return cfg
 }
