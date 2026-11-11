@@ -635,6 +635,31 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					break
 				}
 				idxs := built[0]
+				// Proven fixed recovery inventory can leave no member slot at all.
+				// Decide this before a preparation ticket: aggregate recovery stock
+				// may itself prevent that ticket from ever reaching the window probe.
+				if runtime.Window.fixedBatchLimit(consumer) == 0 {
+					firstErr = ErrCandidateCapacity
+					cancel()
+					break
+				}
+				// Only an empty entry map can produce aggregateOnly; there are no
+				// replacement keys to subtract in that case.
+				probe, wake, aggregateOnly := runtime.Window.probePrepareOwned(len(idxs), storeResourceID(store), consumer, nil)
+				if probe == WindowBusy && aggregateOnly && mainActive+candidateActive+promotionActive == 0 && !pageActive && !responsePageActive && len(candidates) == 0 && len(responses) == 0 {
+					// The selected manifest really needs production, but this scope
+					// has no restored work to drain the unclaimed aggregate stock.
+					// Give queued resources a chance before a root preparation ticket
+					// hides this member-capacity decision behind its own overage.
+					waitingBatch = &waitingWindowBatch{indices: append([]int(nil), idxs...), pool: pool, attempt: attempt, wake: wake}
+					capacityWaits = append(capacityWaits, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "candidate_window", CapacityChanged: wake}})
+					select {
+					case <-wake:
+					default:
+						yielded = true
+					}
+					break
+				}
 				ticket, e := runtime.Preparation.Try(runCtx, prepareIntent(round.Handler, store, backend.RequestStageMain), runtime.Gate)
 				if d := workDeferred(e); d != nil {
 					capacityWaits = append(capacityWaits, d)
@@ -649,21 +674,17 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				}
 				reservation := NewWorkID()
 				result, wake := runtime.Window.TryPrepareOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
-				if result == WindowPinnedLimit {
-					err := runtime.EnsureProgress(runCtx, reservation, reservation, storeResourceID(store), prepareIntent(round.Handler, store, backend.RequestStageMain).RoundIndex)
-					if errors.Is(err, backend.ErrEarlierScope) {
-						yielded = true
-					}
-					if errors.Is(err, backend.ErrProgressRequired) {
-						result, wake = WindowBusy, runtime.Admission.Changed()
-					} else if err != nil {
-						ticket.Release()
-						firstErr = err
-						cancel()
+				for result == WindowPinnedLimit {
+					limit := runtime.Window.fixedBatchLimit(consumer)
+					if limit < 1 {
+						result = WindowTooLarge
 						break
-					} else {
-						result, wake = runtime.Window.TryReserveOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
 					}
+					// Retain the already selected public prefix and its attempt.
+					// Only proven fixed inventory changes this ceiling; ordinary
+					// in-flight ownership below it is still a Busy wait.
+					idxs = idxs[:min(len(idxs), limit)]
+					result, wake = runtime.Window.TryPrepareOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
 				}
 				if result == WindowTooLarge {
 					ticket.Release()

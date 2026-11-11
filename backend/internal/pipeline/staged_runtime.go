@@ -49,12 +49,13 @@ type windowEntry struct {
 // decompressed response limit. Existing drafts may exceed a lowered window;
 // production stays stopped until consumers make room.
 type CandidateWindow struct {
-	mu        sync.Mutex
-	limits    CandidateLimits
-	entries   map[string]windowEntry
-	ledger    *backend.RequestAdmission
-	changed   chan struct{}
-	consumers map[*WindowConsumer]struct{}
+	mu                    sync.Mutex
+	limits                CandidateLimits
+	entries               map[string]windowEntry
+	ledger                *backend.RequestAdmission
+	changed               chan struct{}
+	consumers             map[*WindowConsumer]struct{}
+	fixedUnclaimedMembers int
 }
 
 func NewCandidateWindow(l CandidateLimits) *CandidateWindow {
@@ -89,29 +90,12 @@ func (w *CandidateWindow) TryReserve(key string, n int) bool {
 func (w *CandidateWindow) TryPrepareOwned(key string, n, resourceID int, consumer *WindowConsumer, replacements []string) (WindowReservationResult, <-chan struct{}) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if consumer == nil || consumer.window != w || resourceID > 0 && !consumer.active {
-		return WindowTooLarge, w.ledger.Changed()
-	}
-	if n < 1 || n > w.limits.Segments {
-		return WindowTooLarge, w.ledger.Changed()
-	}
-	stock := w.ledger.PipelineSnapshot().Segments
-	for _, id := range replacements {
-		if e, ok := w.entries[id]; ok {
-			stock -= e.count
-		}
-	}
-	if n > w.limits.Segments-1-stock {
-		if n > w.limits.Segments-stock {
+	result, _ := w.prepareResultLocked(n, resourceID, consumer, replacements)
+	if result != WindowGranted {
+		if result == WindowBusy {
 			w.ledger.WaitMainTurn(resourceID, consumer.executionRound)
-			return WindowBusy, w.ledger.Changed()
 		}
-		for _, e := range w.entries {
-			if !w.fixedPin(e, consumer) {
-				w.ledger.WaitMainTurn(resourceID, consumer.executionRound)
-				return WindowBusy, w.ledger.Changed()
-			}
-		}
+		return result, w.ledger.Changed()
 	}
 	ok, err := w.ledger.PrepareMembers(key, n, resourceID, consumer.roundID, replacements)
 	if err != nil {
@@ -122,6 +106,94 @@ func (w *CandidateWindow) TryPrepareOwned(key string, n, resourceID int, consume
 	}
 	w.entries[key] = windowEntry{resourceID: resourceID, roundID: consumer.roundID, consumer: consumer, count: n, reservation: true}
 	return WindowGranted, w.ledger.Changed()
+}
+
+// probePrepareOwned shares the reservation check without creating credit or
+// a fair-turn claim. Aggregate-only stock has not acquired a window consumer;
+// a coordinator can yield so the resource scheduler tries its other scopes.
+func (w *CandidateWindow) probePrepareOwned(n, resourceID int, consumer *WindowConsumer, replacements []string) (result WindowReservationResult, wake <-chan struct{}, aggregateOnly bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	result, aggregateOnly = w.prepareResultLocked(n, resourceID, consumer, replacements)
+	return result, w.ledger.Changed(), aggregateOnly
+}
+
+func (w *CandidateWindow) prepareResultLocked(n, resourceID int, consumer *WindowConsumer, replacements []string) (WindowReservationResult, bool) {
+	if consumer == nil || consumer.window != w || resourceID > 0 && !consumer.active {
+		return WindowTooLarge, false
+	}
+	if n < 1 || n > w.limits.Segments {
+		return WindowTooLarge, false
+	}
+	stock := w.ledger.PipelineSnapshot().Segments
+	for _, id := range replacements {
+		if e, ok := w.entries[id]; ok {
+			stock -= e.count
+		}
+	}
+	// Only recovered, durable inventory without a live consumer can establish
+	// a smaller fixed ceiling. Activity that can drain remains a wait, even if
+	// it currently leaves fewer slots than this complete selected prefix.
+	if pinned := w.fixedMembersLocked(consumer); pinned > 0 && n > w.limits.Segments-pinned {
+		return WindowPinnedLimit, false
+	}
+	if n > w.limits.Segments-1-stock {
+		if n > w.limits.Segments-stock {
+			return WindowBusy, len(w.entries) == 0 && stock > 0
+		}
+		for _, e := range w.entries {
+			if !w.fixedPin(e, consumer) {
+				return WindowBusy, false
+			}
+		}
+	}
+	return WindowGranted, false
+}
+
+func (w *CandidateWindow) fixedMembersLocked(consumer *WindowConsumer) int {
+	pinned := 0
+	if consumer != nil && consumer.window == w && consumer.active && consumer.recovered && consumer.resourceID > 0 && consumer.roundID > 0 {
+		pinned = w.fixedUnclaimedMembers
+	}
+	for _, entry := range w.entries {
+		if w.fixedPin(entry, consumer) {
+			pinned += entry.count
+		}
+	}
+	return pinned
+}
+
+// FixUnclaimedRecovery is called only after every runnable resource has
+// selected its actual work, yielded and joined without persisted progress.
+// That fair pass proves the remaining scalar stock has no earlier consumer.
+// Freeze it once so the existing fixed-prefix path can use any member slot
+// left by it. Activity and later broadcasts never resize this proof.
+func (w *CandidateWindow) FixUnclaimedRecovery() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.consumers) != 0 || len(w.entries) != 0 || w.fixedUnclaimedMembers != 0 {
+		return false
+	}
+	members, ok := w.ledger.UnclaimedRecoveryMembers()
+	if !ok || members <= 0 || members >= int64(w.limits.Segments) {
+		return false
+	}
+	w.fixedUnclaimedMembers = int(members)
+	w.signal()
+	return true
+}
+
+func (w *CandidateWindow) transferFixedRecoveryLocked(members int64) {
+	w.fixedUnclaimedMembers -= int(min(int64(w.fixedUnclaimedMembers), members))
+}
+
+// fixedBatchLimit is independent of temporary occupancy. A fully pinned S
+// cannot fit even unique progress; callers must report capacity rather than
+// repeatedly yielding the same earlier resource without an executable member.
+func (w *CandidateWindow) fixedBatchLimit(consumer *WindowConsumer) int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return max(0, w.limits.Segments-w.fixedMembersLocked(consumer))
 }
 
 type WindowReservationResult uint8
@@ -345,9 +417,11 @@ func (w *CandidateWindow) RestoreRaw(id string, count, resource, round int, cons
 	if _, ok := w.entries[id]; ok {
 		return nil
 	}
-	if err := w.ledger.RestoreBudgetEntry(id, backend.PipelineBudgetEntry{ResourceID: resource, RoundID: round, Count: count, Reservation: true, Durable: true}); err != nil {
+	transferred, err := w.ledger.RestoreBudgetEntryWithTransfer(id, backend.PipelineBudgetEntry{ResourceID: resource, RoundID: round, Count: count, Reservation: true, Durable: true})
+	if err != nil {
 		return err
 	}
+	w.transferFixedRecoveryLocked(transferred)
 	w.entries[id] = windowEntry{resourceID: resource, roundID: round, consumer: consumer, count: count, reservation: true, durable: true}
 	w.signal()
 	return nil
@@ -463,9 +537,11 @@ func (w *CandidateWindow) restoreLocked(key string, bytes int64, resourceID, rou
 		}
 		return nil
 	}
-	if err := w.ledger.RestoreBudgetEntry(key, backend.PipelineBudgetEntry{ResourceID: resourceID, RoundID: roundID, Count: 1, Bytes: bytes, Durable: true}); err != nil {
+	transferred, err := w.ledger.RestoreBudgetEntryWithTransfer(key, backend.PipelineBudgetEntry{ResourceID: resourceID, RoundID: roundID, Count: 1, Bytes: bytes, Durable: true})
+	if err != nil {
 		return err
 	}
+	w.transferFixedRecoveryLocked(transferred)
 	w.entries[key] = windowEntry{resourceID: resourceID, roundID: roundID, consumer: consumer, count: 1, bytes: bytes, durable: true}
 	w.signal()
 	return nil
