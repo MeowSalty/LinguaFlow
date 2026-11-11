@@ -21,22 +21,31 @@ vars:
   BACKEND_LDFLAGS: '{{default (printf "%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=%s -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=%s" .BACKEND_LDFLAGS_EXTRA .VERSION .COMMIT) .BACKEND_LDFLAGS}}'
 
 tasks:
+  test:persistence:runner:
+    desc: 验证持久化验收报告的本轮样本、完整矩阵和最终事实
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node --test ./internal/persistenceacceptance/measurements.test.mjs
+
   test:persistence:
     desc: 隔离 SQLite 持久化协议、批处理和故障验收
     dir: '{{.TASKFILE_DIR}}'
     cmds:
+      - task: test:persistence:runner
       - node ./internal/persistenceacceptance/run.mjs {{.CLI_ARGS}}
 
   test:persistence:postgres:
     desc: 私有 PostgreSQL 持久化协议、锁竞争及竞态验收
     dir: '{{.TASKFILE_DIR}}'
     cmds:
+      - task: test:persistence:runner
       - node ./internal/persistenceacceptance/run.mjs --postgres {{.CLI_ARGS}}
 
   bench:persistence:
     desc: 相同 SQLite/隔离 PostgreSQL 夹具的 SQL 数、延迟和全流水线压力对照
     dir: '{{.TASKFILE_DIR}}'
     cmds:
+      - task: test:persistence:runner
       - node ./internal/persistenceacceptance/run.mjs --bench {{.CLI_ARGS}}
 
   test:auth:deployment:

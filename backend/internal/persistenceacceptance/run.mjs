@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { createRuntime } from '../authacceptance/runtime.mjs';
 import { run } from '../authacceptance/prepare.mjs';
+import { initializeSamples, validateMeasurements } from './measurements.mjs';
 
 const backendDir = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const sourceRoot = resolve(backendDir, '..');
@@ -23,6 +24,8 @@ await mkdir(reportRoot, { recursive: true });
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('LINGUAFLOW_') && !key.startsWith('PG')));
 env.LINGUAFLOW_PERSISTENCE_DRIVER = postgres ? 'postgres' : 'sqlite3';
 env.LINGUAFLOW_PERSISTENCE_REPORT = join(reportRoot, 'samples.jsonl');
+// Samples are appended by Go fixtures, but acceptance belongs to this run only.
+await initializeSamples(env.LINGUAFLOW_PERSISTENCE_REPORT);
 const runtime = postgres ? await createRuntime() : null;
 let status = 'failed';
 let results = [];
@@ -34,7 +37,7 @@ try {
     process.env.LINGUAFLOW_AUTH_POSTGRES_BIN = bin;
     env.LINGUAFLOW_TEST_POSTGRES_DSN = (await runtime.postgres()).dsn;
   }
-  const protocols = 'Persistence|Scheduler|Preparation|ReadyHint|RequestAdmission|RequestBackend|RequestSession|RequestAccounting|Runtime|StagedRecoveryCommit|StagedWindow|CandidateWindow|RoundStoreWindow|StoredRound|CheckpointBarrier|DBReporter|BatchRequest|CommitAcknowledgementLost|AtomicConfirmation|NoopRejects|CancellationOrders|Bulk|Abort|TransactionRetryHasOneOwner|UnknownVerification|ReservationAcknowledgement|ExpiredAttempt|LostRecordAndAbort|JoinedRollback|TimeDriver|TimeTransaction' + (postgres ? '|IndependentDatabaseCommitArbitration' : '');
+  const protocols = 'Persistence|Scheduler|Preparation|ReadyHint|RequestAdmission|RequestBackend|RequestSession|RequestAccounting|Runtime|StagedRecoveryCommit|StagedStorage|StagedFixedRecoveryCapacity|FixedUnclaimedRecovery|StagedWindow|CandidateWindow|RoundStoreWindow|StoredRound|CheckpointBarrier|DBReporter|BatchRequest|CommitAcknowledgementLost|AtomicConfirmation|NoopRejects|CancellationOrders|Bulk|Abort|TransactionRetryHasOneOwner|UnknownVerification|ReservationAcknowledgement|ExpiredAttempt|LostRecordAndAbort|JoinedRollback|TimeDriver|TimeTransaction|RubyHandoffAcceptance(RecoveryOriginalMemberBoundary|RunnerFuturePinsLoweredWindow|RunnerFuturePinsAggregateCapacity|RunnerFixedFuturePrefixMakesProgress|RunnerFixedFuture16PreservesPaidBatch|RunnerEmptyEarlyRoundsDrainFuturePins|RunnerOneResourceSlotDrainsOtherRaw16)' + (postgres ? '|IndependentDatabaseCommitArbitration' : '');
   const pattern = bench ? '^TestPersistence(HotPathCosts|SealAndCheckpointCosts|LoadMatrix|TranslationLoadMatrix)$' : '^Test(' + protocols + ')';
   const packages = bench ? './internal/worker ./internal/pipeline' : './internal/worker ./internal/workstate ./internal/pipeline ./internal/progress ./internal/backend ./internal/database ./internal/persistence';
   const skip = protocol ? " -skip '^TestPersistence(LoadMatrix|TranslationLoadMatrix)$'" : '';
@@ -56,8 +59,16 @@ try {
   if (!bench) required.push('TestPersistenceSharedConcurrencyReachesTen', 'TestPersistenceReservationProtocol', 'TestPersistenceFencesAndPauseHandoff', 'TestPersistenceCandidateCursorAtomicity', 'TestPersistenceUnknownCommit', 'TestPersistenceAtomicChunkFailure','TestPersistenceLegacyCheckpointUnknownCommit','TestPersistenceReservationUnknownBoundaries','TestPersistenceCommitObservations','TestPreparationCancelledHeadDoesNotStarveReadyResource','TestSchedulerReliableBurstStillServicesNormal','TestStagedRecoveryCommitUsesActualResourceAndRequestMetadata','TestRuntimePreservesUpstreamObserverWithoutDoubleCounting','TestRequestAccountingLifetimeRetainsUpstreamObserver','TestRuntimeProductionObserverAndOriginalHandoffBudget','TestRuntimeReporterSavingObservesCheckpointSQLAndLifetime');
   if (postgres && !bench) required.push('TestPersistencePostgresLockAndDisconnect', 'TestIndependentDatabaseCommitArbitration');
   if (!bench) required.push('TestTimeDriverExecutionBudgetRequiresOwner', 'TestTimeTransactionKeepsCallerDeadlineCause');
-  if (!bench) required.push('TestStagedWindowHardLimitSplitsOnlyOversizeBatch', 'TestStagedWindowActiveOwnerWaitsWithSameBatchAndAttempt', 'TestStagedWindowInactiveRecoveryOwnerYieldsThenResumes', 'TestStagedWindowWaitingPauseCancelLeavesMembersAndCredit');
-  if (!bench) required.push('TestStagedWindowSameResourceFutureRoundWithoutClaimYields', 'TestStagedWindowCurrentScopeRecoveryPageClaimsConsumer', 'TestStagedWindowMultipleWaitersDoNotWakeEachOthersPreparation');
+  if (!bench) required.push('TestPersistenceTranslationContract');
+  if (!bench) required.push('TestPersistenceRoundMemberPageBounds');
+  if (!bench) required.push('TestPersistenceCommitEncodedQualityIssues', 'TestPersistenceStoredEncodedQualityIssues');
+  if (!bench) required.push('TestStagedStorageFailureStopsSharedProducerAndPreservesPaidFacts', 'TestStagedStorageControlErrorsDoNotCloseSharedDispatch', 'TestStagedStorageCallerCancellationDoesNotCloseSharedDispatch');
+  if (!bench) required.push('TestStagedFixedRecoveryCapacityPrecedesBlockedPreparation', 'TestRubyHandoffAcceptanceRecoveryOriginalMemberBoundary', 'TestRubyHandoffAcceptanceRunnerFuturePinsLoweredWindow', 'TestRubyHandoffAcceptanceRunnerFuturePinsAggregateCapacity', 'TestRubyHandoffAcceptanceRunnerFixedFuturePrefixMakesProgress', 'TestRubyHandoffAcceptanceRunnerEmptyEarlyRoundsDrainFuturePins', 'TestRubyHandoffAcceptanceRunnerOneResourceSlotDrainsOtherRaw16');
+  if (!bench) required.push('TestFixedUnclaimedRecoveryTransfersOnlyActualRestoredMembers', 'TestFixedUnclaimedRecoveryRejectsNoSingletonSpace');
+  if (!bench) required.push('TestRubyHandoffAcceptanceRunnerFixedFuture16PreservesPaidBatch/S17', 'TestRubyHandoffAcceptanceRunnerFixedFuture16PreservesPaidBatch/S32');
+  if (!bench) required.push('TestPersistenceRuntimeInventoryBoundedByteState');
+  if (!bench) required.push('TestStagedWindowLargeBatchCompletesAndResumes', 'TestStagedWindowLargeBatchPreservesFuturePin', 'TestStagedWindowRejectsOversizedSingleton', 'TestStagedWindowActiveOwnerWaitsWithSameBatchAndAttempt', 'TestStagedWindowInactiveRecoveryOwnerYieldsThenResumes', 'TestStagedWindowWaitingPauseCancelLeavesMembersAndCredit');
+  if (!bench) required.push('TestStagedWindowSameResourceFutureRoundWithoutClaimMakesProgress', 'TestStagedWindowCurrentScopeRecoveryPageClaimsConsumer', 'TestStagedWindowMultipleWaitersDoNotWakeEachOthersPreparation');
   if (!bench) required.push('TestStagedWindowPartialFuturePinCompletesEarlierAndRecoversLater', 'TestStagedWindowPinAndActiveOccupancyWaitAfterFixedSplit', 'TestCandidateWindowFixedPinRequiresDurableScopeAndCompleteRecovery', 'TestStagedWindowFixedPinWaitPauseCancelPreservesBatch', 'TestRoundStoreWindowHeaderUsesDurableScopeIdentity');
   for (const name of required) {
     if (!results.some(event => event.Test === name && event.Action === 'pass')) throw new Error('Required acceptance fixture did not pass: ' + name);
@@ -65,17 +76,7 @@ try {
   const samples = await readFile(env.LINGUAFLOW_PERSISTENCE_REPORT, 'utf8');
   if (!samples.trim()) throw new Error('Acceptance did not produce required fixture samples');
   const measurements = samples.trim().split(/\r?\n/).map(line => JSON.parse(line));
-  const delayedSamples = protocol ? [['reserve300', [0, 1, 2, 5]]] : [['load7x10x300', [0, 1, 2, 5]], ['translation7x2x300', [0, 5]]];
-  for (const [name, delays] of delayedSamples) {
-    for (const delay of delays) {
-      if (!measurements.some(sample => sample.name === name && sample.driver === env.LINGUAFLOW_PERSISTENCE_DRIVER && sample.extra?.delay_ms === delay)) throw new Error('Missing driver/delay measurement: ' + name + '/' + delay);
-    }
-  }
-  if (protocol) {
-    for (const name of ['pool-advance-reserve300', 'seal5000', 'checkpoint300', 'calibrate', 'commit-observations']) {
-      if (!measurements.some(sample => sample.name === name && sample.driver === env.LINGUAFLOW_PERSISTENCE_DRIVER)) throw new Error('Missing protocol measurement: ' + name);
-    }
-  }
+  validateMeasurements(measurements, { driver: env.LINGUAFLOW_PERSISTENCE_DRIVER, protocol, bench });
   status = 'passed';
 } finally {
   // The complete Go process has exited before closing the owned cluster.
