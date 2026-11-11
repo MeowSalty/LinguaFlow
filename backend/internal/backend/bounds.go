@@ -155,22 +155,49 @@ func NewFixedBoundedWriter(bounds *BuildBounds, size int64) (*BoundedWriter, err
 	}
 	return &BoundedWriter{bounds: bounds, limit: size, data: make([]byte, 0, int(size))}, nil
 }
-func (w *BoundedWriter) Write(p []byte) (int, error) {
-	if w.limit < 0 || int64(len(p)) > w.limit-int64(len(w.data)) {
-		return 0, &BuildCapacityError{"encoded bytes"}
+
+// boundedWriterLength checks the addressable size before adding lengths.
+func boundedWriterLength(current, incoming int) (int, error) {
+	if current < 0 || incoming < 0 || incoming > math.MaxInt-current {
+		return 0, &BuildCapacityError{"addressable bytes"}
 	}
-	n := len(w.data) + len(p)
+	return current + incoming, nil
+}
+
+// boundedWriterCapacity grows within both the credited limit and int's range.
+// required has already passed the length and limit checks in prepareWrite.
+func boundedWriterCapacity(current, required int, limit int64) int {
+	maximum := int(min(limit, int64(math.MaxInt)))
+	capacity := maximum
+	if current <= maximum/2 {
+		capacity = current * 2
+	}
+	return min(maximum, max(required, 64, capacity))
+}
+
+func (w *BoundedWriter) prepareWrite(incoming int) error {
+	if w.limit < 0 || int64(incoming) > w.limit-int64(len(w.data)) {
+		return &BuildCapacityError{"encoded bytes"}
+	}
+	n, err := boundedWriterLength(len(w.data), incoming)
+	if err != nil {
+		return err
+	}
 	if n > cap(w.data) {
-		capacity := min(w.limit, max(int64(n), max(int64(64), int64(cap(w.data))*2)))
-		if capacity > int64(math.MaxInt) {
-			return 0, &BuildCapacityError{"addressable bytes"}
+		capacity := boundedWriterCapacity(cap(w.data), n, w.limit)
+		if err := w.bounds.ReserveText(int64(n), int64(capacity)); err != nil {
+			return err
 		}
-		if err := w.bounds.ReserveText(int64(n), capacity); err != nil {
-			return 0, err
-		}
-		data := make([]byte, len(w.data), int(capacity))
+		data := make([]byte, len(w.data), capacity)
 		copy(data, w.data)
 		w.data = data
+	}
+	return nil
+}
+
+func (w *BoundedWriter) Write(p []byte) (int, error) {
+	if err := w.prepareWrite(len(p)); err != nil {
+		return 0, err
 	}
 	w.data = append(w.data, p...)
 	return len(p), nil
@@ -179,21 +206,8 @@ func (w *BoundedWriter) Bytes() []byte { return w.data }
 
 // WriteString avoids io.WriteString's otherwise unaccounted []byte conversion.
 func (w *BoundedWriter) WriteString(s string) (int, error) {
-	if w.limit < 0 || int64(len(s)) > w.limit-int64(len(w.data)) {
-		return 0, &BuildCapacityError{"encoded bytes"}
-	}
-	n := len(w.data) + len(s)
-	if n > cap(w.data) {
-		capacity := min(w.limit, max(int64(n), max(int64(64), int64(cap(w.data))*2)))
-		if capacity > int64(math.MaxInt) {
-			return 0, &BuildCapacityError{"addressable bytes"}
-		}
-		if err := w.bounds.ReserveText(int64(n), capacity); err != nil {
-			return 0, err
-		}
-		data := make([]byte, len(w.data), int(capacity))
-		copy(data, w.data)
-		w.data = data
+	if err := w.prepareWrite(len(s)); err != nil {
+		return 0, err
 	}
 	w.data = append(w.data, s...)
 	return len(s), nil
