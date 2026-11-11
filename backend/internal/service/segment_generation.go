@@ -58,7 +58,7 @@ func WithResourceTranslation(ctx context.Context, client *ent.Client, resourceID
 
 // ValidateJobResourceSource 拒绝针对其他源修订版本受理的工作。
 func ValidateJobResourceSource(ctx context.Context, client *ent.Client, item *ent.JobResource) error {
-	row, err := client.Resource.Query().Where(resource.HasJobResourcesWith(jobresource.IDEQ(item.ID))).Only(ctx)
+	row, err := client.Resource.Query().Where(resource.HasJobResourcesWith(jobresource.IDEQ(item.ID))).Select(resource.FieldID, resource.FieldSourceGeneration, resource.FieldCurrentSourceRevisionID).Only(ctx)
 	if ent.IsNotFound(err) {
 		return ErrSourceRevisionConflict
 	}
@@ -72,7 +72,7 @@ func ValidateJobResourceSource(ctx context.Context, client *ent.Client, item *en
 }
 
 func guardJobResourceSource(ctx context.Context, client *ent.Client, item *ent.JobResource) error {
-	row, err := client.Resource.Query().Where(resource.HasJobResourcesWith(jobresource.IDEQ(item.ID))).Only(ctx)
+	row, err := client.Resource.Query().Where(resource.HasJobResourcesWith(jobresource.IDEQ(item.ID))).Select(resource.FieldID, resource.FieldSourceGeneration, resource.FieldCurrentSourceRevisionID).Only(ctx)
 	if ent.IsNotFound(err) {
 		return ErrSourceRevisionConflict
 	}

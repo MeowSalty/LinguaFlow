@@ -55,19 +55,46 @@ func (s *JobService) prepareRecoveredJob(ctx context.Context, id int) error {
 	if guard.Active() {
 		return tasklife.ErrBusy
 	}
+	count, err := s.client.JobRound.Query().Where(jobround.JobIDEQ(id)).Count(ctx)
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		var release func()
+		ctx, _, release, err = s.loadControlDefinition(ctx, id, 0)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	return s.prepareRecoveredJobState(ctx, id)
 }
 
 func (s *JobService) prepareRecoveredJobState(ctx context.Context, id int) error {
+	definition, prepared := ctx.Value(controlDefinitionKey{}).(*controlDefinition)
+	if !prepared || definition.id != id || definition.snapshot == nil {
+		count, err := s.client.JobRound.Query().Where(jobround.JobIDEQ(id)).Count(ctx)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			var release func()
+			ctx, _, release, err = s.loadControlDefinition(ctx, id, 0)
+			if err != nil {
+				return err
+			}
+			defer release()
+		}
+	}
 	return withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
 		if err := workstate.LockJob(ctx, client, id); err != nil {
 			return err
 		}
-		current, err := client.Job.Get(ctx, id)
+		current, err := client.Job.Query().Where(job.IDEQ(id)).Select(job.FieldID, job.FieldStatus, job.FieldPauseRequested).Only(ctx)
 		if err != nil {
 			return err
 		}
-		if err := execution.ValidateExecutionConfigFormat(current.ExecutionConfig); err != nil {
+		if err := workstate.CheckExecution(ctx, client, id); err != nil {
 			return err
 		}
 		if current.PauseRequested || current.Status == JobStatusPausing {
@@ -116,25 +143,5 @@ func (s *JobService) PendingTaskIDs(ctx context.Context, afterID, limit int) ([]
 	if afterID < 0 || limit < 1 || limit > 128 {
 		return nil, fmt.Errorf("invalid pending task page")
 	}
-	ids := make([]int, 0, limit)
-	for {
-		rows, err := s.client.Job.Query().Where(job.StatusEQ(JobStatusPending), job.IDGT(afterID)).
-			Order(ent.Asc(job.FieldID)).Limit(128).Select(job.FieldID, job.FieldExecutionConfig).All(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range rows {
-			afterID = row.ID
-			if execution.ValidateExecutionConfigFormat(row.ExecutionConfig) != nil {
-				continue
-			}
-			ids = append(ids, row.ID)
-			if len(ids) == limit {
-				return ids, nil
-			}
-		}
-		if len(rows) < 128 {
-			return ids, nil
-		}
-	}
+	return s.client.Job.Query().Where(job.StatusEQ(JobStatusPending), job.IDGT(afterID), workstate.SupportedExecution(workstate.ExecutionDefinitionReadLimit)).Order(ent.Asc(job.FieldID)).Limit(limit).IDs(ctx)
 }

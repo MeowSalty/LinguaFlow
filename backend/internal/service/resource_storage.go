@@ -366,7 +366,7 @@ func (s *ResourceService) updateStoredResource(ctx context.Context, actor, proje
 	return s.CommitSourceUpdate(ctx, actor, projectID, resourceID, file.PreviewTaskID, *file.ExpectedSourceGeneration, *file.ExpectedTranslationGeneration)
 }
 
-func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, projectID, resourceID, taskID int, sourceGen, translationGen int64) (*ent.Resource, *IncrementalUpdateStats, error) {
+func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, projectID, resourceID, taskID int, sourceGen, translationGen int64) (_ *ent.Resource, _ *IncrementalUpdateStats, resultErr error) {
 	ctx, cancel := context.WithTimeout(ctx, s.storage.cfg.TransferTimeout)
 	defer cancel()
 	if _, err := s.projects.requireProjectAccess(ctx, actor, projectID, true); err != nil {
@@ -428,6 +428,11 @@ func (s *ResourceService) CommitSourceUpdate(ctx context.Context, actor, project
 		return nil, nil, err
 	}
 	var stats *IncrementalUpdateStats
+	finish, err := s.projects.budgetCleanup.prepare(ctx, s.client, projectID, resourceID, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer finishExecutionCleanup(ctx, finish, &resultErr)
 	err = withOrganizationTransaction(ctx, s.client, func(tx *ent.Client) error {
 		if e := storageProjectGate(ctx, tx, projectID, task.ExpectedStorageGeneration); e != nil {
 			return e

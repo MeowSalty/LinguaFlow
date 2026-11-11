@@ -9,9 +9,17 @@ import (
 // A previously accepted execution uses its own bindings, independently of the
 // creator's later membership. API authorization is performed by the caller.
 func (s *JobService) checkExecutionPolicies(ctx context.Context, job *ent.Job) error {
-	spec, err := GetSnapshot(job)
-	if err != nil {
-		return err
+	definition, ok := ctx.Value(controlDefinitionKey{}).(*controlDefinition)
+	var spec *JobExecutionSnapshot
+	if ok {
+		spec = definition.snapshot
+	}
+	if !ok || definition.id != job.ID || spec == nil {
+		var err error
+		spec, err = GetSnapshot(job)
+		if err != nil {
+			return err
+		}
 	}
 	check := func(b BackendSnapshot) error {
 		if s.backends == nil || s.backends.Credentials() == nil {
