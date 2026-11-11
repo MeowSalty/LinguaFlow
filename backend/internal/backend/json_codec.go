@@ -403,7 +403,7 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 			return err
 		}
 		var scratch [64]byte
-		_, err := w.Write(strconv.AppendFloat(scratch[:0], f, 'g', -1, v.Type().Bits()))
+		_, err := w.Write(appendCanonicalJSONFloat(scratch[:0], f))
 		return err
 	case reflect.Slice, reflect.Array:
 		if v.Kind() == reflect.Slice && v.IsNil() {
@@ -551,6 +551,29 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 	default:
 		return errors.New("unsupported bounded JSON type")
 	}
+}
+
+// SQL JSON may expand an exponent or erase negative zero. Canonical encoding
+// uses decimal integers for exactly integral finite floats in the 64-bit
+// integer domain, while preserving typed integer identities without float
+// conversion. Strict power-of-two upper bounds avoid out-of-range conversion
+// caused by float64(MaxInt64/MaxUint64) rounding upward.
+func appendCanonicalJSONFloat(dst []byte, f float64) []byte {
+	if f == 0 {
+		return append(dst, '0')
+	}
+	if math.Trunc(f) == f {
+		if f >= -0x1p63 && f < 0x1p63 {
+			return strconv.AppendInt(dst, int64(f), 10)
+		}
+		if f >= 0 && f < 0x1p64 {
+			return strconv.AppendUint(dst, uint64(f), 10)
+		}
+	}
+	// Promote float32 exactly before encoding: SQL's generic JSON decoder uses
+	// float64. A shortest-32 spelling could cross the integer-domain threshold
+	// or change its spelling when that generic value is re-encoded.
+	return strconv.AppendFloat(dst, f, 'g', -1, 64)
 }
 
 // A scanner node has only offsets and sibling indexes. Raw strings and unknown

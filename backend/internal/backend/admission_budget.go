@@ -9,7 +9,14 @@ import (
 const RequestMetadataBytes int64 = 32 << 10
 
 var ErrPipelineCapacity = errors.New("pipeline capacity conflict")
-var ErrMainBatchTooLarge = errors.New("main batch cannot fit response handoff")
+
+type permanentBudgetError string
+
+func (e permanentBudgetError) Error() string   { return string(e) }
+func (e permanentBudgetError) Permanent() bool { return true }
+
+var ErrMainBatchTooLarge error = permanentBudgetError("main batch cannot fit response handoff")
+var ErrNoCapacityDrain error = permanentBudgetError("execution resource budget has no runnable consumer")
 
 func (a *RequestAdmission) capacityLocked(intent RequestAdmissionIntent, exact bool) (int64, string, error) {
 	main, aux := a.mainResults[intent.RoundIndex], a.auxResults
@@ -22,11 +29,19 @@ func (a *RequestAdmission) capacityLocked(intent RequestAdmissionIntent, exact b
 	if intent.Stage == RequestStageAlignment && aux >= a.config.AlignmentConcurrency {
 		return 0, "alignment_concurrency", nil
 	}
+	if a.budget != nil && intent.Stage == RequestStageMain && a.mainPriority && (intent.ResourceID != a.priorityResource || intent.RoundIndex != a.priorityRound) {
+		return 0, "fair_main_turn", nil
+	}
 	if a.budget == nil || !exact && intent.RequestID == "" {
 		return 0, "", nil
 	}
 	if intent.Stage == RequestStageMain {
-		return a.budget.canGrantMain(intent)
+		lane, reason, err := a.budget.canGrantMain(intent)
+		if reason != "" && err == nil && !a.mainPriority {
+			a.mainPriority = true
+			a.priorityResource, a.priorityRound = intent.ResourceID, intent.RoundIndex
+		}
+		return lane, reason, err
 	}
 	reason, err := a.budget.canGrantAux(intent)
 	return 0, reason, err
@@ -38,6 +53,7 @@ type PipelineBudgetLimits struct {
 }
 type PipelineBudgetEntry struct {
 	ResourceID, RoundID, Count     int
+	PlannedCount                   int
 	Bytes, Growth                  int64
 	Reservation, Durable, Progress bool
 	GrowthDurable                  bool
@@ -49,7 +65,7 @@ type PipelineBudgetSnapshot struct {
 	MainCapacityReason                                                                        map[int]string
 	RequestedAux, EffectiveAux                                                                int
 	AuxCapacityReason                                                                         string
-	Episode                                                                                   PipelineRuntimeState
+	Lifecycle                                                                                 PipelineRuntimeState
 	MainOwnerPeak, AuxOwnerPeak                                                               int
 	Segments                                                                                  int
 	CandidateBytes, GrowthBytes, HandoffBytes, PreparedBytes, AuxInputBytes, AuxResponseBytes int64
@@ -64,22 +80,32 @@ type requestBudget struct {
 	known, freeze, wire, raw, business int64
 	granted, progress                  bool
 	pinned                             bool
+	full                               bool
+	direct                             bool
+	responseOwned                      bool
+	businessAttached                   bool
+	restored                           bool
 	corrected                          int64
 	attachment                         int64
 }
 type pipelineBudget struct {
-	owned                       ownedPayloadState
-	mainOwnerPeak, auxOwnerPeak int
-	limits                      PipelineBudgetLimits
-	entries                     map[string]PipelineBudgetEntry
-	requests                    map[string]requestBudget
-	mainOwners                  map[int]int
-	auxOwners                   int
-	auxInput, auxResponse       int64
-	progressID                  string
-	lane                        int64
-	businessOwner               string
-	state                       PipelineRuntimeState
+	baseSegments                            int64
+	baseCandidates, baseGrowth, baseHandoff int64
+	inventoryRestored                       bool
+	owned                                   ownedPayloadState
+	mainOwnerPeak, auxOwnerPeak             int
+	limits                                  PipelineBudgetLimits
+	entries                                 map[string]PipelineBudgetEntry
+	requests                                map[string]requestBudget
+	mainOwners                              map[int]int
+	auxOwners                               int
+	auxInput, auxResponse                   int64
+	auxPrepared                             map[string]int64
+	progressID                              string
+	lane                                    int64
+	businessOwner                           string
+	rootStandby                             int64
+	state                                   PipelineRuntimeState
 }
 
 func checkedSum(values ...int64) (int64, error) {
@@ -91,6 +117,13 @@ func checkedSum(values ...int64) (int64, error) {
 		total += v
 	}
 	return total, nil
+}
+
+func CheckedProduct(left, right int64) (int64, error) {
+	if left < 0 || right < 0 || left != 0 && right > math.MaxInt64/left {
+		return 0, ErrPipelineCapacity
+	}
+	return left * right, nil
 }
 
 func (a *RequestAdmission) ConfigurePipelineBudget(l PipelineBudgetLimits) error {
@@ -145,18 +178,34 @@ func (a *RequestAdmission) ReserveCandidateGrowth(id string) (bool, error) {
 	if e.Growth == b.limits.Item-e.Bytes {
 		return true, nil
 	}
-	ordinary := int64(0)
+	previous, previousProgress := e, b.progressID
+	commit := func() (bool, error) {
+		b.entries[id] = e
+		if err := a.syncRootLocked(0); err != nil {
+			b.entries[id] = previous
+			b.progressID = previousProgress
+			if aggregateCapacity(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		a.notifyLocked()
+		return true, nil
+	}
+	ordinary := b.baseCandidates + b.baseGrowth
 	for _, v := range b.entries {
 		if !v.Progress {
 			ordinary += v.Bytes + v.Growth
 		}
 	}
 	delta := b.limits.Item - e.Bytes - e.Growth
+	_, candidateBytes, growthBytes := b.candidateTotals()
+	if delta > 0 && delta > max(b.limits.Candidates, b.limits.Item)-candidateBytes-growthBytes {
+		return false, nil
+	}
 	if e.Progress || delta <= max(int64(0), b.limits.Candidates-b.limits.Item)-ordinary {
 		e.Growth = b.limits.Item - e.Bytes
-		b.entries[id] = e
-		a.notifyLocked()
-		return true, nil
+		return commit()
 	}
 	if b.progressID != "" && b.progressID != id {
 		return false, nil
@@ -167,12 +216,11 @@ func (a *RequestAdmission) ReserveCandidateGrowth(id string) (bool, error) {
 	e.Progress = true
 	e.Growth = b.limits.Item - e.Bytes
 	b.progressID = id
-	b.entries[id] = e
-	a.notifyLocked()
-	return true, nil
+	return commit()
 }
 
 func (b *pipelineBudget) candidateTotals() (count int, bytes, growth int64) {
+	count, bytes, growth = int(b.baseSegments), b.baseCandidates, b.baseGrowth
 	for _, e := range b.entries {
 		count += e.Count
 		bytes += e.Bytes
@@ -181,15 +229,14 @@ func (b *pipelineBudget) candidateTotals() (count int, bytes, growth int64) {
 	return
 }
 func (b *pipelineBudget) requestTotal() int64 {
-	var total int64
+	total := b.baseHandoff
 	for _, r := range b.requests {
-		if !r.progress {
-			total += r.known
-			if r.granted {
-				total += r.raw + RequestMetadataBytes
-				if r.pinned {
-					total += r.corrected
-				}
+		total += r.known
+		if r.granted {
+			total += r.raw + RequestMetadataBytes
+			total += r.corrected
+			if r.full && !r.businessAttached {
+				total += r.business
 			}
 		}
 	}
@@ -197,7 +244,7 @@ func (b *pipelineBudget) requestTotal() int64 {
 }
 func (b *pipelineBudget) businessMaximum(extra int64) int64 {
 	for _, r := range b.requests {
-		if r.granted && !r.pinned && r.business > extra {
+		if r.granted && !r.pinned && !r.businessAttached && r.business > extra {
 			extra = r.business
 		}
 	}
@@ -212,7 +259,7 @@ func (a *RequestAdmission) PipelineSnapshot() PipelineBudgetSnapshot {
 		return PipelineBudgetSnapshot{}
 	}
 	count, bytes, growth := b.candidateTotals()
-	out := PipelineBudgetSnapshot{Segments: count, CandidateBytes: bytes, GrowthBytes: growth, HandoffBytes: b.requestTotal() + b.lane, AuxInputBytes: b.auxInput, AuxResponseBytes: b.auxResponse, ProgressID: b.progressID, ProgressLane: b.lane, MainOwners: map[int]int{}, AuxOwners: b.auxOwners, Revision: a.version}
+	out := PipelineBudgetSnapshot{Segments: count, CandidateBytes: bytes, GrowthBytes: growth, HandoffBytes: b.requestTotal() + b.rootStandby, AuxInputBytes: b.auxInput, AuxResponseBytes: b.auxResponse, ProgressID: b.progressID, ProgressLane: b.rootStandby, MainOwners: map[int]int{}, AuxOwners: b.auxOwners, Revision: a.version}
 	for _, r := range b.requests {
 		if !r.granted {
 			out.PreparedBytes += r.known
@@ -221,7 +268,7 @@ func (a *RequestAdmission) PipelineSnapshot() PipelineBudgetSnapshot {
 	for round, n := range b.mainOwners {
 		out.MainOwners[round] = n
 	}
-	out.Episode = b.state
+	out.Lifecycle = b.state
 	out.MainOwnerPeak = b.mainOwnerPeak
 	out.AuxOwnerPeak = b.auxOwnerPeak
 	out.OwnedPayloads = a.ownedPayloadSnapshotLocked()
@@ -229,8 +276,15 @@ func (a *RequestAdmission) PipelineSnapshot() PipelineBudgetSnapshot {
 	out.EffectiveMain = map[int]int{}
 	out.MainCapacityReason = map[int]string{}
 	known := map[int]int64{}
+	memberSize := map[int]int{}
 	pinned := false
-	for _, request := range b.requests {
+	for id, request := range b.requests {
+		if entry, ok := b.entries[id]; ok {
+			n := max(entry.Count, entry.PlannedCount)
+			if n > 0 && (memberSize[request.round] == 0 || n < memberSize[request.round]) {
+				memberSize[request.round] = n
+			}
+		}
 		if request.pinned {
 			pinned = true
 		}
@@ -248,6 +302,13 @@ func (a *RequestAdmission) PipelineSnapshot() PipelineBudgetSnapshot {
 			reason = "future_pins"
 		} else if u > 0 {
 			available := remaining / u
+			if n := memberSize[round]; n > 0 {
+				byS := int64(max(0, b.limits.Segments-1-count) / n)
+				if byS < available {
+					available = byS
+					reason = "member_capacity"
+				}
+			}
 			effective += int(min(int64(max(0, requested-effective)), available))
 		}
 		if effective >= requested {
@@ -259,7 +320,7 @@ func (a *RequestAdmission) PipelineSnapshot() PipelineBudgetSnapshot {
 		out.MainCapacityReason[round] = reason
 	}
 	out.RequestedAux = a.config.AlignmentConcurrency
-	ordinary := int64(0)
+	ordinary := b.baseCandidates + b.baseGrowth
 	for _, entry := range b.entries {
 		if !entry.Progress {
 			ordinary += entry.Bytes + entry.Growth
@@ -289,6 +350,50 @@ func (a *RequestAdmission) BudgetEntries() map[string]PipelineBudgetEntry {
 
 func (a *RequestAdmission) ReserveMembers(key string, count, resource, round int, progress bool) (bool, error) {
 	return a.ReserveMembersReplacing(key, count, resource, round, progress, nil)
+}
+
+// PrepareMembers retains a bounded descriptor only. S is transferred together
+// with the response and RPM grant, after the complete input is ready.
+func (a *RequestAdmission) PrepareMembers(key string, count, resource, round int, replacements []string) (bool, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	b := a.budget
+	if b == nil || key == "" || count < 1 || count > b.limits.Segments {
+		return false, ErrPipelineCapacity
+	}
+	if old, ok := b.entries[key]; ok {
+		return old.PlannedCount == count, nil
+	}
+	if len(replacements) > count {
+		return false, ErrPipelineCapacity
+	}
+	seen := map[string]bool{}
+	for _, id := range replacements {
+		if id == "" || seen[id] {
+			return false, ErrPipelineCapacity
+		}
+		seen[id] = true
+		if e, ok := b.entries[id]; ok && (!e.Reservation || !e.Durable || e.Count != 1 || e.ResourceID != resource || e.RoundID != round) {
+			return false, ErrPipelineCapacity
+		}
+	}
+	metadataAdded := false
+	if a.root != nil && a.rootScope.JobID > 0 {
+		var e error
+		metadataAdded, e = a.prepareRootMetadataLocked(key, count)
+		if e != nil {
+			return false, e
+		}
+		if e = a.syncRootLocked(0); e != nil {
+			if metadataAdded {
+				delete(a.requestMetadata, key)
+			}
+			return false, a.classifyRootCapacityLocked(e)
+		}
+	}
+	b.entries[key] = PipelineBudgetEntry{ResourceID: resource, RoundID: round, PlannedCount: count, Reservation: true, Replaced: append([]string(nil), replacements...)}
+	a.notifyLocked()
+	return true, nil
 }
 func (a *RequestAdmission) ReserveMembersReplacing(key string, count, resource, round int, progress bool, replacements []string) (bool, error) {
 	a.mu.Lock()
@@ -326,19 +431,28 @@ func (a *RequestAdmission) ReserveMembersReplacing(key string, count, resource, 
 	n, _, _ := b.candidateTotals()
 	n -= len(replaced)
 	limit := b.limits.Segments - 1
-	if progress {
-		if count != 1 || b.progressID != "" && b.progressID != key && !seen[b.progressID] {
-			return false, nil
-		}
-		limit = int(b.progressMemberLimit())
+	if count == b.limits.Segments || progress {
+		limit = b.limits.Segments
 	}
 	if count > limit-n {
 		return false, nil
 	}
+	previous := make(map[string]PipelineBudgetEntry, len(replaced))
 	for _, id := range replaced {
+		previous[id] = b.entries[id]
 		delete(b.entries, id)
 	}
 	b.entries[key] = PipelineBudgetEntry{ResourceID: resource, RoundID: round, Count: count, Reservation: true, Progress: progress, Replaced: replaced}
+	if err := a.syncRootLocked(0); err != nil {
+		delete(b.entries, key)
+		for _, id := range replaced {
+			b.entries[id] = previous[id]
+		}
+		if aggregateCapacity(err) {
+			return false, nil
+		}
+		return false, err
+	}
 	if progress {
 		b.progressID = key
 	}
@@ -391,11 +505,19 @@ func (a *RequestAdmission) RestoreBudgetEntry(key string, e PipelineBudgetEntry)
 	if b.progressID == key {
 		e.Progress = true
 	}
-	b.entries[key] = e
-	if e.Progress {
-		if b.progressID != "" && b.progressID != key {
+	if e.Progress && b.progressID != "" && b.progressID != key {
+		return ErrPipelineCapacity
+	}
+	if b.inventoryRestored {
+		if int64(e.Count) > b.baseSegments || e.Bytes > b.baseCandidates || e.Growth > b.baseGrowth {
 			return ErrPipelineCapacity
 		}
+		b.baseSegments -= int64(e.Count)
+		b.baseCandidates -= e.Bytes
+		b.baseGrowth -= e.Growth
+	}
+	b.entries[key] = e
+	if e.Progress {
 		b.progressID = key
 	}
 	a.notifyLocked()
@@ -408,6 +530,7 @@ func (a *RequestAdmission) BeginPromotion(from, to string, size int64, progress 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	b := a.budget
+	oldProgress := b.progressID
 	e, ok := b.entries[from]
 	if !ok || !e.Reservation || e.Count < 1 || size < 0 || size > b.limits.Item {
 		return false, ErrPipelineCapacity
@@ -416,7 +539,7 @@ func (a *RequestAdmission) BeginPromotion(from, to string, size int64, progress 
 		return pending.Count == 0 && pending.Bytes == size, nil
 	}
 	_, bytes, growth := b.candidateTotals()
-	ordinary := int64(0)
+	ordinary := b.baseCandidates + b.baseGrowth
 	for _, entry := range b.entries {
 		if !entry.Progress {
 			ordinary += entry.Bytes + entry.Growth
@@ -441,6 +564,14 @@ func (a *RequestAdmission) BeginPromotion(from, to string, size int64, progress 
 		b.progressID = to
 	}
 	b.entries[to] = PipelineBudgetEntry{ResourceID: e.ResourceID, RoundID: e.RoundID, Bytes: size, Progress: progress}
+	if rootErr := a.syncRootLocked(0); rootErr != nil {
+		delete(b.entries, to)
+		b.progressID = oldProgress
+		if aggregateCapacity(rootErr) {
+			return false, nil
+		}
+		return false, rootErr
+	}
 	a.notifyLocked()
 	return true, nil
 }
@@ -514,6 +645,9 @@ func (a *RequestAdmission) ReleaseBudgetEntry(id string) {
 		}
 	}
 	delete(a.budget.entries, id)
+	if metadata := a.requestMetadata[id]; metadata != nil && !metadata.dispatched {
+		a.releaseRootMetadataLocked(id)
+	}
 	if a.budget.progressID == id {
 		a.budget.progressID = ""
 	}
@@ -546,7 +680,7 @@ func (a *RequestAdmission) ResizeBudgetEntry(id string, size int64, shrink bool)
 
 // PrepareMain stores only known K. A cooled backend owns neither response nor
 // network capacity until the same admission grant succeeds.
-func (a *RequestAdmission) PrepareMain(id string, round, resource int, freeze, wire, business int64, progress bool) (bool, error) {
+func (a *RequestAdmission) PrepareMain(id string, round, resource int, freeze, wire, business int64, progress bool, members ...int) (bool, error) {
 	known, err := checkedSum(freeze, wire)
 	if err != nil {
 		return false, err
@@ -576,33 +710,84 @@ func (a *RequestAdmission) PrepareMain(id string, round, resource int, freeze, w
 	if e != nil {
 		return false, e
 	}
-	if ownLane > b.limits.Handoff {
+	fullRequired, e := checkedSum(known, b.limits.Responses, RequestMetadataBytes, business)
+	if e != nil {
+		return false, e
+	}
+	if fullRequired > b.limits.Handoff {
 		return false, ErrMainBatchTooLarge
 	}
 	alone, e := checkedSum(known, b.limits.Responses, RequestMetadataBytes, ownLane)
 	if e != nil {
 		return false, e
 	}
-	if !progress && alone > b.limits.Handoff {
-		return false, ErrMainBatchTooLarge
+	full := alone > b.limits.Handoff
+	if entry, ok := b.entries[id]; ok && max(entry.Count, entry.PlannedCount) == b.limits.Segments {
+		full = true
 	}
-	// Future saved business can make the previous lane exceed a lowered J.
-	// Its live inventory is classified by the one progress owner, not by
-	// rejecting a finite fresh singleton before that owner can be attached.
-	if !progress && known > b.limits.Handoff-b.lane {
-		return false, nil
+	if entry, ok := b.entries[id]; ok && entry.PlannedCount > 0 {
+		n, _, _ := b.candidateTotals()
+		for _, id := range entry.Replaced {
+			if e, ok := b.entries[id]; ok {
+				n -= e.Count
+			}
+		}
+		if entry.PlannedCount > b.limits.Segments-1-n && entry.PlannedCount <= b.limits.Segments-n {
+			full = true
+		}
 	}
 	previous := int64(0)
 	if attachment > 0 {
 		previous = old.known
 	}
-	if !progress && known > b.limits.Handoff-b.lane-(b.requestTotal()-previous) {
+	if known > b.limits.Handoff-(b.requestTotal()-previous) {
 		return false, nil
 	}
-	if progress && known > b.limits.Item {
-		return false, ErrPipelineCapacity
+	b.requests[id] = requestBudget{round: round, resource: resource, known: known, freeze: freeze, wire: wire + attachment, business: business, progress: progress, full: full, attachment: attachment}
+	r := b.requests[id]
+	r.direct = freeze == 0 && business == 0
+	b.requests[id] = r
+	metadataAdded := false
+	if a.root != nil && a.rootScope.JobID > 0 {
+		memberCount := 0
+		if entry, ok := b.entries[id]; ok {
+			memberCount = max(entry.Count, entry.PlannedCount)
+		}
+		if len(members) > 1 {
+			if exists {
+				b.requests[id] = old
+			} else {
+				delete(b.requests, id)
+			}
+			return false, ErrPipelineCapacity
+		}
+		if len(members) > 0 {
+			memberCount = members[0]
+		}
+		if memberCount != 0 {
+			var e error
+			metadataAdded, e = a.prepareRootMetadataLocked(id, memberCount)
+			if e != nil {
+				if exists {
+					b.requests[id] = old
+				} else {
+					delete(b.requests, id)
+				}
+				return false, e
+			}
+		}
 	}
-	b.requests[id] = requestBudget{round: round, resource: resource, known: known, freeze: freeze, wire: wire + attachment, business: business, progress: progress, attachment: attachment}
+	if rootErr := a.syncRootLocked(0); rootErr != nil {
+		if metadataAdded {
+			delete(a.requestMetadata, id)
+		}
+		if exists {
+			b.requests[id] = old
+		} else {
+			delete(b.requests, id)
+		}
+		return false, a.classifyRootCapacityLocked(rootErr)
+	}
 	a.notifyLocked()
 	return true, nil
 }
@@ -616,76 +801,80 @@ func (b *pipelineBudget) canGrantMain(intent RequestAdmissionIntent) (int64, str
 		return 0, "", ErrPipelineCapacity
 	}
 	lane, err := checkedSum(b.limits.Item, b.limits.Responses, RequestMetadataBytes, b.businessMaximum(r.business))
-	if err != nil || lane > b.limits.Handoff {
+	if err != nil {
 		return 0, "", ErrPipelineCapacity
 	}
-	if r.progress {
-		total := int64(0)
-		for _, owned := range b.requests {
-			credit, e := checkedSum(owned.known)
-			if e != nil {
-				return 0, "", e
-			}
-			if owned.pinned {
-				credit, e = checkedSum(credit, owned.corrected)
-				if e != nil {
-					return 0, "", e
-				}
-			}
-			if owned.granted {
-				credit, e = checkedSum(credit, owned.raw, RequestMetadataBytes)
-				if e != nil {
-					return 0, "", e
-				}
-			}
-			total, e = checkedSum(total, credit)
-			if e != nil {
-				return 0, "", e
+	if r.direct {
+		lane = 0
+	}
+	if entry, ok := b.entries[intent.RequestID]; ok && entry.PlannedCount > 0 {
+		n, _, _ := b.candidateTotals()
+		for _, id := range entry.Replaced {
+			if e, ok := b.entries[id]; ok {
+				n -= e.Count
 			}
 		}
-		required, e := checkedSum(total, b.limits.Responses, RequestMetadataBytes)
-		if e != nil {
-			return 0, "", e
+		limit := b.limits.Segments - 1
+		if r.full {
+			limit = b.limits.Segments
 		}
-		ceiling, e := checkedSum(max(b.limits.Handoff, b.state.J0), lane)
-		if e != nil {
-			return 0, "", e
-		}
-		if required > ceiling {
-			return 0, "response_handoff", nil
+		if entry.PlannedCount > limit-n {
+			return 0, "member_capacity", nil
 		}
 	}
-	if !r.progress {
-		for _, owned := range b.requests {
-			if owned.pinned {
-				return 0, "pinned_response_inventory", nil
+	for id, owned := range b.requests {
+		if id != intent.RequestID && owned.full && owned.granted {
+			return 0, "full_owner", nil
+		}
+	}
+	if r.full {
+		for id, owned := range b.requests {
+			if id != intent.RequestID && owned.responseOwned && !owned.pinned {
+				return 0, "full_owner_drain", nil
 			}
 		}
-		required, err := checkedSum(b.requestTotal(), b.limits.Responses, RequestMetadataBytes, lane)
-		if err != nil {
-			return 0, "", err
-		}
-		if required > b.limits.Handoff {
-			return 0, "response_handoff", nil
-		}
+		lane = r.business
+	}
+	required, err := checkedSum(b.requestTotal(), b.limits.Responses, RequestMetadataBytes, lane)
+	if err != nil {
+		return 0, "", err
+	}
+	if required > b.limits.Handoff {
+		return 0, "response_handoff", nil
+	}
+	if r.full {
+		lane = 0
 	}
 	return lane, "", nil
 }
 
 func (b *pipelineBudget) canGrantAux(intent RequestAdmissionIntent) (string, error) {
+	if _, err := checkedSum(b.auxResponse, b.limits.Responses); err != nil {
+		return "", err
+	}
+	if _, err := checkedSum(b.auxInput, intent.InputBytes); err != nil {
+		return "", err
+	}
 	if intent.InputBytes < 0 || intent.InputBytes > max(b.limits.Candidates, b.limits.Item) {
 		return "", ErrPipelineCapacity
 	}
-	if intent.InputBytes > max(b.limits.Candidates, b.limits.Item)-b.auxInput {
+	prepared := int64(0)
+	for id, n := range b.auxPrepared {
+		if id != intent.RequestID {
+			prepared += n
+		}
+	}
+	if intent.InputBytes > max(b.limits.Candidates, b.limits.Item)-b.auxInput-prepared {
 		return "aux_input", nil
 	}
-	ordinary := int64(0)
+	ordinary := b.baseCandidates + b.baseGrowth
 	for _, e := range b.entries {
 		if !e.Progress {
 			ordinary += e.Bytes + e.Growth
 		}
 	}
 	additional := int64(0)
+	allAdditional := int64(0)
 	seen := map[string]bool{}
 	for _, id := range intent.CandidateIDs {
 		if seen[id] {
@@ -696,6 +885,7 @@ func (b *pipelineBudget) canGrantAux(intent RequestAdmissionIntent) (string, err
 		if !ok || e.Count != 1 || e.Reservation {
 			return "", ErrPipelineCapacity
 		}
+		allAdditional += b.limits.Item - e.Bytes - e.Growth
 		if e.Progress {
 			if len(intent.CandidateIDs) != 1 {
 				return "", ErrPipelineCapacity
@@ -703,6 +893,10 @@ func (b *pipelineBudget) canGrantAux(intent RequestAdmissionIntent) (string, err
 			continue
 		}
 		additional += b.limits.Item - e.Bytes - e.Growth
+	}
+	_, candidateBytes, growthBytes := b.candidateTotals()
+	if allAdditional > 0 && allAdditional > max(b.limits.Candidates, b.limits.Item)-candidateBytes-growthBytes {
+		return "candidate_growth", nil
 	}
 	if additional > max(int64(0), b.limits.Candidates-b.limits.Item)-ordinary {
 		if len(intent.CandidateIDs) == 1 && b.progressID == intent.CandidateIDs[0] {
@@ -718,8 +912,17 @@ func (b *pipelineBudget) canGrantAux(intent RequestAdmissionIntent) (string, err
 
 func (b *pipelineBudget) applyGrant(intent RequestAdmissionIntent, lane int64) {
 	if intent.Stage == RequestStageMain {
+		if entry, ok := b.entries[intent.RequestID]; ok && entry.PlannedCount > 0 {
+			for _, id := range entry.Replaced {
+				delete(b.entries, id)
+			}
+			entry.Count = entry.PlannedCount
+			entry.PlannedCount = 0
+			b.entries[intent.RequestID] = entry
+		}
 		r := b.requests[intent.RequestID]
 		r.granted = true
+		r.responseOwned = true
 		r.raw = b.limits.Responses
 		b.requests[intent.RequestID] = r
 		b.mainOwners[intent.RoundIndex]++
@@ -729,12 +932,19 @@ func (b *pipelineBudget) applyGrant(intent RequestAdmissionIntent, lane int64) {
 		}
 		b.mainOwnerPeak = max(b.mainOwnerPeak, total)
 		b.lane = lane
+		if !r.full && !r.direct {
+			b.rootStandby = lane
+		}
+		if r.full {
+			b.rootStandby = 0
+		}
 	} else {
 		b.auxOwners++
+		delete(b.auxPrepared, intent.RequestID)
 		b.auxOwnerPeak = max(b.auxOwnerPeak, b.auxOwners)
 		b.auxInput += intent.InputBytes
 		b.auxResponse += b.limits.Responses
-		ordinary := int64(0)
+		ordinary := b.baseCandidates + b.baseGrowth
 		for _, e := range b.entries {
 			if !e.Progress {
 				ordinary += e.Bytes + e.Growth
@@ -782,9 +992,59 @@ func (a *RequestAdmission) ReleasePrepared(id string) {
 	if a.budget != nil {
 		if r, ok := a.budget.requests[id]; ok && !r.granted {
 			delete(a.budget.requests, id)
+			a.releaseRootMetadataLocked(id)
+			a.notifyLocked()
+		}
+		delete(a.budget.auxPrepared, id)
+		if metadata := a.requestMetadata[id]; metadata != nil && !metadata.dispatched {
+			a.releaseRootMetadataLocked(id)
 			a.notifyLocked()
 		}
 	}
+}
+
+func (a *RequestAdmission) PrepareAux(id string, bytes int64, members ...int) (bool, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	b := a.budget
+	if b == nil || id == "" || bytes < 0 || bytes > max(b.limits.Candidates, b.limits.Item) {
+		return false, ErrPipelineCapacity
+	}
+	if n, ok := b.auxPrepared[id]; ok {
+		return n == bytes, nil
+	}
+	total := b.auxInput
+	for _, n := range b.auxPrepared {
+		total += n
+	}
+	if bytes > max(b.limits.Candidates, b.limits.Item)-total {
+		return false, nil
+	}
+	if b.auxPrepared == nil {
+		b.auxPrepared = map[string]int64{}
+	}
+	b.auxPrepared[id] = bytes
+	metadataAdded := false
+	if a.root != nil && a.rootScope.JobID > 0 && len(members) > 0 {
+		var e error
+		metadataAdded, e = a.prepareRootMetadataLocked(id, members[0])
+		if e != nil {
+			delete(b.auxPrepared, id)
+			return false, e
+		}
+	}
+	if err := a.syncRootLocked(0); err != nil {
+		if metadataAdded {
+			delete(a.requestMetadata, id)
+		}
+		delete(b.auxPrepared, id)
+		if aggregateCapacity(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	a.notifyLocked()
+	return true, nil
 }
 
 // ApplyFinalResultCredit replaces a joined local construction allowance with
@@ -815,6 +1075,49 @@ func (a *RequestAdmission) ApplyFinalResultCredit(id string, size int64) error {
 	return nil
 }
 
+// ReserveFinalResultCredit measures the final QA/commit envelope before its
+// opaque backing allocation. Ready recovery can drain with delta zero instead
+// of precharging Q; added diagnostics reserve only their actual positive delta.
+func (a *RequestAdmission) ReserveFinalResultCredit(id string, size int64) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	b := a.budget
+	if b == nil {
+		return ErrPipelineCapacity
+	}
+	e, ok := b.entries[id]
+	if !ok || e.Reservation || e.Count != 1 || size < 0 || size > b.limits.Item {
+		return ErrPipelineCapacity
+	}
+	growth := max(int64(0), size-e.Bytes)
+	if growth <= e.Growth {
+		return nil
+	}
+	delta := growth - e.Growth
+	_, bytes, totalGrowth := b.candidateTotals()
+	if delta > max(b.limits.Candidates, b.limits.Item)-bytes-totalGrowth {
+		return ErrPipelineCapacity
+	}
+	ordinary := b.baseCandidates + b.baseGrowth
+	for _, v := range b.entries {
+		if !v.Progress {
+			ordinary += v.Bytes + v.Growth
+		}
+	}
+	if !e.Progress && delta > max(int64(0), b.limits.Candidates-b.limits.Item)-ordinary {
+		return ErrProgressRequired
+	}
+	old := e
+	e.Growth = growth
+	b.entries[id] = e
+	if err := a.syncRootLocked(0); err != nil {
+		b.entries[id] = old
+		return err
+	}
+	a.notifyLocked()
+	return nil
+}
+
 func (a *RequestAdmission) RestoreResponseOwner(id string, round, resource int, freeze, raw, business int64) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -831,12 +1134,18 @@ func (a *RequestAdmission) RestoreResponseOwner(id string, round, resource int, 
 		}
 		return nil
 	}
+	if b.inventoryRestored {
+		owned, e := checkedSum(freeze, raw, RequestMetadataBytes)
+		if e != nil || owned > b.baseHandoff {
+			return ErrPipelineCapacity
+		}
+		b.baseHandoff -= owned
+	}
 	lane, err := checkedSum(b.limits.Item, b.limits.Responses, RequestMetadataBytes, b.businessMaximum(business))
 	if err != nil || freeze > b.limits.Handoff {
 		return ErrPipelineCapacity
 	}
-	b.requests[id] = requestBudget{round: round, resource: resource, known: freeze, freeze: freeze, raw: raw, business: business, granted: true}
-	b.mainOwners[round]++
+	b.requests[id] = requestBudget{round: round, resource: resource, known: freeze, freeze: freeze, raw: raw, business: business, granted: true, restored: b.inventoryRestored}
 	b.lane = lane
 	a.notifyLocked()
 	return nil
@@ -877,9 +1186,11 @@ func (a *RequestAdmission) releaseRequestBudgetLocked(intent RequestAdmissionInt
 	if b == nil {
 		return
 	}
+	a.releaseStorageLocked(intent.RequestID)
+	a.releaseRootMetadataLocked(intent.RequestID)
 	if intent.Stage == RequestStageMain {
 		if r, ok := b.requests[intent.RequestID]; ok {
-			if r.granted {
+			if r.responseOwned {
 				b.mainOwners[r.round]--
 			}
 			delete(b.requests, intent.RequestID)
@@ -889,11 +1200,48 @@ func (a *RequestAdmission) releaseRequestBudgetLocked(intent RequestAdmissionInt
 		}
 		lane, _ := checkedSum(b.limits.Item, b.limits.Responses, RequestMetadataBytes, b.businessMaximum(0))
 		b.lane = lane
+		if len(b.requests) == 0 {
+			b.rootStandby = 0
+		}
 	} else {
+		delete(a.candidateReads, intent.RequestID)
 		b.auxOwners--
 		b.auxInput -= intent.InputBytes
 		b.auxResponse -= b.limits.Responses
 	}
+}
+
+func (a *RequestAdmission) ClaimResponseOwner(id string) (bool, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	b := a.budget
+	if b == nil {
+		return false, ErrPipelineCapacity
+	}
+	r, ok := b.requests[id]
+	if !ok || !r.granted {
+		return false, ErrPipelineCapacity
+	}
+	if r.responseOwned {
+		return true, nil
+	}
+	if b.mainOwners[r.round] >= a.config.MainConcurrency[r.round] {
+		return false, nil
+	}
+	r.responseOwned = true
+	b.requests[id] = r
+	b.mainOwners[r.round]++
+	if err := a.syncRootLocked(0); err != nil {
+		r.responseOwned = false
+		b.requests[id] = r
+		b.mainOwners[r.round]--
+		if aggregateCapacity(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	a.notifyLocked()
+	return true, nil
 }
 
 // ActiveMainCapacity counts each active round once, including its pending raw
@@ -936,6 +1284,13 @@ func (a *RequestAdmission) RestoreGrowth(id string) error {
 	e, ok := b.entries[id]
 	if !ok || e.Reservation || e.Count != 1 || e.Bytes < 0 || e.Bytes > b.limits.Item {
 		return ErrPipelineCapacity
+	}
+	delta := b.limits.Item - e.Bytes - e.Growth
+	if b.inventoryRestored {
+		if delta > b.baseGrowth {
+			return ErrPipelineCapacity
+		}
+		b.baseGrowth -= delta
 	}
 	e.Growth = b.limits.Item - e.Bytes
 	e.GrowthDurable = true
@@ -1019,8 +1374,22 @@ func (a *RequestAdmission) RestoreResponseBusiness(id string, bytes int64) error
 	if !ok || bytes > r.business {
 		return ErrPipelineCapacity
 	}
+	old := r
+	base := b.baseHandoff
+	if r.restored && !r.businessAttached {
+		if bytes > b.baseHandoff {
+			return ErrPipelineCapacity
+		}
+		b.baseHandoff -= bytes
+	}
 	r.corrected = bytes
+	r.businessAttached = true
 	b.requests[id] = r
+	if err := a.syncRootLocked(0); err != nil {
+		b.requests[id] = old
+		b.baseHandoff = base
+		return err
+	}
 	a.notifyLocked()
 	return nil
 }
@@ -1154,13 +1523,6 @@ func (a *RequestAdmission) CanTransferBusiness(previous, next string) (bool, err
 	}
 	if required <= b.limits.Handoff {
 		return true, nil
-	}
-	if current.progress && b.state.EpisodeActive {
-		ceiling, e := checkedSum(max(b.limits.Handoff, b.state.J0), lane)
-		if e != nil {
-			return false, e
-		}
-		return required <= ceiling, nil
 	}
 	return false, nil
 }

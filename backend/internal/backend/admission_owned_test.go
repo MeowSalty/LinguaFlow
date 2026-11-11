@@ -17,7 +17,7 @@ func TestOwnedPayloadObservationTracksBackingWithoutGrant(t *testing.T) {
 		t.Fatalf("incorrect actual backing lifetime %+v", s)
 	}
 	budget := a.PipelineSnapshot()
-	if budget.HandoffBytes == 0 || len(budget.MainOwners) > 0 || budget.Segments != 0 {
+	if budget.HandoffBytes != 0 || len(budget.MainOwners) > 0 || budget.Segments != 0 {
 		t.Fatalf("observation changed resource grants %+v", budget)
 	}
 	a.ObserveOwned("raw", "two", 0)

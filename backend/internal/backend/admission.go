@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 )
 
 // RequestStage selects a frozen request budget, independently of the backend.
@@ -64,23 +66,35 @@ type AdmissionWait struct {
 // execute immediately when a permit is granted. Admission never queues permits.
 // The lock order is gate -> admission -> limiter pool; release never reverses it.
 type RequestAdmission struct {
-	budget      *pipelineBudget
-	mu          sync.Mutex
-	pool        *LimiterPool
-	config      RequestAdmissionConfig
-	main        map[int]int
-	mainResults map[int]int
-	auxResults  int
-	alignment   int
-	completions int
-	closed      bool
-	changed     chan struct{}
-	version     uint64
-	queueOnce   sync.Once
-	queue       chan *admissionRequest
-	queueWake   chan struct{}
-	stopped     chan struct{}
-	queued      atomic.Int64
+	root                                     *resourcebudget.RootBudget
+	rootScope                                resourcebudget.Scope
+	rootID                                   string
+	storageCredits                           map[string]int64
+	storageRepresentationBound               func(int64) (int64, error)
+	candidateReadAllocationBound             func(int64) (int64, error)
+	candidateReads                           map[string]*candidateReadCredit
+	rootMetadataBase                         int64
+	requestMetadata                          map[string]*requestMetadataCredit
+	prepareOwners, buildWorkers, descriptors int64
+	mainPriority                             bool
+	priorityResource, priorityRound          int
+	budget                                   *pipelineBudget
+	mu                                       sync.Mutex
+	pool                                     *LimiterPool
+	config                                   RequestAdmissionConfig
+	main                                     map[int]int
+	mainResults                              map[int]int
+	auxResults                               int
+	alignment                                int
+	completions                              int
+	closed                                   bool
+	changed                                  chan struct{}
+	version                                  uint64
+	queueOnce                                sync.Once
+	queue                                    chan *admissionRequest
+	queueWake                                chan struct{}
+	stopped                                  chan struct{}
+	queued                                   atomic.Int64
 }
 
 func NewRequestAdmission(pool *LimiterPool, config RequestAdmissionConfig) (*RequestAdmission, error) {
@@ -161,6 +175,11 @@ func (a *RequestAdmission) ReadyHint(ctx context.Context, intent RequestAdmissio
 			tokens := min(float64(h.rpm), h.tokens+max(now.Sub(h.updated).Minutes(), 0)*float64(h.rpm))
 			if tokens < 1 {
 				w.AvailableAt = now.Add(max(time.Duration((1-tokens)/float64(h.rpm)*float64(time.Minute)), time.Nanosecond))
+				if intent.Stage == RequestStageMain && a.mainPriority && a.priorityResource == intent.ResourceID && a.priorityRound == intent.RoundIndex {
+					a.mainPriority = false
+					a.notifyLocked()
+					w.CapacityChanged = a.changed
+				}
 				if w.Reason == "" {
 					w.Reason = "backend_rpm"
 				}
@@ -196,6 +215,7 @@ func (a *RequestAdmission) tryAdmit(ctx context.Context, intent RequestAdmission
 		wait.PauseRequested = gate.Done()
 	}
 	var admissionErr error
+	var dispatchPolicy <-chan struct{}
 	admit := func() bool {
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -223,14 +243,56 @@ func (a *RequestAdmission) tryAdmit(ctx context.Context, intent RequestAdmission
 		if a.pool != nil {
 			a.pool.mu.Lock()
 			defer a.pool.mu.Unlock()
+			h, ok := a.pool.limiters[intent.BackendID]
+			if ok {
+				dispatchPolicy = h.changed
+			}
+			if a.pool.closed {
+				admissionErr = ErrLimiterClosed
+				return false
+			}
+			if !ok || h.closed {
+				admissionErr = ErrLimiterMissing
+				return false
+			}
+			if h.rpm > 0 {
+				now := time.Now()
+				tokens := min(float64(h.rpm), h.tokens+max(now.Sub(h.updated).Minutes(), 0)*float64(h.rpm))
+				if tokens < 1 {
+					wait.Reason = "backend_rpm"
+					wait.PolicyChanged = h.changed
+					wait.AvailableAt = now.Add(max(time.Duration((1-tokens)/float64(h.rpm)*float64(time.Minute)), time.Nanosecond))
+					return false
+				}
+			}
+			if err := a.reserveRootDispatchLocked(intent, lane); err != nil {
+				err = a.classifyRootCapacityLocked(err)
+				if aggregateCapacity(err) {
+					wait.Reason = "aggregate_capacity"
+					wait.CapacityChanged = a.root.Changed()
+				} else {
+					admissionErr = err
+				}
+				return false
+			}
 			var admitted bool
 			admitted, wait.AvailableAt, wait.PolicyChanged, admissionErr = a.pool.tryTakeLocked(intent.BackendID, time.Now())
 			if !admitted {
 				wait.Reason = "backend_rpm"
 				return false
 			}
+		} else if err := a.reserveRootDispatchLocked(intent, lane); err != nil {
+			err = a.classifyRootCapacityLocked(err)
+			if aggregateCapacity(err) {
+				wait.Reason = "aggregate_capacity"
+				wait.CapacityChanged = a.root.Changed()
+			} else {
+				admissionErr = err
+			}
+			return false
 		}
 		if shared {
+			a.mainPriority = false
 			a.main[intent.RoundIndex]++
 			a.mainResults[intent.RoundIndex]++
 		} else {
@@ -264,7 +326,30 @@ func (a *RequestAdmission) tryAdmit(ctx context.Context, intent RequestAdmission
 		}
 		return nil, wait, nil
 	}
-	return &RequestPermit{admission: a, intent: intent, shared: shared, gate: gate}, AdmissionWait{}, nil
+	permit := &RequestPermit{admission: a, intent: intent, shared: shared, gate: gate, policy: dispatchPolicy}
+	return permit, AdmissionWait{}, nil
+}
+
+func (a *RequestAdmission) YieldMainPriority(resource, round int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mainPriority && a.priorityResource == resource && a.priorityRound == round {
+		a.mainPriority = false
+		a.notifyLocked()
+	}
+}
+
+// WaitMainTurn protects the first retained complete batch before input build.
+// It consumes no member/response credit. Do not signal here: the failed probe's
+// own notification is not a new drain opportunity. A real consumer release wakes
+// the waiter; grant, yielding or leaving the scope releases the turn.
+func (a *RequestAdmission) WaitMainTurn(resource, round int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.mainPriority {
+		a.mainPriority = true
+		a.priorityResource, a.priorityRound = resource, round
+	}
 }
 
 // Acquire queues a prepared request through one fair dispatcher. Requests rotate
@@ -275,6 +360,9 @@ func (a *RequestAdmission) Acquire(ctx context.Context, intent RequestAdmissionI
 }
 
 func (a *RequestAdmission) notifyLocked() {
+	if a.root != nil {
+		_ = a.syncRootLocked(0)
+	}
 	a.version++
 	close(a.changed)
 	a.changed = make(chan struct{})
@@ -283,6 +371,9 @@ func (a *RequestAdmission) notifyLocked() {
 func (a *RequestAdmission) Changed() <-chan struct{} {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.root != nil {
+		return a.root.Changed()
+	}
 	return a.changed
 }
 func (a *RequestAdmission) PolicyChanged() <-chan struct{} {
@@ -298,6 +389,7 @@ func (a *RequestAdmission) Close() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if !a.closed {
+		_ = a.detachRootLocked()
 		a.closed = true
 		close(a.stopped)
 		a.notifyLocked()
@@ -325,12 +417,41 @@ func (a *RequestAdmission) Snapshot() RequestAdmissionSnapshot {
 // Release returns the completion slot after parsing and reliable saving finish.
 // Both methods are idempotent and safe to call from cleanup paths.
 type RequestPermit struct {
+	policy         <-chan struct{}
 	admission      *RequestAdmission
 	intent         RequestAdmissionIntent
 	shared         bool
 	gate           DispatchGate
 	requestOnce    sync.Once
 	completionOnce sync.Once
+}
+
+var ErrStalePermit = errors.New("request dispatch policy changed before send")
+
+// StartDispatch is the final policy linearization point. No construction or
+// persistence may intervene between this check and the external invocation.
+func (p *RequestPermit) StartDispatch(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if p == nil {
+		return ErrAdmissionClosed
+	}
+	if p.gate != nil {
+		select {
+		case <-p.gate.Done():
+			return ErrDispatchPaused
+		default:
+		}
+	}
+	if p.policy != nil {
+		select {
+		case <-p.policy:
+			return ErrStalePermit
+		default:
+		}
+	}
+	return nil
 }
 
 func (p *RequestPermit) RequestDone() {

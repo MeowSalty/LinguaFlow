@@ -18,13 +18,20 @@ func (a *RequestAdmission) PrepareInputAttachment(id string, round, resource int
 		}
 		return true, nil
 	}
-	if bytes > b.limits.Handoff-b.lane {
+	if bytes > b.limits.Handoff {
 		return false, ErrMainBatchTooLarge
 	}
-	if bytes > b.limits.Handoff-b.lane-b.requestTotal() {
+	if bytes > b.limits.Handoff-b.requestTotal() {
 		return false, nil
 	}
 	b.requests[id] = requestBudget{round: round, resource: resource, known: bytes, attachment: bytes}
+	if err := a.syncRootLocked(0); err != nil {
+		delete(b.requests, id)
+		if aggregateCapacity(err) {
+			return false, nil
+		}
+		return false, err
+	}
 	a.notifyLocked()
 	return true, nil
 }
@@ -45,10 +52,15 @@ func (a *RequestAdmission) RepriceInputAttachment(id string, oldBytes, newBytes 
 	if !ok || r.granted || oldBytes < 0 || newBytes < 0 || r.attachment != oldBytes || oldBytes > r.known {
 		return ErrPipelineCapacity
 	}
-	if newBytes > oldBytes && newBytes-oldBytes > b.limits.Handoff-b.lane-b.requestTotal() {
+	if newBytes > oldBytes && newBytes-oldBytes > b.limits.Handoff-b.requestTotal() {
 		return ErrPipelineCapacity
 	}
-	r.known = r.known - oldBytes + newBytes
+	previous := r
+	known, err := checkedSum(r.known-oldBytes, newBytes)
+	if err != nil {
+		return err
+	}
+	r.known = known
 	if r.freeze > 0 || r.wire > 0 {
 		if oldBytes > r.wire {
 			return ErrPipelineCapacity
@@ -57,6 +69,10 @@ func (a *RequestAdmission) RepriceInputAttachment(id string, oldBytes, newBytes 
 	}
 	r.attachment = newBytes
 	b.requests[id] = r
+	if err := a.syncRootLocked(0); err != nil {
+		b.requests[id] = previous
+		return err
+	}
 	a.notifyLocked()
 	return nil
 }
