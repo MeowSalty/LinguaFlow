@@ -260,7 +260,7 @@ func TestStagedRecoveryPagesDrainBeforeDecodingNextPage(t *testing.T) {
 	}
 }
 
-func TestStagedResourceSingletonPreservesAnonymousForeignWindow(t *testing.T) {
+func TestStagedResourceFixedWindowPreservesAnonymousForeignInventory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	doc := newTestDoc(2)
@@ -282,9 +282,9 @@ func TestStagedResourceSingletonPreservesAnonymousForeignWindow(t *testing.T) {
 	main := &stagedConcurrencyBackend{entered: make(chan int, 2), release: make(chan struct{})}
 	close(main.release)
 	result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: stagedTestHandler(t, r, main)}, doc, store, r, quietLogger(), progress.Nop{})
-	// An anonymous inactive draft has no bound progress owner. Strict4 permits
-	// one singleton to finish while preserving this historical foreign credit.
-	if err != nil || len(result.Resolved) != 2 || len(result.Unresolved) != 0 || len(main.entered) != 1 {
+	// An inactive foreign member is real S inventory. S=1 cannot admit another
+	// member; the recoverable local candidate drains while the next member yields.
+	if !errors.Is(err, ErrResourceYield) || len(result.Resolved) != 1 || len(result.Unresolved) != 1 || len(main.entered) != 0 {
 		state, _ := store.Load(ctx)
 		t.Fatalf("singleton progress changed: %+v %v calls=%d promotion=%s state=%+v budget=%+v", result, err, len(main.entered), promotionFailure, state, r.Admission.PipelineSnapshot())
 	}
@@ -292,7 +292,7 @@ func TestStagedResourceSingletonPreservesAnonymousForeignWindow(t *testing.T) {
 		t.Fatalf("singleton released foreign capacity: %+v", usage)
 	}
 	state, _ := store.Load(ctx)
-	if len(state.Completed) != 2 || state.Cursors[1].Pool != 0 {
+	if len(state.Completed) != 1 || state.Cursors[1].Pool != 0 {
 		t.Fatalf("singleton discarded cursor/checkpoint: %+v", state)
 	}
 }
@@ -350,6 +350,11 @@ func TestStagedStorageFailureSurvivesAdmissionClosure(t *testing.T) {
 			candidateIDs := make([]string, len(doc.Segments))
 			for i := range doc.Segments {
 				c := scheduleCandidate(t, i)
+				// The independent reader is local-ready and does not wait for the
+				// sole response owner whose reliable save is deliberately held.
+				if scenario == "prior_business_error" && i == 1 {
+					c.Ready = true
+				}
 				c.Segment.ID = doc.Segments[i].ID
 				candidateIDs[i] = c.ID
 				if err := store.Save(ctx, c); err != nil {

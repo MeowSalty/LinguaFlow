@@ -140,6 +140,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		indices       []int
 		pool, attempt int
 		wake          <-chan struct{}
+		reason        string
 	}
 	var waitingBatch *waitingWindowBatch
 	paused := func() bool { return runtime.Gate != nil && runtime.Gate.Paused() }
@@ -301,7 +302,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		}
 		if e.waitCapacity != nil {
 			if e.main && len(e.waitIndices) > 0 {
-				waitingBatch = &waitingWindowBatch{indices: e.waitIndices, pool: e.waitPool, attempt: e.waitAttempt, wake: e.waitCapacity.Wait.CapacityChanged}
+				waitingBatch = &waitingWindowBatch{indices: e.waitIndices, pool: e.waitPool, attempt: e.waitAttempt, wake: e.waitCapacity.Wait.CapacityChanged, reason: e.waitCapacity.Wait.Reason}
 			}
 			if e.responseAdvance != nil {
 				applyMember(e)
@@ -315,6 +316,9 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		}
 	}
 	for {
+		if runCtx.Err() != nil || paused() || yielded || firstErr != nil {
+			runtime.Admission.YieldMainPriority(storeResourceID(store), prepareIntent(round.Handler, store, backend.RequestStageMain).RoundIndex)
+		}
 		windowChanged := runtime.Window.Changed()
 		preparationChanged := runtime.Preparation.Changed()
 		admissionChanged := runtime.Admission.Changed()
@@ -323,7 +327,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		var windowWake <-chan struct{}
 		var batchDeadline time.Time
 		if runCtx.Err() == nil && !paused() && !yielded {
-			if !responseRecoveryDone && !responsePageActive {
+			if !responseRecoveryDone && !responsePageActive && len(responses) == 0 {
 				responsePageActive = true
 				wg.Add(1)
 				go func(after int) {
@@ -333,6 +337,9 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 						if err == nil {
 							i := prepareIntent(round.Handler, store, backend.RequestStageMain)
 							err = runtime.Admission.RestoreResponseOwner(header.ID, i.RoundIndex, storeResourceID(store), header.FreezeBytes, header.ResponseBytes, header.BusinessBound)
+							if err == nil && header.MetadataBytes > 0 {
+								err = runtime.Admission.RestoreRequestMetadata(header.ID, header.MemberCount, header.MetadataBytes)
+							}
 						}
 						if err == nil {
 							err = runtime.Window.RestoreRaw(header.ID, header.MemberCount-header.Cursor, storeResourceID(store), storeRoundID(store), consumer)
@@ -341,7 +348,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					events <- stagedEvent{responsePage: true, nextPage: next, lastPage: len(headers) == 0, responseHeaders: headers, err: err}
 				}(responseAfter)
 			}
-			if responseRecoveryDone {
+			if len(responses) > 0 {
 				var ready []MainResponseHeader
 				businessOwner := runtime.Admission.RuntimeState().BusinessOwner
 				for id, header := range responses {
@@ -480,7 +487,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					}
 				}
 				for _, member := range batch {
-					if !needsAlignmentAttempt(round, member) {
+					if !member.Ready && !needsAlignmentAttempt(round, member) {
 						ok, err := runtime.Admission.ReserveCandidateGrowth(member.ID)
 						if errors.Is(err, backend.ErrEarlierScope) {
 							yielded = true
@@ -538,6 +545,15 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			}
 			for recoveryDone && responseRecoveryDone && mainActive < max(1, round.Concurrency) {
 				if waitingBatch != nil {
+					// Policy refresh can cool a retained window waiter before any
+					// stock is released. Recheck RPM so its fairness turn yields to
+					// warm producers instead of monopolizing all main scopes.
+					_, hintErr := runtime.Admission.ReadyHint(runCtx, prepareIntent(round.Handler, store, backend.RequestStageMain), runtime.Gate)
+					if hintErr != nil && !errors.Is(hintErr, backend.ErrDispatchPaused) {
+						firstErr = hintErr
+						cancel()
+						break
+					}
 					ready := false
 					select {
 					case <-waitingBatch.wake:
@@ -576,13 +592,6 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				if blocked {
 					break
 				}
-				fairLimit, err := runtime.Window.freshBatchLimit(prepareIntent(round.Handler, store, backend.RequestStageMain).RoundIndex)
-				if err != nil {
-					firstErr = err
-					cancel()
-					break
-				}
-				var eligible []int
 				var built [][]int
 				var e error
 				if waitingBatch == nil {
@@ -591,20 +600,17 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 						if err != nil {
 							return err
 						}
-						if err = b.ReserveNodes(int64(fairLimit), 8); err != nil {
-							return err
-						}
-						eligible = make([]int, 0, fairLimit)
-						for idx := range remaining {
-							cur := doc.Segments[idx].RoundWork.Cursor
-							if !active[idx] && candidates[idx] == nil && cur.Pool == pool && cur.Attempt == attempt && cur.State != "unresolved" && cur.State != "candidate" && cur.State != "response_pending" && !time.Now().Before(cur.NextAttemptAt) {
-								eligible = append(eligible, idx)
-								if len(eligible) == fairLimit {
-									break
+						visit := func(yield func(int) bool) {
+							for idx := range remaining {
+								cur := doc.Segments[idx].RoundWork.Cursor
+								if !active[idx] && candidates[idx] == nil && cur.Pool == pool && cur.Attempt == attempt && cur.State != "unresolved" && cur.State != "candidate" && cur.State != "response_pending" && !time.Now().Before(cur.NextAttemptAt) {
+									if !yield(idx) {
+										return
+									}
 								}
 							}
 						}
-						batch, err := PlanFirstMainBatchBounded(b, h, doc, eligible, pool)
+						batch, err := PlanNextMainBatchBounded(b, h, doc, visit, pool, runtime.Window.limits.Segments)
 						if err != nil {
 							return err
 						}
@@ -629,20 +635,6 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					break
 				}
 				idxs := built[0]
-				if waitingBatch == nil {
-					// Apply this after the handler's word/context/fallback planning;
-					// its configured maxima remain unchanged. Serial rounds retain
-					// their existing oversize/pinned prefix adaptation below.
-					fairLimit, err := runtime.Window.freshBatchLimit(prepareIntent(round.Handler, store, backend.RequestStageMain).RoundIndex)
-					if err != nil {
-						firstErr = err
-						cancel()
-						break
-					}
-					if waitingBatch == nil {
-						idxs = idxs[:min(len(idxs), fairLimit)]
-					}
-				}
 				ticket, e := runtime.Preparation.Try(runCtx, prepareIntent(round.Handler, store, backend.RequestStageMain), runtime.Gate)
 				if d := workDeferred(e); d != nil {
 					capacityWaits = append(capacityWaits, d)
@@ -656,12 +648,8 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					break
 				}
 				reservation := NewWorkID()
-				result, wake := runtime.Window.TryReserveOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
-				for (result == WindowTooLarge || result == WindowPinnedLimit) && len(idxs) > 1 {
-					idxs = idxs[:len(idxs)/2]
-					result, wake = runtime.Window.TryReserveOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
-				}
-				if result == WindowPinnedLimit && len(idxs) == 1 {
+				result, wake := runtime.Window.TryPrepareOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
+				if result == WindowPinnedLimit {
 					err := runtime.EnsureProgress(runCtx, reservation, reservation, storeResourceID(store), prepareIntent(round.Handler, store, backend.RequestStageMain).RoundIndex)
 					if errors.Is(err, backend.ErrEarlierScope) {
 						yielded = true
@@ -674,7 +662,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 						cancel()
 						break
 					} else {
-						result, wake = runtime.Window.TryReserveOwned(reservation, 1, storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
+						result, wake = runtime.Window.TryReserveOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
 					}
 				}
 				if result == WindowTooLarge {
@@ -732,6 +720,16 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			if firstErr != nil || runCtx.Err() != nil || paused() || yielded {
 				break
 			}
+			if recoveryDone && responseRecoveryDone && waitingBatch != nil && len(candidates) == 0 && !runtime.Window.CanDrainFor(consumer) {
+				select {
+				case <-waitingBatch.wake:
+				default:
+					yielded = true
+				}
+				if yielded {
+					break
+				}
+			}
 			pending := false
 			for idx := range remaining {
 				if candidates[idx] != nil || (doc.Segments[idx].RoundWork.Cursor.Pool < maxPools && doc.Segments[idx].RoundWork.Cursor.State != "unresolved") {
@@ -755,6 +753,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					break
 				}
 			}
+		}
+		// Stopping a producer yields its fair turn before slow paid writers join.
+		// Their member/response/payload ownership remains intact until completion.
+		if runCtx.Err() != nil || paused() || yielded || firstErr != nil {
+			runtime.Admission.YieldMainPriority(storeResourceID(store), prepareIntent(round.Handler, store, backend.RequestStageMain).RoundIndex)
 		}
 		// Only real deadlines use a timer; capacity changes wake immediately.
 		deadline := batchDeadline
@@ -1036,7 +1039,7 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 					return err
 				}
 			}
-			result, err = compactCommitResult(b, result, runtime.Window.limits.ItemBytes)
+			result, err = compactCommitResult(b, result, runtime.Window.limits.ItemBytes, func(size int64) error { return runtime.Admission.ReserveFinalResultCredit(c.ID, size) })
 			if err != nil {
 				return err
 			}

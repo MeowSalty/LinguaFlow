@@ -75,17 +75,53 @@ func (w *CandidateWindow) signal() {
 }
 func (w *CandidateWindow) Changed() <-chan struct{} { return w.ledger.Changed() }
 
-// mainBatchLimit shares the static worst-case payload budget across main
-// requests. A large first batch must not consume the room needed by the other
-// configured workers. Live occupancy is deliberately excluded: a Busy batch
-// retains its boundaries while waiting for existing owners to drain.
+// mainBatchLimit is the single request member boundary. Concurrency does not
+// participate in public planning.
 func (w *CandidateWindow) mainBatchLimit(concurrency int) int {
-	return int(max(1, int64(max(0, w.limits.Segments-1))/int64(max(1, concurrency))))
+	return w.limits.Segments
 }
 
 func (w *CandidateWindow) TryReserve(key string, n int) bool {
 	result, _ := w.TryReserveOwned(key, n, 0, nil)
 	return result == WindowGranted
+}
+
+func (w *CandidateWindow) TryPrepareOwned(key string, n, resourceID int, consumer *WindowConsumer, replacements []string) (WindowReservationResult, <-chan struct{}) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if consumer == nil || consumer.window != w || resourceID > 0 && !consumer.active {
+		return WindowTooLarge, w.ledger.Changed()
+	}
+	if n < 1 || n > w.limits.Segments {
+		return WindowTooLarge, w.ledger.Changed()
+	}
+	stock := w.ledger.PipelineSnapshot().Segments
+	for _, id := range replacements {
+		if e, ok := w.entries[id]; ok {
+			stock -= e.count
+		}
+	}
+	if n > w.limits.Segments-1-stock {
+		if n > w.limits.Segments-stock {
+			w.ledger.WaitMainTurn(resourceID, consumer.executionRound)
+			return WindowBusy, w.ledger.Changed()
+		}
+		for _, e := range w.entries {
+			if !w.fixedPin(e, consumer) {
+				w.ledger.WaitMainTurn(resourceID, consumer.executionRound)
+				return WindowBusy, w.ledger.Changed()
+			}
+		}
+	}
+	ok, err := w.ledger.PrepareMembers(key, n, resourceID, consumer.roundID, replacements)
+	if err != nil {
+		return WindowTooLarge, w.ledger.Changed()
+	}
+	if !ok {
+		return WindowBusy, w.ledger.Changed()
+	}
+	w.entries[key] = windowEntry{resourceID: resourceID, roundID: consumer.roundID, consumer: consumer, count: n, reservation: true}
+	return WindowGranted, w.ledger.Changed()
 }
 
 type WindowReservationResult uint8
@@ -116,9 +152,6 @@ func (w *CandidateWindow) TryReserveOwned(key string, n, resourceID int, consume
 		round = consumer.roundID
 	}
 	progress := w.limits.Segments == 1 || w.limits.Bytes < w.limits.ItemBytes || w.ledger.RuntimeState().ProgressID == key
-	if progress && n != 1 {
-		return WindowTooLarge, w.ledger.Changed()
-	}
 	var replace []string
 	if len(replacements) > 0 {
 		replace = replacements[0]
@@ -164,19 +197,7 @@ type WindowConsumer struct {
 }
 
 func (w *CandidateWindow) freshBatchLimit(round int) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	var rounds []int
-	for c := range w.consumers {
-		if c.active {
-			rounds = append(rounds, c.executionRound)
-		}
-	}
-	capacity, err := w.ledger.ActiveMainCapacity(round, rounds)
-	if err != nil {
-		return 0, err
-	}
-	return w.mainBatchLimit(capacity), nil
+	return w.limits.Segments, nil
 }
 
 func (w *CandidateWindow) EnterScope(resourceID, roundID int, executionRound ...int) *WindowConsumer {
@@ -212,6 +233,7 @@ func (c *WindowConsumer) RecoveryComplete() {
 	}
 }
 func (c *WindowConsumer) Leave() {
+	c.window.ledger.YieldMainPriority(c.resourceID, c.executionRound)
 	w := c.window
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -253,8 +275,9 @@ func (w *CandidateWindow) CanDrainFor(consumer *WindowConsumer) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	draining := false
-	for _, entry := range w.entries {
-		if entry.reservation && entry.durable {
+	budgets := w.ledger.BudgetEntries()
+	for id, entry := range w.entries {
+		if e, ok := budgets[id]; ok && e.PlannedCount > 0 {
 			continue
 		}
 		if w.fixedPin(entry, consumer) {
@@ -275,7 +298,7 @@ func (w *CandidateWindow) CanDrainFor(consumer *WindowConsumer) bool {
 		}
 		draining = true
 	}
-	return draining || len(w.entries) == 0
+	return draining || w.ledger.PipelineSnapshot().Segments == 0
 }
 func (w *CandidateWindow) Transfer(from, to string, size int64) error {
 	w.mu.Lock()
@@ -699,7 +722,6 @@ type requestSession struct {
 	reporter          progress.Reporter
 	intent            RequestIntent
 	permits           []*backend.RequestPermit
-	preGrant          *backend.RequestPermit
 	preWire, preInput int64
 	preTicket         *PreparationTicket
 	lastID            string
@@ -719,9 +741,7 @@ type requestSession struct {
 type requestSessionKey struct{}
 
 func (s *requestSession) finish() error {
-	if s.preGrant != nil {
-		s.preGrant.Release()
-		s.preGrant = nil
+	if s.preTicket != nil && s.calls == 0 {
 		if abort, ok := s.store.(RequestAborter); ok {
 			if err := s.runtime.SaveNamed(s.accountingContext(context.Background()), persistence.Metadata{Operation: "abort", Class: persistence.Reliable, RequestID: s.intent.ID, ResourceID: s.intent.ResourceID}, func(ctx context.Context) error { return abort.AbortRequest(ctx, s.intent.ID) }); err != nil {
 				s.fail(err)
@@ -928,7 +948,7 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 	_, _ = io.WriteString(digest, req.System)
 	_, _ = digest.Write([]byte{0})
 	_, _ = io.WriteString(digest, req.User)
-	if session == nil || session.preGrant == nil {
+	if session == nil || session.preTicket == nil {
 		intent.InputDigest = hex.EncodeToString(digest.Sum(nil))
 	}
 	wireBytes, wireErr := backend.MeasureRequest(b.inner, req)
@@ -946,7 +966,7 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		return nil, inputErr
 	}
 	if intent.Stage == backend.RequestStageMain {
-		ok, prepareErr := b.runtime.Admission.PrepareMain(intent.ID, intent.RoundIndex, intent.ResourceID, int64(len(intent.FreezePayload)), inputBytes, intent.BusinessBound, b.runtime.Window.limits.Segments == 1 || b.runtime.Window.limits.Bytes < b.runtime.Window.limits.ItemBytes || b.runtime.Admission.RuntimeState().ProgressID == intent.ID)
+		ok, prepareErr := b.runtime.Admission.PrepareMain(intent.ID, intent.RoundIndex, intent.ResourceID, int64(len(intent.FreezePayload)), inputBytes, intent.BusinessBound, b.runtime.Window.limits.Segments == 1 || b.runtime.Window.limits.Bytes < b.runtime.Window.limits.ItemBytes || b.runtime.Admission.RuntimeState().ProgressID == intent.ID, len(intent.Indices))
 		if prepareErr != nil {
 			return nil, fmt.Errorf("prepare main %s freeze%d/input%d: %w", intent.ID, len(intent.FreezePayload), inputBytes, prepareErr)
 		}
@@ -966,6 +986,14 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		}
 	} else {
 		admissionIntent.InputBytes = inputBytes
+		ok, e := b.runtime.Admission.PrepareAux(intent.ID, inputBytes, len(intent.Members))
+		if e != nil {
+			return nil, e
+		}
+		if !ok {
+			return nil, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "aux_input", CapacityChanged: b.runtime.Admission.Changed()}}
+		}
+		defer b.runtime.Admission.ReleasePrepared(intent.ID)
 		for _, member := range intent.Members {
 			admissionIntent.CandidateIDs = append(admissionIntent.CandidateIDs, member.CandidateID)
 
@@ -974,54 +1002,54 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 	var permit *backend.RequestPermit
 	var err error
 	ticket := preparationTicket(ctx)
-	if session != nil && session.preGrant != nil {
+	if session != nil && session.preTicket != nil {
 		if session.preWire != wireBytes || session.preInput != inputBytes {
 			return nil, backend.ErrBuildCapacity
 		}
-		permit = session.preGrant
-		session.preGrant = nil
 		ticket = session.preTicket
-	} else {
-		if !ticket.Active() {
-			var err error
-			ticket, err = b.runtime.Preparation.Try(ctx, admissionIntent, b.runtime.Gate)
-			if err != nil {
-				// An unfrozen direct-save retry gets a fresh request identity. Its
-				// released prepared K must not leave an old identity in this group.
-				if session != nil && len(intent.FreezePayload) == 0 && workDeferred(err) != nil {
-					b.forgetPreparation(ctx)
-				}
-				return nil, fmt.Errorf("prepare dispatch %s: %w", intent.ID, err)
-			}
-		}
-		if session != nil && session.store != nil {
-			if err := session.runtime.SaveNamed(ctx, persistence.Metadata{Operation: "reserve", Class: persistence.Normal, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error { return session.store.Reserve(saveCtx, intent) }); err != nil {
-				if errors.Is(err, backend.ErrDispatchPaused) {
-					// The durable pause intent may win before the in-memory callback.
-					// No reservation succeeded, so this is a dispatch stop, not a failed
-					// response save or a debit eligible for refund.
-					if b.runtime.Gate != nil {
-						b.runtime.Gate.Pause()
-					}
-					ticket.Release()
-					return nil, backend.ErrDispatchPaused
-				}
-				return nil, session.fail(err)
-			}
-		}
-		ticket.MarkReserved()
-		permit, err = b.acquire(ctx, admissionIntent, ticket)
-		if errors.Is(err, backend.ErrProgressRequired) && len(admissionIntent.CandidateIDs) == 1 {
-			if progressErr := b.runtime.EnsureProgress(ctx, admissionIntent.CandidateIDs[0], "", intent.ResourceID, intent.RoundIndex); progressErr == nil {
-				permit, err = b.acquire(ctx, admissionIntent, ticket)
-			} else {
-				err = progressErr
-			}
-		}
-
 	}
+	if !ticket.Active() {
+		var err error
+		ticket, err = b.runtime.Preparation.Try(ctx, admissionIntent, b.runtime.Gate)
+		if err != nil {
+			// An unfrozen direct-save retry gets a fresh request identity. Its
+			// released prepared K must not leave an old identity in this group.
+			if session != nil && len(intent.FreezePayload) == 0 && workDeferred(err) != nil {
+				b.forgetPreparation(ctx)
+			}
+			return nil, fmt.Errorf("prepare dispatch %s: %w", intent.ID, err)
+		}
+	}
+	if session != nil && session.store != nil && session.preTicket == nil {
+		if err := session.runtime.SaveNamed(ctx, persistence.Metadata{Operation: "reserve", Class: persistence.Normal, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error { return session.store.Reserve(saveCtx, intent) }); err != nil {
+			if errors.Is(err, backend.ErrDispatchPaused) {
+				// The durable pause intent may win before the in-memory callback.
+				// No reservation succeeded, so this is a dispatch stop, not a failed
+				// response save or a debit eligible for refund.
+				if b.runtime.Gate != nil {
+					b.runtime.Gate.Pause()
+				}
+				ticket.Release()
+				return nil, backend.ErrDispatchPaused
+			}
+			return nil, session.fail(err)
+		}
+	}
+	ticket.MarkReserved()
+	permit, err = b.acquire(ctx, admissionIntent, ticket)
+	if errors.Is(err, backend.ErrProgressRequired) && len(admissionIntent.CandidateIDs) == 1 {
+		if progressErr := b.runtime.EnsureProgress(ctx, admissionIntent.CandidateIDs[0], "", intent.ResourceID, intent.RoundIndex); progressErr == nil {
+			permit, err = b.acquire(ctx, admissionIntent, ticket)
+		} else {
+			err = progressErr
+		}
+	}
+
 	if err == nil {
 		err = b.runtime.beginDispatch(ctx)
+		if err == nil {
+			err = permit.StartDispatch(ctx)
+		}
 		if err != nil && permit != nil {
 			permit.Release()
 			permit = nil
@@ -1043,6 +1071,9 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 			}
 		} else {
 			ticket.Release()
+		}
+		if errors.Is(err, backend.ErrStalePermit) {
+			return nil, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "policy_changed", CapacityChanged: b.runtime.Admission.Changed(), PolicyChanged: b.runtime.Admission.PolicyChanged()}}
 		}
 		if workDeferred(err) != nil {
 			return nil, err
@@ -1181,6 +1212,24 @@ func requestBackendPolicy(ctx context.Context, b backend.Backend) error {
 
 // The waiter belongs to a bounded preparation owner, never the dispatcher.
 func (b *requestBackend) acquire(ctx context.Context, intent backend.RequestAdmissionIntent, ticket *PreparationTicket) (*backend.RequestPermit, error) {
+	if coordinatorPreparation(ctx) {
+		hint, err := b.runtime.Admission.ReadyHint(ctx, intent, b.runtime.Gate)
+		if err != nil {
+			return nil, err
+		}
+		if hint.Reason != "" && hint.Reason != "backend_rpm" {
+			return nil, &WorkDeferred{Wait: hint}
+		}
+		// ReadyHint previews local roots only. The immediate joint probe must
+		// also check actor/instance payload and reliable storage before queueing.
+		permit, wait, err := b.runtime.Admission.TryAdmit(ctx, intent, b.runtime.Gate)
+		if err != nil || permit != nil {
+			return permit, err
+		}
+		if wait.Reason != "backend_rpm" {
+			return nil, &WorkDeferred{Wait: wait}
+		}
+	}
 	type result struct {
 		permit *backend.RequestPermit
 		err    error

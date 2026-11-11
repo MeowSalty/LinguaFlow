@@ -117,6 +117,11 @@ func (p *Preparation) Try(ctx context.Context, i backend.RequestAdmissionIntent,
 		}
 	}
 	if !found && len(p.queue) < p.capacity {
+		if p.admission != nil {
+			if err := p.admission.ChangeStation(0, 0, 1); err != nil {
+				return nil, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "aggregate_descriptors", CapacityChanged: p.admission.RootChanged()}}
+			}
+		}
 		p.queue = append(p.queue, i)
 		entry := &queuedPreparation{}
 		p.queued[k] = entry
@@ -160,6 +165,12 @@ func (p *Preparation) Try(ctx context.Context, i backend.RequestAdmissionIntent,
 			return nil, &WorkDeferred{Wait: w}
 		}
 		t := &PreparationTicket{owner: p, key: k}
+		if p.admission != nil {
+			if err := p.admission.ChangeStation(1, 0, 0); err != nil {
+				return nil, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "aggregate_prepare", CapacityChanged: p.admission.RootChanged()}}
+			}
+			_ = p.admission.ChangeStation(0, 0, -1)
+		}
 		p.pending[k] = t
 		p.peakPending = max(p.peakPending, len(p.pending))
 		p.queue = append(p.queue[:n], p.queue[n+1:]...)
@@ -182,6 +193,9 @@ func (t *PreparationTicket) Release() {
 		p.mu.Lock()
 		if p.pending[t.key] == t {
 			delete(p.pending, t.key)
+			if p.admission != nil {
+				_ = p.admission.ChangeStation(-1, 0, 0)
+			}
 		}
 		if t.competitor != nil {
 			var first, rest, tail []backend.RequestAdmissionIntent
@@ -258,6 +272,9 @@ func (p *Preparation) forgetLocked(k preparationKey) {
 	for n, q := range p.queue {
 		if preparationIdentity(q) == k {
 			p.queue = append(p.queue[:n], p.queue[n+1:]...)
+			if p.admission != nil {
+				_ = p.admission.ChangeStation(0, 0, -1)
+			}
 			break
 		}
 	}
@@ -275,6 +292,9 @@ func (p *Preparation) Forget(i backend.RequestAdmissionIntent) {
 func (p *Preparation) Close() {
 	p.mu.Lock()
 	p.closed = true
+	if p.admission != nil && len(p.queue) > 0 {
+		_ = p.admission.ChangeStation(0, 0, -int64(len(p.queue)))
+	}
 	p.queue = nil
 	for k, e := range p.queued {
 		e.stop()

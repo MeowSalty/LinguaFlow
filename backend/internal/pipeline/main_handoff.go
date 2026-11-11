@@ -114,6 +114,12 @@ func (r *ExecutionRuntime) responseLimit() int64 { return r.ResponseBytes }
 // Run implements the provider's short CPU-build permit. It never encloses a
 // network read, admission wait or persistence operation.
 func (r *ExecutionRuntime) Run(ctx context.Context, fn func() error) error {
+	if r.Admission != nil {
+		if err := r.Admission.ChangeStation(0, 1, 0); err != nil {
+			return &WorkDeferred{Wait: backend.AdmissionWait{Reason: "aggregate_build", CapacityChanged: r.Admission.RootChanged()}}
+		}
+		defer r.Admission.ChangeStation(0, -1, 0)
+	}
 	select {
 	case r.parse <- struct{}{}:
 		defer func() { <-r.parse }()
@@ -278,7 +284,7 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 		if d := workDeferred(err); d != nil {
 			return batchResult{waitCapacity: d, deferred: true}
 		}
-		if storageFailure(err) || errors.Is(err, backend.ErrBuildCapacity) || errors.Is(err, backend.ErrResponseTooLarge) {
+		if errors.Is(err, backend.ErrNoCapacityDrain) || storageFailure(err) || errors.Is(err, backend.ErrBuildCapacity) || errors.Is(err, backend.ErrResponseTooLarge) {
 			return batchResult{err: err}
 		}
 		if backend.IsRetryable(err) {
@@ -335,7 +341,11 @@ func freezeMeasuredMain(b *backend.BuildBounds, h stagedHandler, input *prepared
 		return session.intent.PromotionMembers[i].SegmentID < session.intent.PromotionMembers[j].SegmentID || session.intent.PromotionMembers[i].SegmentID == session.intent.PromotionMembers[j].SegmentID && session.intent.PromotionMembers[i].Index < session.intent.PromotionMembers[j].Index
 	})
 	if handler, ok := h.(*TranslateHandler); ok && handler.InlineBootstrap && handler.InlineConflictStrategy == InlineConflictRewriteLocal {
-		session.intent.BusinessBound = int64(len(frozen.Members)) * session.runtime.Window.limits.ItemBytes
+		bound, e := backend.CheckedProduct(int64(len(frozen.Members)), session.runtime.Window.limits.ItemBytes)
+		if e != nil {
+			return e
+		}
+		session.intent.BusinessBound = bound
 	}
 	freezeBytes, err := b.MeasureJSON(frozen)
 	if err != nil {
@@ -350,7 +360,10 @@ func freezeMeasuredMain(b *backend.BuildBounds, h stagedHandler, input *prepared
 		return err
 	}
 	progress := session.runtime.Admission.RuntimeState().ProgressID == session.intent.ID
-	granted, err := session.runtime.Admission.PrepareMain(session.intent.ID, session.intent.RoundIndex, session.intent.ResourceID, freezeBytes, inputBytes, session.intent.BusinessBound, progress)
+	granted, err := session.runtime.Admission.PrepareMain(session.intent.ID, session.intent.RoundIndex, session.intent.ResourceID, freezeBytes, inputBytes, session.intent.BusinessBound, progress, len(session.intent.Indices))
+	if errors.Is(err, backend.ErrAggregateCapacity) {
+		return &WorkDeferred{Wait: backend.AdmissionWait{Reason: "aggregate_capacity", CapacityChanged: session.runtime.Admission.Changed()}}
+	}
 	if err != nil {
 		return err
 	}
@@ -385,41 +398,7 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 	ctx = session.Context(ctx)
 	defer runtime.Admission.ObserveOwned("freeze", reservation, 0)
 	defer runtime.Admission.ObserveOwned("raw", reservation, 0)
-	var result batchResult
-	for {
-		result = prepareMainInvocation(ctx, h, input, session, attempt, logger)
-		if !errors.Is(result.err, backend.ErrMainBatchTooLarge) {
-			break
-		}
-		if len(indices) == 1 {
-			if err := runtime.EnsureProgress(ctx, reservation, reservation, storeResourceID(store), prepareIntent(h, store, backend.RequestStageMain).RoundIndex); err != nil {
-				if errors.Is(err, backend.ErrProgressRequired) {
-					result = batchResult{waitCapacity: &WorkDeferred{Wait: backend.AdmissionWait{Reason: "progress_owner", CapacityChanged: runtime.Admission.Changed()}, Yield: errors.Is(err, backend.ErrEarlierScope)}}
-				} else {
-					result.err = err
-				}
-				break
-			}
-			session.intent.PromotionMembers = nil
-			session.intent.FreezePayload = nil
-			result = prepareMainInvocation(ctx, h, input, session, attempt, logger)
-			break
-		}
-		indices = indices[:max(1, len(indices)/2)]
-		if err := runtime.Window.ShrinkReservation(reservation, len(indices)); err != nil {
-			result.err = err
-			break
-		}
-		var err error
-		input, err = snapshotMainInput(source, indices, h, runtime)
-		if err != nil {
-			result.err = err
-			break
-		}
-		session.intent.Indices = indices
-		session.intent.PromotionMembers = nil
-		session.intent.FreezePayload = nil
-	}
+	result := prepareMainInvocation(ctx, h, input, session, attempt, logger)
 
 	if result.err != nil {
 		session.fail(result.err)
@@ -452,6 +431,9 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 	}
 	if result.waitCapacity != nil {
 		runtime.Window.Release(reservation)
+		if result.waitCapacity.Wait.Reason != "aggregate_capacity" {
+			result.waitCapacity.Wait.CapacityChanged = runtime.Admission.Changed()
+		}
 		e.waitCapacity = result.waitCapacity
 		e.waitIndices = append([]int(nil), indices...)
 		e.waitPool = pool
@@ -503,6 +485,16 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 
 func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, header MainResponseHeader, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger) (e stagedEvent) {
 	e = stagedEvent{rawPromotion: true, cursors: map[int]WorkCursor{}}
+	owned, ownerErr := runtime.Admission.ClaimResponseOwner(header.ID)
+	if ownerErr != nil {
+		e.err = ownerErr
+		return e
+	}
+	if !owned {
+		e.responseAdvance = &header
+		e.waitCapacity = &WorkDeferred{Wait: backend.AdmissionWait{Reason: "response_owner", CapacityChanged: runtime.Admission.Changed()}}
+		return e
+	}
 	response, err := store.Response(ctx, header.ID, runtime.handoffLimit(), runtime.responseLimit(), runtime.handoffLimit())
 	if err != nil {
 		e.err = err

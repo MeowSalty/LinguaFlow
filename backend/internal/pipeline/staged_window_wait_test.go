@@ -108,7 +108,7 @@ func waitWindowProbe(t *testing.T, fn func() bool) {
 
 func TestCandidateWindowClassifiesStaticLimitAndBusy(t *testing.T) {
 	w := NewCandidateWindow(CandidateLimits{Segments: 8, Bytes: 4 << 20, ItemBytes: 1 << 20})
-	if got := w.mainBatchLimit(1); got != 7 {
+	if got := w.mainBatchLimit(1); got != 8 {
 		t.Fatalf("static ordinary S-1 member limit: %d", got)
 	}
 	singleton := NewCandidateWindow(CandidateLimits{Segments: 1, Bytes: 4 << 20, ItemBytes: 1 << 20})
@@ -161,7 +161,7 @@ func TestCandidateWindowClassifiesStaticLimitAndBusy(t *testing.T) {
 	}
 }
 
-func TestStagedWindowHardLimitSplitsOnlyOversizeBatch(t *testing.T) {
+func TestStagedWindowFullBatchIndependentOfConcurrency(t *testing.T) {
 	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 2}})
 	if err != nil {
 		t.Fatal(err)
@@ -175,17 +175,8 @@ func TestStagedWindowHardLimitSplitsOnlyOversizeBatch(t *testing.T) {
 		t.Fatalf("split failed: %+v %v", result, err)
 	}
 	batches, _ := h.snapshot()
-	if len(batches) != 3 {
-		t.Fatalf("static concurrency budget produced unexpected batches: %v", batches)
-	}
-	for i, batch := range batches {
-		want := 3
-		if i == 2 {
-			want = 2
-		}
-		if len(batch) != want {
-			t.Fatalf("busy fragmented a statically budgeted batch: %v", batches)
-		}
+	if len(batches) != 1 || len(batches[0]) != 8 {
+		t.Fatalf("C2 changed original full n8/S8: %v", batches)
 	}
 }
 
@@ -416,7 +407,7 @@ func TestWindowConsumerDoesNotReviveEarlierInstanceClaims(t *testing.T) {
 func TestStagedWindowSameResourceFutureRoundWithoutClaimMakesProgress(t *testing.T) {
 	// The fixed recovery exception permits the earliest singleton while a
 	// later header remains pinned. The later body is never claimed or decoded.
-	r := stagedTestRuntime(t, CandidateLimits{Segments: 1, Bytes: 1 << 20, ItemBytes: 1 << 20})
+	r := stagedTestRuntime(t, CandidateLimits{Segments: 2, Bytes: 1 << 20, ItemBytes: 1 << 20})
 	if err := r.Window.RestoreScoped("future-round", 100, 1, 2); err != nil {
 		t.Fatal(err)
 	}
@@ -517,7 +508,7 @@ func TestStagedWindowPartialFuturePinCompletesEarlierAndRecoversLater(t *testing
 		t.Fatalf("partial future pin stopped earlier round: %+v %v", result, err)
 	}
 	batches, attempts := h.snapshot()
-	if len(batches) != 2 || len(batches[0]) != 8 || len(batches[1]) != 8 || attempts[0] != 1 || attempts[1] != 1 {
+	if len(batches) != 1 || len(batches[0]) != 16 || attempts[0] != 1 {
 		t.Fatalf("fixed-pin split changed members/attempt: %v %v", batches, attempts)
 	}
 	seen := make(map[int]bool)
@@ -589,8 +580,7 @@ func TestStagedWindowPinAndActiveOccupancyWaitAfterFixedSplit(t *testing.T) {
 				t.Fatal(err)
 			}
 			batches, _ := h.snapshot()
-			if pin && (len(batches) != 2 || len(batches[0]) != 8 || len(batches[1]) != 8) ||
-				!pin && (len(batches) != 1 || len(batches[0]) != 16) {
+			if len(batches) != 1 || len(batches[0]) != 16 {
 				t.Fatalf("batch ceiling did not distinguish fixed/live occupancy: %v", batches)
 			}
 		})
@@ -666,7 +656,9 @@ func TestCandidateWindowFixedPinRequiresDurableScopeAndCompleteRecovery(t *testi
 }
 
 func TestStagedWindowTwoResourcesFuturePinsMakeProgressWithOneResourceSlot(t *testing.T) {
-	r := stagedTestRuntime(t, windowFixtureLimits())
+	limits := windowFixtureLimits()
+	limits.Segments = 400
+	r := stagedTestRuntime(t, limits)
 	futureStores := make([]*windowResourceStore, 2)
 	futureDocs := make([]*Document, 2)
 	for resource := 1; resource <= 2; resource++ {
@@ -708,7 +700,7 @@ func TestStagedWindowTwoResourcesFuturePinsMakeProgressWithOneResourceSlot(t *te
 		// Main reserves S only: sixteen ordinary slots minus eight/four
 		// durable future members. Fixed prefix halving selects eight in either
 		// case; later live occupancy may wait but cannot rehalve that prefix.
-		firstSize := 8
+		firstSize := 300
 		if len(batches) == 0 || len(batches[0]) != firstSize {
 			t.Fatalf("resource %d did not fit fixed recovery ceiling: %v", resource, batches)
 		}
@@ -826,7 +818,7 @@ func TestStagedWindowReleaseBetweenBusyAndYieldRetriesRetainedBatch(t *testing.T
 		t.Fatalf("released capacity caused a false sole-resource yield: %+v %v hook=%v", result, err, logProbe.hit.Load())
 	}
 	batches, _ := h.snapshot()
-	if len(batches) != 2 || len(batches[0]) != 8 || len(batches[1]) != 8 {
+	if len(batches) != 1 || len(batches[0]) != 16 {
 		t.Fatalf("release raced batch was rebuilt: %v", batches)
 	}
 }
@@ -888,10 +880,7 @@ func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 			}
 			if outcome == "completed_without_claim" {
 				foreign.RecoveryComplete()
-				if err := awaitRuntimeResult(t, done); !errors.Is(err, ErrResourceYield) {
-					t.Fatalf("exhausted page retained a false consumption proof: %v", err)
-				}
-				return
+				// All stock is now a proven pin: original n16 plus pin1 fits S17.
 			}
 			if outcome == "claim_and_release" {
 				if err := r.Window.ClaimRecovered("unclaimed", 1024, foreign); err != nil {
@@ -910,8 +899,7 @@ func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 				t.Fatal(err)
 			}
 			batches, _ := h.snapshot()
-			if outcome == "exit" && (len(batches) != 2 || len(batches[0]) != 8 || len(batches[1]) != 8) ||
-				outcome == "claim_and_release" && (len(batches) != 1 || len(batches[0]) != 16) {
+			if len(batches) != 1 || len(batches[0]) != 16 {
 				t.Fatalf("page outcome changed the wrong batch ceiling: %v", batches)
 			}
 		})

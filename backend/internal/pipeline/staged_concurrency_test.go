@@ -95,7 +95,7 @@ func TestStagedConcurrencyPreservesProtectedContextWordBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	limits := DefaultCandidateLimits()
-	// The fair member cap derives from S/C; S=17 and C=4 preserves n=4.
+	// The original n=10 batch is preserved under S=17 and C=4.
 	limits.Segments = 17
 	runtime := NewExecutionRuntime(a, limits, nil)
 	defer runtime.Close()
@@ -104,10 +104,11 @@ func TestStagedConcurrencyPreservesProtectedContextWordBudget(t *testing.T) {
 	doc := newTestDoc(23)
 	for i := range doc.Segments {
 		doc.Segments[i].Source = "source"
-		if i%3 == 2 {
+		if i%3 == 0 {
 			doc.Segments[i].Source += " `one two three four five six seven eight`"
 		}
 	}
+	doc.Segments[0].Translate = false // A raw protected context outside membership.
 	var rawContext, protectedTarget atomic.Bool
 	var requests atomic.Int32
 	violations := make(chan error, len(doc.Segments))
@@ -136,8 +137,8 @@ func TestStagedConcurrencyPreservesProtectedContextWordBudget(t *testing.T) {
 				rawContext.Store(true)
 			}
 		}
-		if targets > 4 || targets > 1 && words > 20 {
-			err := fmt.Errorf("actual request has %d targets and %d words, static cap=4 word cap=20", targets, words)
+		if targets > 10 || targets > 1 && words > 20 {
+			err := fmt.Errorf("actual request has %d targets and %d words, configured cap=10 word cap=20", targets, words)
 			violations <- err
 			return err
 		}
@@ -152,7 +153,7 @@ func TestStagedConcurrencyPreservesProtectedContextWordBudget(t *testing.T) {
 		t.Fatal(violation)
 	default:
 	}
-	if err != nil || len(result.Resolved) != len(doc.Segments) || len(result.Unresolved) != 0 {
+	if err != nil || len(result.Resolved) != len(doc.Segments)-1 || len(result.Unresolved) != 0 {
 		t.Fatalf("protected context round: %+v error=%v", result, err)
 	}
 	if requests.Load() < 2 || !rawContext.Load() || !protectedTarget.Load() {
@@ -163,7 +164,7 @@ func TestStagedConcurrencyPreservesProtectedContextWordBudget(t *testing.T) {
 	}
 }
 
-func TestStagedRoundConcurrencyUsesStaticWindowBudget(t *testing.T) {
+func TestStagedRoundConcurrencyPreservesCompleteBatch(t *testing.T) {
 	defaults := DefaultCandidateLimits()
 	cases := []struct {
 		name                       string
@@ -180,15 +181,15 @@ func TestStagedRoundConcurrencyUsesStaticWindowBudget(t *testing.T) {
 		{"translate_large_batch", RoundModeTranslate, 4, 50, 65, 0, 2, defaults},
 		{"translate_single_segments", RoundModeTranslate, 4, 1, 19, 0, 4, defaults},
 		{"translate_window_bound", RoundModeTranslate, 20, 10, 35, 0, 4, defaults},
-		{"translate_c32_handoff", RoundModeTranslate, 32, 50, 256, 0, 32, defaults},
-		{"revise_c32_handoff", RoundModeRevise, 32, 50, 256, 0, 32, defaults},
-		{"translate_max_int_concurrency", RoundModeTranslate, int(^uint(0) >> 1), 10, 35, 0, 35, defaults},
+		{"translate_c32_handoff", RoundModeTranslate, 32, 50, 256, 0, 5, defaults},
+		{"revise_c32_handoff", RoundModeRevise, 32, 50, 256, 0, 5, defaults},
+		{"translate_max_int_concurrency", RoundModeTranslate, int(^uint(0) >> 1), 10, 35, 0, 4, defaults},
 		{"translate_fewer_segments", RoundModeTranslate, 8, 10, 3, 0, 1, defaults},
 		{"translate_second_round", RoundModeTranslate, 4, 10, 35, 1, 4, defaults},
 		{"revise_default_batch", RoundModeRevise, 4, 10, 35, 0, 4, defaults},
 		{"revise_second_round", RoundModeRevise, 2, 20, 35, 1, 2, defaults},
-		{"small_byte_window", RoundModeTranslate, 4, 10, 9, 0, 4, CandidateLimits{Segments: 8, Bytes: 2 << 20, ItemBytes: 1 << 20}},
-		{"small_segment_window", RoundModeTranslate, 4, 10, 9, 0, 1, CandidateLimits{Segments: 2, Bytes: 16 << 20, ItemBytes: 1 << 20}},
+		{"small_byte_window", RoundModeTranslate, 4, 10, 9, 0, 0, CandidateLimits{Segments: 8, Bytes: 2 << 20, ItemBytes: 1 << 20}},
+		{"small_segment_window", RoundModeTranslate, 4, 10, 9, 0, 0, CandidateLimits{Segments: 2, Bytes: 16 << 20, ItemBytes: 1 << 20}},
 		{"singleton_exception", RoundModeTranslate, 4, 10, 3, 0, 1, CandidateLimits{Segments: 4, Bytes: 1, ItemBytes: 1 << 20}},
 	}
 	for _, tc := range cases {
@@ -235,6 +236,18 @@ func TestStagedRoundConcurrencyUsesStaticWindowBudget(t *testing.T) {
 				result, err := RunRound(ctx, Round{Concurrency: tc.concurrency, Handler: handler, Runtime: runtime, Store: store}, doc, nil, quietLogger(), nil)
 				done <- outcome{result, err}
 			}()
+			if tc.wantConcurrent == 0 {
+				got := <-done
+				joined = true
+				if !errors.Is(got.err, ErrCandidateCapacity) || len(remote.entered) != 0 {
+					t.Fatalf("over-S original batch: %+v %v HTTP=%d", got.result, got.err, len(remote.entered))
+				}
+				state, _ := store.Load(ctx)
+				if len(state.Completed) != 0 {
+					t.Fatal("capacity failure advanced checkpoints")
+				}
+				return
+			}
 			// Each provider call holds its network slot until all expected calls
 			// arrive. A serial scheduler cannot pass by merely finishing quickly.
 			barrier := time.NewTimer(3 * time.Second)

@@ -287,6 +287,119 @@ func mainContextWordsScalar(doc *Document, candidate []int, window int) int {
 	return words
 }
 
+// PlanNextMainBatchBounded scans the authoritative membership without retaining
+// a task-sized eligible array. Only the next public batch and one competing
+// continuous remainder are retained. Capacity never changes its membership.
+func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Document, visit func(func(int) bool), pool, memberLimit int) ([]int, error) {
+	if memberLimit < 1 {
+		return nil, backend.ErrPipelineCapacity
+	}
+	memberLimit = min(memberLimit, 65536)
+	if err := b.ReserveNodes(int64(memberLimit+1)*2, 8); err != nil {
+		return nil, err
+	}
+	c := BatchConstraint{}
+	window, span, continuous := 0, 0, false
+	switch v := h.(type) {
+	case *TranslateHandler:
+		c = BatchConstraint{MaxSegments: v.BatchSize, MaxWords: v.MaxWordsPerBatch}
+		if c.MaxSegments <= 0 && c.MaxWords <= 0 {
+			c.MaxSegments = 1
+		}
+		c = shrinkConstraint(c, v.FallbackShrink, pool)
+		if v.Context.Enabled {
+			window = max(v.Context.Before, v.Context.After)
+		}
+		continuous = window == 0
+	case *ReviseHandler:
+		c = BatchConstraint{MaxSegments: v.BatchSize, MaxWords: v.MaxWordsPerBatch}
+		span = v.MaxBatchIndexSpan
+	default:
+		return nil, errors.New("unsupported bounded main planner")
+	}
+	current := make([]int, 0, memberLimit+1)
+	best := make([]int, 0, memberLimit+1)
+	count, words, previous, first, bestCount := 0, 0, -1, 0, 0
+	var planErr error
+	selected := false
+	finishRun := func() {
+		if count > bestCount {
+			best = best[:len(current)]
+			copy(best, current)
+			bestCount = count
+		}
+		current, count, words = current[:0], 0, 0
+	}
+	visit(func(idx int) bool {
+		if idx < 0 || idx >= len(doc.Segments) || idx <= previous {
+			planErr = backend.ErrBuildCapacity
+			return false
+		}
+		gap := idx - previous
+		if count > 0 && (continuous && gap > 1 || window > 0 && window < (math.MaxInt-1)/2 && gap > 2*window+1) {
+			if !continuous {
+				selected = true
+				return false
+			}
+			finishRun()
+		}
+		next := CountWords(doc.Segments[idx].Source)
+		if _, ok := h.(*ReviseHandler); ok {
+			n := CountWords(doc.Segments[idx].Target)
+			if next > math.MaxInt-n {
+				next = math.MaxInt
+			} else {
+				next += n
+			}
+		}
+		if count == 0 {
+			first = idx
+		}
+		exceeds := count > 0 && (c.exceeds(count, words, next) || span > 0 && idx-first > span)
+		if count > 0 && window > 0 && c.MaxWords > 0 && !exceeds {
+			// All retained indices are part of this next batch. Refuse an
+			// overlarge batch before allocating another index or context tree.
+			if count > memberLimit {
+				planErr = ErrCandidateCapacity
+				return false
+			}
+			contextIndices := append(current, idx)
+			contextWords := mainContextWordsScalar(doc, contextIndices, window)
+			exceeds = contextWords > c.MaxWords || words > c.MaxWords-contextWords || next > c.MaxWords-contextWords-words
+		}
+		if exceeds {
+			selected = true
+			return false
+		}
+		count++
+		if count <= memberLimit+1 {
+			current = append(current, idx)
+		}
+		if next > math.MaxInt-words {
+			words = math.MaxInt
+		} else {
+			words += next
+		}
+		previous = idx
+		if !continuous && count > memberLimit {
+			planErr = ErrCandidateCapacity
+			return false
+		}
+		return true
+	})
+	if planErr != nil {
+		return nil, planErr
+	}
+	if continuous && !selected {
+		finishRun()
+		current, count = best, bestCount
+	}
+	if count > memberLimit {
+		return nil, ErrCandidateCapacity
+	}
+	return current, nil
+}
+
 // MainHintPayload is the only hint value permitted across an admission wait.
 // Its actual byte length belongs to the prepared input K, not dictionary H.
 type MainHintPayload struct {

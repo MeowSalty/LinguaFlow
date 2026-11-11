@@ -490,7 +490,7 @@ func runPool(
 	done := make(chan struct{})
 	var sourceCredits chan struct{}
 	if round.Runtime != nil {
-		sourceCredits = make(chan struct{}, concurrency)
+		sourceCredits = make(chan struct{}, min(concurrency, max(1, round.Runtime.Policy.PreparePending)))
 	}
 	returnSourceCredit := func() {
 		if sourceCredits != nil {

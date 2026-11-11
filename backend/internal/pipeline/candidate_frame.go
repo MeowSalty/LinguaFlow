@@ -118,10 +118,19 @@ type CandidateCommitPreparer interface {
 	PrepareCandidateCommit(context.Context, *backend.BuildBounds, *Candidate, TranslatedSegment) (TranslatedSegment, error)
 }
 
-func compactCommitResult(b *backend.BuildBounds, r TranslatedSegment, limit int64) (TranslatedSegment, error) {
+func compactCommitResult(b *backend.BuildBounds, r TranslatedSegment, limit int64, claim ...func(int64) error) (TranslatedSegment, error) {
 	for i := range r.Issues {
 		if r.Issues[i].Disposition == "" {
 			r.Issues[i].Disposition = qa.DispositionPending
+		}
+	}
+	if len(claim) > 0 {
+		size, err := b.MeasureJSON(r)
+		if err != nil {
+			return TranslatedSegment{}, err
+		}
+		if err = claim[0](size); err != nil {
+			return TranslatedSegment{}, err
 		}
 	}
 	payload, err := b.EncodeJSON(r, limit)

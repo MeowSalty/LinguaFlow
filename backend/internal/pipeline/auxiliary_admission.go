@@ -13,9 +13,9 @@ import (
 // measureOnly stops the pure rendering pass before any prompt output backing.
 var errMeasureOnly = errors.New("prompt measurement complete")
 
-// preclaimAux executes the same durable reserve and joint admission as Translate,
-// outside the short CPU permit. Its grant is consumed by the immediately following
-// verified render/send; no second budget or dispatch authority is introduced.
+// preclaimAux measures and claims only immutable input before output backing.
+// The durable descriptor holds no response, RPM or worker permit; Translate
+// performs the joint grant after the verified render has finished.
 func preclaimAux(ctx context.Context, remote backend.Backend, session *requestSession, req backend.Request, measured backend.PromptMeasure) error {
 	return preclaimMeasured(ctx, remote, session, req, measured)
 }
@@ -72,12 +72,21 @@ func preclaimMeasured(ctx context.Context, remote backend.Backend, session *requ
 				return err
 			}
 		}
-		granted, e := bound.runtime.Admission.PrepareMain(intent.ID, intent.RoundIndex, intent.ResourceID, 0, input, 0, progress)
+		granted, e := bound.runtime.Admission.PrepareMain(intent.ID, intent.RoundIndex, intent.ResourceID, 0, input, 0, progress, len(intent.Indices))
 		if e != nil {
 			return e
 		}
 		if !granted {
 			return &WorkDeferred{Wait: backend.AdmissionWait{Reason: "prepared_bytes", CapacityChanged: bound.runtime.Admission.Changed()}}
+		}
+		prepared = true
+	} else {
+		ok, e := bound.runtime.Admission.PrepareAux(intent.ID, input, len(intent.Members))
+		if e != nil {
+			return e
+		}
+		if !ok {
+			return &WorkDeferred{Wait: backend.AdmissionWait{Reason: "aux_input", CapacityChanged: bound.runtime.Admission.Changed()}}
 		}
 		prepared = true
 	}
@@ -116,28 +125,7 @@ func preclaimMeasured(ctx context.Context, remote backend.Backend, session *requ
 		}
 	}
 	ticket.MarkReserved()
-	permit, err := bound.acquire(ctx, admission, ticket)
-	if errors.Is(err, backend.ErrProgressRequired) && len(admission.CandidateIDs) == 1 {
-		err = bound.runtime.EnsureProgress(ctx, admission.CandidateIDs[0], "", intent.ResourceID, intent.RoundIndex)
-		if err == nil {
-			permit, err = bound.acquire(ctx, admission, ticket)
-		}
-	}
-	if err != nil {
-		if abort, ok := session.store.(RequestAborter); ok {
-			abortErr := session.runtime.SaveNamed(session.accountingContext(ctx), persistence.Metadata{Operation: "abort", Class: persistence.Reliable, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error { return abort.AbortRequest(saveCtx, intent.ID) })
-			if abortErr != nil {
-				err = errors.Join(err, abortErr)
-			}
-		}
-		ticket.Release()
-		if errors.Is(err, backend.ErrProgressRequired) {
-			return &WorkDeferred{Wait: backend.AdmissionWait{Reason: "progress_owner", CapacityChanged: bound.runtime.Admission.Changed()}, Yield: errors.Is(err, backend.ErrEarlierScope)}
-		}
-		return err
-	}
 	session.intent = intent
-	session.preGrant = permit
 	session.preWire = wire
 	session.preInput = input
 	session.preTicket = ticket

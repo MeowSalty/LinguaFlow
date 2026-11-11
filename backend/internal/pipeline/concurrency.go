@@ -14,10 +14,11 @@ func RunConcurrent(parent context.Context, n, concurrency int, fn func(ctx conte
 	if concurrency < 1 {
 		concurrency = 1
 	}
+	concurrency = min(concurrency, n)
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 
-	jobs := make(chan int, concurrency*2)
+	jobs := make(chan int)
 	var (
 		wg       sync.WaitGroup
 		mu       sync.Mutex

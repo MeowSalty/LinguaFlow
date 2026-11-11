@@ -35,6 +35,7 @@ type MainResponseHeader struct {
 	FreezeBytes    int64
 	ResponseBytes  int64
 	CorrectedBytes int64
+	MetadataBytes  int64
 	BusinessBound  int64
 	MemberCount    int
 	Cursor         int
