@@ -16,6 +16,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	pa "github.com/MeowSalty/LinguaFlow/backend/internal/persistenceacceptance"
@@ -153,180 +154,239 @@ func TestPersistenceTranslationLoadMatrix(t *testing.T) {
 	}
 	for _, ms := range []int{0, 5} {
 		t.Run(fmt.Sprintf("delay%d", ms), func(t *testing.T) {
-			fixtures := persistenceResources(t, 2)
-			// This bounds the whole 4200-segment harness, not an individual save.
-			// Product SQL execution and logical handoff budgets remain 30/120s.
-			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Minute)
-			defer cancel()
-			admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 10}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			runtime := pipeline.NewExecutionRuntime(admission, pipeline.DefaultCandidateLimits(), nil)
-			runtime.JobID = fixtures[0].Scope.JobID
-			runtime.Lifetime = ctx
-			defer runtime.Close()
-			timings := &persistenceTimings{}
-			observer := &persistenceTranslationObserver{timings: timings, requests: map[string]bool{}, resources: map[int]int{}}
-			ctx = persistence.WithObserver(ctx, observer)
-			runtime.Lifetime = ctx
-			model := &persistenceTranslationModel{}
-			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-			type resourceRun struct {
-				store    *roundStore
-				reporter *progress.DBReporter
-				handler  *pipeline.TranslateHandler
-				doc      *pipeline.Document
-			}
-			var runs []resourceRun
-			for _, fixture := range fixtures {
-				fixture.Client.JobRound.UpdateOneID(fixture.Scope.RoundID).SetMode("translate").ExecX(ctx)
-				indices := make(map[int]int, len(fixture.IDs))
-				for i, id := range fixture.IDs {
-					indices[i] = id
-				}
-				snapshot := &service.JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", Rounds: []execution.JobRoundSnapshot{{Mode: "translate", Backend: execution.BackendSnapshot{ID: 1, Name: "isolated-fake"}, Translate: &execution.JobTranslateRoundSnapshot{Prompt: execution.PromptSnapshot{Content: "Translate; return JSON translations."}, Concurrency: 10, BatchSize: 300, Retry: execution.RetryConfig{MaxAttempts: 1}}}}}
-				snapshot = completeWorkerSnapshot(t, snapshot)
-				fixture.SetExecutionSnapshot(t, snapshot)
-				store := newRoundStore(fixture.Client, fixture.Scope, indices, snapshot, 0, nil, false, pa.Driver(), nil, nil)
-				opts := progress.DBReporterOptions{Client: fixture.Client, JobID: fixture.Scope.JobID, JobResourceID: fixture.Scope.JobResourceID, ResourceID: fixture.Scope.ResourceID, Lifetime: ctx, Logger: logger, Ticker: time.Hour}
-				persistenceWireReporter(runtime, &opts, observer)
-				reporter := progress.NewDBReporter(opts)
-				reporter.SwitchRound(fixture.Scope.RoundID, func(i int) (int, bool) {
-					id, ok := indices[i]
-					return id, ok
-				})
-				renderer, err := prompt.NewRenderer(`Translate {{.SourceLang}} into {{.TargetLang}}. Return JSON {"translations":{"<id>":"<translation>"}}.`)
-				if err != nil {
-					t.Fatal(err)
-				}
-				handler := &pipeline.TranslateHandler{Backend: pipeline.BindRequestBackend(model, 1, 0, runtime), Renderer: renderer, BatchSize: 300, Logger: logger, Reporter: reporter}
-				doc := &pipeline.Document{SourceLang: "en", TargetLang: "zh"}
-				rows := fixture.Client.Segment.Query().Where(segment.ResourceIDEQ(fixture.Scope.ResourceID)).Order(segment.BySegmentIndex()).AllX(ctx)
-				for _, row := range rows {
-					doc.Segments = append(doc.Segments, pipeline.Segment{ID: fmt.Sprint(row.ID), DBID: row.ID, ContentVersion: row.ContentVersion, Source: row.SourceText, Status: string(row.Status), TargetIsNull: row.TargetText == nil, Translate: true})
-				}
-				runs = append(runs, resourceRun{store, reporter, handler, doc})
-			}
-			runtime.Observer = observer
-			timings.sampleRuntime(runtime)
-			fixtures[0].Probe.Reset(time.Duration(ms) * time.Millisecond)
-			stopProgress := persistenceTranslationProgress(t, ms, fixtures[0].Probe, model, runtime, observer)
-			defer stopProgress()
-			done := make(chan error, len(runs))
-			var yields atomic.Int64
-			for _, run := range runs {
-				go func() {
-					var runErr error
-					for {
-						changed := runtime.Window.Changed()
-						_, runErr = pipeline.RunRound(ctx, pipeline.Round{Runtime: runtime, Store: run.store, Handler: run.handler, Concurrency: 10, Retry: backend.RetryPolicy{MaxAttempts: 1}}, run.doc, nil, logger, run.reporter)
-						if !errors.Is(runErr, pipeline.ErrResourceYield) {
-							break
-						}
-						yields.Add(1)
-						select {
-						case <-ctx.Done():
-							runErr = ctx.Err()
-						case <-changed:
-							continue
-						}
-						break
-					}
-					done <- errors.Join(runErr, run.reporter.Close())
-				}()
-			}
-			failures := persistenceJoin(done)
-			stopProgress()
-			timings.stopSampling()
-			runtime.Close()
-			assertCtx, assertCancel := context.WithTimeout(t.Context(), 30*time.Second)
-			defer assertCancel()
-			client := fixtures[0].Client
-			job := client.Job.GetX(assertCtx, fixtures[0].Scope.JobID)
-			usageRows := client.UsageRecord.Query().AllX(assertCtx)
-			usage := len(usageRows)
-			usageCalls := map[int]int{}
-			for _, row := range usageRows {
-				usageCalls[row.ID] = row.APICalls
-			}
-			facts := client.JobRoundSegment.Query().CountX(assertCtx)
-			candidates := client.WorkCandidate.Query().CountX(assertCtx)
-			requestRows := client.WorkRequest.Query().AllX(assertCtx)
-			requests := len(requestRows)
-			requestSizes := map[int]int{}
-			memberCounts := map[int]int{}
-			requestIdentities := map[string]bool{}
-			usageIdentities := map[int]bool{}
-			invalidRequests := 0
-			for _, request := range requestRows {
-				if request.State != "completed" || !request.UsageKnown || request.InputTokens != 3 || request.OutputTokens != 5 || request.Identity == "" || requestIdentities[request.Identity] || request.UsageRecordID == nil {
-					invalidRequests++
-				}
-				requestIdentities[request.Identity] = true
-				if request.UsageRecordID != nil {
-					if usageIdentities[*request.UsageRecordID] || usageCalls[*request.UsageRecordID] != 1 {
-						invalidRequests++
-					}
-					usageIdentities[*request.UsageRecordID] = true
-				}
-				requestSizes[len(request.SegmentIds)]++
-				for _, id := range request.SegmentIds {
-					memberCounts[id]++
-				}
-			}
-			duplicateOrMissingMembers := 0
-			for _, fixture := range fixtures {
-				for _, id := range fixture.IDs {
-					if memberCounts[id] != 1 {
-						duplicateOrMissingMembers++
-					}
-				}
-			}
-			resourceCompleted := make([]int, len(fixtures))
-			bodyUpdated := 0
-			for i, fixture := range fixtures {
-				resourceCompleted[i] = client.JobRound.GetX(assertCtx, fixture.Scope.RoundID).SegmentCompleted
-				rows := client.Segment.Query().Where(segment.ResourceIDEQ(fixture.Scope.ResourceID)).AllX(assertCtx)
-				for _, row := range rows {
-					if row.TargetText != nil && *row.TargetText == persistenceTranslationTarget && string(row.Status) == "translated" && row.ContentVersion == 2 {
-						bodyUpdated++
-					}
-				}
-			}
-			correlations := observer.summary()
-			extra := map[string]any{"delay_ms": ms, "resources": 7, "source_batches": 14, "source_batch_size": 300, "actual_llm_batches": requests, "request_size_distribution": requestSizes, "model_size_distribution": model.sizeDistribution(), "default_candidate_segments": pipeline.DefaultCandidateLimits().Segments, "split_reason": "source batches exceed or compete for the shared default candidate window", "segments": 4200, "provider_calls": model.calls.Load(), "provider_peak": model.peak.Load(), "resource_yields": yields.Load(), "completed": job.ProgressCompleted, "total": job.ProgressTotal, "body_updated": bodyUpdated, "facts": facts, "candidate_records": candidates, "request_records": requests, "usage_records": usage, "invalid_requests": invalidRequests, "duplicate_or_missing_members": duplicateOrMissingMembers, "resource_completed": resourceCompleted, "failures": failures, "timings": timings.summary(), "commit_correlations": correlations}
-			persistenceReport(t, fixtures[0].Probe, "translation7x2x300", extra)
-			if len(failures) > 0 {
-				t.Fatalf("translation load failed: %v", failures)
-			}
-			if int64(requests) != model.calls.Load() || usage != requests || job.ProgressCompleted != 4200 || job.ProgressTotal != 4200 || bodyUpdated != 4200 || facts != 4200 || candidates != 4200 || invalidRequests != 0 || duplicateOrMissingMembers != 0 || len(memberCounts) != 4200 || !reflect.DeepEqual(requestSizes, model.sizeDistribution()) {
-				t.Fatalf("translation requests/body/facts do not satisfy the source workload: %v", extra)
-			}
-			if model.peak.Load() > 10 {
-				t.Fatal("shared provider concurrency exceeded 10")
-			}
-			for _, count := range resourceCompleted {
-				if count != 600 {
-					t.Fatalf("incomplete resource: %v", resourceCompleted)
-				}
-			}
-			if correlations["events"] != 4200 || correlations["missing"] != 0 || correlations["request_count"] != requests {
-				t.Fatalf("commit identity attribution incomplete: %v", correlations)
-			}
-			for _, operation := range []string{"reserve", "sent", "received", "completed", "candidate", "commit"} {
-				for _, phase := range []string{"save_queue", "transaction", "query", "exec"} {
-					if _, ok := extra["timings"].(map[string]any)[operation+"."+phase]; !ok {
-						t.Fatalf("missing %s.%s timing", operation, phase)
-					}
-				}
-			}
-			for key, cap := range map[string]int{"pending_owner_peak": 16, "coordinator_intent_peak": 16, "normal_queue_peak": 16, "reliable_queue_peak": 32, "completion_peak": 16} {
-				peak, ok := extra["timings"].(map[string]any)[key].(int)
-				if !ok || peak > cap {
-					t.Fatalf("%s=%v exceeds %d or was not measured", key, extra["timings"].(map[string]any)[key], cap)
-				}
-			}
+			persistenceTranslationLoad(t, 7, 2, ms, "translation7x2x300")
 		})
+	}
+}
+
+// Keep the production batch size and shared candidate window while limiting
+// normal CI to two competing resources and one source batch each.
+func TestPersistenceTranslationContract(t *testing.T) {
+	persistenceTranslationLoad(t, 2, 1, 0, "translation2x1x300")
+}
+
+func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sampleName string) {
+	t.Helper()
+	fixtures := persistenceResourceFixtures(t, resources, batches)
+	wantResourceSegments := batches * 300
+	wantSegments := resources * wantResourceSegments
+	// This bounds the whole workload harness, not an individual save.
+	// Product SQL execution and logical handoff budgets remain 30/120s.
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Minute)
+	defer cancel()
+	admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 10}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := pipeline.NewExecutionRuntime(admission, pipeline.DefaultCandidateLimits(), nil)
+	runtime.JobID = fixtures[0].Scope.JobID
+	runtime.Lifetime = ctx
+	defer runtime.Close()
+	timings := &persistenceTimings{}
+	observer := &persistenceTranslationObserver{timings: timings, requests: map[string]bool{}, resources: map[int]int{}}
+	ctx = persistence.WithObserver(ctx, observer)
+	runtime.Lifetime = ctx
+	model := &persistenceTranslationModel{}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	type resourceRun struct {
+		store    *roundStore
+		reporter *progress.DBReporter
+		handler  *pipeline.TranslateHandler
+		doc      *pipeline.Document
+	}
+	var runs []resourceRun
+	for _, fixture := range fixtures {
+		fixture.Client.JobRound.UpdateOneID(fixture.Scope.RoundID).SetMode("translate").ExecX(ctx)
+		indices := make(map[int]int, len(fixture.IDs))
+		for i, id := range fixture.IDs {
+			indices[i] = id
+		}
+		snapshot := &service.JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", Rounds: []execution.JobRoundSnapshot{{Mode: "translate", Backend: execution.BackendSnapshot{ID: 1, Name: "isolated-fake"}, Translate: &execution.JobTranslateRoundSnapshot{Prompt: execution.PromptSnapshot{Content: "Translate; return JSON translations."}, Concurrency: 10, BatchSize: 300, Retry: execution.RetryConfig{MaxAttempts: 1}}}}}
+		snapshot = completeWorkerSnapshot(t, snapshot)
+		fixture.SetExecutionSnapshot(t, snapshot)
+		store := newRoundStore(fixture.Client, fixture.Scope, indices, snapshot, 0, nil, false, pa.Driver(), nil, nil)
+		opts := progress.DBReporterOptions{Client: fixture.Client, JobID: fixture.Scope.JobID, JobResourceID: fixture.Scope.JobResourceID, ResourceID: fixture.Scope.ResourceID, Lifetime: ctx, Logger: logger, Ticker: time.Hour}
+		persistenceWireReporter(runtime, &opts, observer)
+		reporter := progress.NewDBReporter(opts)
+		reporter.SwitchRound(fixture.Scope.RoundID, func(i int) (int, bool) {
+			id, ok := indices[i]
+			return id, ok
+		})
+		renderer, err := prompt.NewRenderer(`Translate {{.SourceLang}} into {{.TargetLang}}. Return JSON {"translations":{"<id>":"<translation>"}}.`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		handler := &pipeline.TranslateHandler{Backend: pipeline.BindRequestBackend(model, 1, 0, runtime), Renderer: renderer, BatchSize: 300, Logger: logger, Reporter: reporter}
+		doc := &pipeline.Document{SourceLang: "en", TargetLang: "zh"}
+		rows := fixture.Client.Segment.Query().Where(segment.ResourceIDEQ(fixture.Scope.ResourceID)).Order(segment.BySegmentIndex()).AllX(ctx)
+		for _, row := range rows {
+			doc.Segments = append(doc.Segments, pipeline.Segment{ID: fmt.Sprint(row.ID), DBID: row.ID, ContentVersion: row.ContentVersion, Source: row.SourceText, Status: string(row.Status), TargetIsNull: row.TargetText == nil, Translate: true})
+		}
+		runs = append(runs, resourceRun{store, reporter, handler, doc})
+	}
+	runtime.Observer = observer
+	timings.sampleRuntime(runtime)
+	fixtures[0].Probe.Reset(time.Duration(ms) * time.Millisecond)
+	stopProgress := persistenceTranslationProgress(t, ms, fixtures[0].Probe, model, runtime, observer)
+	defer stopProgress()
+	done := make(chan error, len(runs))
+	var yields atomic.Int64
+	for _, run := range runs {
+		go func() {
+			var runErr error
+			for {
+				changed := runtime.Window.Changed()
+				_, runErr = pipeline.RunRound(ctx, pipeline.Round{Runtime: runtime, Store: run.store, Handler: run.handler, Concurrency: 10, Retry: backend.RetryPolicy{MaxAttempts: 1}}, run.doc, nil, logger, run.reporter)
+				if !errors.Is(runErr, pipeline.ErrResourceYield) {
+					break
+				}
+				yields.Add(1)
+				select {
+				case <-ctx.Done():
+					runErr = ctx.Err()
+				case <-changed:
+					continue
+				}
+				break
+			}
+			if runErr != nil {
+				// Preserve the first resource's storage error before its peers wake
+				// from shared-capacity waits, then join every resource below.
+				t.Logf("translation resource failed: %v", runErr)
+				cancel()
+			}
+			closeErr := run.reporter.Close()
+			if closeErr != nil {
+				t.Logf("translation reporter failed: %v", closeErr)
+				cancel()
+			}
+			done <- errors.Join(runErr, closeErr)
+		}()
+	}
+	failures := persistenceJoin(done, len(fixtures))
+	stopProgress()
+	timings.stopSampling()
+	if len(failures) > 0 {
+		t.Fatalf("translation load failed: %v", failures)
+	}
+	remainingBudget := runtime.Admission.PipelineSnapshot()
+	if remainingBudget.Segments != 0 || remainingBudget.CandidateBytes != 0 || remainingBudget.GrowthBytes != 0 || remainingBudget.HandoffBytes != 0 || remainingBudget.PreparedBytes != 0 || remainingBudget.AuxInputBytes != 0 || remainingBudget.AuxResponseBytes != 0 || remainingBudget.AuxOwners != 0 {
+		t.Fatalf("completed translation retained in-flight budget: %+v", remainingBudget)
+	}
+	for _, owners := range remainingBudget.MainOwners {
+		if owners != 0 {
+			t.Fatalf("completed translation retained main owners: %+v", remainingBudget)
+		}
+	}
+	runtime.Close()
+	assertCtx, assertCancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer assertCancel()
+	client := fixtures[0].Client
+	job := client.Job.GetX(assertCtx, fixtures[0].Scope.JobID)
+	usageRows := client.UsageRecord.Query().AllX(assertCtx)
+	usage := len(usageRows)
+	usageCalls := map[int]int{}
+	for _, row := range usageRows {
+		usageCalls[row.ID] = row.APICalls
+	}
+	facts := client.JobRoundSegment.Query().CountX(assertCtx)
+	candidates := client.WorkCandidate.Query().CountX(assertCtx)
+	requestRows := client.WorkRequest.Query().AllX(assertCtx)
+	requests, abortedRequests, invalidAbortedRequests := 0, 0, 0
+	requestSizes := map[int]int{}
+	memberCounts := map[int]int{}
+	requestIdentities := map[string]bool{}
+	usageIdentities := map[int]bool{}
+	invalidRequests := 0
+	requestScopes := make(map[int]*pa.Fixture, len(fixtures))
+	for _, fixture := range fixtures {
+		requestScopes[fixture.Scope.RoundID] = fixture
+	}
+	for _, request := range requestRows {
+		fixture := requestScopes[request.JobRoundID]
+		if fixture == nil || request.JobID != fixture.Scope.JobID || request.ResourceID != fixture.Scope.ResourceID || request.RetryEpoch != fixture.Scope.RetryEpoch || request.Stage != string(backend.RequestStageMain) {
+			invalidRequests++
+		}
+		if request.Identity == "" || requestIdentities[request.Identity] {
+			invalidRequests++
+		}
+		requestIdentities[request.Identity] = true
+		if request.State == "cancelled_before_dispatch" {
+			abortedRequests++
+			if request.UsageKnown || request.UsageRecordID != nil || request.InputTokens != 0 || request.OutputTokens != 0 || request.HandoffAt != nil || request.ResponseBytes != 0 || len(request.ResponsePayload) != 0 || request.FreezeBytes != 0 || len(request.FreezePayload) != 0 || request.BusinessBound != 0 || len(request.PromotionMembers) != 0 {
+				invalidAbortedRequests++
+			}
+			continue
+		}
+		requests++
+		if request.State != "completed" || !request.UsageKnown || request.InputTokens != 3 || request.OutputTokens != 5 || request.UsageRecordID == nil {
+			invalidRequests++
+		}
+		if request.UsageRecordID != nil {
+			if usageIdentities[*request.UsageRecordID] || usageCalls[*request.UsageRecordID] != 1 {
+				invalidRequests++
+			}
+			usageIdentities[*request.UsageRecordID] = true
+		}
+		requestSizes[len(request.SegmentIds)]++
+		for _, id := range request.SegmentIds {
+			memberCounts[id]++
+		}
+	}
+	duplicateOrMissingMembers := 0
+	for _, fixture := range fixtures {
+		for _, id := range fixture.IDs {
+			if memberCounts[id] != 1 {
+				duplicateOrMissingMembers++
+			}
+		}
+	}
+	resourceCompleted := make([]int, len(fixtures))
+	bodyUpdated := 0
+	for i, fixture := range fixtures {
+		resourceCompleted[i] = client.JobRound.GetX(assertCtx, fixture.Scope.RoundID).SegmentCompleted
+		rows := client.Segment.Query().Where(segment.ResourceIDEQ(fixture.Scope.ResourceID)).AllX(assertCtx)
+		for _, row := range rows {
+			if row.TargetText != nil && *row.TargetText == persistenceTranslationTarget && string(row.Status) == "translated" && row.ContentVersion == 2 {
+				bodyUpdated++
+			}
+		}
+	}
+	correlations := observer.summary()
+	extra := map[string]any{"delay_ms": ms, "resources": resources, "source_batches": resources * batches, "source_batch_size": 300, "actual_llm_batches": requests, "request_size_distribution": requestSizes, "model_size_distribution": model.sizeDistribution(), "default_candidate_segments": pipeline.DefaultCandidateLimits().Segments, "split_reason": "source batches exceed or compete for the shared default candidate window", "segments": wantSegments, "provider_calls": model.calls.Load(), "provider_peak": model.peak.Load(), "resource_yields": yields.Load(), "completed": job.ProgressCompleted, "total": job.ProgressTotal, "body_updated": bodyUpdated, "facts": facts, "candidate_records": candidates, "request_records": len(requestRows), "completed_request_records": requests, "aborted_request_records": abortedRequests, "invalid_aborted_requests": invalidAbortedRequests, "usage_records": usage, "invalid_requests": invalidRequests, "duplicate_or_missing_members": duplicateOrMissingMembers, "resource_completed": resourceCompleted, "failures": failures, "timings": timings.summary(), "commit_correlations": correlations}
+	persistenceReport(t, fixtures[0].Probe, sampleName, extra)
+	if int64(requests) != model.calls.Load() || usage != requests || job.ProgressCompleted != int64(wantSegments) || job.ProgressTotal != int64(wantSegments) || bodyUpdated != wantSegments || facts != wantSegments || candidates != wantSegments || invalidRequests != 0 || invalidAbortedRequests != 0 || duplicateOrMissingMembers != 0 || len(memberCounts) != wantSegments || !reflect.DeepEqual(requestSizes, model.sizeDistribution()) {
+		t.Fatalf("translation requests/body/facts do not satisfy the source workload: %v", extra)
+	}
+	for _, fixture := range fixtures {
+		for _, member := range client.WorkItem.Query().Where(workitem.JobRoundIDEQ(fixture.Scope.RoundID)).AllX(assertCtx) {
+			if member.MainAttempts != 1 || member.MainNetworkAttempts != 1 || member.NetworkAttempts != 1 {
+				t.Fatalf("pre-dispatch abort did not refund member attempts: %+v", member)
+			}
+		}
+	}
+	if model.peak.Load() > 10 {
+		t.Fatal("shared provider concurrency exceeded 10")
+	}
+	for _, count := range resourceCompleted {
+		if count != wantResourceSegments {
+			t.Fatalf("incomplete resource: %v", resourceCompleted)
+		}
+	}
+	if correlations["events"] != wantSegments || correlations["missing"] != 0 || correlations["request_count"] != requests {
+		t.Fatalf("commit identity attribution incomplete: %v", correlations)
+	}
+	for _, operation := range []string{"reserve", "sent", "response_handoff", "member_promotion", "commit", "stage_initialize"} {
+		for _, phase := range []string{"save_queue", "transaction", "query", "exec"} {
+			if _, ok := extra["timings"].(map[string]any)[operation+"."+phase]; !ok {
+				t.Fatalf("missing %s.%s timing", operation, phase)
+			}
+		}
+	}
+	for key, cap := range map[string]int{"pending_owner_peak": 16, "coordinator_intent_peak": 16, "normal_queue_peak": 16, "reliable_queue_peak": 32, "completion_peak": 16} {
+		peak, ok := extra["timings"].(map[string]any)[key].(int)
+		if !ok || peak > cap {
+			t.Fatalf("%s=%v exceeds %d or was not measured", key, extra["timings"].(map[string]any)[key], cap)
+		}
 	}
 }
