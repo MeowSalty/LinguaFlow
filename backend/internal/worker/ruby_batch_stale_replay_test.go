@@ -17,6 +17,7 @@ func TestRubyBatchHTTPUnknownSaveCommitThenEditRetiresDurableSuccessor(t *testin
 	for _, batchSize := range []int{1, 4} {
 		t.Run(fmt.Sprintf("batch=%d", batchSize), func(t *testing.T) {
 			f := newRubyBatchFixture(t, batchSize)
+			cohort := captureRubyBatchCohort(t, f)
 			const editedText = "manual edit after unacknowledged candidate save"
 			unknownCommit := errors.New("candidate transaction committed but acknowledgement was lost")
 			editedID, attemptedSaves := 0, 0
@@ -89,6 +90,7 @@ func TestRubyBatchHTTPUnknownSaveCommitThenEditRetiresDurableSuccessor(t *testin
 			if batchSize == 1 {
 				wantAlignmentCalls = 4
 			}
+			assertRubyBatchFirstCohort(t, f, cohort, batchSize)
 			f.assertUsage(t, 1+wantAlignmentCalls)
 			if requests := alignmentHTTPRequests(f); len(requests) != wantAlignmentCalls {
 				t.Fatalf("unknown storage commit resent model requests: %+v", requests)

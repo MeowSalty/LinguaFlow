@@ -371,15 +371,23 @@ func (f *rubyPipelineFixture) assertUsage(t *testing.T, expected int) {
 	t.Helper()
 	ctx := context.Background()
 	requests := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).AllX(ctx)
-	if len(requests) != expected {
-		t.Fatalf("durable requests=%d, want %d", len(requests), expected)
-	}
 	seen := map[int]bool{}
+	dispatched := 0
 	for _, request := range requests {
+		if request.State == "cancelled_before_dispatch" {
+			if request.UsageKnown || request.UsageRecordID != nil || request.InputTokens != 0 || request.OutputTokens != 0 || len(request.FreezePayload) != 0 || request.FreezeBytes != 0 || len(request.ResponsePayload) != 0 || request.ResponseBytes != 0 || len(request.CorrectedTargets) != 0 || request.CorrectedTargetBytes != 0 {
+				t.Fatalf("unsent descriptor acquired usage or retained backing: %+v", request)
+			}
+			continue
+		}
+		dispatched++
 		if request.UsageRecordID == nil || seen[*request.UsageRecordID] || !request.UsageKnown || request.InputTokens != 7 || request.OutputTokens != 11 {
 			t.Fatalf("request usage is not unique and exact: %+v", request)
 		}
 		seen[*request.UsageRecordID] = true
+	}
+	if dispatched != expected {
+		t.Fatalf("dispatched durable requests=%d, want %d (%d descriptors)", dispatched, expected, len(requests))
 	}
 	usage := f.client.UsageRecord.Query().AllX(ctx)
 	apiCalls, input, output := 0, 0, 0

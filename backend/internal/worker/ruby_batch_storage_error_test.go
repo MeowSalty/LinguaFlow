@@ -17,6 +17,7 @@ func TestRubyBatchHTTPStorageStaleWithoutBaselineChangeRemainsAnError(t *testing
 	for _, fault := range []string{"request_proof", "cursor_monotonicity"} {
 		t.Run(fault, func(t *testing.T) {
 			f := newRubyBatchFixture(t, 4)
+			cohort := captureRubyBatchCohort(t, f)
 			armed, injected := false, false
 			if fault == "cursor_monotonicity" {
 				f.client.WorkItem.Use(func(next ent.Mutator) ent.Mutator {
@@ -49,6 +50,7 @@ func TestRubyBatchHTTPStorageStaleWithoutBaselineChangeRemainsAnError(t *testing
 				t.Fatalf("bookkeeping failure was swallowed as a stale candidate: result=%+v err=%v injected=%v", result, err, injected)
 			}
 			ctx := context.Background()
+			assertRubyBatchFirstCohort(t, f, cohort, 4)
 			for _, c := range f.client.WorkCandidate.Query().Where(workcandidate.HasWorkItemWith(workitem.JobRoundIDEQ(f.roundIDs[0]))).AllX(ctx) {
 				if c.Version != 1 || c.State != "pending_alignment" || len(c.Payload) == 0 {
 					t.Fatalf("bookkeeping failure retired or changed a valid candidate: %+v", c)
