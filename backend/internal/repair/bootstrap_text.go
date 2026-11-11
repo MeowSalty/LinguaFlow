@@ -58,6 +58,9 @@ func ParseBootstrapByMode(text string, isTextMode bool, opt Options, requireHead
 }
 
 func tryRepairBootstrapText(text string, opt Options) ([]prompt.BootstrapEntry, []string, bool, error) {
+	if opt.Bounds != nil {
+		return bootstrapTextBounded(text, opt)
+	}
 	var repaired []string
 
 	if opt.JSONStructural {

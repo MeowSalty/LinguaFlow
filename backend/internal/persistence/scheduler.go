@@ -14,6 +14,9 @@ type Class uint8
 const (
 	Normal Class = iota
 	Reliable
+	// Handoff is reserved for an already-issued main response becoming durable.
+	// Its one fixed execution lane cannot be occupied by candidate/commit work.
+	Handoff
 )
 
 type Metadata struct {
@@ -98,6 +101,8 @@ type Snapshot struct {
 	NormalQueued, ReliableQueued         int
 	PeakNormalQueued, PeakReliableQueued int
 	Executing                            bool
+	HandoffQueued, PeakHandoffQueued     int
+	HandoffExecuting                     bool
 	Saves, Retries, Failures             uint64
 	QueueDuration, ExecutionDuration     time.Duration
 }
@@ -107,7 +112,9 @@ type Scheduler struct {
 	policy            Policy
 	logger            *slog.Logger
 	normal, reliable  []*waiter
+	handoff           []*waiter
 	executing, closed bool
+	handoffExecuting  bool
 	burst             int
 	changed, done     chan struct{}
 	stats             Snapshot
@@ -183,7 +190,18 @@ func New(policy Policy, logger *slog.Logger) *Scheduler {
 }
 func (s *Scheduler) signal() { close(s.changed); s.changed = make(chan struct{}) }
 func (s *Scheduler) grant() {
-	if s.executing || s.closed {
+	if s.closed {
+		return
+	}
+	if !s.handoffExecuting && len(s.handoff) > 0 {
+		w := s.handoff[0]
+		s.handoff = s.handoff[1:]
+		s.handoffExecuting = true
+		w.granted = true
+		close(w.ready)
+	}
+	if s.executing {
+		s.signal()
 		return
 	}
 	var w *waiter
@@ -217,14 +235,22 @@ func (s *Scheduler) acquire(ctx context.Context, class Class) (func(), error) {
 		}
 		q := &s.normal
 		cap := s.policy.NormalQueue
-		if class == Reliable {
+		if class == Reliable || class == Handoff {
 			q = &s.reliable
+			if class == Handoff {
+				q = &s.handoff
+			}
 			cap = s.policy.ReliableQueue
 		}
-		if len(*q) < cap {
+		queued := len(*q)
+		if class == Reliable || class == Handoff {
+			queued = len(s.reliable) + len(s.handoff)
+		}
+		if queued < cap {
 			*q = append(*q, w)
 			s.stats.PeakNormalQueued = max(s.stats.PeakNormalQueued, len(s.normal))
-			s.stats.PeakReliableQueued = max(s.stats.PeakReliableQueued, len(s.reliable))
+			s.stats.PeakReliableQueued = max(s.stats.PeakReliableQueued, len(s.reliable)+len(s.handoff))
+			s.stats.PeakHandoffQueued = max(s.stats.PeakHandoffQueued, len(s.handoff))
 			s.grant()
 			break
 		}
@@ -245,7 +271,7 @@ func (s *Scheduler) acquire(ctx context.Context, class Class) (func(), error) {
 	}
 	s.mu.Lock()
 	if !w.granted {
-		for _, q := range []*[]*waiter{&s.normal, &s.reliable} {
+		for _, q := range []*[]*waiter{&s.normal, &s.reliable, &s.handoff} {
 			for i, v := range *q {
 				if v == w {
 					*q = append((*q)[:i], (*q)[i+1:]...)
@@ -263,7 +289,18 @@ func (s *Scheduler) acquire(ctx context.Context, class Class) (func(), error) {
 	}
 	s.mu.Unlock()
 	var once sync.Once
-	release := func() { once.Do(func() { s.mu.Lock(); s.executing = false; s.grant(); s.mu.Unlock() }) }
+	release := func() {
+		once.Do(func() {
+			s.mu.Lock()
+			if class == Handoff {
+				s.handoffExecuting = false
+			} else {
+				s.executing = false
+			}
+			s.grant()
+			s.mu.Unlock()
+		})
+	}
 	if err := ctx.Err(); err != nil {
 		release()
 		return nil, err
@@ -374,8 +411,10 @@ func (s *Scheduler) Snapshot() Snapshot {
 		v.Aggregates = append(v.Aggregates, row)
 	}
 	v.NormalQueued = len(s.normal)
-	v.ReliableQueued = len(s.reliable)
-	v.Executing = s.executing
+	v.ReliableQueued = len(s.reliable) + len(s.handoff)
+	v.HandoffQueued = len(s.handoff)
+	v.HandoffExecuting = s.handoffExecuting
+	v.Executing = s.executing || s.handoffExecuting
 	return v
 }
 

@@ -9,7 +9,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
@@ -215,11 +217,22 @@ func (s *Server) handleRetryJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
+	defer s.jobSvc.ReleaseExecutionControlResult(job)
+	r = r.WithContext(s.jobSvc.ExecutionControlContext(job, r.Context()))
+	r = r.WithContext(s.jobSvc.PrepareExecutionControlObservation(r.Context(), authUser.User.ID, job.ID))
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.retry", ResourceType: "job", ResourceID: job.ID, Message: "重试任务"})
 	if s.dispatcher != nil {
 		s.dispatcher.Notify("translation")
 	}
-	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
+	var payload jobResponse
+	if err := s.jobSvc.RunExecutionControlBuild(job, func() error {
+		payload = s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID))
+		return nil
+	}); err != nil {
+		s.writeJobServiceError(w, r, err)
+		return
+	}
+	s.writeExecutionJSON(w, r, http.StatusOK, payload)
 }
 
 // handlePauseJob 优雅暂停：running 任务先通知 worker 排空（在途 LLM 请求返回后
@@ -260,11 +273,22 @@ func (s *Server) handleResumeJob(w http.ResponseWriter, r *http.Request) {
 		s.writeJobServiceError(w, r, err)
 		return
 	}
+	defer s.jobSvc.ReleaseExecutionControlResult(job)
+	r = r.WithContext(s.jobSvc.ExecutionControlContext(job, r.Context()))
+	r = r.WithContext(s.jobSvc.PrepareExecutionControlObservation(r.Context(), authUser.User.ID, job.ID))
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, ProjectID: &job.ProjectID, Action: "job.resume", ResourceType: "job", ResourceID: job.ID, Message: "恢复任务"})
 	if s.dispatcher != nil {
 		s.dispatcher.Notify("translation")
 	}
-	writeJSON(w, http.StatusOK, s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
+	var payload jobResponse
+	if err := s.jobSvc.RunExecutionControlBuild(job, func() error {
+		payload = s.toJobDetailResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID))
+		return nil
+	}); err != nil {
+		s.writeJobServiceError(w, r, err)
+		return
+	}
+	s.writeExecutionJSON(w, r, http.StatusOK, payload)
 }
 
 func sanitizeExecutionConfig(config map[string]any) map[string]any {
@@ -403,6 +427,8 @@ func toJobResourceResponse(row *ent.JobResource) jobResourceResponse {
 
 func (s *Server) writeJobServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, resourcebudget.ErrCapacity), errors.Is(err, backend.ErrBuildCapacity):
+		s.writeProblem(w, r, http.StatusServiceUnavailable, "execution_busy", err.Error())
 	case errors.Is(err, service.ErrJobNotFound):
 		s.writeProblem(w, r, http.StatusNotFound, "not_found", "任务不存在")
 	case errors.Is(err, service.ErrJobEmpty):

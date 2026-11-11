@@ -73,7 +73,7 @@ func TestAuthenticationRecoveryIssueFileAndRestoreContracts(t *testing.T) {
 	if _, err := executeAdmin(t, "", "authentication-recovery", "restore-local-login", "--token-file", tokenPath, "--password-file", filepath.Join(dir, "missing-password")); err == nil {
 		t.Fatal("restore accepted missing password file")
 	}
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: config.ModeServer, Environment: config.Environment()})
+	resolved, err := resolveTestServerConfig(config.ServerInputs{Mode: config.ModeServer, Environment: config.Environment()})
 	if err != nil {
 		t.Fatal(err)
 	}

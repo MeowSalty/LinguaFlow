@@ -67,7 +67,11 @@ func TestJobRestartRejectsInvalidExecutionBeforeReset(t *testing.T) {
 						t.Fatalf("invalid job entered recovery queue: ids=%v err=%v", ids, err)
 					}
 					after := env.client.Job.GetX(ctx, job.ID)
-					if after.Status != JobStatusFailed || after.ErrorMessage == nil || !strings.HasPrefix(*after.ErrorMessage, "execution recovery refused:") {
+					if invalid == "missing" || invalid == "unsupported_version" {
+						if after.Status != status || after.ErrorMessage != nil {
+							t.Fatal("unsupported execution format changed historical state")
+						}
+					} else if after.Status != JobStatusFailed || after.ErrorMessage == nil || !strings.HasPrefix(*after.ErrorMessage, "execution recovery refused:") {
 						t.Fatalf("rejected recovery was not recorded: status=%s error=%v", after.Status, after.ErrorMessage)
 					}
 				case "resume":

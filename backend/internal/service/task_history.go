@@ -69,6 +69,11 @@ type TaskHistoryService struct {
 	previewBudget   time.Duration
 	previewLimit    int
 	anchorTraversal *retentionAnchorTraversal
+	budgetDeletion  func(context.Context, int) (func(context.Context) error, error)
+}
+
+func (s *TaskHistoryService) SetBudgetDeletion(before func(context.Context, int) (func(context.Context) error, error)) {
+	s.budgetDeletion = before
 }
 
 func NewTaskHistoryService(client *ent.Client, projects *ProjectService, lifecycle *tasklife.Coordinator, broker *event.Broker) *TaskHistoryService {
@@ -204,6 +209,13 @@ func (s *TaskHistoryService) delete(ctx context.Context, actor int, target Histo
 	}
 	if s.blocked() {
 		return ErrStorageMaintenance
+	}
+	if target.Kind == OperationTranslation && s.budgetDeletion != nil {
+		finish, err := s.budgetDeletion(ctx, id)
+		if err != nil {
+			return err
+		}
+		defer func() { resultErr = errors.Join(resultErr, finish(ctx)) }()
 	}
 	err = withHistoryTransaction(ctx, s.client, func(tx *ent.Client) error {
 		if retention != nil {

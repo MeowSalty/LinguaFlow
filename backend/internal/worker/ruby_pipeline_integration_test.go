@@ -312,6 +312,10 @@ func (f *rubyPipelineFixture) round(t *testing.T, resource int) (*pipeline.Docum
 }
 
 func (f *rubyPipelineFixture) execute(t *testing.T, resource int, gate *pipeline.PauseGate, wrap func(*roundStore) pipeline.RoundStore) (*pipeline.Document, pipeline.RunRoundResult, error) {
+	return f.executePrepared(t, resource, gate, wrap, nil)
+}
+
+func (f *rubyPipelineFixture) executePrepared(t *testing.T, resource int, gate *pipeline.PauseGate, wrap func(*roundStore) pipeline.RoundStore, prepare func(context.Context, *pipeline.ExecutionRuntime, *roundStore)) (*pipeline.Document, pipeline.RunRoundResult, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -334,6 +338,9 @@ func (f *rubyPipelineFixture) execute(t *testing.T, resource int, gate *pipeline
 	var store pipeline.RoundStore = durable
 	if wrap != nil {
 		store = wrap(durable)
+	}
+	if prepare != nil {
+		prepare(ctx, runtime, durable)
 	}
 	result, err := pipeline.RunStagedRound(ctx, eng.Rounds()[0], doc, store, runtime, f.logger, progress.Nop{})
 	return doc, result, err
@@ -364,15 +371,23 @@ func (f *rubyPipelineFixture) assertUsage(t *testing.T, expected int) {
 	t.Helper()
 	ctx := context.Background()
 	requests := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).AllX(ctx)
-	if len(requests) != expected {
-		t.Fatalf("durable requests=%d, want %d", len(requests), expected)
-	}
 	seen := map[int]bool{}
+	dispatched := 0
 	for _, request := range requests {
+		if request.State == "cancelled_before_dispatch" {
+			if request.UsageKnown || request.UsageRecordID != nil || request.InputTokens != 0 || request.OutputTokens != 0 || len(request.FreezePayload) != 0 || request.FreezeBytes != 0 || len(request.ResponsePayload) != 0 || request.ResponseBytes != 0 || len(request.CorrectedTargets) != 0 || request.CorrectedTargetBytes != 0 {
+				t.Fatalf("unsent descriptor acquired usage or retained backing: %+v", request)
+			}
+			continue
+		}
+		dispatched++
 		if request.UsageRecordID == nil || seen[*request.UsageRecordID] || !request.UsageKnown || request.InputTokens != 7 || request.OutputTokens != 11 {
 			t.Fatalf("request usage is not unique and exact: %+v", request)
 		}
 		seen[*request.UsageRecordID] = true
+	}
+	if dispatched != expected {
+		t.Fatalf("dispatched durable requests=%d, want %d (%d descriptors)", dispatched, expected, len(requests))
 	}
 	usage := f.client.UsageRecord.Query().AllX(ctx)
 	apiCalls, input, output := 0, 0, 0
@@ -403,6 +418,21 @@ func (s *rubyPipelineFaultStore) Save(ctx context.Context, candidate *pipeline.C
 		return err
 	}
 	if s.afterSave != nil {
+		return s.afterSave(ctx, candidate)
+	}
+	return nil
+}
+
+func (s *rubyPipelineFaultStore) PromoteMember(ctx context.Context, id string, cursor int, candidate *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
+	if candidate != nil && s.beforeSave != nil {
+		if err := s.beforeSave(ctx, candidate); err != nil {
+			return err
+		}
+	}
+	if err := s.roundStore.PromoteMember(ctx, id, cursor, candidate, next, failure); err != nil {
+		return err
+	}
+	if candidate != nil && s.afterSave != nil {
 		return s.afterSave(ctx, candidate)
 	}
 	return nil
@@ -582,8 +612,8 @@ func TestRubyPipelineSQLitePartialMainSaveRecoverySkipsSavedSegments(t *testing.
 		t.Fatalf("partial main response saved %d candidates, want 1", len(saved))
 	}
 	request := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).OnlyX(ctx)
-	if request.State != "received" || !request.UsageKnown {
-		t.Fatalf("failed save claimed reliable completion: %+v", request)
+	if request.State != "completed" || !request.UsageKnown || request.PromotionCursor != 1 || request.PromotionState != "response_pending" || len(request.ResponsePayload) == 0 {
+		t.Fatalf("failed promotion lost the reliable raw or its cursor: %+v", request)
 	}
 	if err := f.jobs.PrepareRecovery(ctx); err != nil {
 		t.Fatal(err)
@@ -602,11 +632,11 @@ func TestRubyPipelineSQLitePartialMainSaveRecoverySkipsSavedSegments(t *testing.
 			occurrences["unsaved"]++
 		}
 	}
-	if main != 2 || align != 2 || occurrences["saved"] != 1 || occurrences["unsaved"] != 2 {
+	if main != 1 || align != 2 || occurrences["saved"] != 1 || occurrences["unsaved"] != 1 {
 		t.Fatalf("partial save caused replay of durable work: main=%d alignment=%d sources=%v", main, align, sources)
 	}
 	f.assertAccepted(t, 0, 2)
-	f.assertUsage(t, 4)
+	f.assertUsage(t, 3)
 }
 
 func TestRubyPipelineSQLiteReadyRecoveryCommitsWithoutRequests(t *testing.T) {

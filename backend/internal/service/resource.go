@@ -347,7 +347,19 @@ func (s *ResourceService) GetResource(ctx context.Context, actorUserID, projectI
 // DeleteResource 删除资源文件及其存储。
 // 在事务中按依赖顺序级联删除关联记录（JobResource → Segment → Resource），
 // 避免 FOREIGN KEY constraint failed 错误。
-func (s *ResourceService) DeleteResource(ctx context.Context, actorUserID, projectID, resourceID int) error {
+func (s *ResourceService) DeleteResource(ctx context.Context, actorUserID, projectID, resourceID int) (resultErr error) {
+	current, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true)
+	if err != nil {
+		return err
+	}
+	if current.StorageState != "active" {
+		return ErrStorageMaintenance
+	}
+	finish, err := s.projects.budgetCleanup.prepare(ctx, s.client, projectID, resourceID, true)
+	if err != nil {
+		return err
+	}
+	defer finishExecutionCleanup(ctx, finish, &resultErr)
 	return s.projects.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, p *ent.Project) error {
 		if p.StorageState != "active" {
 			return ErrStorageMaintenance

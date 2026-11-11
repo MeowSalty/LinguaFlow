@@ -46,39 +46,42 @@ type QuickTranslateInput struct {
 
 // QuickTranslateOutput 即时翻译的输出结果。
 type QuickTranslateOutput struct {
-	Status        string // "success" | "partial" | "failed"
-	SourceText    string
-	TargetText    string
-	SourceLang    string
-	TargetLang    string
-	QualityIssues []qa.QualityIssue
-	RoundSummary  []PreviewRoundSummary
-	BatchEvents   []progress.BatchEvent
-	Usage         UsageSummary
-	Warnings      []string
+	ExecutionInputOwnership `json:"-"`
+	Status                  string // "success" | "partial" | "failed"
+	SourceText              string
+	TargetText              string
+	SourceLang              string
+	TargetLang              string
+	QualityIssues           []qa.QualityIssue
+	RoundSummary            []PreviewRoundSummary
+	BatchEvents             []progress.BatchEvent
+	Usage                   UsageSummary
+	Warnings                []string
 }
 
 // QuickTranslateRunnerInput 是 runner 的输入：已冻结的快照与已构建好的术语表。
 // 由 service 组装，runner 不再做授权/解析。
 type QuickTranslateRunnerInput struct {
-	Snapshot   *JobExecutionSnapshot
-	SourceLang string
-	TargetLang string
-	SourceText string
-	Glossary   glossary.Glossary
-	Format     string
+	ActorUserID int
+	Snapshot    *JobExecutionSnapshot
+	SourceLang  string
+	TargetLang  string
+	SourceText  string
+	Glossary    glossary.Glossary
+	Format      string
 }
 
 // QuickTranslateResult 是 runner 返回的同步执行结果（纯内存，不写 DB）。
 type QuickTranslateResult struct {
-	Status        string
-	SourceText    string
-	TargetText    string
-	QualityIssues []qa.QualityIssue
-	RoundSummary  []PreviewRoundSummary
-	Metrics       []backend.MeterMetrics
-	Collector     *preview.MemoryCollector
-	Warnings      []string
+	ExecutionInputOwnership `json:"-"`
+	Status                  string
+	SourceText              string
+	TargetText              string
+	QualityIssues           []qa.QualityIssue
+	RoundSummary            []PreviewRoundSummary
+	Metrics                 []backend.MeterMetrics
+	Collector               *preview.MemoryCollector
+	Warnings                []string
 }
 
 // QuickTranslateRunner 是执行即时翻译的接口，由 worker.QuickTranslateRunner 实现。
@@ -207,6 +210,17 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 	// 3. Apply quick translate timeout.
 	runCtx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
+	runCtx = WithExecutionActor(runCtx, in.ActorUserID)
+	runCtx, inputErr := PrepareExecutionInputs(runCtx, s.runner)
+	if inputErr != nil {
+		return nil, inputErr
+	}
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			ExecutionInputOwner(runCtx).ReleaseExecutionInputs()
+		}
+	}()
 
 	// 4. Determine source/target languages and glossary base flag.
 	sourceLang, targetLang := in.SourceLang, in.TargetLang
@@ -279,17 +293,32 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 	var warnings []string
 	if snapshot.GlossaryEnabled {
 		if projectRow != nil {
-			dbGloss, err := NewDatabaseGlossary(runCtx, s.client, projectRow)
+			runtimeGlossary, _, err = LoadExecutionGlossary(runCtx, s.client, projectRow, false)
 			if err != nil {
-				s.logger.Warn("quick translate: failed to load database glossary", "err", err)
-				runtimeGlossary = preview.NewOverlayGlossary(nil)
-			} else {
-				runtimeGlossary = preview.NewOverlayGlossary(dbGloss)
+				return nil, err
 			}
 		} else {
-			runtimeGlossary = preview.NewOverlayGlossary(nil)
+			runtimeGlossary, err = NewMemoryExecutionGlossary(runCtx)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if len(in.Glossary) > 0 {
+			if len(in.Glossary) > 65536 {
+				return nil, backend.ErrBuildCapacity
+			}
+			var entryBytes int64
+			for _, g := range in.Glossary {
+				n := int64(len(g.Source) + len(g.Target) + len(g.Notes))
+				if n > DefaultExecutionInputBytes-entryBytes {
+					return nil, backend.ErrBuildCapacity
+				}
+				entryBytes += n
+			}
+			entryLease, err := NewExecutionInputLease(runCtx, int64(len(in.Glossary))*backend.MaxNodeAllocationBytes)
+			if err != nil {
+				return nil, err
+			}
 			entries := make([]glossary.Entry, 0, len(in.Glossary))
 			for _, g := range in.Glossary {
 				entries = append(entries, glossary.Entry{
@@ -302,8 +331,11 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 				})
 			}
 			addResult, addErr := runtimeGlossary.Add(runCtx, entries...)
+			clear(entries)
+			entries = nil
+			entryLease.Close()
 			if addErr != nil {
-				s.logger.Warn("quick translate: inline glossary add failed", "err", addErr)
+				return nil, addErr
 			}
 			if len(addResult.Skipped) > 0 {
 				warnings = append(warnings, fmt.Sprintf("内联术语表跳过 %d 条（source/target 为空或冲突）", len(addResult.Skipped)))
@@ -313,14 +345,25 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 
 	// 9. Execute.
 	result, err := s.runner.Run(runCtx, QuickTranslateRunnerInput{
-		Snapshot:   snapshot,
-		SourceLang: sourceLang,
-		TargetLang: targetLang,
-		SourceText: in.SourceText,
-		Glossary:   runtimeGlossary,
-		Format:     "txt",
+		ActorUserID: in.ActorUserID,
+		Snapshot:    snapshot,
+		SourceLang:  sourceLang,
+		TargetLang:  targetLang,
+		SourceText:  in.SourceText,
+		Glossary:    runtimeGlossary,
+		Format:      "txt",
 	})
 	if err != nil {
+		if result != nil {
+			metrics := aggregateMetrics(result.Metrics)
+			if metrics.APICalls > 0 {
+				usageCtx, cancel := context.WithTimeout(context.WithoutCancel(runCtx), 5*time.Second)
+				defer cancel()
+				if usageErr := s.recordQuickUsage(usageCtx, in, projectRow, metrics); usageErr != nil {
+					s.logger.Warn("quick translate: failed execution usage record", "err", usageErr)
+				}
+			}
+		}
 		return nil, fmt.Errorf("quick translate: execute: %w", err)
 	}
 	warnings = append(warnings, result.Warnings...)
@@ -373,18 +416,23 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 	var events []progress.BatchEvent
 	if result.Collector != nil {
 		events = result.Collector.Events()
+		if err := result.Collector.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	// 13. Return.
+	handedOff = true
 	return &QuickTranslateOutput{
-		Status:        result.Status,
-		SourceText:    result.SourceText,
-		TargetText:    result.TargetText,
-		SourceLang:    sourceLang,
-		TargetLang:    targetLang,
-		QualityIssues: result.QualityIssues,
-		RoundSummary:  result.RoundSummary,
-		BatchEvents:   events,
+		ExecutionInputOwnership: ExecutionInputOwner(runCtx),
+		Status:                  result.Status,
+		SourceText:              result.SourceText,
+		TargetText:              result.TargetText,
+		SourceLang:              sourceLang,
+		TargetLang:              targetLang,
+		QualityIssues:           result.QualityIssues,
+		RoundSummary:            result.RoundSummary,
+		BatchEvents:             events,
 		Usage: UsageSummary{
 			APICalls:     usageMetrics.APICalls,
 			InputTokens:  usageMetrics.InputTokens,

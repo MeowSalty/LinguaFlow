@@ -18,8 +18,9 @@ import (
 // StoragePathClaimUpdate is the builder for updating StoragePathClaim entities.
 type StoragePathClaimUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StoragePathClaimMutation
+	hooks     []Hook
+	mutation  *StoragePathClaimMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StoragePathClaimUpdate builder.
@@ -109,6 +110,12 @@ func (_u *StoragePathClaimUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StoragePathClaimUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StoragePathClaimUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StoragePathClaimUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -130,6 +137,7 @@ func (_u *StoragePathClaimUpdate) sqlSave(ctx context.Context) (_node int, err e
 	if value, ok := _u.mutation.AddedExecutionGeneration(); ok {
 		_spec.AddField(storagepathclaim.FieldExecutionGeneration, field.TypeInt64, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storagepathclaim.Label}
@@ -145,9 +153,10 @@ func (_u *StoragePathClaimUpdate) sqlSave(ctx context.Context) (_node int, err e
 // StoragePathClaimUpdateOne is the builder for updating a single StoragePathClaim entity.
 type StoragePathClaimUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StoragePathClaimMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StoragePathClaimMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -244,6 +253,12 @@ func (_u *StoragePathClaimUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StoragePathClaimUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StoragePathClaimUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StoragePathClaimUpdateOne) sqlSave(ctx context.Context) (_node *StoragePathClaim, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -282,6 +297,7 @@ func (_u *StoragePathClaimUpdateOne) sqlSave(ctx context.Context) (_node *Storag
 	if value, ok := _u.mutation.AddedExecutionGeneration(); ok {
 		_spec.AddField(storagepathclaim.FieldExecutionGeneration, field.TypeInt64, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StoragePathClaim{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

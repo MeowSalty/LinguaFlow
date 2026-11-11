@@ -93,7 +93,7 @@ func TestRunnerReleaseRoundTripAndReadOnlyVerification(t *testing.T) {
 				t.Fatal("deployment input changed")
 			}
 			deployment := filepath.Join(options.TargetDataDir, "deployment.yaml")
-			resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &deployment, Environment: map[string]string{}})
+			resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &deployment, Environment: map[string]string{}})
 			if err != nil {
 				t.Fatal("generated deployment", err)
 			}
@@ -122,6 +122,7 @@ func TestRunnerReleaseRoundTripAndReadOnlyVerification(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				authorizeTestExecution(&resolved.Config)
 				server, err := api.NewServer(&resolved.Config, resolved.CredentialKeys, slog.New(slog.NewTextHandler(io.Discard, nil)), db, client, config.ModeServer, nil)
 				if err != nil {
 					t.Fatal("runtime API initialization", err)

@@ -20,8 +20,9 @@ import (
 // CredentialUpdate is the builder for updating Credential entities.
 type CredentialUpdate struct {
 	config
-	hooks    []Hook
-	mutation *CredentialMutation
+	hooks     []Hook
+	mutation  *CredentialMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the CredentialUpdate builder.
@@ -180,6 +181,12 @@ func (_u *CredentialUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *CredentialUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *CredentialUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *CredentialUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -291,6 +298,7 @@ func (_u *CredentialUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{credential.Label}
@@ -306,9 +314,10 @@ func (_u *CredentialUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 // CredentialUpdateOne is the builder for updating a single Credential entity.
 type CredentialUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *CredentialMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *CredentialMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -474,6 +483,12 @@ func (_u *CredentialUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *CredentialUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *CredentialUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *CredentialUpdateOne) sqlSave(ctx context.Context) (_node *Credential, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -602,6 +617,7 @@ func (_u *CredentialUpdateOne) sqlSave(ctx context.Context) (_node *Credential, 
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Credential{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

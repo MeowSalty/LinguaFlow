@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -38,6 +39,11 @@ func (m *rubyCountingTM) Search(context.Context, string, string, string) ([]tm.M
 	m.searches++
 	m.mu.Unlock()
 	return nil, nil
+}
+
+func (m *rubyCountingTM) VisitMatchesBounded(ctx context.Context, source, sourceLang, targetLang string, _ *backend.BuildBounds, _ func(context.Context, func() error) error, _ func(tm.Match) error) error {
+	_, err := m.Search(ctx, source, sourceLang, targetLang)
+	return err
 }
 
 func (m *rubyCountingTM) Add(ctx context.Context, source, target, sourceLang, targetLang string) error {
@@ -76,7 +82,18 @@ func executeRubyTMFixture(t *testing.T, f *rubyPipelineFixture, memory tm.Transl
 	doc, durable := f.round(t, 0)
 	durable.memory = memory
 	eng.PrepareDocument(doc, nil)
-	store := &rubyPipelineFaultStore{roundStore: durable, afterSave: afterSave}
+	store := &rubyPipelineFaultStore{roundStore: durable}
+	if afterSave != nil {
+		store.afterSave = func(ctx context.Context, header *pipeline.Candidate) error {
+			// Observe the actual acknowledged DTO instead of the compact header
+			// retained by the execution coordinator while it saves.
+			candidate, err := durable.Candidate(ctx, header.ID, runtime.BudgetLimits().Item)
+			if err != nil {
+				return err
+			}
+			return afterSave(ctx, candidate)
+		}
+	}
 	return pipeline.RunStagedRound(ctx, eng.Rounds()[0], doc, store, runtime, f.logger, progress.Nop{})
 }
 

@@ -826,6 +826,7 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "retry_epoch", Type: field.TypeInt64, Default: 0},
 		{Name: "pause_requested", Type: field.TypeBool, Default: false},
+		{Name: "pipeline_runtime_state", Type: field.TypeBytes, Nullable: true},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
 		{Name: "trigger_type", Type: field.TypeString, Default: "manual"},
 		{Name: "execution_plan_id", Type: field.TypeInt},
@@ -850,13 +851,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "jobs_projects_jobs",
-				Columns:    []*schema.Column{JobsColumns[18]},
+				Columns:    []*schema.Column{JobsColumns[19]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "jobs_users_created_jobs",
-				Columns:    []*schema.Column{JobsColumns[19]},
+				Columns:    []*schema.Column{JobsColumns[20]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -865,7 +866,7 @@ var (
 			{
 				Name:    "job_project_id_id",
 				Unique:  false,
-				Columns: []*schema.Column{JobsColumns[18], JobsColumns[0]},
+				Columns: []*schema.Column{JobsColumns[19], JobsColumns[0]},
 			},
 			{
 				Name:    "job_updated_at_id",
@@ -875,12 +876,12 @@ var (
 			{
 				Name:    "job_status_updated_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{JobsColumns[5], JobsColumns[2], JobsColumns[0]},
+				Columns: []*schema.Column{JobsColumns[6], JobsColumns[2], JobsColumns[0]},
 			},
 			{
 				Name:    "job_status_retention_anchor_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{JobsColumns[5], JobsColumns[17], JobsColumns[0]},
+				Columns: []*schema.Column{JobsColumns[6], JobsColumns[18], JobsColumns[0]},
 			},
 		},
 	}
@@ -2403,9 +2404,13 @@ var (
 		{Name: "source_revision_id", Type: field.TypeInt, Nullable: true},
 		{Name: "baseline_version", Type: field.TypeInt64},
 		{Name: "baseline_target", Type: field.TypeString, Nullable: true},
+		{Name: "baseline_digest", Type: field.TypeString, Default: ""},
+		{Name: "baseline_target_is_null", Type: field.TypeBool, Default: false},
 		{Name: "baseline_status", Type: field.TypeString},
 		{Name: "state", Type: field.TypeString, Default: "pending_alignment"},
 		{Name: "payload_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "growth_reserved", Type: field.TypeBool, Default: false},
+		{Name: "pipeline_header", Type: field.TypeBytes, Nullable: true},
 		{Name: "payload", Type: field.TypeJSON, Nullable: true},
 		{Name: "work_item_id", Type: field.TypeInt},
 	}
@@ -2417,7 +2422,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "work_candidates_work_items_work_item",
-				Columns:    []*schema.Column{WorkCandidatesColumns[17]},
+				Columns:    []*schema.Column{WorkCandidatesColumns[21]},
 				RefColumns: []*schema.Column{WorkItemsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -2426,12 +2431,12 @@ var (
 			{
 				Name:    "workcandidate_work_item_id_state",
 				Unique:  false,
-				Columns: []*schema.Column{WorkCandidatesColumns[17], WorkCandidatesColumns[14]},
+				Columns: []*schema.Column{WorkCandidatesColumns[21], WorkCandidatesColumns[16]},
 			},
 			{
 				Name:    "workcandidate_state_id",
 				Unique:  false,
-				Columns: []*schema.Column{WorkCandidatesColumns[14], WorkCandidatesColumns[0]},
+				Columns: []*schema.Column{WorkCandidatesColumns[16], WorkCandidatesColumns[0]},
 			},
 		},
 	}
@@ -2442,7 +2447,9 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "retry_epoch", Type: field.TypeInt64, Default: 0},
 		{Name: "state", Type: field.TypeString, Default: "pending"},
+		{Name: "member_owned", Type: field.TypeBool, Default: false},
 		{Name: "candidate_id", Type: field.TypeString, Default: ""},
+		{Name: "response_request_id", Type: field.TypeString, Default: ""},
 		{Name: "pool_index", Type: field.TypeInt, Default: 0},
 		{Name: "main_attempts", Type: field.TypeInt, Default: 0},
 		{Name: "alignment_attempts", Type: field.TypeInt, Default: 0},
@@ -2466,25 +2473,25 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "work_items_jobs_job",
-				Columns:    []*schema.Column{WorkItemsColumns[16]},
+				Columns:    []*schema.Column{WorkItemsColumns[18]},
 				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_items_resources_resource",
-				Columns:    []*schema.Column{WorkItemsColumns[17]},
+				Columns:    []*schema.Column{WorkItemsColumns[19]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_items_job_rounds_round",
-				Columns:    []*schema.Column{WorkItemsColumns[18]},
+				Columns:    []*schema.Column{WorkItemsColumns[20]},
 				RefColumns: []*schema.Column{JobRoundsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_items_segments_segment",
-				Columns:    []*schema.Column{WorkItemsColumns[19]},
+				Columns:    []*schema.Column{WorkItemsColumns[21]},
 				RefColumns: []*schema.Column{SegmentsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -2493,17 +2500,17 @@ var (
 			{
 				Name:    "workitem_job_round_id_segment_id",
 				Unique:  true,
-				Columns: []*schema.Column{WorkItemsColumns[18], WorkItemsColumns[19]},
+				Columns: []*schema.Column{WorkItemsColumns[20], WorkItemsColumns[21]},
 			},
 			{
 				Name:    "workitem_job_id_state_id",
 				Unique:  false,
-				Columns: []*schema.Column{WorkItemsColumns[16], WorkItemsColumns[4], WorkItemsColumns[0]},
+				Columns: []*schema.Column{WorkItemsColumns[18], WorkItemsColumns[4], WorkItemsColumns[0]},
 			},
 			{
 				Name:    "workitem_resource_id",
 				Unique:  false,
-				Columns: []*schema.Column{WorkItemsColumns[17]},
+				Columns: []*schema.Column{WorkItemsColumns[19]},
 			},
 		},
 	}
@@ -2522,6 +2529,26 @@ var (
 		{Name: "members", Type: field.TypeJSON, Nullable: true},
 		{Name: "debits", Type: field.TypeJSON, Nullable: true},
 		{Name: "glossary_receipt", Type: field.TypeJSON, Nullable: true},
+		{Name: "freeze_payload", Type: field.TypeBytes, Nullable: true},
+		{Name: "freeze_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "response_payload", Type: field.TypeBytes, Nullable: true},
+		{Name: "response_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "response_format_version", Type: field.TypeInt, Default: 0},
+		{Name: "snapshot_digest", Type: field.TypeString, Default: ""},
+		{Name: "freeze_digest", Type: field.TypeString, Default: ""},
+		{Name: "response_digest", Type: field.TypeString, Default: ""},
+		{Name: "corrected_targets", Type: field.TypeBytes, Nullable: true},
+		{Name: "corrected_target_index", Type: field.TypeBytes, Nullable: true},
+		{Name: "corrected_target_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "corrected_target_digest", Type: field.TypeString, Default: ""},
+		{Name: "promotion_members", Type: field.TypeJSON, Nullable: true},
+		{Name: "promotion_cursor", Type: field.TypeInt, Default: 0},
+		{Name: "promotion_count", Type: field.TypeInt, Default: 0},
+		{Name: "business_bound", Type: field.TypeInt64, Default: 0},
+		{Name: "response_truncated", Type: field.TypeBool, Default: false},
+		{Name: "promotion_state", Type: field.TypeString, Default: ""},
+		{Name: "promotion_status", Type: field.TypeBytes, Nullable: true},
+		{Name: "handoff_at", Type: field.TypeTime, Nullable: true},
 		{Name: "usage_record_id", Type: field.TypeInt, Nullable: true},
 		{Name: "budget_model", Type: field.TypeString},
 		{Name: "input_digest", Type: field.TypeString},
@@ -2543,19 +2570,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "work_requests_jobs_job",
-				Columns:    []*schema.Column{WorkRequestsColumns[22]},
+				Columns:    []*schema.Column{WorkRequestsColumns[42]},
 				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_requests_resources_resource",
-				Columns:    []*schema.Column{WorkRequestsColumns[23]},
+				Columns:    []*schema.Column{WorkRequestsColumns[43]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_requests_job_rounds_round",
-				Columns:    []*schema.Column{WorkRequestsColumns[24]},
+				Columns:    []*schema.Column{WorkRequestsColumns[44]},
 				RefColumns: []*schema.Column{JobRoundsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -2564,7 +2591,12 @@ var (
 			{
 				Name:    "workrequest_job_id_state_id",
 				Unique:  false,
-				Columns: []*schema.Column{WorkRequestsColumns[22], WorkRequestsColumns[16], WorkRequestsColumns[0]},
+				Columns: []*schema.Column{WorkRequestsColumns[42], WorkRequestsColumns[36], WorkRequestsColumns[0]},
+			},
+			{
+				Name:    "workrequest_job_id_promotion_state_job_round_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{WorkRequestsColumns[42], WorkRequestsColumns[30], WorkRequestsColumns[44], WorkRequestsColumns[0]},
 			},
 		},
 	}

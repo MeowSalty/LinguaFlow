@@ -40,7 +40,10 @@ func (s *Server) handlePreviewResourceSegmentTranslation(w http.ResponseWriter, 
 		ExecutionPlanId int             `json:"execution_plan_id"`
 		SourceText      json.RawMessage `json:"source_text"`
 	}
-	if !s.decodeJSON(w, r, &req) {
+	request, releaseInput, decoded := s.decodeExecutionJSON(w, r, authUser.User.ID, &req)
+	r = request
+	defer releaseInput()
+	if !decoded {
 		return
 	}
 	input := service.PreviewInput{
@@ -60,7 +63,8 @@ func (s *Server) handlePreviewResourceSegmentTranslation(w http.ResponseWriter, 
 		s.writePreviewServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toSegmentTranslationPreviewResponse(result))
+	defer result.ReleaseExecutionInputs()
+	s.writeExecutionJSON(w, r, http.StatusOK, toSegmentTranslationPreviewResponse(result))
 }
 
 func (s *Server) handleApplyResourceSegmentTranslationPreview(w http.ResponseWriter, r *http.Request) {

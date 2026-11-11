@@ -21,8 +21,9 @@ import (
 // ExecutionProfileUpdate is the builder for updating ExecutionProfile entities.
 type ExecutionProfileUpdate struct {
 	config
-	hooks    []Hook
-	mutation *ExecutionProfileMutation
+	hooks     []Hook
+	mutation  *ExecutionProfileMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the ExecutionProfileUpdate builder.
@@ -216,6 +217,12 @@ func (_u *ExecutionProfileUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ExecutionProfileUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ExecutionProfileUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ExecutionProfileUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -301,6 +308,7 @@ func (_u *ExecutionProfileUpdate) sqlSave(ctx context.Context) (_node int, err e
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{executionprofile.Label}
@@ -316,9 +324,10 @@ func (_u *ExecutionProfileUpdate) sqlSave(ctx context.Context) (_node int, err e
 // ExecutionProfileUpdateOne is the builder for updating a single ExecutionProfile entity.
 type ExecutionProfileUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *ExecutionProfileMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *ExecutionProfileMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -519,6 +528,12 @@ func (_u *ExecutionProfileUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ExecutionProfileUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ExecutionProfileUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ExecutionProfileUpdateOne) sqlSave(ctx context.Context) (_node *ExecutionProfile, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -621,6 +636,7 @@ func (_u *ExecutionProfileUpdateOne) sqlSave(ctx context.Context) (_node *Execut
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &ExecutionProfile{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

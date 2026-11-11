@@ -74,6 +74,7 @@ func TestLoadKeyringChecksActualWindowsACLWithoutRepair(t *testing.T) {
 			if _, err := PrepareKeyring(path, true); err != nil {
 				t.Fatal(err)
 			}
+			restorePrivateTestDACL(t, path)
 			before, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)

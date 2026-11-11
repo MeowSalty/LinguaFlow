@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
@@ -39,8 +40,61 @@ func alignmentHTTPRequests(f *rubyPipelineFixture) []rubyPipelineRequest {
 	return result
 }
 
+// Hold the real auxiliary preparation lane while main HTTP and all member
+// promotions complete. A fresh execution then observes one fully ready cohort,
+// independent of the configured 100ms timer or instrumentation speed.
+func prepareRubyBatchCandidates(t *testing.T, f *rubyPipelineFixture) {
+	t.Helper()
+	gate := pipeline.NewPauseGate()
+	var ticket *pipeline.PreparationTicket
+	defer func() { ticket.Release() }()
+	promoted := 0
+	_, result, err := f.executePrepared(t, 0, gate, func(store *roundStore) pipeline.RoundStore {
+		return &rubyPipelineFaultStore{roundStore: store, afterSave: func(_ context.Context, c *pipeline.Candidate) error {
+			if c.LogicalAttempt != 0 {
+				return errors.New("auxiliary request crossed the preparation barrier")
+			}
+			promoted++
+			if promoted == 4 {
+				gate.Pause()
+			}
+			return nil
+		}}
+	}, func(ctx context.Context, runtime *pipeline.ExecutionRuntime, store *roundStore) {
+		var err error
+		ticket, err = runtime.Preparation.Try(ctx, backend.RequestAdmissionIntent{ResourceID: store.scope.ResourceID, RoundIndex: 0, BackendID: f.snapshot.RubyRetry.Backend.ID, Stage: backend.RequestStageAlignment}, gate)
+		if err != nil {
+			t.Fatal("auxiliary preparation barrier:", err)
+		}
+	})
+	if err != nil || promoted != 4 || len(result.Resolved) != 0 || len(result.Unresolved) != 4 {
+		t.Fatalf("complete promotion cohort: promoted=%d result=%+v err=%v", promoted, result, err)
+	}
+	ctx := context.Background()
+	rows := f.client.WorkCandidate.Query().Where(workcandidate.HasWorkItemWith(workitem.JobRoundIDEQ(f.roundIDs[0]))).AllX(ctx)
+	if len(rows) != 4 || len(alignmentHTTPRequests(f)) != 0 {
+		t.Fatalf("preparation barrier: candidates=%d auxiliary HTTP=%d", len(rows), len(alignmentHTTPRequests(f)))
+	}
+	for _, row := range rows {
+		if row.Version != 1 || row.State != "pending_alignment" || row.DtoVersion != 2 {
+			t.Fatalf("candidate not ready for its first alignment: %+v", row)
+		}
+	}
+	for _, work := range f.client.WorkItem.Query().Where(workitem.JobRoundIDEQ(f.roundIDs[0])).AllX(ctx) {
+		if work.MainAttempts != 1 || work.AlignmentAttempts != 0 || work.AlignmentNetworkAttempts != 0 {
+			t.Fatalf("preparation barrier changed member attempts: %+v", work)
+		}
+	}
+	main := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).OnlyX(ctx)
+	if main.PromotionCursor != 4 || main.PromotionState != "promoted" || main.State != "completed" || len(main.FreezePayload) != 0 || len(main.ResponsePayload) != 0 {
+		t.Fatalf("promotion barrier did not retain reliable main response: %+v", main)
+	}
+	f.assertUsage(t, 1)
+}
+
 func TestRubyBatchHTTPFourMembersUseOneInvocationAndUsage(t *testing.T) {
 	f := newRubyBatchFixture(t, 4)
+	prepareRubyBatchCandidates(t, f)
 	_, result, err := f.execute(t, 0, nil, nil)
 	if err != nil || len(result.Resolved) != 4 || len(result.Unresolved) != 0 {
 		t.Fatalf("batch result=%+v, %v", result, err)
@@ -73,6 +127,7 @@ func TestRubyBatchHTTPFourMembersUseOneInvocationAndUsage(t *testing.T) {
 
 func TestRubyBatchHTTPPartialProgressKeepsConfiguredBatch(t *testing.T) {
 	f := newRubyBatchFixture(t, 4)
+	prepareRubyBatchCandidates(t, f)
 	var mu sync.Mutex
 	batchCalls := 0
 	f.respond = func(_ context.Context, request rubyPipelineRequest) (any, error) {
@@ -109,6 +164,7 @@ func TestRubyBatchHTTPPartialProgressKeepsConfiguredBatch(t *testing.T) {
 
 func TestRubyBatchHTTPPauseDrainsAllResponseMembersAndResumeOnlyCommits(t *testing.T) {
 	f := newRubyBatchFixture(t, 4)
+	prepareRubyBatchCandidates(t, f)
 	gate := pipeline.NewPauseGate()
 	paused := false
 	_, _, err := f.execute(t, 0, gate, func(store *roundStore) pipeline.RoundStore {
@@ -156,6 +212,7 @@ func TestRubyBatchHTTPPauseDrainsAllResponseMembersAndResumeOnlyCommits(t *testi
 
 func TestRubyBatchHTTPPartialSaveRecoveryResendsOnlyUnsavedMembers(t *testing.T) {
 	f := newRubyBatchFixture(t, 4)
+	prepareRubyBatchCandidates(t, f)
 	injected := errors.New("process stopped between batch member saves")
 	savedAlignment := 0
 	_, _, err := f.execute(t, 0, nil, func(store *roundStore) pipeline.RoundStore {
@@ -214,6 +271,7 @@ func TestRubyBatchHTTPProtocolIsolationSurvivesResumeAndRetry(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			f := newRubyBatchFixture(t, 4)
+			prepareRubyBatchCandidates(t, f)
 			f.respond = func(_ context.Context, request rubyPipelineRequest) (any, error) {
 				if len(request.Alignments) > 0 {
 					return map[string]any{"alignments": []any{}}, nil
@@ -281,6 +339,7 @@ func TestRubyBatchHTTPProtocolIsolationSurvivesResumeAndRetry(t *testing.T) {
 
 func TestRubyBatchHTTPEditedMemberDoesNotDiscardOtherReceivedMembers(t *testing.T) {
 	f := newRubyBatchFixture(t, 4)
+	prepareRubyBatchCandidates(t, f)
 	editedID := 0
 	f.respond = func(ctx context.Context, request rubyPipelineRequest) (any, error) {
 		if len(request.Alignments) > 0 {
@@ -317,6 +376,7 @@ func TestRubyBatchHTTPEditedMemberDoesNotDiscardOtherReceivedMembers(t *testing.
 
 func TestRubyBatchHTTPCASStaleMemberDoesNotDiscardOtherReceivedMembers(t *testing.T) {
 	f := newRubyBatchFixture(t, 4)
+	prepareRubyBatchCandidates(t, f)
 	editedID := 0
 	_, result, err := f.execute(t, 0, nil, func(store *roundStore) pipeline.RoundStore {
 		return &rubyPipelineFaultStore{roundStore: store, beforeSave: func(ctx context.Context, c *pipeline.Candidate) error {
@@ -355,6 +415,7 @@ func TestRubyBatchHTTPCASStaleMemberDoesNotDiscardOtherReceivedMembers(t *testin
 
 func TestRubyBatchHTTPNetworkFailurePreservesConfiguredBatchAndLogicalBudget(t *testing.T) {
 	f := newRubyBatchFixture(t, 4)
+	prepareRubyBatchCandidates(t, f)
 	var mu sync.Mutex
 	failed := false
 	f.respond = func(_ context.Context, request rubyPipelineRequest) (any, error) {
@@ -391,6 +452,7 @@ func TestRubyBatchHTTPNetworkFailurePreservesConfiguredBatchAndLogicalBudget(t *
 
 func TestRubyBatchHTTPDuplicateIdentityIsolatesOnlyAffectedMember(t *testing.T) {
 	f := newRubyBatchFixture(t, 4)
+	prepareRubyBatchCandidates(t, f)
 	f.respond = func(_ context.Context, request rubyPipelineRequest) (any, error) {
 		response := rubyPipelineResponse(request)
 		if len(request.Alignments) > 0 {
@@ -419,6 +481,7 @@ func TestRubyBatchHTTPProtocolFallbackDoesNotGrantAdditionalLogicalBudget(t *tes
 	f := newRubyBatchFixture(t, 4)
 	f.snapshot.RubyRetry.MaxAttempts = 1
 	f.persistSnapshot(t)
+	prepareRubyBatchCandidates(t, f)
 	f.respond = func(_ context.Context, request rubyPipelineRequest) (any, error) {
 		if len(request.Alignments) > 0 {
 			return map[string]any{"alignments": []any{}}, nil

@@ -119,7 +119,7 @@ func TestServerRuntimeLifecycle(t *testing.T) {
 	for _, scenario := range []string{"shutdown", "parent_cancel", "serve_failure", "shutdown_before_run"} {
 		t.Run(scenario, func(t *testing.T) {
 			c := newTestEntClient(t)
-			cfg := config.DefaultServerConfig()
+			cfg := testServerConfig()
 			cfg.Storage.Initialization.CapacityBytes = config.QuotaInput{Set: true}
 			cfg.Storage.Initialization.LogicalLimitBytes = config.QuotaInput{Set: true}
 			cfg.DataDir = t.TempDir()

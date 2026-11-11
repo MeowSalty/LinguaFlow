@@ -32,9 +32,10 @@ var (
 )
 
 type ProjectService struct {
-	client  *ent.Client
-	users   *UserService
-	storage *StorageService
+	client        *ent.Client
+	users         *UserService
+	storage       *StorageService
+	budgetCleanup *ExecutionBudgetCleanup
 }
 
 type CreateProjectInput struct {
@@ -207,9 +208,20 @@ func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, project
 	return updated.Unwrap(), nil
 }
 
-func (s *ProjectService) DeleteProject(ctx context.Context, actorUserID, projectID int) ([]string, error) {
-	var paths []string
-	err := s.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, current *ent.Project) error {
+func (s *ProjectService) DeleteProject(ctx context.Context, actorUserID, projectID int) (paths []string, resultErr error) {
+	current, err := s.requireProjectAccess(ctx, actorUserID, projectID, true)
+	if err != nil {
+		return nil, err
+	}
+	if current.StorageState != "active" {
+		return nil, ErrStorageMaintenance
+	}
+	finish, err := s.budgetCleanup.prepare(ctx, s.client, projectID, 0, true)
+	if err != nil {
+		return nil, err
+	}
+	defer finishExecutionCleanup(ctx, finish, &resultErr)
+	err = s.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, current *ent.Project) error {
 		if current.StorageState != "active" {
 			return ErrStorageMaintenance
 		}
@@ -266,16 +278,19 @@ func cascadeDeleteProject(ctx context.Context, tx *ent.Client, current *ent.Proj
 	}
 	// 在锁定任何 Resource 前按统一顺序锁定项目任务，避免逐资源删除时
 	// 获取任务锁的顺序与候选提交或另一批量删除相反。
-	tjIDs, err := tx.Job.Query().
-		Where(job.ProjectIDEQ(projectID)).
-		Order(ent.Asc(job.FieldID)).
-		IDs(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("query translation job IDs: %w", err)
-	}
-	for _, id := range tjIDs {
-		if err := workstate.LockJob(ctx, tx, id); err != nil {
-			return nil, err
+	for after := 0; ; {
+		ids, err := tx.Job.Query().Where(job.ProjectIDEQ(projectID), job.IDGT(after)).Order(ent.Asc(job.FieldID)).Limit(16).IDs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("query translation job IDs: %w", err)
+		}
+		if len(ids) == 0 {
+			break
+		}
+		for _, id := range ids {
+			if err := workstate.LockJob(ctx, tx, id); err != nil {
+				return nil, err
+			}
+			after = id
 		}
 	}
 	for _, r := range resources {
@@ -291,40 +306,24 @@ func cascadeDeleteProject(ctx context.Context, tx *ent.Client, current *ent.Proj
 	}
 
 	// Step 1: 删除 JobResource（同时依赖 TJ 和 Resource）
-	if len(tjIDs) > 0 || len(resIDs) > 0 {
-		var preds []predicate.JobResource
-		if len(tjIDs) > 0 {
-			preds = append(preds, jobresource.HasJobWith(job.IDIn(tjIDs...)))
-		}
-		if len(resIDs) > 0 {
-			preds = append(preds, jobresource.HasResourceWith(resource.IDIn(resIDs...)))
-		}
-		_, err = tx.JobResource.Delete().
-			Where(jobresource.Or(preds...)).
-			Exec(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("delete job resources: %w", err)
-		}
+	_, err = tx.JobResource.Delete().Where(jobresource.Or(
+		jobresource.HasJobWith(job.ProjectIDEQ(projectID)),
+		jobresource.HasResourceWith(resource.ProjectIDEQ(projectID)),
+	)).Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete job resources: %w", err)
 	}
 
 	// Step 1.5: 删除 SSEEvent（依赖 Job）
-	if len(tjIDs) > 0 {
-		_, err = tx.SSEEvent.Delete().
-			Where(sseevent.JobIDIn(tjIDs...)).
-			Exec(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("delete sse events: %w", err)
-		}
+	_, err = tx.SSEEvent.Delete().Where(sseevent.HasJobWith(job.ProjectIDEQ(projectID))).Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete sse events: %w", err)
 	}
 
 	// Step 2: 删除 Job
-	if len(tjIDs) > 0 {
-		_, err = tx.Job.Delete().
-			Where(job.IDIn(tjIDs...)).
-			Exec(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("delete translation jobs: %w", err)
-		}
+	_, err = tx.Job.Delete().Where(job.ProjectIDEQ(projectID)).Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete translation jobs: %w", err)
 	}
 
 	// Step 3: 删除 Segment（依赖 Resource）

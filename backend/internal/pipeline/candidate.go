@@ -4,13 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"reflect"
 	"strings"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
@@ -24,6 +23,13 @@ const CandidateDTOVersion = 2
 // Candidate owns its entire payload. It is never an alias of a live Document.
 // Its baseline is captured before the main request, and cannot be refreshed on retry.
 type Candidate struct {
+	PreparedPayload        []byte               `json:"-"`
+	PreparedHeader         []byte               `json:"-"`
+	BaselineDigest         string               `json:"-"`
+	PendingSave            bool                 `json:"-"`
+	HeaderOnly             bool                 `json:"-"`
+	HeaderWords            int                  `json:"-"`
+	HeaderMissing          bool                 `json:"-"`
 	DTOVersion             int                  `json:"dto_version"`
 	ID                     string               `json:"id"`
 	WorkID                 string               `json:"work_id,omitempty"`
@@ -56,80 +62,69 @@ func NewWorkID() string {
 	return hex.EncodeToString(b[:])
 }
 
-func newCandidate(seg Segment, index int, mode, format string) *Candidate {
-	return &Candidate{DTOVersion: CandidateDTOVersion, ID: NewWorkID(), WorkID: fmt.Sprintf("%s:%d", mode, index), Version: 1,
-		Index: index, Mode: mode, Format: format, Segment: cloneSegment(seg),
-		BaselineTarget: seg.Target, BaselineStatus: seg.Status}
+func newCandidateChecked(seg Segment, index int, mode, format, id string, provided ...*backend.BuildBounds) (*Candidate, error) {
+	b, err := backend.NewBuildBounds(DefaultCandidateLimits().ItemBytes, 0)
+	if len(provided) > 0 && provided[0] != nil {
+		b, err = provided[0], nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var owned Segment
+	if err := b.CloneInto(seg, &owned); err != nil {
+		return nil, err
+	}
+	if id == "" {
+		id = NewWorkID()
+	}
+	return &Candidate{DTOVersion: CandidateDTOVersion, ID: id, WorkID: fmt.Sprintf("%s:%d", mode, index), Version: 1, Index: index, Mode: mode, Format: format, Segment: owned, BaselineTarget: seg.Target, BaselineStatus: seg.Status}, nil
 }
 
-// cloneValue preserves concrete types in parser metadata (notably []ruby.Item).
-// Metadata is an acyclic value tree produced by the document parsers.
-func cloneValue(v reflect.Value) reflect.Value {
-	if !v.IsValid() {
-		return v
+func (c *Candidate) Encode() ([]byte, error) {
+	if c.PreparedPayload != nil {
+		return c.PreparedPayload, nil
 	}
-	switch v.Kind() {
-	case reflect.Interface:
-		if v.IsNil() {
-			return reflect.Zero(v.Type())
-		}
-		out := reflect.New(v.Type()).Elem()
-		out.Set(cloneValue(v.Elem()))
-		return out
-	case reflect.Pointer:
-		if v.IsNil() {
-			return reflect.Zero(v.Type())
-		}
-		out := reflect.New(v.Type().Elem())
-		out.Elem().Set(cloneValue(v.Elem()))
-		return out
-	case reflect.Map:
-		if v.IsNil() {
-			return reflect.Zero(v.Type())
-		}
-		out := reflect.MakeMapWithSize(v.Type(), v.Len())
-		iter := v.MapRange()
-		for iter.Next() {
-			out.SetMapIndex(iter.Key(), cloneValue(iter.Value()))
-		}
-		return out
-	case reflect.Slice:
-		if v.IsNil() {
-			return reflect.Zero(v.Type())
-		}
-		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-		for i := 0; i < v.Len(); i++ {
-			out.Index(i).Set(cloneValue(v.Index(i)))
-		}
-		return out
-	case reflect.Struct:
-		out := reflect.New(v.Type()).Elem()
-		out.Set(v)
-		for i := 0; i < v.NumField(); i++ {
-			if out.Field(i).CanSet() && v.Field(i).CanInterface() {
-				out.Field(i).Set(cloneValue(v.Field(i)))
-			}
-		}
-		return out
-	default:
-		return v
-	}
+	return c.EncodeBounded(DefaultCandidateLimits().ItemBytes, 0)
 }
-
-func cloneSegment(seg Segment) Segment { return cloneValue(reflect.ValueOf(seg)).Interface().(Segment) }
-
-func (c *Candidate) Encode() ([]byte, error) { return json.Marshal(c) }
+func (c *Candidate) EncodeBounded(limit, input int64) ([]byte, error) {
+	if c.PreparedPayload != nil {
+		if int64(len(c.PreparedPayload)) > limit {
+			return nil, ErrCandidateCapacity
+		}
+		return c.PreparedPayload, nil
+	}
+	b, err := backend.NewBuildBounds(limit, input)
+	if err != nil {
+		return nil, err
+	}
+	return b.EncodeJSON(c, limit)
+}
 func DecodeCandidate(data []byte) (*Candidate, error) {
+	return DecodeCandidateBounded(data, max(DefaultCandidateLimits().ItemBytes, int64(len(data))), 0)
+}
+func DecodeCandidateBounded(data []byte, limit, input int64) (*Candidate, error) {
+	if int64(len(data)) > limit {
+		return nil, ErrCandidateCapacity
+	}
 	var c Candidate
-	if err := json.Unmarshal(data, &c); err != nil {
+	b, err := backend.NewBuildBounds(limit, input)
+	if err != nil {
+		return nil, err
+	}
+	if err := b.DecodeJSON(data, &c); err != nil {
 		return nil, fmt.Errorf("decode candidate: %w", err)
 	}
-	if (c.DTOVersion != 1 && c.DTOVersion != CandidateDTOVersion) || c.ID == "" || c.Version < 1 {
+	for i := range c.Segment.Issues {
+		if c.Segment.Issues[i].Disposition == "" {
+			c.Segment.Issues[i].Disposition = "pending"
+		}
+	}
+	if c.DTOVersion != CandidateDTOVersion || c.ID == "" || c.Version < 1 {
 		return nil, fmt.Errorf("unsupported or invalid candidate DTO")
 	}
 	if c.Alignment != nil {
-		if err := c.Alignment.Validate(); err != nil {
-			return nil, err
+		if err := c.Alignment.ValidateBounded(b); err != nil {
+			return nil, fmt.Errorf("validate candidate alignment: %w", err)
 		}
 	}
 	return &c, nil
@@ -147,7 +142,11 @@ func (h *ReviseHandler) PrepareBatch(ctx context.Context, doc *Document, idxs []
 	return copy.ProcessBatch(ctx, doc, idxs, attempt, logger)
 }
 
-func (h *TranslateHandler) prepareTranslatedCandidates(doc *Document, idxs []int, wantIDs []string, trans map[string]string, outputs map[string][]ruby.OutputEntry, contextSet map[int]struct{}, logger *slog.Logger) batchResult {
+func (h *TranslateHandler) prepareTranslatedCandidates(doc *Document, idxs []int, wantIDs []string, trans map[string]string, outputs map[string][]ruby.OutputEntry, contextSet map[int]struct{}, logger *slog.Logger, candidateIDs ...string) batchResult {
+	b, err := candidateBounds(h.buildBounds)
+	if err != nil {
+		return batchResult{err: err}
+	}
 	var result batchResult
 	n := 0
 	for _, idx := range idxs {
@@ -161,14 +160,30 @@ func (h *TranslateHandler) prepareTranslatedCandidates(doc *Document, idxs []int
 			result.unresolved = append(result.unresolved, idx)
 			continue
 		}
-		c := newCandidate(doc.Segments[idx], idx, RoundModeTranslate, doc.Format)
+		idValue := ""
+		if n-1 < len(candidateIDs) {
+			idValue = candidateIDs[n-1]
+		}
+		c, err := newCandidateChecked(doc.Segments[idx], idx, RoundModeTranslate, doc.Format, idValue, b)
+		if err != nil {
+			result.err = err
+			return result
+		}
 		seg := &c.Segment
 		if h.Repair.PlaceholderNormalize {
-			text, _ = repair.NormalizePlaceholders(text, seg.Protected)
+			text, _, err = repair.NormalizePlaceholdersBounded(b, text, seg.Protected)
+			if err != nil {
+				result.err = err
+				return result
+			}
 		}
 		seg.Target = text
 		seg.Issues = nil
-		missing, duplicated, invented := protect.PlaceholderViolations(seg)
+		missing, duplicated, invented, err := protect.PlaceholderViolationsBounded(b, seg)
+		if err != nil {
+			result.err = err
+			return result
+		}
 		if len(missing)+len(duplicated)+len(invented) > 0 {
 			result.unresolved = append(result.unresolved, idx)
 			continue
@@ -177,7 +192,7 @@ func (h *TranslateHandler) prepareTranslatedCandidates(doc *Document, idxs []int
 			seg.Target = strings.TrimSpace(seg.Target)
 		}
 		if h.Protector != nil {
-			if err := h.Protector.Unprotect(seg); err != nil {
+			if err := protect.UnprotectBounded(b, h.Protector, seg); err != nil {
 				result.unresolved = append(result.unresolved, idx)
 				continue
 			}
@@ -193,7 +208,7 @@ func (h *TranslateHandler) prepareTranslatedCandidates(doc *Document, idxs []int
 				continue
 			}
 			items := ruby.ClassifyInitialItems(extractRubyItemsFromSeg(seg), outputs[id])
-			state, err := PrepareAlignment(seg.Target, doc.Format, items, kindSet(h.RubyPreserveKinds), max(1, h.RubyProtocolVersion), outputs[id])
+			state, err := PrepareAlignmentBounded(b, seg.Target, doc.Format, items, kindSet(h.RubyPreserveKinds), max(1, h.RubyProtocolVersion), outputs[id])
 			if err != nil {
 				result.err = err
 				return result
@@ -206,21 +221,41 @@ func (h *TranslateHandler) prepareTranslatedCandidates(doc *Document, idxs []int
 	return result
 }
 
-func (h *ReviseHandler) prepareRevisionCandidate(seg *Segment, idx int, revision prompt.ReviseRevision, st *reviseProtectState, outputs map[string][]ruby.OutputEntry, format string) (*Candidate, error) {
-	c := newCandidate(*seg, idx, RoundModeRevise, format)
+func (h *ReviseHandler) prepareRevisionCandidate(seg *Segment, idx int, revision prompt.ReviseRevision, st *reviseProtectState, outputs map[string][]ruby.OutputEntry, format string, candidateIDs ...string) (*Candidate, error) {
+	b, err := candidateBounds(h.buildBounds)
+	if err != nil {
+		return nil, err
+	}
+	id := ""
+	if len(candidateIDs) > 0 {
+		id = candidateIDs[0]
+	}
+	c, err := newCandidateChecked(*seg, idx, RoundModeRevise, format, id, b)
+	if err != nil {
+		return nil, err
+	}
 	text := revision.Target
 	if h.Repair.PlaceholderNormalize {
-		text, _ = repair.NormalizePlaceholders(text, st.mapping)
+		text, _, err = repair.NormalizePlaceholdersBounded(b, text, st.mapping)
+		if err != nil {
+			return nil, err
+		}
 	}
 	c.Segment.Target = text
 	c.Segment.Protected = st.mapping
-	missing, duplicated, invented := protect.PlaceholderViolations(&c.Segment)
+	missing, duplicated, invented, err := protect.PlaceholderViolationsBounded(b, &c.Segment)
+	if err != nil {
+		return nil, err
+	}
 	if len(missing)+len(duplicated)+len(invented) > 0 || strings.Contains(text, "⟦ruby:") {
 		return nil, nil
 	}
-	c.Segment.Target = protect.RestoreText(text, st.mapping)
+	c.Segment.Target, err = protect.RestoreTextBounded(b, text, st.mapping, b.OutputLimit())
+	if err != nil {
+		return nil, err
+	}
 	if h.RubyEnabled && len(st.rubyItems) > 0 {
-		state, err := PrepareAlignment(c.Segment.Target, format, st.rubyItems, nil, max(1, h.RubyProtocolVersion), outputs[revision.ID])
+		state, err := PrepareAlignmentBounded(b, c.Segment.Target, format, st.rubyItems, nil, max(1, h.RubyProtocolVersion), outputs[revision.ID])
 		if err != nil {
 			return nil, err
 		}
@@ -251,9 +286,19 @@ func itemIDs(items []ruby.Item) []string {
 
 // FinalizeCandidate is deterministic and does not change the baseline or write a Document.
 func FinalizeCandidate(c *Candidate) (TranslatedSegment, bool, error) {
-	seg := cloneSegment(c.Segment)
+	b, err := backend.NewBuildBounds(DefaultCandidateLimits().ItemBytes, 0)
+	if err != nil {
+		return TranslatedSegment{}, false, err
+	}
+	return FinalizeCandidateBounded(b, c)
+}
+func FinalizeCandidateBounded(b *backend.BuildBounds, c *Candidate) (TranslatedSegment, bool, error) {
+	var seg Segment
+	if err := b.CloneInto(c.Segment, &seg); err != nil {
+		return TranslatedSegment{}, false, err
+	}
 	if c.Alignment != nil {
-		text, restored, err := c.Alignment.Render()
+		text, restored, err := c.Alignment.RenderBounded(b, b.OutputLimit())
 		if err != nil {
 			return TranslatedSegment{}, false, err
 		}
@@ -271,9 +316,31 @@ func FinalizeCandidate(c *Candidate) (TranslatedSegment, bool, error) {
 		baseline = c.BaselineTarget
 	}
 	if markup.RequiresWellFormedTargets(c.Format) {
-		if err := markup.TargetRegression(baseline, seg.Target); err != nil {
+		if err := markup.TargetRegressionBounded(b, baseline, seg.Target); err != nil {
 			return TranslatedSegment{}, false, nil
 		}
 	}
 	return TranslatedSegment{Index: c.Index, ID: seg.ID, SourceText: rawSource(&seg), TargetText: seg.Target, Meta: seg.Meta, Issues: seg.Issues, Protected: seg.Protected}, true, nil
+}
+
+func candidateBounds(provided *backend.BuildBounds) (*backend.BuildBounds, error) {
+	if provided != nil {
+		return provided, nil
+	}
+	return backend.NewBuildBounds(DefaultCandidateLimits().ItemBytes, 0)
+}
+func PrepareAlignmentBounded(b *backend.BuildBounds, body, format string, items []ruby.Item, preserve map[string]bool, protocol int, initial []ruby.OutputEntry) (*ruby.AlignmentState, error) {
+	s, err := ruby.NewAlignmentStateBounded(b, body, format, items, preserve, protocol)
+	if err != nil {
+		return nil, err
+	}
+	missing, err := s.MissingBounded(b)
+	if err != nil {
+		return nil, err
+	}
+	if err = b.ReserveNodes(int64(len(missing)), 16); err != nil {
+		return nil, err
+	}
+	_, err = s.ApplyOutputBounded(b, itemIDs(missing), initial, false)
+	return s, err
 }

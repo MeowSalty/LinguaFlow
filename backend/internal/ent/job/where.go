@@ -75,6 +75,11 @@ func PauseRequested(v bool) predicate.Job {
 	return predicate.Job(sql.FieldEQ(FieldPauseRequested, v))
 }
 
+// PipelineRuntimeState applies equality check predicate on the "pipeline_runtime_state" field. It's identical to PipelineRuntimeStateEQ.
+func PipelineRuntimeState(v []byte) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldPipelineRuntimeState, v))
+}
+
 // ProjectID applies equality check predicate on the "project_id" field. It's identical to ProjectIDEQ.
 func ProjectID(v int) predicate.Job {
 	return predicate.Job(sql.FieldEQ(FieldProjectID, v))
@@ -268,6 +273,56 @@ func PauseRequestedEQ(v bool) predicate.Job {
 // PauseRequestedNEQ applies the NEQ predicate on the "pause_requested" field.
 func PauseRequestedNEQ(v bool) predicate.Job {
 	return predicate.Job(sql.FieldNEQ(FieldPauseRequested, v))
+}
+
+// PipelineRuntimeStateEQ applies the EQ predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateEQ(v []byte) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldPipelineRuntimeState, v))
+}
+
+// PipelineRuntimeStateNEQ applies the NEQ predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateNEQ(v []byte) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldPipelineRuntimeState, v))
+}
+
+// PipelineRuntimeStateIn applies the In predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateIn(vs ...[]byte) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldPipelineRuntimeState, vs...))
+}
+
+// PipelineRuntimeStateNotIn applies the NotIn predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateNotIn(vs ...[]byte) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldPipelineRuntimeState, vs...))
+}
+
+// PipelineRuntimeStateGT applies the GT predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateGT(v []byte) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldPipelineRuntimeState, v))
+}
+
+// PipelineRuntimeStateGTE applies the GTE predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateGTE(v []byte) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldPipelineRuntimeState, v))
+}
+
+// PipelineRuntimeStateLT applies the LT predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateLT(v []byte) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldPipelineRuntimeState, v))
+}
+
+// PipelineRuntimeStateLTE applies the LTE predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateLTE(v []byte) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldPipelineRuntimeState, v))
+}
+
+// PipelineRuntimeStateIsNil applies the IsNil predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateIsNil() predicate.Job {
+	return predicate.Job(sql.FieldIsNull(FieldPipelineRuntimeState))
+}
+
+// PipelineRuntimeStateNotNil applies the NotNil predicate on the "pipeline_runtime_state" field.
+func PipelineRuntimeStateNotNil() predicate.Job {
+	return predicate.Job(sql.FieldNotNull(FieldPipelineRuntimeState))
 }
 
 // ProjectIDEQ applies the EQ predicate on the "project_id" field.

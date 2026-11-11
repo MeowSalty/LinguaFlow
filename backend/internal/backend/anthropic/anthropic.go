@@ -45,6 +45,7 @@ type Backend struct {
 	stream            bool
 	thinking          backend.Thinking
 	thinkingBudget    *int64
+	responseBytes     int64
 }
 
 func (b *Backend) Name() string {
@@ -52,149 +53,6 @@ func (b *Backend) Name() string {
 		return b.name
 	}
 	return TypeName + ":" + b.model
-}
-
-func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
-	params, useToolPath, err := b.buildParams(req)
-	if err != nil {
-		return nil, err
-	}
-	callOpts := b.callOpts()
-	if b.stream {
-		return b.translateStream(ctx, params, useToolPath, callOpts)
-	}
-	msg, err := b.client.Messages.New(ctx, params, callOpts...)
-	if err != nil {
-		return nil, wrapAnthropicError(err)
-	}
-	return b.responseFromMessage(msg, useToolPath)
-}
-
-func (b *Backend) translateStream(ctx context.Context, params sdk.MessageNewParams, useToolPath bool, callOpts []option.RequestOption) (*backend.Response, error) {
-	stream := b.client.Messages.NewStreaming(ctx, params, callOpts...)
-	defer stream.Close()
-
-	var msg sdk.Message
-	for stream.Next() {
-		if err := msg.Accumulate(stream.Current()); err != nil {
-			return nil, fmt.Errorf("anthropic: accumulate: %w", err)
-		}
-	}
-	if err := stream.Err(); err != nil {
-		return nil, wrapAnthropicError(err)
-	}
-	return b.responseFromMessage(&msg, useToolPath)
-}
-
-func (b *Backend) responseFromMessage(msg *sdk.Message, useToolPath bool) (*backend.Response, error) {
-	text, err := extractResponseText(msg, useToolPath, b, msg.StopReason, msg.Usage.InputTokens)
-	if err != nil {
-		return nil, err
-	}
-
-	return &backend.Response{
-		Text: text,
-		Usage: backend.Usage{
-			PromptTokens:     msg.Usage.InputTokens,
-			CompletionTokens: msg.Usage.OutputTokens,
-			TotalTokens:      msg.Usage.InputTokens + msg.Usage.OutputTokens,
-		},
-		Raw: msg,
-		// 截断（stop_reason=max_tokens）时部分文本仍有效：带 Truncated 标志返回，
-		// 由上层修复链抢救前缀、缺失部分走重跑通道，而非整体丢弃报错。
-		// 空文本截断由 extractResponseText 的 EmptyResponseError 覆盖（携带 stop reason）。
-		Truncated: msg.StopReason == sdk.StopReasonMaxTokens,
-	}, nil
-}
-
-func (b *Backend) buildParams(req backend.Request) (sdk.MessageNewParams, bool, error) {
-	model := req.Model
-	if model == "" {
-		model = b.model
-	}
-	maxTok := req.MaxTokens
-	if maxTok == 0 {
-		maxTok = b.maxTokens
-	}
-
-	rf := req.ResponseFormat
-	if rf == "" {
-		rf = b.responseFormat
-	}
-	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone, "":
-	default:
-		return sdk.MessageNewParams{}, false, fmt.Errorf("anthropic: unknown response_format %q", rf)
-	}
-
-	sysText := req.System
-	if rf == respFmtJSONObject {
-		// Anthropic 无 json_object 原生支持，用 system 指令模拟
-		sysText += "\n\nRespond with a single valid JSON object and nothing else."
-	}
-	sysBlock := sdk.TextBlockParam{Text: sysText}
-	if b.enablePromptCache {
-		// 在 system block 上打 ephemeral 缓存断点;TTL 字段留空走默认 5m
-		sysBlock.CacheControl = sdk.CacheControlEphemeralParam{}
-	}
-
-	params := sdk.MessageNewParams{
-		Model:     sdk.Model(model),
-		MaxTokens: maxTok,
-		System:    []sdk.TextBlockParam{sysBlock},
-		Messages: []sdk.MessageParam{
-			sdk.NewUserMessage(sdk.NewTextBlock(req.User)),
-		},
-	}
-	// 开启档位（minimal/low/medium/high）时 API 拒绝非默认 temperature/top_p，整段跳过采样参数；
-	// 显式 off 时 thinking 已禁用，API 不再拒绝采样参数，temperature/top_p 正常传递。
-	switch {
-	case b.thinking.Active():
-		var budget int64
-		if b.thinkingBudget != nil {
-			budget = *b.thinkingBudget
-			if budget < 1024 || budget >= maxTok {
-				return sdk.MessageNewParams{}, false, errors.New("anthropic: invalid resolved thinking budget")
-			}
-		} else {
-			var err error
-			budget, err = anthropicThinkingBudget(b.thinking.Level, maxTok)
-			if err != nil {
-				return sdk.MessageNewParams{}, false, err
-			}
-		}
-		params.Thinking = sdk.ThinkingConfigParamOfEnabled(budget)
-	default:
-		if b.thinking.Set {
-			disabled := sdk.NewThinkingConfigDisabledParam()
-			params.Thinking = sdk.ThinkingConfigParamUnion{OfDisabled: &disabled}
-		}
-		if req.Temperature != nil {
-			params.Temperature = sdk.Float(*req.Temperature)
-		} else if b.temperature != nil {
-			params.Temperature = sdk.Float(*b.temperature)
-		}
-		if req.TopP != nil {
-			params.TopP = sdk.Float(*req.TopP)
-		} else if b.topP != nil {
-			params.TopP = sdk.Float(*b.topP)
-		}
-	}
-
-	useToolPath := rf == respFmtJSONSchema && req.JSONSchema != nil
-	if useToolPath {
-		params.Tools = []sdk.ToolUnionParam{{
-			OfTool: &sdk.ToolParam{
-				Name:        toolName,
-				Description: sdk.String(toolDescription),
-				InputSchema: buildToolInputSchema(req.JSONSchema),
-			},
-		}}
-		params.ToolChoice = sdk.ToolChoiceUnionParam{
-			OfTool: &sdk.ToolChoiceToolParam{Name: toolName},
-		}
-	}
-	return params, useToolPath, nil
 }
 
 // anthropicThinkingBudget 按档位比例计算 budget_tokens（≥1024 且 < maxTokens）。
@@ -207,7 +65,7 @@ func (b *Backend) buildParams(req backend.Request) (sdk.MessageNewParams, bool, 
 //
 //	仍会截断，却让用户放松对 batch_size / max_tokens 的主动调优）。
 //
-// 截断信号由 responseFromMessage 的 Response.Truncated 标志传递给上层修复链处理。
+// 截断信号由 the controlled wire decoder 的 Response.Truncated 标志传递给上层修复链处理。
 func anthropicThinkingBudget(level backend.ThinkingLevel, maxTokens int64) (int64, error) {
 	minBudget := int64(1024)
 	if maxTokens <= minBudget {
@@ -260,81 +118,6 @@ func wrapAnthropicError(err error) error {
 	return backend.WrapUpstreamError("anthropic: messages", err)
 }
 
-// extractResponseText 把响应内容拼成可供上层 parseBatchResponse 解析的字符串。
-// useToolPath=true 时优先在 content 中找 emit_translations 的 tool_use 块，
-// 取其 Input(json.RawMessage) 字面值。退化：无 tool_use 时拼所有 text block,
-// 让上层 jsonObjectSlice 抢救解析。
-// 空内容时返回 EmptyResponseError（携带 stop_reason/input_tokens 诊断信息），
-// 使上层将其归为不可重试，转入 shrink/fallback 而非退避重试刷屏。
-func extractResponseText(msg *sdk.Message, useToolPath bool, b *Backend, stopReason sdk.StopReason, inputTokens int64) (string, error) {
-	if useToolPath {
-		for _, blk := range msg.Content {
-			if blk.Type == "tool_use" && blk.Name == toolName {
-				if len(blk.Input) == 0 {
-					return "", &backend.EmptyResponseError{
-						BackendName:  b.Name(),
-						Model:        b.model,
-						FinishReason: string(stopReason),
-						PromptTokens: inputTokens,
-					}
-				}
-				return string(blk.Input), nil
-			}
-		}
-	}
-	var buf []byte
-	for _, blk := range msg.Content {
-		if blk.Type == "text" && blk.Text != "" {
-			buf = append(buf, blk.Text...)
-		}
-	}
-	if len(buf) == 0 {
-		return "", &backend.EmptyResponseError{
-			BackendName:  b.Name(),
-			Model:        b.model,
-			FinishReason: string(stopReason),
-			PromptTokens: inputTokens,
-		}
-	}
-	return string(buf), nil
-}
-
-// buildToolInputSchema 把 LinguaFlow 的 JSON Schema map 拆进 ToolInputSchemaParam。
-// SDK 固定 Type="object";properties/required 用专字段;其他键 (additionalProperties 等)
-// 放进 ExtraFields，让 SDK 在 MarshalJSON 时透传。
-func buildToolInputSchema(schema map[string]any) sdk.ToolInputSchemaParam {
-	out := sdk.ToolInputSchemaParam{}
-	if props, ok := schema["properties"]; ok {
-		out.Properties = props
-	}
-	if req, ok := schema["required"]; ok {
-		switch r := req.(type) {
-		case []string:
-			out.Required = r
-		case []any:
-			ss := make([]string, 0, len(r))
-			for _, v := range r {
-				if s, ok := v.(string); ok {
-					ss = append(ss, s)
-				}
-			}
-			out.Required = ss
-		}
-	}
-	extras := make(map[string]any)
-	for k, v := range schema {
-		switch k {
-		case "type", "properties", "required":
-			continue
-		}
-		extras[k] = v
-	}
-	if len(extras) > 0 {
-		out.ExtraFields = extras
-	}
-	return out
-}
-
 // factory 从 backend.Config 构造实例。Options 期望的键：
 //   - api_key (必填)
 //   - base_url (留空走 SDK 默认)
@@ -381,6 +164,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	}
 	b := &Backend{
 		name:              cfg.Name,
+		responseBytes:     cfg.MaxResponseBytes,
 		client:            sdk.NewClient(clientOpts...),
 		model:             model,
 		maxTokens:         backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),

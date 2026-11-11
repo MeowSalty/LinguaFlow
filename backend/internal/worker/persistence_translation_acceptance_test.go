@@ -158,7 +158,7 @@ func TestPersistenceTranslationLoadMatrix(t *testing.T) {
 			// Product SQL execution and logical handoff budgets remain 30/120s.
 			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Minute)
 			defer cancel()
-			admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 10}, MaxCompletions: 16})
+			admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 10}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -185,7 +185,9 @@ func TestPersistenceTranslationLoadMatrix(t *testing.T) {
 				for i, id := range fixture.IDs {
 					indices[i] = id
 				}
-				snapshot := &service.JobExecutionSnapshot{SchemaVersion: 2, SourceLang: "en", TargetLang: "zh", Rounds: []execution.JobRoundSnapshot{{Mode: "translate", Translate: &execution.JobTranslateRoundSnapshot{Concurrency: 10, BatchSize: 300, Retry: execution.RetryConfig{MaxAttempts: 1}}}}}
+				snapshot := &service.JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", Rounds: []execution.JobRoundSnapshot{{Mode: "translate", Backend: execution.BackendSnapshot{ID: 1, Name: "isolated-fake"}, Translate: &execution.JobTranslateRoundSnapshot{Prompt: execution.PromptSnapshot{Content: "Translate; return JSON translations."}, Concurrency: 10, BatchSize: 300, Retry: execution.RetryConfig{MaxAttempts: 1}}}}}
+				snapshot = completeWorkerSnapshot(t, snapshot)
+				fixture.SetExecutionSnapshot(t, snapshot)
 				store := newRoundStore(fixture.Client, fixture.Scope, indices, snapshot, 0, nil, false, pa.Driver(), nil, nil)
 				opts := progress.DBReporterOptions{Client: fixture.Client, JobID: fixture.Scope.JobID, JobResourceID: fixture.Scope.JobResourceID, ResourceID: fixture.Scope.ResourceID, Lifetime: ctx, Logger: logger, Ticker: time.Hour}
 				persistenceWireReporter(runtime, &opts, observer)

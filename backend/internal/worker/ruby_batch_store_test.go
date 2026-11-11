@@ -117,12 +117,12 @@ func TestRubyBatchStoreRecoversPartialResponseAndPreservesIsolationOnRetry(t *te
 	}
 }
 
-func TestRubyBatchStoreLoadsAndUpgradesLegacyCandidateDTO(t *testing.T) {
+func TestRubyBatchStoreRejectsOldCandidateDTOWithoutMutation(t *testing.T) {
 	ctx := context.Background()
 	f := newRubyPipelineFixture(t, 2)
 	store, candidates := seedRubyBatchCandidates(t, f)
 	c := candidates[0]
-	// Model a pre-P2 persisted DTO without new identity or fallback fields.
+	// Historical DTO1 remains readable as a database fact but cannot execute.
 	c.DTOVersion = 1
 	c.WorkID = ""
 	data, err := json.Marshal(c)
@@ -130,21 +130,11 @@ func TestRubyBatchStoreLoadsAndUpgradesLegacyCandidateDTO(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.client.WorkCandidate.Update().Where(workcandidate.IdentityEQ(c.ID)).SetDtoVersion(1).SetPayload(data).SetPayloadBytes(int64(len(data))).ExecX(ctx)
-	loaded, _, err := store.Candidates(ctx, 0, 1)
-	if err != nil || len(loaded) != 1 {
-		t.Fatalf("legacy load: %v", err)
+	if loaded, _, err := store.Candidates(ctx, 0, 1); err == nil || len(loaded) != 0 {
+		t.Fatalf("DTO1 entered current execution: %+v %v", loaded, err)
 	}
-	old := loaded[0]
-	if old.WorkID != store.WorkIdentity(0) || old.ForceSingleAlignment || old.DTOVersion != 1 {
-		t.Fatalf("legacy defaults: %+v", old)
-	}
-	old.Version++
-	old.DTOVersion = pipeline.CandidateDTOVersion
-	if err := store.Save(ctx, old); err != nil {
-		t.Fatalf("upgrade old candidate on next save: %v", err)
-	}
-	loaded, _, err = store.Candidates(ctx, 0, 1)
-	if err != nil || loaded[0].DTOVersion != 2 || loaded[0].Version != 2 {
-		t.Fatalf("upgraded reload: %+v, %v", loaded, err)
+	row := f.client.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).OnlyX(ctx)
+	if row.DtoVersion != 1 || row.Version != 1 || string(row.Payload) != string(data) {
+		t.Fatal("DTO1 rejection rewrote historical payload/version")
 	}
 }

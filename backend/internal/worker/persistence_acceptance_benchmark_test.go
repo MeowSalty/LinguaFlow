@@ -156,7 +156,13 @@ func persistenceResources(t *testing.T, batches int) []*pa.Fixture {
 }
 func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persistenceFastModel) (*pipeline.ExecutionRuntime, *persistenceTimings, <-chan error) {
 	t.Helper()
-	admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 10}, MaxCompletions: 16})
+	ctx, cancel := context.WithCancel(t.Context())
+	if deadline, ok := t.Deadline(); ok {
+		cancel()
+		ctx, cancel = context.WithDeadline(t.Context(), deadline.Add(-time.Second))
+	}
+	t.Cleanup(cancel)
+	admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 10}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +174,7 @@ func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persis
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	done := make(chan error, 7)
 	for _, f := range fixtures {
-		store := persistenceRoundStore(f)
+		store := persistenceRoundStore(t, f)
 		opts := progress.DBReporterOptions{Client: f.Client, JobID: f.Scope.JobID, JobResourceID: f.Scope.JobResourceID, ResourceID: f.Scope.ResourceID, Logger: logger, Ticker: time.Hour}
 		persistenceWireReporter(r, &opts, observer)
 		reporter := progress.NewDBReporter(opts)
@@ -188,7 +194,7 @@ func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persis
 			doc.Segments = append(doc.Segments, pipeline.Segment{ID: fmt.Sprint(id), DBID: id, Source: fmt.Sprintf("synthetic source %d", i), Translate: true})
 		}
 		go func() {
-			_, err := pipeline.RunRound(t.Context(), pipeline.Round{Runtime: r, Store: store, Handler: handler, Concurrency: 10}, doc, nil, logger, reporter)
+			_, err := pipeline.RunRound(ctx, pipeline.Round{Runtime: r, Store: store, Handler: handler, Concurrency: 10}, doc, nil, logger, reporter)
 			closeErr := reporter.Close()
 			if err == nil {
 				err = closeErr
@@ -241,6 +247,7 @@ func TestPersistenceLoadMatrix(t *testing.T) {
 				}
 			}
 			if len(failures) > 0 {
+				t.Logf("joined load failure: model_calls=%d usage=%d admission=%+v pipeline=%+v", model.calls.Load(), usage, r.Admission.Snapshot(), r.Admission.PipelineSnapshot())
 				t.Fatalf("load failed: %v", failures)
 			}
 			if model.calls.Load() != 70 || usage != 70 || job.ProgressCompleted != 21000 || job.ProgressTotal != 21000 {
@@ -266,13 +273,13 @@ func TestPersistenceLoadMatrix(t *testing.T) {
 
 func TestPersistenceCommitObservations(t *testing.T) {
 	f := pa.Seed(t, 1, true)
-	store := persistenceRoundStore(f)
+	store := persistenceRoundStore(t, f)
 	row := f.Client.Segment.GetX(t.Context(), f.IDs[0])
 	candidate := &pipeline.Candidate{DTOVersion: pipeline.CandidateDTOVersion, ID: pipeline.NewWorkID(), WorkID: store.WorkIdentity(0), Version: 1, Index: 0, Mode: pipeline.RoundModeTranslate, Format: "text", Ready: true, BaselineStatus: string(row.Status), Segment: pipeline.Segment{DBID: row.ID, Source: row.SourceText, ContentVersion: row.ContentVersion, Status: string(row.Status), TargetIsNull: row.TargetText == nil, Translate: true}}
 	if err := store.Save(t.Context(), candidate); err != nil {
 		t.Fatal(err)
 	}
-	admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 1}, MaxCompletions: 1})
+	admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}

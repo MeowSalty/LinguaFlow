@@ -76,7 +76,7 @@ func (e terminalRuntimeStoreError) Unwrap() error { return e.error }
 func testExecutionRuntime(t *testing.T, completions int) *ExecutionRuntime {
 	t.Helper()
 	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{
-		MainConcurrency: map[int]int{0: 4}, AlignmentConcurrency: 2, MaxCompletions: completions,
+		MainConcurrency: map[int]int{0: 4}, AlignmentConcurrency: 2,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestRequestBackendRetriesOnlyLocalStorage(t *testing.T) {
 	}
 }
 
-func TestRequestBackendBoundsParsingAndReleasesNetwork(t *testing.T) {
+func TestRequestBackendReleasesCPUAndRetainsDurableOwners(t *testing.T) {
 	runtime := testExecutionRuntime(t, 4)
 	inner := &runtimeTestBackend{}
 	b := BindRequestBackend(inner, 1, 0, runtime)
@@ -201,20 +201,18 @@ func TestRequestBackendBoundsParsingAndReleasesNetwork(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { _, err := third.Translate(contexts[2], backend.Request{}); done <- err }()
 	<-thirdReturned
-	select {
-	case err := <-done:
-		t.Fatalf("third parser escaped capacity: %v", err)
-	default:
-	}
-	sessions[0].finish()
 	if err := awaitRuntimeResult(t, done); err != nil {
 		t.Fatal(err)
 	}
-	if len(runtime.parse) != 2 {
+	if len(runtime.parse) != 0 {
 		t.Fatalf("active parsers=%d", len(runtime.parse))
 	}
-	if snapshot := runtime.Admission.Snapshot(); snapshot.MainInflight[0] != 0 || snapshot.PendingResults != 2 {
+	if snapshot := runtime.Admission.Snapshot(); snapshot.MainInflight[0] != 0 || snapshot.PendingResults != 3 {
 		t.Fatalf("parse result accounting: %+v", snapshot)
+	}
+	sessions[0].finish()
+	if snapshot := runtime.Admission.Snapshot(); snapshot.PendingResults != 2 {
+		t.Fatalf("durable owner released before finish: %+v", snapshot)
 	}
 }
 
@@ -538,24 +536,37 @@ func TestRequestSessionFinishFailureDoesNotClaimCompletion(t *testing.T) {
 
 func TestCandidateWindowReservationTransferAndResize(t *testing.T) {
 	w := NewCandidateWindow(CandidateLimits{Segments: 4, Bytes: 20, ItemBytes: 10})
-	if w.TryReserve("batch", 3) || !w.TryReserve("batch", 2) {
-		t.Fatal("incorrect full-item reservation")
+	if !w.TryReserve("batch", 2) || !w.TryReserve("fill", 1) || w.TryReserve("over-S", 1) {
+		t.Fatal("incorrect ordinary S-1 reservation")
+	}
+	if ok, err := w.ledger.BeginPromotion("batch", "a", 2, false); err != nil || !ok {
+		t.Fatalf("promotion pregrant: %v %v", ok, err)
 	}
 	if err := w.Transfer("batch", "a", 2); err != nil {
 		t.Fatal(err)
 	}
 	if w.TryReserve("next", 1) {
-		t.Fatal("admitted production beyond byte window")
+		t.Fatal("admitted production beyond member window")
 	}
 	w.Release("batch")
 	if !w.TryReserve("next", 1) {
 		t.Fatal("remaining reservation not released")
 	}
-	if err := w.Transfer("next", "b", -1); !errors.Is(err, ErrCandidateCapacity) {
+	w.Release("fill")
+	if err := w.Transfer("next", "b", -1); !errors.Is(err, backend.ErrPipelineCapacity) {
 		t.Fatal("accepted negative payload")
+	}
+	if ok, err := w.ledger.BeginPromotion("next", "b", 3, false); err != nil || !ok {
+		t.Fatalf("promotion pregrant: %v %v", ok, err)
 	}
 	if err := w.Transfer("next", "b", 3); err != nil {
 		t.Fatal(err)
+	}
+	if err := w.ledger.AttachProgress(backend.PipelineRuntimeState{Version: 1, ProgressID: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := w.ledger.ReserveCandidateGrowth("a"); err != nil || !ok {
+		t.Fatalf("full Q pregrant: %v %v", ok, err)
 	}
 	if err := w.Resize("a", 10); err != nil {
 		t.Fatal(err)
@@ -604,7 +615,7 @@ func TestCandidateWindowRestoresAboveLoweredLimit(t *testing.T) {
 	if !w.TryReserve("single", 1) {
 		t.Fatal("single item could not run alone")
 	}
-	if err := w.Transfer("single", "large", 11); !errors.Is(err, ErrCandidateCapacity) {
+	if err := w.Transfer("single", "large", 11); !errors.Is(err, backend.ErrPipelineCapacity) {
 		t.Fatal("single item bypassed hard limit")
 	}
 	if err := w.Restore("old-too-large", 11); !errors.Is(err, ErrCandidateCapacity) {
@@ -613,17 +624,17 @@ func TestCandidateWindowRestoresAboveLoweredLimit(t *testing.T) {
 }
 
 func TestCandidateWindowRejectsArithmeticOverflow(t *testing.T) {
-	w := NewCandidateWindow(CandidateLimits{Segments: math.MaxInt, Bytes: math.MaxInt64, ItemBytes: math.MaxInt64})
-	if w.TryReserve("overflow", 2) || !w.TryReserve("one", 1) {
-		t.Fatal("reservation arithmetic overflow")
-	}
-	if err := w.Transfer("one", "saved", math.MaxInt64); err != nil {
+	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 1}})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.Restore("overflow", 1); !errors.Is(err, ErrCandidateCapacity) {
-		t.Fatal("restored total overflowed")
+	defer a.Close()
+	// Q+R+O must be representable before constructing a window. The previous
+	// fixture treated an impossible MaxInt64 singleton lane as configured.
+	if err = a.ConfigurePipelineBudget(backend.PipelineBudgetLimits{Segments: math.MaxInt, Candidates: math.MaxInt64, Item: math.MaxInt64, Responses: 1, Handoff: math.MaxInt64}); !errors.Is(err, backend.ErrPipelineCapacity) {
+		t.Fatalf("unrepresentable singleton configured: %v", err)
 	}
-	if got := w.Snapshot().Bytes; got != math.MaxInt64 {
-		t.Fatalf("accounting wrapped: %d", got)
+	if got := a.PipelineSnapshot(); got.CandidateBytes != 0 || got.GrowthBytes != 0 || got.Segments != 0 {
+		t.Fatalf("invalid configuration allocated accounting: %+v", got)
 	}
 }

@@ -20,8 +20,9 @@ import (
 // LoginBindingUpdate is the builder for updating LoginBinding entities.
 type LoginBindingUpdate struct {
 	config
-	hooks    []Hook
-	mutation *LoginBindingMutation
+	hooks     []Hook
+	mutation  *LoginBindingMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the LoginBindingUpdate builder.
@@ -245,6 +246,12 @@ func (_u *LoginBindingUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *LoginBindingUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *LoginBindingUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *LoginBindingUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -335,6 +342,7 @@ func (_u *LoginBindingUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{loginbinding.Label}
@@ -350,9 +358,10 @@ func (_u *LoginBindingUpdate) sqlSave(ctx context.Context) (_node int, err error
 // LoginBindingUpdateOne is the builder for updating a single LoginBinding entity.
 type LoginBindingUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *LoginBindingMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *LoginBindingMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -583,6 +592,12 @@ func (_u *LoginBindingUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *LoginBindingUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *LoginBindingUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *LoginBindingUpdateOne) sqlSave(ctx context.Context) (_node *LoginBinding, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -690,6 +705,7 @@ func (_u *LoginBindingUpdateOne) sqlSave(ctx context.Context) (_node *LoginBindi
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &LoginBinding{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

@@ -20,8 +20,9 @@ import (
 // StorageTaskUpdate is the builder for updating StorageTask entities.
 type StorageTaskUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageTaskMutation
+	hooks     []Hook
+	mutation  *StorageTaskMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageTaskUpdate builder.
@@ -666,6 +667,12 @@ func (_u *StorageTaskUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageTaskUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageTaskUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -864,6 +871,7 @@ func (_u *StorageTaskUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	if _u.mutation.InputCleared() {
 		_spec.ClearField(storagetask.FieldInput, field.TypeJSON)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storagetask.Label}
@@ -879,9 +887,10 @@ func (_u *StorageTaskUpdate) sqlSave(ctx context.Context) (_node int, err error)
 // StorageTaskUpdateOne is the builder for updating a single StorageTask entity.
 type StorageTaskUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageTaskMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageTaskMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -1533,6 +1542,12 @@ func (_u *StorageTaskUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageTaskUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageTaskUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageTaskUpdateOne) sqlSave(ctx context.Context) (_node *StorageTask, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1748,6 +1763,7 @@ func (_u *StorageTaskUpdateOne) sqlSave(ctx context.Context) (_node *StorageTask
 	if _u.mutation.InputCleared() {
 		_spec.ClearField(storagetask.FieldInput, field.TypeJSON)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageTask{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

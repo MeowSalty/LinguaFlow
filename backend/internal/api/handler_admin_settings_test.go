@@ -49,7 +49,7 @@ func TestRegisterSettingsFailureReturnsUnavailable(t *testing.T) {
 
 func TestInitializationReadinessTracksPolicyAndMode(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.DefaultServerConfig()
+	cfg := testServerConfig()
 	cfg.DataDir = t.TempDir()
 	db, client, err := database.Open(ctx, cfg)
 	if err != nil {

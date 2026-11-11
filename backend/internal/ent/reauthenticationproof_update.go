@@ -18,8 +18,9 @@ import (
 // ReauthenticationProofUpdate is the builder for updating ReauthenticationProof entities.
 type ReauthenticationProofUpdate struct {
 	config
-	hooks    []Hook
-	mutation *ReauthenticationProofMutation
+	hooks     []Hook
+	mutation  *ReauthenticationProofMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the ReauthenticationProofUpdate builder.
@@ -95,6 +96,12 @@ func (_u *ReauthenticationProofUpdate) defaults() {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ReauthenticationProofUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ReauthenticationProofUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ReauthenticationProofUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(reauthenticationproof.Table, reauthenticationproof.Columns, sqlgraph.NewFieldSpec(reauthenticationproof.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -122,6 +129,7 @@ func (_u *ReauthenticationProofUpdate) sqlSave(ctx context.Context) (_node int, 
 	if _u.mutation.ConsumedAtCleared() {
 		_spec.ClearField(reauthenticationproof.FieldConsumedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{reauthenticationproof.Label}
@@ -137,9 +145,10 @@ func (_u *ReauthenticationProofUpdate) sqlSave(ctx context.Context) (_node int, 
 // ReauthenticationProofUpdateOne is the builder for updating a single ReauthenticationProof entity.
 type ReauthenticationProofUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *ReauthenticationProofMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *ReauthenticationProofMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -222,6 +231,12 @@ func (_u *ReauthenticationProofUpdateOne) defaults() {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ReauthenticationProofUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ReauthenticationProofUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ReauthenticationProofUpdateOne) sqlSave(ctx context.Context) (_node *ReauthenticationProof, err error) {
 	_spec := sqlgraph.NewUpdateSpec(reauthenticationproof.Table, reauthenticationproof.Columns, sqlgraph.NewFieldSpec(reauthenticationproof.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
@@ -266,6 +281,7 @@ func (_u *ReauthenticationProofUpdateOne) sqlSave(ctx context.Context) (_node *R
 	if _u.mutation.ConsumedAtCleared() {
 		_spec.ClearField(reauthenticationproof.FieldConsumedAt, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &ReauthenticationProof{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

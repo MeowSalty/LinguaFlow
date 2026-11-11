@@ -24,8 +24,9 @@ import (
 // JobUpdate is the builder for updating Job entities.
 type JobUpdate struct {
 	config
-	hooks    []Hook
-	mutation *JobMutation
+	hooks     []Hook
+	mutation  *JobMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the JobUpdate builder.
@@ -72,6 +73,18 @@ func (_u *JobUpdate) SetNillablePauseRequested(v *bool) *JobUpdate {
 	if v != nil {
 		_u.SetPauseRequested(*v)
 	}
+	return _u
+}
+
+// SetPipelineRuntimeState sets the "pipeline_runtime_state" field.
+func (_u *JobUpdate) SetPipelineRuntimeState(v []byte) *JobUpdate {
+	_u.mutation.SetPipelineRuntimeState(v)
+	return _u
+}
+
+// ClearPipelineRuntimeState clears the value of the "pipeline_runtime_state" field.
+func (_u *JobUpdate) ClearPipelineRuntimeState() *JobUpdate {
+	_u.mutation.ClearPipelineRuntimeState()
 	return _u
 }
 
@@ -598,6 +611,12 @@ func (_u *JobUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *JobUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *JobUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -621,6 +640,12 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.PauseRequested(); ok {
 		_spec.SetField(job.FieldPauseRequested, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PipelineRuntimeState(); ok {
+		_spec.SetField(job.FieldPipelineRuntimeState, field.TypeBytes, value)
+	}
+	if _u.mutation.PipelineRuntimeStateCleared() {
+		_spec.ClearField(job.FieldPipelineRuntimeState, field.TypeBytes)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)
@@ -929,6 +954,7 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{job.Label}
@@ -944,9 +970,10 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // JobUpdateOne is the builder for updating a single Job entity.
 type JobUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *JobMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *JobMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -987,6 +1014,18 @@ func (_u *JobUpdateOne) SetNillablePauseRequested(v *bool) *JobUpdateOne {
 	if v != nil {
 		_u.SetPauseRequested(*v)
 	}
+	return _u
+}
+
+// SetPipelineRuntimeState sets the "pipeline_runtime_state" field.
+func (_u *JobUpdateOne) SetPipelineRuntimeState(v []byte) *JobUpdateOne {
+	_u.mutation.SetPipelineRuntimeState(v)
+	return _u
+}
+
+// ClearPipelineRuntimeState clears the value of the "pipeline_runtime_state" field.
+func (_u *JobUpdateOne) ClearPipelineRuntimeState() *JobUpdateOne {
+	_u.mutation.ClearPipelineRuntimeState()
 	return _u
 }
 
@@ -1526,6 +1565,12 @@ func (_u *JobUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *JobUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *JobUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1566,6 +1611,12 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	}
 	if value, ok := _u.mutation.PauseRequested(); ok {
 		_spec.SetField(job.FieldPauseRequested, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PipelineRuntimeState(); ok {
+		_spec.SetField(job.FieldPipelineRuntimeState, field.TypeBytes, value)
+	}
+	if _u.mutation.PipelineRuntimeStateCleared() {
+		_spec.ClearField(job.FieldPipelineRuntimeState, field.TypeBytes)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)
@@ -1874,6 +1925,7 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &Job{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

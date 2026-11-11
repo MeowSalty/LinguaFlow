@@ -39,11 +39,20 @@ type roundCheckpoint struct {
 	pending      []int
 	aligned      bool // resolved 是否已与 DB 断点行对齐
 	writtenCount int  // 本 reporter 上次成功 flush 的本地集合大小
+	bounded      bool // stable canonical producers retain only the current batch's IDs
+	confirmed    int  // scalar database baseline for the bounded producer
+}
+
+func (c *roundCheckpoint) localCount() int {
+	if c.bounded {
+		return c.confirmed + len(c.resolved)
+	}
+	return len(c.resolved)
 }
 
 // needsWrite 报告是否有新增事实或恢复后尚未确认的本地视图。
 func (c *roundCheckpoint) needsWrite() bool {
-	return len(c.pending) > 0 || len(c.resolved) != c.writtenCount
+	return len(c.pending) > 0 || c.localCount() != c.writtenCount
 }
 
 // snapshot 取出待确认的事实（调用方持 flushMu）。count 仅供成功后的本地
@@ -54,7 +63,7 @@ func (c *roundCheckpoint) snapshot() (checkpointWrite, bool) {
 	}
 	ids := c.pending
 	c.pending = nil
-	return checkpointWrite{round: c, ids: ids, count: len(c.resolved)}, true
+	return checkpointWrite{round: c, ids: ids, count: c.localCount()}, true
 }
 
 // requeue 把写失败的增量放回队首（断点是正确性数据，必须重试）。
@@ -196,6 +205,17 @@ func NewDBReporter(opts DBReporterOptions) *DBReporter {
 // roundRowID <= 0 退化为「无轮次行」：mapper 忽略、SegmentResolved 为 no-op，
 // 进度只累加 Job 计数器（单资源路径）。
 func (r *DBReporter) SwitchRound(roundRowID int, segmentID func(docIndex int) (dbID int, ok bool)) {
+	r.switchRound(roundRowID, segmentID, false)
+}
+
+// SwitchBoundedRound uses the canonical producer's stable, unique membership.
+// It keeps a scalar completed baseline and only unconfirmed batch IDs. Database
+// Confirm remains authoritative for replay and concurrent-writer deduplication.
+func (r *DBReporter) SwitchBoundedRound(roundRowID int, segmentID func(docIndex int) (dbID int, ok bool)) {
+	r.switchRound(roundRowID, segmentID, true)
+}
+
+func (r *DBReporter) switchRound(roundRowID int, segmentID func(docIndex int) (dbID int, ok bool), bounded bool) {
 	if !r.beginWrite() {
 		return
 	}
@@ -221,6 +241,7 @@ func (r *DBReporter) SwitchRound(roundRowID int, segmentID func(docIndex int) (d
 			rowID:     roundRowID,
 			segmentID: segmentID,
 			resolved:  make(map[int]struct{}),
+			bounded:   bounded,
 		}
 	} else {
 		r.round = nil
@@ -332,6 +353,9 @@ func (r *DBReporter) StageError() error {
 //
 // 失败会返回给执行器，本轮必须先重试存储屏障才能继续派发。
 func (r *DBReporter) alignResolved(ctx context.Context, c *roundCheckpoint) (int, error) {
+	if c.bounded {
+		return r.alignBoundedResolved(ctx, c)
+	}
 	ids, err := r.client.JobRoundSegment.Query().
 		Where(jobroundsegment.JobRoundIDEQ(c.rowID)).
 		Select(jobroundsegment.FieldSegmentID).
@@ -364,6 +388,38 @@ func (r *DBReporter) alignResolved(ctx context.Context, c *roundCheckpoint) (int
 	c.resolved = resolved
 	c.aligned = true
 	return len(c.resolved), nil
+}
+
+func (r *DBReporter) alignBoundedResolved(ctx context.Context, c *roundCheckpoint) (int, error) {
+	count, err := r.client.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(c.rowID)).Count(ctx)
+	if err != nil {
+		return 0, err
+	}
+	// The write lifecycle lock prevents a concurrent snapshot or round switch;
+	// producers may still append. Query only fixed pages of pending IDs and then
+	// remove the durable matches under flushMu, without a full-scope ID tree.
+	for start := 0; ; start += 16 {
+		var ids [16]int
+		r.flushMu.Lock()
+		if start >= len(c.pending) {
+			c.confirmed = count
+			c.aligned = true
+			result := c.localCount()
+			r.flushMu.Unlock()
+			return result, nil
+		}
+		n := copy(ids[:], c.pending[start:])
+		r.flushMu.Unlock()
+		persisted, err := r.client.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(c.rowID), jobroundsegment.SegmentIDIn(ids[:n]...)).Select(jobroundsegment.FieldSegmentID).Ints(ctx)
+		if err != nil {
+			return 0, err
+		}
+		r.flushMu.Lock()
+		for _, id := range persisted {
+			delete(c.resolved, id)
+		}
+		r.flushMu.Unlock()
+	}
 }
 
 // alignCheckpoints 把所有未对齐的轮次断点集合与 DB 对齐（flush 写
@@ -406,7 +462,9 @@ func (r *DBReporter) SegmentDone() {
 	cur := r.stageDone.Add(1)
 
 	r.flushMu.Lock()
-	r.pending = append(r.pending, segmentUpdate{done: cur})
+	if r.round == nil || !r.round.bounded {
+		r.pending = append(r.pending, segmentUpdate{done: cur})
+	}
 	r.flushMu.Unlock()
 }
 
@@ -686,6 +744,12 @@ func (r *DBReporter) flushExecution(ctx context.Context) (err error) {
 				w.round.requeue(w.ids)
 			} else {
 				w.round.writtenCount = w.count
+				if w.round.bounded {
+					for _, id := range w.ids {
+						delete(w.round.resolved, id)
+					}
+					w.round.confirmed = w.count
+				}
 			}
 		}
 		r.flushMu.Unlock()
@@ -725,12 +789,18 @@ func (r *DBReporter) writeFlush(ctx context.Context, writes []checkpointWrite, j
 			return err
 		}
 		for _, w := range writes {
-			facts := make([]workstate.Confirmation, 0, len(w.ids))
-			for _, id := range w.ids {
-				facts = append(facts, workstate.Confirmation{SegmentID: id})
-			}
-			if _, err := workstate.Confirm(ctx, tx, r.jobID, w.round.rowID, facts); err != nil {
-				return err
+			for start := 0; start < len(w.ids) || start == 0; start += 16 {
+				var facts [16]workstate.Confirmation
+				end := min(start+len(facts), len(w.ids))
+				for i, id := range w.ids[start:end] {
+					facts[i] = workstate.Confirmation{SegmentID: id}
+				}
+				if _, err := workstate.Confirm(ctx, tx, r.jobID, w.round.rowID, facts[:end-start]); err != nil {
+					return err
+				}
+				if end == len(w.ids) {
+					break
+				}
 			}
 		}
 		if jobDelta > 0 {
@@ -739,13 +809,22 @@ func (r *DBReporter) writeFlush(ctx context.Context, writes []checkpointWrite, j
 		return nil
 	})
 	if err != nil && jobDelta == 0 {
-		facts := make(map[int][]workstate.Confirmation, len(writes))
 		for _, w := range writes {
-			for _, id := range w.ids {
-				facts[w.round.rowID] = append(facts[w.round.rowID], workstate.Confirmation{SegmentID: id})
+			for start := 0; start < len(w.ids) || start == 0; start += 16 {
+				var facts [16]workstate.Confirmation
+				end := min(start+len(facts), len(w.ids))
+				for i, id := range w.ids[start:end] {
+					facts[i] = workstate.Confirmation{SegmentID: id}
+				}
+				if resolved := workstate.ResolveCheckpoint(ctx, r.client, r.jobID, err, map[int][]workstate.Confirmation{w.round.rowID: facts[:end-start]}); resolved != nil {
+					return resolved
+				}
+				if end == len(w.ids) {
+					break
+				}
 			}
 		}
-		return workstate.ResolveCheckpoint(ctx, r.client, r.jobID, err, facts)
+		return nil
 	}
 	return err
 }

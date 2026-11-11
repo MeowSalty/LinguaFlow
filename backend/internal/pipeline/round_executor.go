@@ -488,14 +488,38 @@ func runPool(
 	}
 
 	done := make(chan struct{})
+	var sourceCredits chan struct{}
+	if round.Runtime != nil {
+		sourceCredits = make(chan struct{}, min(concurrency, max(1, round.Runtime.Policy.PreparePending)))
+	}
+	returnSourceCredit := func() {
+		if sourceCredits != nil {
+			<-sourceCredits
+		}
+	}
 	var submitWg sync.WaitGroup
 	submitWg.Add(1)
 	go func() {
 		defer submitWg.Done()
 		for batchIndex, batch := range batches {
+			if sourceCredits != nil {
+				select {
+				case sourceCredits <- struct{}{}:
+				case <-done:
+					pendingMu.Lock()
+					for _, remaining := range batches[batchIndex:] {
+						nextPending = append(nextPending, remaining...)
+					}
+					pendingMu.Unlock()
+					return
+				}
+			}
 			job := batchJob{idxs: batch}
 			for _, idx := range batch {
 				cursor := initialCursors[idx]
+				if initialCursors == nil && round.Runtime != nil {
+					cursor = doc.Segments[idx].RoundWork.Cursor
+				}
 				job.attempt = max(job.attempt, cursor.Attempt)
 				if cursor.NextAttemptAt.After(job.notBefore) {
 					job.notBefore = cursor.NextAttemptAt
@@ -503,6 +527,7 @@ func runPool(
 			}
 			select {
 			case <-done:
+				returnSourceCredit()
 				// Closing delivery cannot discard the source batches that never
 				// reached a worker. They remain eligible in the same pool/attempt.
 				pendingMu.Lock()
@@ -704,12 +729,14 @@ func runPool(
 					case <-runCtx.Done():
 						deferRetry(result)
 						active--
+						returnSourceCredit()
 					case jobs <- *result.retry:
 						// in-flight 重试不递减 active（复用席位）
 					}
 				} else {
 					deferRetry(result)
 					active--
+					returnSourceCredit()
 				}
 			}
 		case <-preparationChanged:

@@ -5,6 +5,7 @@ package persistenceacceptance
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
@@ -94,13 +96,17 @@ func Seed(t testing.TB, n int, seal bool) *Fixture {
 	ctx := t.Context()
 	project := c.Project.Create().SetName("isolated-persistence").SaveX(ctx)
 	resource := c.Resource.Create().SetProjectID(project.ID).SetPath("fixture.txt").SetStoragePath("fixture.txt").SetFormat("txt").SaveX(ctx)
-	job := c.Job.Create().SetProjectID(project.ID).SetExecutionPlanID(1).SetStatus("running").SaveX(ctx)
+	job := c.Job.Create().SetProjectID(project.ID).SetExecutionPlanID(1).SetExecutionConfig(map[string]any{"schema_version": 4, "defaults_version": 4, "response_format_version": 1}).SetStatus("running").SaveX(ctx)
 	return SeedResource(t, c, db, p, project.ID, job.ID, resource.ID, n, seal)
 }
 
 func SeedResource(t testing.TB, c *ent.Client, db *sql.DB, p *Probe, projectID, jobID, resourceID, n int, seal bool) *Fixture {
 	t.Helper()
 	ctx := t.Context()
+	j := c.Job.GetX(ctx, jobID)
+	if len(j.ExecutionConfig) == 0 {
+		c.Job.UpdateOneID(jobID).SetExecutionConfig(map[string]any{"schema_version": 4, "defaults_version": 4, "response_format_version": 1}).ExecX(ctx)
+	}
 	jr := c.JobResource.Create().SetJobID(jobID).SetResourceID(resourceID).SetStatus("running").SaveX(ctx)
 	round := c.JobRound.Create().SetJobID(jobID).SetJobResourceID(jr.ID).SetRoundIndex(0).SetMode("extract").SetStatus("running").SaveX(ctx)
 	f := &Fixture{Client: c, DB: db, Probe: p, Store: workstate.NewStore(c), Scope: workstate.Scope{JobID: jobID, ResourceID: resourceID, JobResourceID: jr.ID, RoundID: round.ID}}
@@ -124,4 +130,22 @@ func SeedResource(t testing.TB, c *ent.Client, db *sql.DB, p *Probe, projectID, 
 	}
 	p.Reset(0)
 	return f
+}
+
+// SetExecutionSnapshot gives staged fixtures the same digest source as their
+// concrete roundStore before reserving any model request.
+func (f *Fixture) SetExecutionSnapshot(t testing.TB, spec *execution.JobExecutionSnapshot) {
+	t.Helper()
+	if err := execution.ValidateSpec(spec); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err = json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	f.Client.Job.UpdateOneID(f.Scope.JobID).SetExecutionConfig(config).ExecX(t.Context())
 }

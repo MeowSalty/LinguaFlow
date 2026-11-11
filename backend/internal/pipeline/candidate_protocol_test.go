@@ -107,7 +107,7 @@ func TestRubyCandidateIncompleteTranslateWarnsAndReviseRejects(t *testing.T) {
 	}
 }
 
-func TestRubyCandidateLegacyInlineKeepsBodyWithoutManufacturingIdentity(t *testing.T) {
+func TestRubyCandidateLegacyProtocolCannotCreateExecutableCandidate(t *testing.T) {
 	for _, withMapping := range []bool{false, true} {
 		seg := newRubyTestSeg("source", "old", []ruby.Item{{ID: "6", SourceBase: "source"}})
 		doc := &Document{Format: "text", Segments: []Segment{*seg}}
@@ -117,23 +117,8 @@ func TestRubyCandidateLegacyInlineKeepsBodyWithoutManufacturingIdentity(t *testi
 			entries = []ruby.OutputEntry{{ID: "6", Base: "alpha", Text: "explicit", Kind: "creative"}}
 		}
 		result := h.prepareTranslatedCandidates(doc, []int{0}, []string{"1"}, map[string]string{"1": "a ⟦ruby:alpha/untrusted/creative⟧ body"}, map[string][]ruby.OutputEntry{"1": entries}, nil, quietLogger())
-		if result.err != nil || len(result.candidates) != 1 || len(result.unresolved) != 0 {
-			t.Fatalf("legacy main text was discarded: %+v", result)
-		}
-		c := result.candidates[0]
-		if c.Alignment.Translation != "a alpha body" || (len(c.Alignment.Verified) == 1) != withMapping {
-			t.Fatalf("legacy marker supplied unsupported alignment facts: %+v", c)
-		}
-		out, accepted, err := FinalizeCandidate(c)
-		if err != nil || !accepted {
-			t.Fatalf("legacy candidate=%+v %t %v", out, accepted, err)
-		}
-		if withMapping {
-			if out.TargetText != "a <ruby>alpha<rt>explicit</rt></ruby> body" {
-				t.Fatalf("marker overrode explicit mapping: %s", out.TargetText)
-			}
-		} else if len(out.Issues) != 1 || out.Issues[0].Code != qa.CodeRubyRestoreIncomplete {
-			t.Fatalf("source-item gap was hidden: %+v", out)
+		if result.err == nil || len(result.candidates) != 0 || doc.Segments[0].Target != "old" {
+			t.Fatalf("obsolete protocol created execution state or changed the accepted body: %+v", result)
 		}
 	}
 }
@@ -167,12 +152,11 @@ func TestStagedRubyRecoverySendsOnlyMissingIDs(t *testing.T) {
 	}
 	state.ApplyOutput([]string{"6"}, []ruby.OutputEntry{{ID: "6", Base: "alpha", Text: "a", Kind: "creative", Occurrence: 1}}, true)
 	c.Alignment = state
-	payload, err := c.Encode()
-	if err != nil {
+	store := NewMemoryRoundStore(nil)
+	if _, err := store.Seal(context.Background(), []int{0}); err != nil {
 		t.Fatal(err)
 	}
-	store := &rubyRecoveryStore{MemoryRoundStore: NewMemoryRoundStore(nil), payload: payload}
-	if _, err := store.Seal(context.Background(), []int{0}); err != nil {
+	if err := store.Save(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
 	main := &fakeBackend{name: "main"}
@@ -217,6 +201,13 @@ func TestStagedRubyTextV2PreservesEscapedFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.Alignment = state
+	digestBounds, err := backend.NewBuildBounds(1<<20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := state.ValidateBounded(digestBounds); err != nil {
+		t.Fatalf("fresh state bounded validation: %v", err)
+	}
 	baseJSON, err := json.Marshal(base)
 	if err != nil {
 		t.Fatal(err)
@@ -240,15 +231,19 @@ func TestStagedRubyTextV2PreservesEscapedFields(t *testing.T) {
 	if err := runtime.Window.Restore(c.ID, int64(len(payload))); err != nil {
 		t.Fatal(err)
 	}
+	store := NewMemoryRoundStore(nil)
+	if err := store.Save(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
 	h := &TranslateHandler{RubyRetryBackends: []backend.Backend{BindRequestBackend(align, 1, 0, runtime)}, RubyRetryAttempts: 1, RubyTemplates: testRubyTemplates(), ResponseMode: "text"}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result := processCandidate(ctx, Round{Handler: h}, c, NewMemoryRoundStore(nil), runtime, quietLogger(), progress.Nop{})
+	result := processCandidate(ctx, Round{Handler: h}, c, store, runtime, quietLogger(), progress.Nop{})
 	if result.err != nil || result.outcome != CommitAccepted || result.completed == nil {
-		t.Fatalf("text candidate=%+v", result)
+		t.Fatalf("text candidate=%+v cause=%v", result, result.err)
 	}
 	expected := base + " / <ruby>" + base + "<rt>" + html.EscapeString(annotation) + "</rt></ruby>"
-	if result.completed.TargetText != expected || c.Alignment.Translation != translation {
+	if result.completed.TargetText != expected || state.Translation != translation {
 		t.Fatalf("text protocol changed whitespace or escapes: %q", result.completed.TargetText)
 	}
 	if len(align.requests) != 1 || align.requests[0].ResponseFormat != "none" || align.requests[0].JSONSchema != nil {

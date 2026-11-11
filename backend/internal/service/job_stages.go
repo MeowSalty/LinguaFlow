@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
@@ -9,9 +10,33 @@ import (
 )
 
 type JobStageCounts = workstate.StageCounts
+type controlStageKey struct{}
+type controlStageObservation struct {
+	actor, id int
+	counts    *JobStageCounts
+}
+
+// Control DTO construction observes these already collected fixed scalars;
+// the SQL counts run before acquiring its short CPU owner.
+func (s *JobService) PrepareExecutionControlObservation(ctx context.Context, actor, id int) context.Context {
+	counts, _ := s.GetJobStageCounts(ctx, actor, id)
+	return context.WithValue(ctx, controlStageKey{}, controlStageObservation{actor, id, counts})
+}
 
 func (s *JobService) GetJobStageCounts(ctx context.Context, actorID, jobID int) (*JobStageCounts, error) {
-	if err := s.CheckJobAccess(ctx, actorID, jobID); err != nil {
+	if observation, ok := ctx.Value(controlStageKey{}).(controlStageObservation); ok && observation.actor == actorID && observation.id == jobID {
+		return observation.counts, nil
+	}
+	definition, control := ctx.Value(controlDefinitionKey{}).(*controlDefinition)
+	if control && definition.id == jobID {
+		ok, err := s.client.Job.Query().Where(job.IDEQ(jobID), job.HasProjectWith(readableProjectPredicate(actorID))).Exist(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, ErrForbidden
+		}
+	} else if err := s.CheckJobAccess(ctx, actorID, jobID); err != nil {
 		return nil, err
 	}
 	return workstate.ReadStageCounts(ctx, s.client, jobID)

@@ -7,7 +7,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/preview"
 )
 
 func TestManualJobFreezesInlineTermExtractionPerRound(t *testing.T) {
@@ -72,9 +71,6 @@ func TestQuickInlineTermExtractionUsesIsolatedGlossary(t *testing.T) {
 	if !runner.captured.Snapshot.GlossaryEnabled || !runner.captured.Snapshot.Rounds[0].Translate.InlineTermExtraction.Enabled {
 		t.Fatal("quick translation lost the round's extraction settings")
 	}
-	if _, ok := runner.captured.Glossary.(*preview.OverlayGlossary); !ok {
-		t.Fatal("quick extraction should use an isolated glossary overlay")
-	}
 	if _, err := runner.captured.Glossary.Add(ctx, glossary.Entry{Source: "Nebula", Target: "星云"}); err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +80,24 @@ func TestQuickInlineTermExtractionUsesIsolatedGlossary(t *testing.T) {
 	}
 	if client.GlossaryEntry.Query().CountX(ctx) != 1 || !client.Project.GetX(ctx, projectID).GlossaryEnabled {
 		t.Fatal("quick extraction persisted terms or changed project settings")
+	}
+	// A later call sees the database's original dictionary, while the first
+	// call still owns its extracted term. Check scope isolation, not wrappers.
+	first := runner.captured.Glossary
+	_, err = fixture.Translate(ctx, QuickTranslateInput{ActorUserID: userID, ProjectID: &projectID, ExecutionPlanID: planID, SourceText: "Nebula API"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	later, err := runner.captured.Glossary.Lookup(ctx, "Nebula API", "en", "zh")
+	if err != nil || len(later) != 1 || later[0].Source != "API" {
+		t.Fatalf("later call inherited temporary terms: %+v %v", later, err)
+	}
+	retained, err := first.Lookup(ctx, "Nebula API", "en", "zh")
+	if err != nil || len(retained) != 2 {
+		t.Fatalf("first scope lost its terms: %+v %v", retained, err)
+	}
+	if client.GlossaryEntry.Query().CountX(ctx) != 1 {
+		t.Fatal("temporary terms entered persistent dictionary")
 	}
 }
 

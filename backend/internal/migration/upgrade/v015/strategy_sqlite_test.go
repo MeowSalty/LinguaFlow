@@ -73,7 +73,7 @@ func TestSQLiteDefaultInplaceServeAndLocal(t *testing.T) {
 			}
 			if mode == "local" {
 				deployment := filepath.Join(sourceDir, "source.yml")
-				resolvedLocal, err := config.ResolveServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &deployment, Environment: map[string]string{}})
+				resolvedLocal, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &deployment, Environment: map[string]string{}})
 				if err != nil {
 					t.Fatal("resolve local deployment", err)
 				}
@@ -293,6 +293,9 @@ func TestSQLiteInplaceUpgradeRejectsOldAccessToken(t *testing.T) {
 	if err != nil {
 		t.Fatal("open upgraded service database", err)
 	}
+	// Maintenance parsing does not authorize model execution. This actual
+	// Server fixture supplies its own finite policy explicitly.
+	authorizeTestExecution(&resolved.Config)
 	server, err := api.NewServer(&resolved.Config, resolved.CredentialKeys, slog.New(slog.NewTextHandler(io.Discard, nil)), db, client, config.ModeServer, nil)
 	if err != nil {
 		db.Close()

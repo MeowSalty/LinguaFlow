@@ -19,8 +19,9 @@ import (
 // JobRoundSegmentUpdate is the builder for updating JobRoundSegment entities.
 type JobRoundSegmentUpdate struct {
 	config
-	hooks    []Hook
-	mutation *JobRoundSegmentMutation
+	hooks     []Hook
+	mutation  *JobRoundSegmentMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the JobRoundSegmentUpdate builder.
@@ -186,6 +187,12 @@ func (_u *JobRoundSegmentUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *JobRoundSegmentUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *JobRoundSegmentUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *JobRoundSegmentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -271,6 +278,7 @@ func (_u *JobRoundSegmentUpdate) sqlSave(ctx context.Context) (_node int, err er
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{jobroundsegment.Label}
@@ -286,9 +294,10 @@ func (_u *JobRoundSegmentUpdate) sqlSave(ctx context.Context) (_node int, err er
 // JobRoundSegmentUpdateOne is the builder for updating a single JobRoundSegment entity.
 type JobRoundSegmentUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *JobRoundSegmentMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *JobRoundSegmentMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetCommitID sets the "commit_id" field.
@@ -461,6 +470,12 @@ func (_u *JobRoundSegmentUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *JobRoundSegmentUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *JobRoundSegmentUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *JobRoundSegmentUpdateOne) sqlSave(ctx context.Context) (_node *JobRoundSegment, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -563,6 +578,7 @@ func (_u *JobRoundSegmentUpdateOne) sqlSave(ctx context.Context) (_node *JobRoun
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &JobRoundSegment{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

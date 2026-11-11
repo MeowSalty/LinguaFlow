@@ -20,8 +20,9 @@ import (
 // SegmentRevisionUpdate is the builder for updating SegmentRevision entities.
 type SegmentRevisionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *SegmentRevisionMutation
+	hooks     []Hook
+	mutation  *SegmentRevisionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the SegmentRevisionUpdate builder.
@@ -384,6 +385,12 @@ func (_u *SegmentRevisionUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SegmentRevisionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SegmentRevisionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SegmentRevisionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -507,6 +514,7 @@ func (_u *SegmentRevisionUpdate) sqlSave(ctx context.Context) (_node int, err er
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{segmentrevision.Label}
@@ -522,9 +530,10 @@ func (_u *SegmentRevisionUpdate) sqlSave(ctx context.Context) (_node int, err er
 // SegmentRevisionUpdateOne is the builder for updating a single SegmentRevision entity.
 type SegmentRevisionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *SegmentRevisionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *SegmentRevisionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetSourceGeneration sets the "source_generation" field.
@@ -894,6 +903,12 @@ func (_u *SegmentRevisionUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *SegmentRevisionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *SegmentRevisionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *SegmentRevisionUpdateOne) sqlSave(ctx context.Context) (_node *SegmentRevision, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1034,6 +1049,7 @@ func (_u *SegmentRevisionUpdateOne) sqlSave(ctx context.Context) (_node *Segment
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &SegmentRevision{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

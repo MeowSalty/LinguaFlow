@@ -20,8 +20,9 @@ import (
 // StorageCheckUpdate is the builder for updating StorageCheck entities.
 type StorageCheckUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageCheckMutation
+	hooks     []Hook
+	mutation  *StorageCheckMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageCheckUpdate builder.
@@ -177,6 +178,12 @@ func (_u *StorageCheckUpdate) defaults() {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageCheckUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageCheckUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageCheckUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(storagecheck.Table, storagecheck.Columns, sqlgraph.NewFieldSpec(storagecheck.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -221,6 +228,7 @@ func (_u *StorageCheckUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.ResultsCleared() {
 		_spec.ClearField(storagecheck.FieldResults, field.TypeJSON)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storagecheck.Label}
@@ -236,9 +244,10 @@ func (_u *StorageCheckUpdate) sqlSave(ctx context.Context) (_node int, err error
 // StorageCheckUpdateOne is the builder for updating a single StorageCheck entity.
 type StorageCheckUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageCheckMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageCheckMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -401,6 +410,12 @@ func (_u *StorageCheckUpdateOne) defaults() {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageCheckUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageCheckUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageCheckUpdateOne) sqlSave(ctx context.Context) (_node *StorageCheck, err error) {
 	_spec := sqlgraph.NewUpdateSpec(storagecheck.Table, storagecheck.Columns, sqlgraph.NewFieldSpec(storagecheck.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
@@ -462,6 +477,7 @@ func (_u *StorageCheckUpdateOne) sqlSave(ctx context.Context) (_node *StorageChe
 	if _u.mutation.ResultsCleared() {
 		_spec.ClearField(storagecheck.FieldResults, field.TypeJSON)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageCheck{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

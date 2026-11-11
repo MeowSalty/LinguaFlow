@@ -31,7 +31,7 @@ func generate() error {
 		return err
 	}
 	defer os.RemoveAll(temporary)
-	if err := entc.Generate("./schema", &gen.Config{Target: temporary, Package: "github.com/MeowSalty/LinguaFlow/backend/internal/ent", Features: []gen.Feature{gen.FeatureExecQuery}}); err != nil {
+	if err := entc.Generate("./schema", &gen.Config{Target: temporary, Package: "github.com/MeowSalty/LinguaFlow/backend/internal/ent", Features: []gen.Feature{gen.FeatureExecQuery, gen.FeatureModifier}}); err != nil {
 		return err
 	}
 	generated := make(map[string]bool)

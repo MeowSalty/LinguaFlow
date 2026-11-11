@@ -17,8 +17,9 @@ import (
 // StorageNamespaceUpdate is the builder for updating StorageNamespace entities.
 type StorageNamespaceUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageNamespaceMutation
+	hooks     []Hook
+	mutation  *StorageNamespaceMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageNamespaceUpdate builder.
@@ -59,6 +60,12 @@ func (_u *StorageNamespaceUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageNamespaceUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageNamespaceUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageNamespaceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(storagenamespace.Table, storagenamespace.Columns, sqlgraph.NewFieldSpec(storagenamespace.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -68,6 +75,7 @@ func (_u *StorageNamespaceUpdate) sqlSave(ctx context.Context) (_node int, err e
 			}
 		}
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storagenamespace.Label}
@@ -83,9 +91,10 @@ func (_u *StorageNamespaceUpdate) sqlSave(ctx context.Context) (_node int, err e
 // StorageNamespaceUpdateOne is the builder for updating a single StorageNamespace entity.
 type StorageNamespaceUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageNamespaceMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageNamespaceMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Mutation returns the StorageNamespaceMutation object of the builder.
@@ -133,6 +142,12 @@ func (_u *StorageNamespaceUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageNamespaceUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageNamespaceUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageNamespaceUpdateOne) sqlSave(ctx context.Context) (_node *StorageNamespace, err error) {
 	_spec := sqlgraph.NewUpdateSpec(storagenamespace.Table, storagenamespace.Columns, sqlgraph.NewFieldSpec(storagenamespace.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
@@ -159,6 +174,7 @@ func (_u *StorageNamespaceUpdateOne) sqlSave(ctx context.Context) (_node *Storag
 			}
 		}
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageNamespace{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

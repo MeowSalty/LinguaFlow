@@ -11,7 +11,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/preview"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/previewtoken"
@@ -56,15 +55,16 @@ type RevisionRoundSummary struct {
 
 // RevisionPreviewResult 是 RevisionPreviewRunner 返回的内存结果。
 type RevisionPreviewResult struct {
-	Status        string
-	SegmentID     int
-	SourceText    string
-	TargetText    string
-	QualityIssues []qa.QualityIssue
-	Metrics       []backend.MeterMetrics
-	Collector     *preview.MemoryCollector
-	RoundSummary  []RevisionRoundSummary
-	Warnings      []string
+	ExecutionInputOwnership `json:"-"`
+	Status                  string
+	SegmentID               int
+	SourceText              string
+	TargetText              string
+	QualityIssues           []qa.QualityIssue
+	Metrics                 []backend.MeterMetrics
+	Collector               *preview.MemoryCollector
+	RoundSummary            []RevisionRoundSummary
+	Warnings                []string
 }
 
 // RevisionPreviewRunner 执行不落库的单段修订轮。
@@ -85,20 +85,21 @@ type RevisionPreviewRunner interface {
 
 // RevisionPreviewOutput 是修订预览 API 的服务层输出。
 type RevisionPreviewOutput struct {
-	Status             string
-	SegmentID          int
-	SourceText         string
-	OriginalTargetText string
-	TargetText         string
-	FixIssues          []qa.QualityIssue
-	QualityIssues      []qa.QualityIssue
-	Snapshot           *JobExecutionSnapshot
-	ApplyToken         string
-	ApplyExpiresAt     time.Time
-	Warnings           []string
-	RoundSummary       []RevisionRoundSummary
-	Usage              UsageSummary
-	BatchEvents        []progress.BatchEvent
+	ExecutionInputOwnership `json:"-"`
+	Status                  string
+	SegmentID               int
+	SourceText              string
+	OriginalTargetText      string
+	TargetText              string
+	FixIssues               []qa.QualityIssue
+	QualityIssues           []qa.QualityIssue
+	Snapshot                *JobExecutionSnapshot
+	ApplyToken              string
+	ApplyExpiresAt          time.Time
+	Warnings                []string
+	RoundSummary            []RevisionRoundSummary
+	Usage                   UsageSummary
+	BatchEvents             []progress.BatchEvent
 }
 
 // RevisionPreviewService 编排单段交互式修订预览。
@@ -162,21 +163,42 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 
 	previewCtx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
+	previewCtx = WithExecutionActor(previewCtx, input.ActorUserID)
+	previewCtx, inputErr := PrepareExecutionInputs(previewCtx, s.previewRunner)
+	if inputErr != nil {
+		return nil, inputErr
+	}
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			ExecutionInputOwner(previewCtx).ReleaseExecutionInputs()
+		}
+	}()
 
 	projectRow, err := s.projects.requireProjectAccess(previewCtx, input.ActorUserID, input.ProjectID, true)
 	if err != nil {
 		return nil, fmt.Errorf("revision preview: project access: %w", err)
 	}
 
-	segRow, err := s.client.Segment.Query().
-		Where(segment.IDEQ(input.SegmentID), segment.ResourceIDEQ(input.ResourceID)).
-		Only(previewCtx)
-	if err != nil {
-		return nil, ErrSegmentNotFound
-	}
 	resRow, err := s.client.Resource.Get(previewCtx, input.ResourceID)
 	if err != nil || resRow.ProjectID == nil || *resRow.ProjectID != input.ProjectID {
 		return nil, ErrResourceNotFound
+	}
+	allSegments, _, err := LoadExecutionSegments(previewCtx, s.client, input.ResourceID)
+	if err != nil {
+		return nil, fmt.Errorf("revision preview: load segments: %w", err)
+	}
+	targetSegmentIdx := -1
+	var segRow *ent.Segment
+	for i, row := range allSegments {
+		if row.ID == input.SegmentID {
+			targetSegmentIdx = i
+			segRow = row
+			break
+		}
+	}
+	if segRow == nil {
+		return nil, ErrSegmentNotFound
 	}
 
 	if (segRow.Status != SegmentStatusTranslated && segRow.Status != SegmentStatusEdited) ||
@@ -227,24 +249,6 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 	}
 	executionSnapshot = *resolved
 
-	allSegments, err := s.client.Segment.Query().
-		Where(segment.ResourceIDEQ(input.ResourceID)).
-		Order(segment.BySegmentIndex(), segment.ByID()).
-		All(previewCtx)
-	if err != nil {
-		return nil, fmt.Errorf("revision preview: load segments: %w", err)
-	}
-	targetSegmentIdx := -1
-	for i, row := range allSegments {
-		if row.ID == input.SegmentID {
-			targetSegmentIdx = i
-			break
-		}
-	}
-	if targetSegmentIdx < 0 {
-		return nil, ErrSegmentNotFound
-	}
-
 	qaClaims := qaConfigFromSnapshot(snapshot, resRow.Format)
 	qaConfig := qa.Config{
 		Enabled:        qaClaims.Enabled,
@@ -262,6 +266,16 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 	repairOpts := repairOptionsFromSnapshot(snapshot)
 	result, err := s.previewRunner.RunRevisionPreview(previewCtx, &executionSnapshot, projectRow, resRow, allSegments, targetSegmentIdx, qaConfig, repairOpts, synthesized)
 	if err != nil {
+		if result != nil {
+			metrics := aggregateMetrics(result.Metrics)
+			if metrics.APICalls > 0 {
+				usageCtx, cancel := context.WithTimeout(context.WithoutCancel(previewCtx), 5*time.Second)
+				defer cancel()
+				if usageErr := s.recordUsage(usageCtx, PreviewInput{ActorUserID: input.ActorUserID, ProjectID: input.ProjectID, ResourceID: input.ResourceID, SegmentID: input.SegmentID, ExecutionPlanID: input.ExecutionPlanID}, projectRow, metrics); usageErr != nil {
+					s.logger.Warn("revision preview: failed execution usage record", "err", usageErr)
+				}
+			}
+		}
 		return nil, fmt.Errorf("revision preview: execute: %w", err)
 	}
 	if result == nil {
@@ -320,22 +334,27 @@ func (s *RevisionPreviewService) RunRevisionPreview(ctx context.Context, input R
 	var events []progress.BatchEvent
 	if result.Collector != nil {
 		events = result.Collector.Events()
+		if err := result.Collector.Err(); err != nil {
+			return nil, err
+		}
 	}
+	handedOff = true
 	return &RevisionPreviewOutput{
-		Status:             result.Status,
-		SegmentID:          result.SegmentID,
-		SourceText:         segRow.SourceText,
-		OriginalTargetText: *segRow.TargetText,
-		TargetText:         result.TargetText,
-		FixIssues:          fixIssues,
-		QualityIssues:      result.QualityIssues,
-		Snapshot:           &executionSnapshot,
-		ApplyToken:         applyToken,
-		ApplyExpiresAt:     applyExpiresAt,
-		Warnings:           result.Warnings,
-		RoundSummary:       result.RoundSummary,
-		Usage:              UsageSummary{APICalls: usageMetrics.APICalls, InputTokens: usageMetrics.InputTokens, OutputTokens: usageMetrics.OutputTokens},
-		BatchEvents:        events,
+		ExecutionInputOwnership: ExecutionInputOwner(previewCtx),
+		Status:                  result.Status,
+		SegmentID:               result.SegmentID,
+		SourceText:              segRow.SourceText,
+		OriginalTargetText:      *segRow.TargetText,
+		TargetText:              result.TargetText,
+		FixIssues:               fixIssues,
+		QualityIssues:           result.QualityIssues,
+		Snapshot:                &executionSnapshot,
+		ApplyToken:              applyToken,
+		ApplyExpiresAt:          applyExpiresAt,
+		Warnings:                result.Warnings,
+		RoundSummary:            result.RoundSummary,
+		Usage:                   UsageSummary{APICalls: usageMetrics.APICalls, InputTokens: usageMetrics.InputTokens, OutputTokens: usageMetrics.OutputTokens},
+		BatchEvents:             events,
 	}, nil
 }
 

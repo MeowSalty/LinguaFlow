@@ -41,44 +41,55 @@ type Round struct {
 // Station 是站位信号量：容量即该轮次的并发预算。
 // 由 worker 层注入（跨资源共享同一实例）；pipeline 层只 acquire/release。
 type Station struct {
-	sem chan struct{}
+	mu                 sync.Mutex
+	capacity, inflight int
+	changed            chan struct{}
 }
 
-// NewStation 创建容量为 capacity 的站位；capacity <= 0 时钳制为 1。
 func NewStation(capacity int) *Station {
 	if capacity < 1 {
 		capacity = 1
 	}
-	return &Station{sem: make(chan struct{}, capacity)}
+	return &Station{capacity: capacity, changed: make(chan struct{})}
 }
-
-// Acquire 获取一个槽位；返回 false 表示 ctx 已取消（未获取槽位）。
 func (s *Station) Acquire(ctx context.Context) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-	select {
-	case s.sem <- struct{}{}:
-		return true
-	case <-ctx.Done():
-		return false
+	for {
+		if ctx.Err() != nil {
+			return false
+		}
+		s.mu.Lock()
+		if s.inflight < s.capacity {
+			s.inflight++
+			s.mu.Unlock()
+			return true
+		}
+		wake := s.changed
+		s.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return false
+		case <-wake:
+		}
 	}
 }
-
-// TryAcquire does not wait or reserve a slot for future work. Joint request
-// admission uses its own frozen scope; this supports remaining local callers.
 func (s *Station) TryAcquire() bool {
-	select {
-	case s.sem <- struct{}{}:
-		return true
-	default:
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.inflight >= s.capacity {
 		return false
 	}
+	s.inflight++
+	return true
 }
-
-// Release 释放一个槽位。
 func (s *Station) Release() {
-	<-s.sem
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.inflight < 1 {
+		panic("station released without an owner")
+	}
+	s.inflight--
+	close(s.changed)
+	s.changed = make(chan struct{})
 }
 
 // PauseGate 是任务级暂停闸门（与 ctx 取消分离的优雅排空信号）。

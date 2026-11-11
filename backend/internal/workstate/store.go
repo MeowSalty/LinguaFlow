@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"sort"
 
+	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
@@ -18,6 +21,49 @@ import (
 )
 
 type Store struct{ client *ent.Client }
+
+var candidateSaveFields = []string{workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldParentRequestID, workcandidate.FieldVersion, workcandidate.FieldWorkItemID, workcandidate.FieldDtoVersion, workcandidate.FieldSnapshotDigest, workcandidate.FieldMode, workcandidate.FieldSourceGeneration, workcandidate.FieldSourceRevisionID, workcandidate.FieldBaselineVersion, workcandidate.FieldBaselineStatus, workcandidate.FieldState, workcandidate.FieldPayloadBytes, workcandidate.FieldPipelineHeader}
+
+func candidatePayloadLimit(c Candidate) int64 {
+	if c.PayloadLimit > 0 {
+		return c.PayloadLimit
+	}
+	return 1 << 20
+}
+
+// candidatePayloadMatches verifies a retained version without copying its body
+// into the response owner. PostgreSQL JSONB compares semantic values directly;
+// SQLite's canonical writer permits its JSON whitespace normalization.
+func candidatePayloadMatches(ctx context.Context, tx *ent.Client, old *ent.WorkCandidate, payload []byte, limit int64) (bool, error) {
+	if old.PayloadBytes < 0 || old.PayloadBytes > limit || int64(len(payload)) > limit {
+		return false, backend.ErrBuildCapacity
+	}
+	return tx.WorkCandidate.Query().Where(workcandidate.IDEQ(old.ID), workcandidate.VersionEQ(old.Version), func(sel *sql.Selector) {
+		sel.Where(candidateJSONEquality(sel, payload))
+	}).Exist(ctx)
+}
+
+func candidateJSONEquality(sel *sql.Selector, payload []byte) *sql.Predicate {
+	return storageJSONEquality(sel, workcandidate.FieldPayload, payload, false)
+}
+
+func storageJSONEquality(sel *sql.Selector, field string, payload []byte, nullable bool) *sql.Predicate {
+	column := sel.C(field)
+	if sel.Dialect() == "postgres" {
+		if nullable {
+			column = "COALESCE(" + column + ",'null'::jsonb)"
+		}
+		return sql.P(func(b *sql.Builder) {
+			b.WriteString(column).WriteString(" = CAST(").Arg(string(payload)).WriteString(" AS JSONB)")
+		})
+	}
+	if nullable {
+		column = "COALESCE(" + column + ",'null')"
+	}
+	return sql.P(func(b *sql.Builder) {
+		b.WriteString("json(" + column + ") = json(").Arg(string(payload)).WriteString(")")
+	})
+}
 
 func NewStore(client *ent.Client) *Store { return &Store{client: client} }
 
@@ -279,7 +325,7 @@ func (s *Store) SavePool(ctx context.Context, scope Scope, pool int) error {
 	})
 }
 
-func lockSegment(ctx context.Context, tx *ent.Client, scope Scope, id int, version int64) (*ent.Segment, error) {
+func lockSegment(ctx context.Context, tx *ent.Client, scope Scope, id int, version int64, factsOnly ...bool) (*ent.Segment, error) {
 	if version < 1 {
 		return nil, ErrStale
 	}
@@ -289,6 +335,9 @@ func lockSegment(ctx context.Context, tx *ent.Client, scope Scope, id int, versi
 	}
 	if n != 1 {
 		return nil, ErrStale
+	}
+	if len(factsOnly) > 0 && factsOnly[0] {
+		return tx.Segment.Query().Where(segment.IDEQ(id)).Select(segment.FieldID, segment.FieldContentVersion, segment.FieldTargetText, segment.FieldStatus).Only(ctx)
 	}
 	return tx.Segment.Get(ctx, id)
 }
@@ -305,7 +354,10 @@ func (s *Store) SaveCandidateWithCursor(ctx context.Context, c Candidate, cursor
 }
 
 func (s *Store) saveCandidate(ctx context.Context, c Candidate, cursor *Cursor) error {
-	if c.ID == "" || c.Version < 1 || c.DTOVersion < 1 || c.SnapshotDigest == "" || !json.Valid(c.Payload) {
+	if int64(len(c.Payload)) > candidatePayloadLimit(c) {
+		return backend.ErrBuildCapacity
+	}
+	if c.ID == "" || len(c.ID) > 128 || len(c.WorkID) > 128 || len(c.ParentRequestID) > 128 || c.Version < 1 || c.DTOVersion < 1 || c.SnapshotDigest == "" || !json.Valid(c.Payload) {
 		return fmt.Errorf("invalid candidate")
 	}
 	if c.State == "" {
@@ -330,14 +382,18 @@ func (s *Store) saveCandidate(ctx context.Context, c Candidate, cursor *Cursor) 
 		if err != nil {
 			return false, err
 		}
-		row, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Only(ctx)
+		row, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID), workcandidate.PayloadBytesLTE(candidatePayloadLimit(c))).Select(candidateSaveFields...).Only(ctx)
 		if ent.IsNotFound(err) {
 			return false, nil
 		}
 		if err != nil {
 			return false, err
 		}
-		if row.WorkItemID != w.ID || row.Version != c.Version || row.SnapshotDigest != c.SnapshotDigest || row.DtoVersion != c.DTOVersion || row.Mode != c.Mode || row.BaselineVersion != c.BaselineVersion || row.State != c.State || string(row.Payload) != string(c.Payload) {
+		equal, equalErr := candidatePayloadMatches(ctx, tx, row, c.Payload, candidatePayloadLimit(c))
+		if equalErr != nil {
+			return false, equalErr
+		}
+		if row.WorkItemID != w.ID || row.Version != c.Version || row.SnapshotDigest != c.SnapshotDigest || row.DtoVersion != c.DTOVersion || row.Mode != c.Mode || row.BaselineVersion != c.BaselineVersion || row.State != c.State || !equal {
 			if row.WorkItemID == w.ID && row.Version < c.Version {
 				return false, nil
 			}
@@ -361,7 +417,7 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 	if w.State == "resolved" {
 		return ErrStale
 	}
-	old, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Only(ctx)
+	old, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Select(candidateSaveFields...).Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
 		return err
 	}
@@ -374,15 +430,15 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 			return err
 		}
 	}
-	row, err := lockSegment(ctx, tx, c.Scope, c.SegmentID, c.BaselineVersion)
+	row, err := lockSegment(ctx, tx, c.Scope, c.SegmentID, c.BaselineVersion, true)
 	if err != nil {
 		return err
 	}
-	if !sameString(row.TargetText, c.BaselineTarget) || string(row.Status) != c.BaselineStatus {
+	if !candidateBaselineMatches(c, row.TargetText) || string(row.Status) != c.BaselineStatus {
 		return ErrStale
 	}
 	if old != nil {
-		validDTO := old.DtoVersion == c.DTOVersion || (old.DtoVersion == 1 && c.DTOVersion == 2 && c.Version > old.Version)
+		validDTO := old.DtoVersion == c.DTOVersion
 		if old.WorkItemID != w.ID || old.BaselineVersion != c.BaselineVersion || old.SnapshotDigest != c.SnapshotDigest || !validDTO || old.Mode != c.Mode || old.SourceGeneration != c.Scope.SourceGeneration || !sameInt(old.SourceRevisionID, c.Scope.SourceRevisionID) {
 			return ErrCandidateVersion
 		}
@@ -393,7 +449,11 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 			return ErrCandidateVersion
 		}
 		if c.Version == old.Version {
-			if string(c.Payload) != string(old.Payload) || c.State != old.State {
+			equal, equalErr := candidatePayloadMatches(ctx, tx, old, c.Payload, candidatePayloadLimit(c))
+			if equalErr != nil {
+				return equalErr
+			}
+			if !equal || c.State != old.State {
 				return ErrCandidateVersion
 			}
 			return nil
@@ -401,7 +461,7 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 		if c.Version != old.Version+1 || w.CandidateID != c.ID {
 			return ErrCandidateVersion
 		}
-		if err := tx.WorkCandidate.UpdateOneID(old.ID).SetVersion(c.Version).SetDtoVersion(c.DTOVersion).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).Exec(ctx); err != nil {
+		if err := tx.WorkCandidate.UpdateOneID(old.ID).SetVersion(c.Version).SetDtoVersion(c.DTOVersion).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).SetPipelineHeader(c.PipelineHeader).Exec(ctx); err != nil {
 			return err
 		}
 	} else {
@@ -417,25 +477,63 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 				return ErrCandidateVersion
 			}
 		}
-		if err := tx.WorkCandidate.Create().SetIdentity(c.ID).SetParentRequestID(c.ParentRequestID).SetVersion(c.Version).SetWorkItemID(w.ID).SetDtoVersion(c.DTOVersion).SetSnapshotDigest(c.SnapshotDigest).SetMode(c.Mode).SetSourceGeneration(c.Scope.SourceGeneration).SetNillableSourceRevisionID(c.Scope.SourceRevisionID).SetBaselineVersion(c.BaselineVersion).SetNillableBaselineTarget(c.BaselineTarget).SetBaselineStatus(c.BaselineStatus).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).Exec(ctx); err != nil {
+		if err := tx.WorkCandidate.Create().SetIdentity(c.ID).SetParentRequestID(c.ParentRequestID).SetVersion(c.Version).SetWorkItemID(w.ID).SetDtoVersion(c.DTOVersion).SetSnapshotDigest(c.SnapshotDigest).SetMode(c.Mode).SetSourceGeneration(c.Scope.SourceGeneration).SetNillableSourceRevisionID(c.Scope.SourceRevisionID).SetBaselineVersion(c.BaselineVersion).SetNillableBaselineTarget(c.BaselineTarget).SetBaselineDigest(c.BaselineDigest).SetBaselineTargetIsNull(c.BaselineTargetIsNull).SetBaselineStatus(c.BaselineStatus).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).SetPipelineHeader(c.PipelineHeader).Exec(ctx); err != nil {
 			return err
 		}
 	}
-	return tx.WorkItem.UpdateOneID(w.ID).SetCandidateID(c.ID).SetState("candidate").Exec(ctx)
+	return tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(true).SetCandidateID(c.ID).SetState("candidate").Exec(ctx)
 }
 
 // guardCandidateHandoff permits saves backed by a request admitted in the
 // current retry epoch. A retained candidate keeps its original main parent;
 // after Retry, its admitted alignment request supplies the new epoch's proof.
 func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old *ent.WorkCandidate) error {
+	if old == nil {
+		ok, err := guardPromotedResponse(ctx, tx, c)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+	}
 	if old != nil {
 		var saved struct {
-			RetryEpoch             int64  `json:"retry_epoch"`
-			LastAlignmentRequestID string `json:"last_alignment_request_id"`
+			RetryEpoch             int64
+			LastAlignmentRequestID string
 		}
-		validSaved := json.Unmarshal(old.Payload, &saved) == nil && saved.RetryEpoch == c.Scope.RetryEpoch
-		if validSaved && old.Version == c.Version && old.State == c.State && string(old.Payload) == string(c.Payload) {
-			return nil
+		validSaved := false
+		lastAlignmentMatches := false
+		if len(old.PipelineHeader) > 0 && len(old.PipelineHeader) <= 2048 {
+			b, e := backend.NewBuildBounds(2048, 0)
+			validSaved = e == nil && b.DecodeJSON(old.PipelineHeader, &saved) == nil && saved.RetryEpoch == c.Scope.RetryEpoch
+			lastAlignmentMatches = saved.LastAlignmentRequestID == c.LastAlignmentRequestID
+		} else {
+			// Legacy lifecycle proof is also scalar: do not read the old Q body
+			// after an already paid request merely to inspect two fields.
+			proof := tx.WorkCandidate.Query().Where(workcandidate.IDEQ(old.ID), workcandidate.VersionEQ(old.Version), func(sel *sql.Selector) {
+				sel.Where(sqljson.ValueEQ(sel.C(workcandidate.FieldPayload), c.Scope.RetryEpoch, sqljson.Path("retry_epoch")))
+			})
+			var err error
+			validSaved, err = proof.Clone().Exist(ctx)
+			if err != nil {
+				return err
+			}
+			lastAlignmentMatches, err = proof.Where(func(sel *sql.Selector) {
+				sel.Where(sqljson.ValueEQ(sel.C(workcandidate.FieldPayload), c.LastAlignmentRequestID, sqljson.Path("last_alignment_request_id")))
+			}).Exist(ctx)
+			if err != nil {
+				return err
+			}
+		}
+		if validSaved && old.Version == c.Version && old.State == c.State {
+			equal, equalErr := candidatePayloadMatches(ctx, tx, old, c.Payload, candidatePayloadLimit(c))
+			if equalErr != nil {
+				return equalErr
+			}
+			if equal {
+				return nil
+			}
 		}
 		w, err := member(ctx, tx, c.Scope, c.SegmentID)
 		if err != nil {
@@ -452,7 +550,7 @@ func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old
 			// A locally exhausted candidate may be finalized without another
 			// invocation. Its already saved response supplies the authorization;
 			// it does not authorize clearing any newer network debit.
-			if validSaved && saved.LastAlignmentRequestID == c.LastAlignmentRequestID {
+			if validSaved && lastAlignmentMatches {
 				ok, err = alignmentProof(ctx, tx, c.Scope, w, c.LastAlignmentRequestID, c.WorkID, old.Version, false)
 				if err != nil {
 					return err
@@ -541,4 +639,17 @@ func (s *Store) PauseRequested(ctx context.Context, jobID int) (bool, error) {
 		return false, err
 	}
 	return row.PauseRequested || row.Status == "pausing" || row.Status == "paused", nil
+}
+
+func candidateBaselineMatches(c Candidate, target *string) bool {
+	if c.BaselineDigest != "" {
+		return c.BaselineTargetIsNull == (target == nil) && c.BaselineDigest == stringDigest(target)
+	}
+	return sameString(target, c.BaselineTarget)
+}
+func promotionCandidateBaselineMatches(m PromotionMember, c Candidate) bool {
+	if c.BaselineDigest != "" {
+		return m.BaselineDigest == c.BaselineDigest && m.BaselineTargetIsNull == c.BaselineTargetIsNull
+	}
+	return samePromotionBaseline(m, c.BaselineTarget)
 }

@@ -2,24 +2,42 @@
 // 独立于任何处理逻辑，供 pipeline、protect、parser 等包共同引用。
 package model
 
-import "github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+import (
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"time"
+)
+
+// RoundWorkCursor is fixed execution metadata in the one canonical Document.
+// It has no opaque payload or user metadata, and is excluded from all wire DTOs.
+type RoundWorkCursor struct {
+	Pool, Attempt, LogicalAttempt, NetworkAttempt int
+	Phase, State                                  string
+	NextAttemptAt                                 time.Time
+}
+type RoundWorkRecord struct {
+	Cursor            RoundWorkCursor
+	Member, Completed bool
+}
 
 // Segment 是文档中一个可翻译的最小单元。
 type Segment struct {
-	DBID           int   // Database identity; distinct from the prompt-facing ID.
-	ContentVersion int64 // Monotonic baseline for accepting a candidate.
-	TargetIsNull   bool
-	ID             string            // 稳定 hash（基于 Source）
-	Source         string            // 原文；protect stage 之后变为含占位符的版本
-	OriginalSource string            // protect 之前的原文快照，供上下文展示给 LLM 使用
-	Target         string            // 译文；translate stage 写入；unprotect 还原占位符
-	Protected      map[string]string // 占位符 → 原片段
-	Meta           map[string]any    // parser 注入的格式信息（块类型、行号、缩进等）
-	Skip           bool              // 增量翻译标记：true 时 translate stage 跳过
-	Translate      bool              // 上下文标记：true=需要翻译，false=仅作上下文参考
-	StructuralOnly bool              // 结构段标记：在本轮保护配置下剥离可保护跨度后无字母/数字。由 translate 轮 BuildBatches 池 0 对全部非 Skip 段统一判定（含 Translate=false；Skip 段不标记——消费方均先被 Skip 短路），驱动送翻跳过与上下文过滤；不持久化，随每轮保护配置浮动。零值 false=未标记，按"有内容"处理（fail-open）
-	Issues         []qa.QualityIssue // 质量问题（裁决轮从 DB 重载；translate 轮通常为空）
-	Status         string            // 段落状态：pending/translated/edited/approved/rejected
+	DBIndex         int             `json:"-"`
+	CompletionModes uint8           `json:"-"`
+	RoundWork       RoundWorkRecord `json:"-"`
+	DBID            int             // Database identity; distinct from the prompt-facing ID.
+	ContentVersion  int64           // Monotonic baseline for accepting a candidate.
+	TargetIsNull    bool
+	ID              string            // 稳定 hash（基于 Source）
+	Source          string            // 原文；protect stage 之后变为含占位符的版本
+	OriginalSource  string            // protect 之前的原文快照，供上下文展示给 LLM 使用
+	Target          string            // 译文；translate stage 写入；unprotect 还原占位符
+	Protected       map[string]string // 占位符 → 原片段
+	Meta            map[string]any    // parser 注入的格式信息（块类型、行号、缩进等）
+	Skip            bool              // 增量翻译标记：true 时 translate stage 跳过
+	Translate       bool              // 上下文标记：true=需要翻译，false=仅作上下文参考
+	StructuralOnly  bool              // 结构段标记：在本轮保护配置下剥离可保护跨度后无字母/数字。由 translate 轮 BuildBatches 池 0 对全部非 Skip 段统一判定（含 Translate=false；Skip 段不标记——消费方均先被 Skip 短路），驱动送翻跳过与上下文过滤；不持久化，随每轮保护配置浮动。零值 false=未标记，按"有内容"处理（fail-open）
+	Issues          []qa.QualityIssue // 质量问题（裁决轮从 DB 重载；translate 轮通常为空）
+	Status          string            // 段落状态：pending/translated/edited/approved/rejected
 }
 
 // Document 是 parser 解析后的中间表示。stages 在其上原地修改。

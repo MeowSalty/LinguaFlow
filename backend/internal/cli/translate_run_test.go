@@ -57,7 +57,7 @@ func TestResolveCLIExecutionFreezesValuesWithoutSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resolved.Close()
-	if resolved.Spec.SchemaVersion != 3 || resolved.Spec.DefaultsVersion != 3 || resolved.Spec.RubyProtocolVersion != 2 || resolved.Spec.RubyValidatorVersion != 1 || resolved.Spec.RubyBatchProtocolVersion != 1 || resolved.Spec.RubyRetry.Concurrency != 1 {
+	if resolved.Spec.SchemaVersion != 4 || resolved.Spec.DefaultsVersion != 4 || resolved.Spec.ResponseFormatVersion != 1 || resolved.Spec.RubyProtocolVersion != 2 || resolved.Spec.RubyValidatorVersion != 1 || resolved.Spec.RubyBatchProtocolVersion != 1 || resolved.Spec.RubyRetry.Concurrency != 1 {
 		t.Fatal("CLI did not freeze the new version and independent default concurrency")
 	}
 	if resolved.Spec.RubyTemplates.JSON != prompt.RubyAlignmentJSONTemplate || resolved.Spec.RubyTemplates.Text != prompt.RubyAlignmentTextTemplate || resolved.Spec.RubyTemplates.BatchJSON != prompt.RubyAlignmentBatchJSONTemplate || resolved.Spec.RubyTemplates.BatchText != prompt.RubyAlignmentBatchTextTemplate {

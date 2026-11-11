@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
 func TestMigrateExecutionExtractSendAllPreservesHistory(t *testing.T) {
@@ -28,7 +26,7 @@ func TestMigrateExecutionExtractSendAllPreservesHistory(t *testing.T) {
 	if after.Status != old.Status || after.ProgressTotal != old.ProgressTotal || after.ProgressCompleted != old.ProgressCompleted || !after.CreatedAt.Equal(old.CreatedAt) || !after.UpdatedAt.Equal(old.UpdatedAt) {
 		t.Fatal("migration changed historical job state")
 	}
-	snapshot, err := service.GetSnapshot(after)
+	snapshot, err := readFrozenExecutionTest(after)
 	if err != nil {
 		t.Fatal(err)
 	}

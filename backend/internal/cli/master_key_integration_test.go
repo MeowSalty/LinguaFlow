@@ -50,7 +50,7 @@ func masterKeyRuntimeInputs(t *testing.T, dir string) config.ServerInputs {
 
 func masterKeyRuntimeResolve(t *testing.T, input config.ServerInputs) *config.ResolvedServer {
 	t.Helper()
-	resolved, err := config.ResolveServerConfig(input)
+	resolved, err := resolveTestServerConfig(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func TestMasterKeyRuntimeResolvedFileSnapshot(t *testing.T) {
 	if err != nil || secret != "snapshot-provider-secret" {
 		t.Fatalf("bootstrap reread the keyring after resolution: %v", err)
 	}
-	if _, err := config.ResolveServerConfig(input); err == nil {
+	if _, err := resolveTestServerConfig(input); err == nil {
 		t.Fatal("new resolution ignored a corrupt keyring file")
 	}
 }

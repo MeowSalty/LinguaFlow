@@ -13,79 +13,40 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
-func TestBuildCfg_ThinkingLevel(t *testing.T) {
-	req := backend.Request{
-		System: "sys",
-		User:   "user",
-		Model:  "gemini-2.5-flash",
-	}
-
-	t.Run("unset omits ThinkingConfig", func(t *testing.T) {
-		b := &Backend{model: "gemini-2.5-flash"}
-		_, _, cfg, err := b.buildCfg(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if cfg.ThinkingConfig != nil {
-			t.Fatal("want ThinkingConfig nil when thinking_level unset")
-		}
-	})
-
-	t.Run("explicit off sets zero thinking budget", func(t *testing.T) {
-		b := &Backend{
-			model:    "gemini-2.5-flash",
-			thinking: backend.Thinking{Level: backend.ThinkingOff, Set: true},
-		}
-		_, _, cfg, err := b.buildCfg(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if cfg.ThinkingConfig == nil {
-			t.Fatal("want ThinkingConfig set when off")
-		}
-		if cfg.ThinkingConfig.ThinkingBudget == nil {
-			t.Fatal("want ThinkingBudget set when off")
-		}
-		if *cfg.ThinkingConfig.ThinkingBudget != 0 {
-			t.Fatalf("ThinkingBudget: got %d want 0", *cfg.ThinkingConfig.ThinkingBudget)
-		}
-		if cfg.ThinkingConfig.ThinkingLevel != "" {
-			t.Fatalf("ThinkingLevel: got %q want empty", cfg.ThinkingConfig.ThinkingLevel)
-		}
-	})
-
-	cases := []struct {
-		level backend.ThinkingLevel
-		want  genai.ThinkingLevel
-	}{
-		{backend.ThinkingMinimal, genai.ThinkingLevelMinimal},
-		{backend.ThinkingLow, genai.ThinkingLevelLow},
-		{backend.ThinkingMedium, genai.ThinkingLevelMedium},
-		{backend.ThinkingHigh, genai.ThinkingLevelHigh},
-	}
-	for _, tt := range cases {
-		t.Run(string(tt.level), func(t *testing.T) {
-			b := &Backend{model: "gemini-2.5-flash", thinking: backend.Thinking{Level: tt.level, Set: true}}
-			_, _, cfg, err := b.buildCfg(req)
+func TestWireThinkingLevel(t *testing.T) {
+	for _, level := range []backend.ThinkingLevel{"", backend.ThinkingOff, backend.ThinkingMinimal, backend.ThinkingLow, backend.ThinkingMedium, backend.ThinkingHigh} {
+		t.Run(string(level), func(t *testing.T) {
+			b := &Backend{model: "gemini", thinking: backend.Thinking{Level: level, Set: level != ""}}
+			_, p, err := b.wireParams(backend.Request{User: "user"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if cfg.ThinkingConfig == nil {
-				t.Fatal("want ThinkingConfig set")
+			c := p["generationConfig"].(map[string]any)
+			if level == "" {
+				if _, ok := c["thinkingConfig"]; ok {
+					t.Fatal("unset thinking sent")
+				}
+				return
 			}
-			if cfg.ThinkingConfig.ThinkingLevel != tt.want {
-				t.Fatalf("ThinkingLevel: got %q want %q", cfg.ThinkingConfig.ThinkingLevel, tt.want)
+			thinking := c["thinkingConfig"].(map[string]any)
+			if level == backend.ThinkingOff {
+				if thinking["thinkingBudget"] != 0 {
+					t.Fatal("off budget")
+				}
+			} else {
+				if thinking["thinkingLevel"] != string(toGoogleThinkingLevel(level)) {
+					t.Fatal("wrong thinking level")
+				}
+				if _, ok := thinking["thinkingBudget"]; ok {
+					t.Fatal("unexpected budget")
+				}
 			}
-			if cfg.ThinkingConfig.ThinkingBudget != nil {
-				t.Fatal("ThinkingBudget must not be set")
-			}
-			if cfg.ThinkingConfig.IncludeThoughts {
-				t.Fatal("IncludeThoughts must be false")
+			if _, ok := thinking["includeThoughts"]; ok {
+				t.Fatal("unexpected thoughts")
 			}
 		})
 	}
 }
-
 func TestToGoogleThinkingLevel(t *testing.T) {
 	if got := toGoogleThinkingLevel(backend.ThinkingMinimal); got != genai.ThinkingLevelMinimal {
 		t.Fatalf("minimal: %q", got)
@@ -134,16 +95,7 @@ func newFakeGoogleBackend(t *testing.T, handler http.Handler, stream bool) *Back
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	cc := &genai.ClientConfig{
-		APIKey:  "test-key",
-		Backend: genai.BackendGeminiAPI,
-	}
-	cc.HTTPOptions.BaseURL = srv.URL
-	client, err := genai.NewClient(context.Background(), cc)
-	if err != nil {
-		t.Fatalf("new genai client: %v", err)
-	}
-	return &Backend{name: "google:test", model: "gemini-test", client: client, stream: stream}
+	return &Backend{name: "google:test", model: "gemini-test", httpClient: srv.Client(), baseURL: srv.URL, apiKey: "test-key", stream: stream}
 }
 
 const geminiTruncatedUsage = `"usageMetadata":{"promptTokenCount":128,"candidatesTokenCount":64,"totalTokenCount":192}`

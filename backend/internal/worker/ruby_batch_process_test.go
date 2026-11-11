@@ -93,6 +93,7 @@ func TestRubyBatchHTTPProcessKillBetweenMemberSavesRecoversWithoutReplay(t *test
 	seed.snapshot.RubyRetry.MaxWordsPerBatch = &words
 	seed.snapshot.RubyRetry.BatchWaitMS = &waitMS
 	seed.persistSnapshot(t)
+	prepareRubyBatchCandidates(t, seed)
 	if err := client.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -237,6 +238,31 @@ func TestRubyBatchHTTPProcessCrashHelper(t *testing.T) {
 			if c.LogicalAttempt == 1 {
 				memberSaves++
 				if memberSaves == 2 {
+					request := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID), workrequest.StageIn("ruby_alignment", "alignment")).OnlyX(context.Background())
+					var envelope struct {
+						Version int               `json:"version"`
+						Members []json.RawMessage `json:"members"`
+					}
+					if err := json.Unmarshal(request.Members, &envelope); err != nil || envelope.Version != 1 || len(envelope.Members) != 4 || request.State != "received" || !request.UsageKnown {
+						return fmt.Errorf("kill boundary lacks a received four-member grant: members=%s state=%s err=%v", request.Members, request.State, err)
+					}
+					for _, work := range f.client.WorkItem.Query().Where(workitem.JobRoundIDEQ(f.roundIDs[0])).AllX(context.Background()) {
+						if work.MainAttempts != 1 || work.AlignmentAttempts != 1 {
+							return fmt.Errorf("kill boundary lacks durable member attempts: %+v", work)
+						}
+					}
+					rows := f.client.WorkCandidate.Query().Where(workcandidate.HasWorkItemWith(workitem.JobRoundIDEQ(f.roundIDs[0]))).AllX(context.Background())
+					saved := 0
+					for _, row := range rows {
+						if row.Version == 2 && row.State == "ready_to_commit" {
+							saved++
+						} else if row.Version != 1 || row.State != "pending_alignment" {
+							return fmt.Errorf("kill boundary has an unexpected candidate revision: %+v", row)
+						}
+					}
+					if len(rows) != 4 || saved != 1 {
+						return fmt.Errorf("kill boundary lacks exactly one durable member: candidates=%d saved=%d", len(rows), saved)
+					}
 					fmt.Fprintln(os.Stdout, "RUBY_BATCH_FIRST_MEMBER_DURABLE")
 					// Keep the real worker alive with the first committed save,
 					// an open SQLite connection and the shared HTTP response.

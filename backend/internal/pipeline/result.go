@@ -17,19 +17,24 @@ type SegmentResult struct {
 
 // TranslatedSegment 描述单个段落的翻译结果（含 Meta）。
 type TranslatedSegment struct {
-	Index      int
-	ID         string
-	SourceText string
-	TargetText string
-	Failed     bool
-	Meta       map[string]any
-	Issues     []qa.QualityIssue // 裁决轮：过滤后的 quality_issues；translate 轮：注音守恒 warning（可空）
-	Protected  map[string]string // 占位符→原文；Unprotect 后仍保留，供 QA 屏蔽保护区
+	PreparedPayload                                   []byte `json:"-"`
+	IssuesPayload                                     []byte `json:"-"`
+	PreparedStatus                                    string `json:"-"`
+	PreparedNoop, PreparedClearReview, CommitPrepared bool   `json:"-"`
+	Index                                             int
+	ID                                                string
+	SourceText                                        string
+	TargetText                                        string
+	Failed                                            bool
+	Meta                                              map[string]any
+	Issues                                            []qa.QualityIssue // 裁决轮：过滤后的 quality_issues；translate 轮：注音守恒 warning（可空）
+	Protected                                         map[string]string // 占位符→原文；Unprotect 后仍保留，供 QA 屏蔽保护区
 }
 
 // BatchResult 描述一批翻译的结果。
 type BatchResult struct {
-	Segments []TranslatedSegment
+	PreparedPayload []byte `json:"-"`
+	Segments        []TranslatedSegment
 }
 
 // TranslateResult 描述一次翻译任务的总体结果。

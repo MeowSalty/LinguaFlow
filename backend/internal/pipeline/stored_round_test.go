@@ -131,6 +131,16 @@ func (r *storedRoundTestReporter) FlushCheckpoint(ctx context.Context) error {
 	return nil
 }
 
+func storedTestExecutionRuntime(t *testing.T) *ExecutionRuntime {
+	t.Helper()
+	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 1}, AlignmentConcurrency: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	return NewExecutionRuntime(a, DefaultCandidateLimits(), nil)
+}
+
 func awaitStoredRoundSignal(t *testing.T, ch <-chan struct{}) {
 	t.Helper()
 	select {
@@ -143,7 +153,7 @@ func awaitStoredRoundSignal(t *testing.T, ch <-chan struct{}) {
 func TestStoredRoundStorageFailuresDoNotRetryModel(t *testing.T) {
 	for _, failure := range []string{"seal", "reserve", "record"} {
 		t.Run(failure, func(t *testing.T) {
-			runtime := testExecutionRuntime(t, 1)
+			runtime := storedTestExecutionRuntime(t)
 			store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil), fail: failure}
 			inner := &runtimeTestBackend{}
 			h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
@@ -171,7 +181,7 @@ func TestStoredRoundStorageFailuresDoNotRetryModel(t *testing.T) {
 }
 
 func TestStoredRoundKeepsCompletionThroughCallbackAndCheckpoint(t *testing.T) {
-	runtime := testExecutionRuntime(t, 1)
+	runtime := storedTestExecutionRuntime(t)
 	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil)}
 	inner := &runtimeTestBackend{}
 	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
@@ -213,7 +223,7 @@ func TestStoredRoundKeepsCompletionThroughCallbackAndCheckpoint(t *testing.T) {
 	assertLifetime := func() {
 		t.Helper()
 		snapshot := runtime.Admission.Snapshot()
-		if snapshot.MainInflight[0] != 0 || snapshot.PendingResults != 1 || runtime.Gate.Inflight() != 0 || len(runtime.parse) != 1 {
+		if snapshot.MainInflight[0] != 0 || snapshot.PendingResults != 1 || runtime.Gate.Inflight() != 0 || len(runtime.parse) != 0 {
 			t.Fatalf("response lifetime: %+v, parsers=%d", snapshot, len(runtime.parse))
 		}
 		_, records := store.snapshot()
@@ -236,7 +246,7 @@ func TestStoredRoundKeepsCompletionThroughCallbackAndCheckpoint(t *testing.T) {
 }
 
 func TestStoredRoundCheckpointFailureAbortsLocally(t *testing.T) {
-	runtime := testExecutionRuntime(t, 1)
+	runtime := storedTestExecutionRuntime(t)
 	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil)}
 	inner := &runtimeTestBackend{}
 	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
@@ -258,7 +268,7 @@ func TestStoredRoundCheckpointFailureAbortsLocally(t *testing.T) {
 }
 
 func TestStoredRoundFinishFailureDoesNotReissueAcceptedWork(t *testing.T) {
-	runtime := testExecutionRuntime(t, 1)
+	runtime := storedTestExecutionRuntime(t)
 	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil), fail: "finish"}
 	inner := &runtimeTestBackend{}
 	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
@@ -278,7 +288,7 @@ func TestStoredRoundFinishFailureDoesNotReissueAcceptedWork(t *testing.T) {
 }
 
 func TestStoredRoundCallbackFailureLeavesResponseReceived(t *testing.T) {
-	runtime := testExecutionRuntime(t, 1)
+	runtime := storedTestExecutionRuntime(t)
 	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil)}
 	inner := &runtimeTestBackend{}
 	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
@@ -294,7 +304,7 @@ func TestStoredRoundCallbackFailureLeavesResponseReceived(t *testing.T) {
 }
 
 func TestStoredRoundRequestUsesFrozenScopeAndUsage(t *testing.T) {
-	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{4: 1}, MaxCompletions: 1})
+	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{4: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +333,7 @@ func TestStoredRoundRequestUsesFrozenScopeAndUsage(t *testing.T) {
 }
 
 func TestStoredRoundRecoveryPreservesPoolAndAttemptBudget(t *testing.T) {
-	runtime := testExecutionRuntime(t, 1)
+	runtime := storedTestExecutionRuntime(t)
 	memory := NewMemoryRoundStore(nil)
 	memory.state = RoundRecovery{Sealed: true, Members: []int{0, 1, 2, 3}, Completed: []int{3}, Cursors: map[int]WorkCursor{
 		0: {Pool: 1, Attempt: 1, State: "pending"},
@@ -335,6 +345,9 @@ func TestStoredRoundRecoveryPreservesPoolAndAttemptBudget(t *testing.T) {
 	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
 	result, err := RunRound(context.Background(), Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Retry: backend.RetryPolicy{MaxAttempts: 1}}, newTestDoc(4), nil, quietLogger(), nil)
 	if err != nil || !reflect.DeepEqual(result.Resolved, []int{0, 1, 3}) || !reflect.DeepEqual(result.Unresolved, []int{2}) {
+		intents, records := store.snapshot()
+		state, _ := store.Load(context.Background())
+		t.Logf("recovery intents=%+v records=%+v cursors=%+v actualCalls=%d", intents, records, state.Cursors, inner.calls.Load())
 		t.Fatalf("recovered round=%+v err=%v", result, err)
 	}
 	intents, _ := store.snapshot()
@@ -347,7 +360,7 @@ func TestStoredRoundRecoveryPreservesPoolAndAttemptBudget(t *testing.T) {
 }
 
 func TestStoredRoundPauseRetainsRetryDeadline(t *testing.T) {
-	runtime := testExecutionRuntime(t, 1)
+	runtime := storedTestExecutionRuntime(t)
 	memory := NewMemoryRoundStore(nil)
 	store := &storedRoundTestStore{RoundStore: memory, cursorSaved: func(_ int, cursor WorkCursor) {
 		if cursor.Attempt == 1 {
@@ -376,7 +389,7 @@ func TestStoredRoundPauseRetainsRetryDeadline(t *testing.T) {
 }
 
 func TestStoredRoundSealedMembershipCannotDisappear(t *testing.T) {
-	runtime := testExecutionRuntime(t, 1)
+	runtime := storedTestExecutionRuntime(t)
 	memory := NewMemoryRoundStore(nil)
 	memory.state = RoundRecovery{Sealed: true, Members: []int{0, 1}, Cursors: map[int]WorkCursor{}}
 	inner := &runtimeTestBackend{}
@@ -388,7 +401,7 @@ func TestStoredRoundSealedMembershipCannotDisappear(t *testing.T) {
 }
 
 func TestStoredRoundRecoversTerminalScanFailure(t *testing.T) {
-	runtime := testExecutionRuntime(t, 1)
+	runtime := storedTestExecutionRuntime(t)
 	memory := NewMemoryRoundStore(nil)
 	memory.state = RoundRecovery{Sealed: true, Members: []int{0}, Cursors: map[int]WorkCursor{0: {Pool: 1, State: "unresolved", Phase: "terminal_failure"}}}
 	inner := &runtimeTestBackend{}

@@ -20,8 +20,9 @@ import (
 // StorageReservationUpdate is the builder for updating StorageReservation entities.
 type StorageReservationUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageReservationMutation
+	hooks     []Hook
+	mutation  *StorageReservationMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageReservationUpdate builder.
@@ -193,6 +194,12 @@ func (_u *StorageReservationUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageReservationUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageReservationUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageReservationUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -275,6 +282,7 @@ func (_u *StorageReservationUpdate) sqlSave(ctx context.Context) (_node int, err
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storagereservation.Label}
@@ -290,9 +298,10 @@ func (_u *StorageReservationUpdate) sqlSave(ctx context.Context) (_node int, err
 // StorageReservationUpdateOne is the builder for updating a single StorageReservation entity.
 type StorageReservationUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageReservationMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageReservationMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -471,6 +480,12 @@ func (_u *StorageReservationUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageReservationUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageReservationUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageReservationUpdateOne) sqlSave(ctx context.Context) (_node *StorageReservation, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -570,6 +585,7 @@ func (_u *StorageReservationUpdateOne) sqlSave(ctx context.Context) (_node *Stor
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageReservation{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

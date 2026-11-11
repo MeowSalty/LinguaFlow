@@ -11,6 +11,7 @@ import (
 
 func TestConfigTemplateAcceptsMasterKeyWithoutKeyring(t *testing.T) {
 	clearDeploymentEnvironment(t)
+	executionBudgetTestEnvironment(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "server.yaml")
 	dataDir := filepath.Join(dir, "not-created")

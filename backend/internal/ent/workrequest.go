@@ -51,6 +51,46 @@ type WorkRequest struct {
 	Debits json.RawMessage `json:"debits,omitempty"`
 	// Idempotent inline glossary absorption result, committed with the glossary entries
 	GlossaryReceipt json.RawMessage `json:"glossary_receipt,omitempty"`
+	// FreezePayload holds the value of the "freeze_payload" field.
+	FreezePayload []byte `json:"freeze_payload,omitempty"`
+	// FreezeBytes holds the value of the "freeze_bytes" field.
+	FreezeBytes int64 `json:"freeze_bytes,omitempty"`
+	// ResponsePayload holds the value of the "response_payload" field.
+	ResponsePayload []byte `json:"response_payload,omitempty"`
+	// ResponseBytes holds the value of the "response_bytes" field.
+	ResponseBytes int64 `json:"response_bytes,omitempty"`
+	// ResponseFormatVersion holds the value of the "response_format_version" field.
+	ResponseFormatVersion int `json:"response_format_version,omitempty"`
+	// SnapshotDigest holds the value of the "snapshot_digest" field.
+	SnapshotDigest string `json:"snapshot_digest,omitempty"`
+	// FreezeDigest holds the value of the "freeze_digest" field.
+	FreezeDigest string `json:"freeze_digest,omitempty"`
+	// ResponseDigest holds the value of the "response_digest" field.
+	ResponseDigest string `json:"response_digest,omitempty"`
+	// CorrectedTargets holds the value of the "corrected_targets" field.
+	CorrectedTargets []byte `json:"corrected_targets,omitempty"`
+	// CorrectedTargetIndex holds the value of the "corrected_target_index" field.
+	CorrectedTargetIndex []byte `json:"corrected_target_index,omitempty"`
+	// CorrectedTargetBytes holds the value of the "corrected_target_bytes" field.
+	CorrectedTargetBytes int64 `json:"corrected_target_bytes,omitempty"`
+	// CorrectedTargetDigest holds the value of the "corrected_target_digest" field.
+	CorrectedTargetDigest string `json:"corrected_target_digest,omitempty"`
+	// PromotionMembers holds the value of the "promotion_members" field.
+	PromotionMembers json.RawMessage `json:"promotion_members,omitempty"`
+	// PromotionCursor holds the value of the "promotion_cursor" field.
+	PromotionCursor int `json:"promotion_cursor,omitempty"`
+	// PromotionCount holds the value of the "promotion_count" field.
+	PromotionCount int `json:"promotion_count,omitempty"`
+	// BusinessBound holds the value of the "business_bound" field.
+	BusinessBound int64 `json:"business_bound,omitempty"`
+	// ResponseTruncated holds the value of the "response_truncated" field.
+	ResponseTruncated bool `json:"response_truncated,omitempty"`
+	// PromotionState holds the value of the "promotion_state" field.
+	PromotionState string `json:"promotion_state,omitempty"`
+	// PromotionStatus holds the value of the "promotion_status" field.
+	PromotionStatus []byte `json:"promotion_status,omitempty"`
+	// HandoffAt holds the value of the "handoff_at" field.
+	HandoffAt *time.Time `json:"handoff_at,omitempty"`
 	// UsageRecordID holds the value of the "usage_record_id" field.
 	UsageRecordID *int `json:"usage_record_id,omitempty"`
 	// BudgetModel holds the value of the "budget_model" field.
@@ -126,15 +166,15 @@ func (*WorkRequest) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case workrequest.FieldSegmentIds, workrequest.FieldMembers, workrequest.FieldDebits, workrequest.FieldGlossaryReceipt:
+		case workrequest.FieldSegmentIds, workrequest.FieldMembers, workrequest.FieldDebits, workrequest.FieldGlossaryReceipt, workrequest.FieldFreezePayload, workrequest.FieldResponsePayload, workrequest.FieldCorrectedTargets, workrequest.FieldCorrectedTargetIndex, workrequest.FieldPromotionMembers, workrequest.FieldPromotionStatus:
 			values[i] = new([]byte)
-		case workrequest.FieldUsageKnown:
+		case workrequest.FieldResponseTruncated, workrequest.FieldUsageKnown:
 			values[i] = new(sql.NullBool)
-		case workrequest.FieldID, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldBackendID, workrequest.FieldLogicalAttempt, workrequest.FieldUsageRecordID, workrequest.FieldInputTokens, workrequest.FieldOutputTokens, workrequest.FieldDurationMs:
+		case workrequest.FieldID, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldBackendID, workrequest.FieldLogicalAttempt, workrequest.FieldFreezeBytes, workrequest.FieldResponseBytes, workrequest.FieldResponseFormatVersion, workrequest.FieldCorrectedTargetBytes, workrequest.FieldPromotionCursor, workrequest.FieldPromotionCount, workrequest.FieldBusinessBound, workrequest.FieldUsageRecordID, workrequest.FieldInputTokens, workrequest.FieldOutputTokens, workrequest.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case workrequest.FieldIdentity, workrequest.FieldStage, workrequest.FieldCandidateID, workrequest.FieldBudgetModel, workrequest.FieldInputDigest, workrequest.FieldState, workrequest.FieldLastError:
+		case workrequest.FieldIdentity, workrequest.FieldStage, workrequest.FieldCandidateID, workrequest.FieldSnapshotDigest, workrequest.FieldFreezeDigest, workrequest.FieldResponseDigest, workrequest.FieldCorrectedTargetDigest, workrequest.FieldPromotionState, workrequest.FieldBudgetModel, workrequest.FieldInputDigest, workrequest.FieldState, workrequest.FieldLastError:
 			values[i] = new(sql.NullString)
-		case workrequest.FieldCreatedAt, workrequest.FieldUpdatedAt:
+		case workrequest.FieldCreatedAt, workrequest.FieldUpdatedAt, workrequest.FieldHandoffAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -254,6 +294,129 @@ func (_m *WorkRequest) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.GlossaryReceipt); err != nil {
 					return fmt.Errorf("unmarshal field glossary_receipt: %w", err)
 				}
+			}
+		case workrequest.FieldFreezePayload:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field freeze_payload", values[i])
+			} else if value != nil {
+				_m.FreezePayload = *value
+			}
+		case workrequest.FieldFreezeBytes:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field freeze_bytes", values[i])
+			} else if value.Valid {
+				_m.FreezeBytes = value.Int64
+			}
+		case workrequest.FieldResponsePayload:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field response_payload", values[i])
+			} else if value != nil {
+				_m.ResponsePayload = *value
+			}
+		case workrequest.FieldResponseBytes:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field response_bytes", values[i])
+			} else if value.Valid {
+				_m.ResponseBytes = value.Int64
+			}
+		case workrequest.FieldResponseFormatVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field response_format_version", values[i])
+			} else if value.Valid {
+				_m.ResponseFormatVersion = int(value.Int64)
+			}
+		case workrequest.FieldSnapshotDigest:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field snapshot_digest", values[i])
+			} else if value.Valid {
+				_m.SnapshotDigest = value.String
+			}
+		case workrequest.FieldFreezeDigest:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field freeze_digest", values[i])
+			} else if value.Valid {
+				_m.FreezeDigest = value.String
+			}
+		case workrequest.FieldResponseDigest:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field response_digest", values[i])
+			} else if value.Valid {
+				_m.ResponseDigest = value.String
+			}
+		case workrequest.FieldCorrectedTargets:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field corrected_targets", values[i])
+			} else if value != nil {
+				_m.CorrectedTargets = *value
+			}
+		case workrequest.FieldCorrectedTargetIndex:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field corrected_target_index", values[i])
+			} else if value != nil {
+				_m.CorrectedTargetIndex = *value
+			}
+		case workrequest.FieldCorrectedTargetBytes:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field corrected_target_bytes", values[i])
+			} else if value.Valid {
+				_m.CorrectedTargetBytes = value.Int64
+			}
+		case workrequest.FieldCorrectedTargetDigest:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field corrected_target_digest", values[i])
+			} else if value.Valid {
+				_m.CorrectedTargetDigest = value.String
+			}
+		case workrequest.FieldPromotionMembers:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field promotion_members", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.PromotionMembers); err != nil {
+					return fmt.Errorf("unmarshal field promotion_members: %w", err)
+				}
+			}
+		case workrequest.FieldPromotionCursor:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field promotion_cursor", values[i])
+			} else if value.Valid {
+				_m.PromotionCursor = int(value.Int64)
+			}
+		case workrequest.FieldPromotionCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field promotion_count", values[i])
+			} else if value.Valid {
+				_m.PromotionCount = int(value.Int64)
+			}
+		case workrequest.FieldBusinessBound:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field business_bound", values[i])
+			} else if value.Valid {
+				_m.BusinessBound = value.Int64
+			}
+		case workrequest.FieldResponseTruncated:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field response_truncated", values[i])
+			} else if value.Valid {
+				_m.ResponseTruncated = value.Bool
+			}
+		case workrequest.FieldPromotionState:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field promotion_state", values[i])
+			} else if value.Valid {
+				_m.PromotionState = value.String
+			}
+		case workrequest.FieldPromotionStatus:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field promotion_status", values[i])
+			} else if value != nil {
+				_m.PromotionStatus = *value
+			}
+		case workrequest.FieldHandoffAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field handoff_at", values[i])
+			} else if value.Valid {
+				_m.HandoffAt = new(time.Time)
+				*_m.HandoffAt = value.Time
 			}
 		case workrequest.FieldUsageRecordID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -405,6 +568,68 @@ func (_m *WorkRequest) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("glossary_receipt=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GlossaryReceipt))
+	builder.WriteString(", ")
+	builder.WriteString("freeze_payload=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FreezePayload))
+	builder.WriteString(", ")
+	builder.WriteString("freeze_bytes=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FreezeBytes))
+	builder.WriteString(", ")
+	builder.WriteString("response_payload=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ResponsePayload))
+	builder.WriteString(", ")
+	builder.WriteString("response_bytes=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ResponseBytes))
+	builder.WriteString(", ")
+	builder.WriteString("response_format_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ResponseFormatVersion))
+	builder.WriteString(", ")
+	builder.WriteString("snapshot_digest=")
+	builder.WriteString(_m.SnapshotDigest)
+	builder.WriteString(", ")
+	builder.WriteString("freeze_digest=")
+	builder.WriteString(_m.FreezeDigest)
+	builder.WriteString(", ")
+	builder.WriteString("response_digest=")
+	builder.WriteString(_m.ResponseDigest)
+	builder.WriteString(", ")
+	builder.WriteString("corrected_targets=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CorrectedTargets))
+	builder.WriteString(", ")
+	builder.WriteString("corrected_target_index=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CorrectedTargetIndex))
+	builder.WriteString(", ")
+	builder.WriteString("corrected_target_bytes=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CorrectedTargetBytes))
+	builder.WriteString(", ")
+	builder.WriteString("corrected_target_digest=")
+	builder.WriteString(_m.CorrectedTargetDigest)
+	builder.WriteString(", ")
+	builder.WriteString("promotion_members=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PromotionMembers))
+	builder.WriteString(", ")
+	builder.WriteString("promotion_cursor=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PromotionCursor))
+	builder.WriteString(", ")
+	builder.WriteString("promotion_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PromotionCount))
+	builder.WriteString(", ")
+	builder.WriteString("business_bound=")
+	builder.WriteString(fmt.Sprintf("%v", _m.BusinessBound))
+	builder.WriteString(", ")
+	builder.WriteString("response_truncated=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ResponseTruncated))
+	builder.WriteString(", ")
+	builder.WriteString("promotion_state=")
+	builder.WriteString(_m.PromotionState)
+	builder.WriteString(", ")
+	builder.WriteString("promotion_status=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PromotionStatus))
+	builder.WriteString(", ")
+	if v := _m.HandoffAt; v != nil {
+		builder.WriteString("handoff_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	if v := _m.UsageRecordID; v != nil {
 		builder.WriteString("usage_record_id=")

@@ -170,7 +170,13 @@ func (b *boundedBackend) Translate(ctx context.Context, req Request) (*Response,
 	// Some stream decoders replace a reader error with a parse error containing
 	// the partial body. Restore the capacity classification without exposing it.
 	if exceeded {
-		return nil, &ResponseLimitError{Limit: b.limit}
+		capacityErr := &ResponseLimitError{Limit: ResponseBudget(ctx, b.limit)}
+		meta.mu.Lock()
+		defer meta.mu.Unlock()
+		if meta.status >= 400 {
+			return nil, &StatusError{StatusCode: meta.status, RetryAfter: meta.retryAfter, Err: capacityErr}
+		}
+		return nil, capacityErr
 	}
 	if err != nil {
 		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {

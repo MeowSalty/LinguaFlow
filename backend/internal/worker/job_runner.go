@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -22,10 +23,12 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/sysmem"
@@ -54,7 +57,11 @@ type JobRunner struct {
 	// pipeCfg 流水线准入预算（字节配额与资源数上限）。
 	pipeCfg PipelineConfig
 	// rssFuse 进程级 RSS 双水位保险丝；nil 时禁用。
-	rssFuse *sysmem.Gate
+	rssFuse             *sysmem.Gate
+	rootBudget          *resourcebudget.RootBudget
+	prepareActor        func(context.Context, int) error
+	budgetSource        workstate.InventorySource
+	budgetInventoryLock sync.Locker
 
 	// per-job 取消注册表：jobID → 取消句柄（包装结构体使 defer 可按值
 	// 身份比较删除——cancel 函数本身只能与 nil 比较）
@@ -72,9 +79,10 @@ type jobCancelEntry struct {
 
 // PipelineConfig 流水线准入配置（由 server 从 WorkerConfig 注入）。
 type PipelineConfig struct {
-	RuntimePolicy    pipeline.RuntimePolicy
-	Candidates       pipeline.CandidateLimits
-	MaxResponseBytes int64
+	RuntimePolicy        pipeline.RuntimePolicy
+	Candidates           pipeline.CandidateLimits
+	MaxResponseBytes     int64
+	ResponseHandoffBytes int64
 	// MaxInflightWeight 在途工作配额上限（源文本字节；0 = 不限制）。
 	MaxInflightWeight int64
 	// MaxInflightResources 在途资源数上限（0 = 不限制）。
@@ -98,6 +106,9 @@ func NewJobRunner(
 ) *JobRunner {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if queue != nil && jobs != nil {
+		queue.WithDispatchCheck(jobs.CheckExecutionFormat)
 	}
 	return &JobRunner{
 		logger:      logger,
@@ -183,7 +194,7 @@ func (r *JobRunner) TaskStatus(ctx context.Context, taskID int) (string, error) 
 // 每资源一个 goroutine 按序执行自己的轮次；同轮所有在途资源共享该轮
 // 站位并发预算（CPU 工位模型）。准入控制（字节配额 + 资源数上限 + RSS
 // 保险丝）约束同时在途的资源；pause gate 在安全点优雅排空。
-func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
+func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error) {
 	// 创建 per-job context，支持外部取消
 	jobCtx, jobCancel := context.WithCancel(ctx)
 	defer jobCancel()
@@ -202,10 +213,11 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 		r.mu.Unlock()
 	}()
 
-	exec, err := r.jobs.LoadJobExecution(jobCtx, jobID)
+	jobCtx, exec, snapshot, registry, definitionClose, err := r.loadJobDefinition(jobCtx, jobID)
 	if err != nil {
 		return err
 	}
+	defer definitionClose()
 	// 二次校验：任务可能在入队后、执行前被取消或暂停
 	if exec.Job.Status == service.JobStatusCancelled || exec.Job.Status == service.JobStatusPaused || exec.Job.PauseRequested || exec.Job.Status == "pausing" {
 		r.logger.Info("job already cancelled or paused, skipping", "job_id", jobID, "status", exec.Job.Status)
@@ -218,17 +230,8 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 		}
 	}
 
-	snapshot, err := r.jobs.GetExecutionSnapshot(jobCtx, jobID)
-	if err != nil {
-		return err
-	}
-
 	if len(pending) > 0 {
 		// 流水线编排：轮次行注册表、暂停闸门、准入预算、站位信号量。
-		registry, err := loadJobRounds(jobCtx, r.client, jobID)
-		if err != nil {
-			return err
-		}
 		// 暂停闸门先于 MarkJobRunning 注册：消除「DB 已 running 但 gate 尚未
 		// 注册」窗口内暂停请求的静默丢失（PauseTask 查不到 gate 返回 false）。
 		// 翻转前到达的暂停走 pending→paused 直接翻转，随后 MarkJobRunning
@@ -254,14 +257,99 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 			return err
 		}
 		requestRuntime.Lifetime = workerLifetime(ctx)
+		if err := requestRuntime.SetResponseLimits(r.pipeCfg.MaxResponseBytes, r.pipeCfg.ResponseHandoffBytes); err != nil {
+			return err
+		}
+		if r.dbDriver == "postgres" {
+			if err := requestRuntime.Admission.SetStorageRepresentationBound(postgresCandidateStorageBound); err != nil {
+				return err
+			}
+		}
+		if err := requestRuntime.Admission.SetCandidateReadAllocationBound(func(physical int64) (int64, error) { return service.ExecutionInputAllocationBound(physical, 1) }); err != nil {
+			return err
+		}
 		requestRuntime.JobID = jobID
+		if err := requestRuntime.ConfigureEpisodeStore(jobCtx, jobID, workstate.NewStore(r.client)); err != nil {
+			return err
+		}
 		defer requestRuntime.Close()
+		var storageBudget *workstate.StorageBudget
+		defer func() {
+			if storageBudget != nil {
+				returnErr = errors.Join(returnErr, storageBudget.Close())
+			}
+		}()
+		inventorySource := r.budgetSource
+		if inventorySource.DB == nil {
+			inventorySource = workstate.InventorySource{DB: r.client, Driver: r.dbDriver, ItemBytes: requestRuntime.BudgetLimits().Item}
+		}
+		inventoryReady := false
+		defer func() {
+			if !inventoryReady {
+				return
+			}
+			// Every resource exit has joined before this defer. Reconcile actual
+			// retained SQL backing before unloading the runtime attachment.
+			factCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			if r.budgetInventoryLock != nil {
+				r.budgetInventoryLock.Lock()
+				defer r.budgetInventoryLock.Unlock()
+			}
+			s, c, g, h, err := inventorySource.Runtime(factCtx, jobID)
+			if err == nil {
+				var metadata int64
+				metadata, err = inventorySource.Metadata(factCtx, jobID)
+				if err == nil {
+					err = requestRuntime.Admission.ResetInventoryAfterJoin(s, c, g, h, metadata)
+				}
+			}
+			if err != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("joined inventory reconciliation: %w", err))
+			}
+		}()
+		if r.rootBudget != nil {
+			if r.prepareActor != nil {
+				if err := r.prepareActor(jobCtx, exec.ActorUserID); err != nil {
+					return err
+				}
+			}
+		}
+		defer func() {
+			lifetime := workerLifetime(ctx)
+			if lifetime.Err() != nil {
+				return
+			}
+			cleanupCtx, cancel := context.WithTimeout(lifetime, 30*time.Second)
+			defer cancel()
+			if storageBudget != nil {
+				cleanupCtx = workstate.WithStorageBudget(cleanupCtx, storageBudget)
+			}
+			j, err := r.client.Job.Get(cleanupCtx, jobID)
+			if err != nil || j.Status != "cancelled" {
+				return
+			}
+			if err = workstate.NewStore(r.client).CleanupCancelledPayloads(cleanupCtx, jobID); err == nil {
+				err = requestRuntime.ApplyCancelledPayloads(cleanupCtx)
+			}
+			if err != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("cancelled payload cleanup: %w", err))
+			}
+		}()
 		jobCtx = pipeline.WithExecutionRuntime(jobCtx, requestRuntime)
 		// Reconstruct aggregate occupancy from headers before admitting a resource.
 		// Recovery never materializes all persisted candidate bodies at once.
 		draftResources := make(map[int]bool)
+		var inventoryMembers, inventoryCandidates, inventoryGrowth, inventoryHandoff int64
+		var savedBusinessHeader *workstate.ResponseHeader
+		rowToRound := map[int]int{}
+		for _, rounds := range registry.rounds {
+			for index, info := range rounds {
+				rowToRound[info.rowID] = index
+			}
+		}
 		for after := 0; ; {
-			headers, next, err := workstate.NewStore(r.client).LoadCandidateHeaders(jobCtx, jobID, after, 128)
+			headers, next, err := workstate.NewStore(r.client).LoadResponseHeaders(jobCtx, jobID, after, 16)
 			if err != nil {
 				return err
 			}
@@ -269,8 +357,68 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 				break
 			}
 			for _, header := range headers {
-				if err := restoreCandidateHeader(requestRuntime.Window, header); err != nil {
-					return err
+				_, ok := rowToRound[header.Scope.RoundID]
+				if !ok {
+					return workstate.ErrManifest
+				}
+				if requestRuntime.Admission.RuntimeState().BusinessOwner == header.RequestID {
+					copy := header
+					savedBusinessHeader = &copy
+				}
+				inventoryMembers += int64(header.MemberCount - header.Cursor)
+				for _, n := range []int64{header.FreezeBytes, header.ResponseBytes, header.CorrectedBytes, backend.RequestMetadataBytes} {
+					if n < 0 || n > math.MaxInt64-inventoryHandoff {
+						return backend.ErrPipelineCapacity
+					}
+					inventoryHandoff += n
+				}
+				draftResources[header.Scope.ResourceID] = true
+			}
+			if next <= after {
+				return workstate.ErrManifest
+			}
+			after = next
+		}
+		for after := 0; ; {
+			headers, next, err := workstate.NewStore(r.client).LoadOwnedMemberHeaders(jobCtx, jobID, after, 16)
+			if err != nil {
+				return err
+			}
+			if len(headers) == 0 {
+				break
+			}
+			for _, h := range headers {
+				inventoryMembers++
+				draftResources[h.Scope.ResourceID] = true
+			}
+			if next <= after {
+				return workstate.ErrManifest
+			}
+			after = next
+		}
+		for after := 0; ; {
+			headers, next, err := workstate.NewStore(r.client).LoadCandidateHeaders(jobCtx, jobID, after, 16)
+			if err != nil {
+				return err
+			}
+			if len(headers) == 0 {
+				break
+			}
+			for _, header := range headers {
+				if header.DTOVersion != pipeline.CandidateDTOVersion || header.PayloadBytes < 0 {
+					return workstate.ErrManifest
+				}
+				inventoryMembers++
+				if header.PayloadBytes > math.MaxInt64-inventoryCandidates {
+					return backend.ErrPipelineCapacity
+				}
+				inventoryCandidates += header.PayloadBytes
+				if header.GrowthReserved {
+					growth := max(int64(0), requestRuntime.BudgetLimits().Item-header.PayloadBytes)
+					if growth > math.MaxInt64-inventoryGrowth {
+						return backend.ErrPipelineCapacity
+					}
+					inventoryGrowth += growth
 				}
 				draftResources[header.Scope.ResourceID] = true
 			}
@@ -278,6 +426,45 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 				return fmt.Errorf("candidate recovery headers did not advance")
 			}
 			after = next
+		}
+		// Headers validate bounded metadata and identify replay scope. SQL scalar
+		// facts include retained freezes in non-replay states as well.
+		inventoryMembers, inventoryCandidates, inventoryGrowth, inventoryHandoff, err = inventorySource.Runtime(jobCtx, jobID)
+		if err != nil {
+			return err
+		}
+		if err := requestRuntime.Admission.RestoreInventory(inventoryMembers, inventoryCandidates, inventoryGrowth, inventoryHandoff); err != nil {
+			return err
+		}
+		metadata, err := inventorySource.Metadata(jobCtx, jobID)
+		if err != nil {
+			return err
+		}
+		if err = requestRuntime.Admission.RestoreRootMetadata(metadata); err != nil {
+			return err
+		}
+		if r.rootBudget != nil {
+			scope := resourcebudget.Scope{ActorID: exec.ActorUserID, JobID: jobID}
+			if err := requestRuntime.Admission.AttachRootBudget(r.rootBudget, scope); err != nil {
+				return err
+			}
+			storageBudget = &workstate.StorageBudget{Root: r.rootBudget, Source: inventorySource, Scope: scope, InventoryLock: r.budgetInventoryLock, Credit: requestRuntime.Admission}
+			jobCtx = workstate.WithStorageBudget(jobCtx, storageBudget)
+		}
+		inventoryReady = true
+		if header := savedBusinessHeader; header != nil {
+			if err := requestRuntime.Admission.RestoreRequestMetadata(header.RequestID, header.MemberCount, header.MetadataBytes); err != nil {
+				return err
+			}
+			if err := requestRuntime.Admission.RestoreResponseOwner(header.RequestID, rowToRound[header.Scope.RoundID], header.Scope.ResourceID, header.FreezeBytes, header.ResponseBytes, header.BusinessBound); err != nil {
+				return err
+			}
+			if err := requestRuntime.Admission.RestoreResponseBusiness(header.RequestID, header.CorrectedBytes); err != nil {
+				return err
+			}
+			if err := requestRuntime.Window.RestoreRaw(header.RequestID, header.MemberCount-header.Cursor, header.Scope.ResourceID, header.Scope.RoundID, nil); err != nil {
+				return err
+			}
 		}
 		hasDraft := func(item *ent.JobResource) bool {
 			return item.Edges.Resource != nil && draftResources[item.Edges.Resource.ID]
@@ -318,7 +505,10 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 			active--
 			if errors.Is(done.err, pipeline.ErrResourceYield) {
 				if len(queue) == 0 && active == 0 {
-					drainErr = fmt.Errorf("candidate capacity is owned by work outside runnable resources")
+					drainErr = fmt.Errorf("%w: candidate capacity is owned by work outside runnable resources", backend.ErrPipelineCapacity)
+					if err := r.jobs.MarkJobResourceFailed(jobCtx, jobID, done.item.ID, drainErr); err != nil {
+						drainErr = errors.Join(drainErr, err)
+					}
 				} else {
 					queue = append(queue, done.item)
 				}
@@ -329,6 +519,11 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 		if drainErr != nil {
 			// A failed response save is not a safe pause. Preserve the persisted
 			// pause intent and return the storage failure for recovery/diagnosis.
+			if workerLifetime(ctx).Err() == nil {
+				finishCtx, cancel := context.WithTimeout(workerLifetime(ctx), 30*time.Second)
+				defer cancel()
+				drainErr = errors.Join(drainErr, r.jobs.ReconcileJob(finishCtx, jobID))
+			}
 			return drainErr
 		}
 
@@ -353,12 +548,24 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 	return reconcileErr
 }
 
+// DTO/Q is canonical JSON; the adapter independently commits enough K for
+// PostgreSQL's normalized JSONB projection before a provider request is sent.
+func postgresCandidateStorageBound(canonicalMax int64) (int64, error) {
+	return persistence.JSONStorageBound(persistence.StoragePostgresJSONB, canonicalMax, 65536, workstate.CandidateReadBytes)
+}
+
 // roundConcurrency 从快照提取某轮的站位容量（concurrency 字段）。
 func restoreCandidateHeader(window *pipeline.CandidateWindow, header workstate.CandidateHeader) error {
 	if header.DTOVersion != pipeline.CandidateDTOVersion {
 		return fmt.Errorf("unsupported saved candidate DTO %d", header.DTOVersion)
 	}
-	return window.RestoreScoped(header.ID, header.PayloadBytes, header.Scope.ResourceID, header.Scope.RoundID)
+	if err := window.RestoreScoped(header.ID, header.PayloadBytes, header.Scope.ResourceID, header.Scope.RoundID); err != nil {
+		return err
+	}
+	if header.GrowthReserved {
+		return window.RestoreGrowth(header.ID)
+	}
+	return nil
 }
 
 func roundConcurrency(snapshot *service.JobExecutionSnapshot, roundIdx int) int {
@@ -535,6 +742,8 @@ func (r *JobRunner) processJobResource(
 ) (retErr error) {
 	job := exec.Job
 	ctx = context.WithValue(ctx, jobWriteScopeKey{}, jobWriteScope{jobID: job.ID, epoch: job.RetryEpoch})
+	ctx = service.WithExecutionInputBudget(ctx, r.rootBudget, resourcebudget.Scope{ActorID: exec.ActorUserID, JobID: job.ID}, r.pipeCfg.ResponseHandoffBytes)
+	defer service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
 	if registry == nil {
 		var err error
 		registry, err = loadJobRounds(ctx, r.client, job.ID)
@@ -586,44 +795,6 @@ func (r *JobRunner) processJobResource(
 			return nil
 		}
 		defer release()
-	}
-
-	// 断点恢复：从 JobRound 行装载各非翻译轮已解决段集合（DB Segment ID），
-	// 转 docIndex 后注入 resolvedByMode（跨同模式轮累积的并集语义）。
-	// registry 为 nil（单资源路径）时跳过——无 JobRound 行。
-	var resolvedByMode map[string]map[int]struct{} = engine.NewResolvedByMode()
-	var dbIDToIndexBootstrap map[int]int
-	if registry != nil {
-		persisted, err := loadResolved(ctx, r.client, item.ID)
-		if err != nil {
-			r.logger.Warn("load resolved checkpoints failed, rounds will rescan",
-				"job_id", job.ID, "job_resource_id", item.ID, "err", err)
-		} else if len(persisted) > 0 {
-			// DB ID → docIndex 映射依赖每轮重载（loadSegments 顺序确定），
-			// 此处仅用 ID 与顺序建立映射：全列加载（含 source_text 大文本）
-			// 读出即弃是启动期读放大，改用单列投影；排序须与轮次循环的
-			// loadSegments 一致（Asc(SegmentIndex), Asc(ID)）。
-			idRows, loadErr := r.client.Segment.Query().
-				Where(segment.ResourceIDEQ(res.ID)).
-				Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
-				Select(segment.FieldID).
-				All(ctx)
-			if loadErr == nil {
-				dbIDToIndexBootstrap = make(map[int]int, len(idRows))
-				for i, row := range idRows {
-					dbIDToIndexBootstrap[row.ID] = i
-				}
-				for mode, dbIDs := range persisted {
-					if set, ok := resolvedByMode[mode]; ok {
-						for dbID := range dbIDs {
-							if idx, ok2 := dbIDToIndexBootstrap[dbID]; ok2 {
-								set[idx] = struct{}{}
-							}
-						}
-					}
-				}
-			}
-		}
 	}
 
 	engineCfg := BuildEngineConfig(snapshot)
@@ -708,6 +879,14 @@ func (r *JobRunner) processJobResource(
 	// reporter.SegmentResolved 逐段实时落盘，读写（WithResolvedIndices /
 	// AccumulateResolved）均在本轮循环 goroutine 顺序执行，无需加锁。
 
+	doc := &pipeline.Document{SourceLang: snapshot.SourceLang, TargetLang: snapshot.TargetLang, Format: res.Format, Vars: map[string]any{}}
+	if err = r.loadCanonicalDocument(ctx, res.ID, doc); err != nil {
+		return err
+	}
+	if err = loadCanonicalResolved(ctx, r.client, item.ID, doc); err != nil {
+		return err
+	}
+	docFresh := true
 	// 轮次循环
 	for roundIdx := range snapshot.Rounds {
 		if ctx.Err() != nil {
@@ -763,35 +942,40 @@ func (r *JobRunner) processJobResource(
 			}
 		}
 
-		// 每轮从 DB 重新加载段落（Worker 通过 DB 重新加载避免保护态问题）
-		selectedRows, allRows, loadErr := r.loadSegments(ctx, res.ID, item.SegmentIds)
-		if loadErr != nil {
-			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, loadErr)
-			return nil
+		if !docFresh {
+			if loadErr := r.loadCanonicalDocument(ctx, res.ID, doc); loadErr != nil {
+				_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, loadErr)
+				return nil
+			}
 		}
-		// A sealed manifest owns membership, including previously confirmed work.
-		// Current status filters must not erase drafts or redefine the denominator.
+		docFresh = false
 		manifestSealed := false
 		if roundRowID > 0 {
-			state, stateErr := workstate.NewStore(r.client).LoadRound(ctx, workstate.Scope{JobID: job.ID, RoundID: roundRowID})
-			if stateErr != nil {
-				return stateErr
+			scope := workstate.Scope{JobID: job.ID, ResourceID: res.ID, JobResourceID: item.ID, RoundID: roundRowID, RetryEpoch: job.RetryEpoch, SourceGeneration: item.SourceGeneration, SourceRevisionID: item.SourceRevisionID}
+			probe := newRoundStore(r.client, scope, nil, snapshot, roundIdx, nil, false, r.dbDriver, nil, nil)
+			probe.bindCanonical(doc)
+			sealed, _, loadErr := probe.LoadCanonical(ctx, doc)
+			if loadErr != nil {
+				return loadErr
 			}
-			manifestSealed = state.Sealed
-			if state.Sealed {
-				members := make(map[int]bool, len(state.Members))
-				for _, id := range state.Members {
-					members[id] = true
-				}
-				selectedRows = nil
-				for _, row := range allRows {
-					if members[row.ID] {
-						selectedRows = append(selectedRows, row)
+			manifestSealed = sealed
+		}
+		selectedCount := 0
+		for i := range doc.Segments {
+			selected := len(item.SegmentIds) == 0
+			if manifestSealed {
+				selected = doc.Segments[i].RoundWork.Member
+			} else {
+				for _, id := range item.SegmentIds {
+					if doc.Segments[i].DBID == id {
+						selected = true
+						break
 					}
 				}
-				if len(selectedRows) != len(members) {
-					return workstate.ErrManifest
-				}
+			}
+			doc.Segments[i].Translate = selected
+			if selected {
+				selectedCount++
 			}
 		}
 
@@ -805,11 +989,17 @@ func (r *JobRunner) processJobResource(
 				r.logger.Debug("explicit segment selection, skipping default filter on first translate round",
 					"job_id", job.ID, "resource_id", res.ID)
 			} else {
-				selectedRows = applyTranslateSegmentFilter(selectedRows, filter)
+				for i := range doc.Segments {
+					seg := &doc.Segments[i]
+					if seg.Translate && !translateStatusAllowed(filter, seg.Status) {
+						seg.Translate = false
+						selectedCount--
+					}
+				}
 			}
 		}
 
-		if len(selectedRows) == 0 {
+		if selectedCount == 0 {
 			// 本轮无段可处理（如 translate pending_only 已全部译完）：显式标记
 			// skipped（进度矩阵可见「跳过」而非静默消失），继续后续轮次。
 			if roundRowID > 0 {
@@ -826,29 +1016,7 @@ func (r *JobRunner) processJobResource(
 			continue
 		}
 
-		// 构建 Document
-		inputs := buildSegmentInputs(allRows)
-		doc := pipeline.BuildDocumentFromSegments(inputs,
-			snapshot.SourceLang, snapshot.TargetLang, res.Format)
-
-		// 构建索引映射
-		dbIDToIndex := make(map[int]int, len(allRows))
-		for i, row := range allRows {
-			dbIDToIndex[row.ID] = i
-		}
-		segmentIndexes := make([]int, 0, len(selectedRows))
-		for _, row := range selectedRows {
-			if idx, ok := dbIDToIndex[row.ID]; ok {
-				segmentIndexes = append(segmentIndexes, idx)
-			}
-		}
-
-		docIndexToDBID := make(map[int]int, len(allRows))
-		for _, row := range allRows {
-			if idx, ok := dbIDToIndex[row.ID]; ok {
-				docIndexToDBID[idx] = row.ID
-			}
-		}
+		docIndexToDBID := func(index int) (int, bool) { return canonicalDBIdentity(doc, index) }
 
 		// 每轮刷新 reporter 目标行，并同点注入当轮断点映射。
 		// 顺序约束由 SwitchRound 内部保证：先 flush 上一轮残留缓冲（写入旧行），
@@ -860,8 +1028,8 @@ func (r *JobRunner) processJobResource(
 		// translate 轮的跨轮增量仍由 Segment.status 驱动——resolvedByMode 不含
 		// translate，loadResolved 也不加载其断点行，断点只承担记账与恢复语义。
 		// docIndexToDBID 每轮整体重建，闭包捕获的是当轮快照，无需加锁。
-		reporter.SwitchRound(roundRowID, func(docIndex int) (int, bool) {
-			dbID, ok := docIndexToDBID[docIndex]
+		reporter.SwitchBoundedRound(roundRowID, func(docIndex int) (int, bool) {
+			dbID, ok := docIndexToDBID(docIndex)
 			return dbID, ok
 		})
 
@@ -893,7 +1061,7 @@ func (r *JobRunner) processJobResource(
 					if ts.TargetText == "" {
 						continue
 					}
-					dbID, ok := docIndexToDBID[ts.Index]
+					dbID, ok := docIndexToDBID(ts.Index)
 					if !ok {
 						continue
 					}
@@ -911,7 +1079,7 @@ func (r *JobRunner) processJobResource(
 
 					persistErr := withJobResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
 						update := client.Segment.UpdateOneID(dbID).
-							Where(segment.ContentVersionEQ(allRows[ts.Index].ContentVersion)).
+							Where(segment.ContentVersionEQ(doc.Segments[ts.Index].ContentVersion)).
 							SetTargetText(ts.TargetText).
 							SetStatus(segStatus)
 						if autoApprove {
@@ -966,7 +1134,7 @@ func (r *JobRunner) processJobResource(
 		case "correct":
 			batchHandler = func(ctx context.Context, batchResult pipeline.BatchResult) error {
 				for _, ts := range batchResult.Segments {
-					dbID, ok := docIndexToDBID[ts.Index]
+					dbID, ok := docIndexToDBID(ts.Index)
 					if !ok {
 						continue
 					}
@@ -976,7 +1144,7 @@ func (r *JobRunner) processJobResource(
 					// 若未来引入同译文手动重算，须接入 qa.ReconcileIssues。
 					persistErr := withJobResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
 						update := client.Segment.UpdateOneID(dbID).
-							Where(segment.ContentVersionEQ(allRows[ts.Index].ContentVersion)).
+							Where(segment.ContentVersionEQ(doc.Segments[ts.Index].ContentVersion)).
 							SetTargetText(ts.TargetText)
 						if len(ts.Issues) > 0 {
 							update.SetQualityIssues(ts.Issues)
@@ -1007,9 +1175,13 @@ func (r *JobRunner) processJobResource(
 			}
 		case "adjudicate":
 			batchHandler = func(ctx context.Context, batchResult pipeline.BatchResult) error {
+				if batchResult.PreparedPayload != nil {
+					_, err := r.persistStoredEncodedBatch(ctx, "adjudicate", batchResult.PreparedPayload, doc, nil, nil, res.ID, item.SourceGeneration)
+					return err
+				}
 				completed := 0
 				for _, ts := range batchResult.Segments {
-					dbID, ok := docIndexToDBID[ts.Index]
+					dbID, ok := docIndexToDBID(ts.Index)
 					if !ok {
 						continue
 					}
@@ -1018,7 +1190,7 @@ func (r *JobRunner) processJobResource(
 					// 不对账：adjudicate 不产生新 issue，只是标记已有的
 					// （applyVerdicts 写 dismissed）；新译文场景下指纹全变，无需对账。
 					persistErr := withJobResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
-						update := client.Segment.UpdateOneID(dbID).Where(segment.ContentVersionEQ(allRows[ts.Index].ContentVersion))
+						update := client.Segment.UpdateOneID(dbID).Where(segment.ContentVersionEQ(doc.Segments[ts.Index].ContentVersion))
 						if len(ts.Issues) > 0 {
 							update.SetQualityIssues(ts.Issues)
 						} else {
@@ -1055,13 +1227,17 @@ func (r *JobRunner) processJobResource(
 			}
 		case "semantic_qa":
 			batchHandler = func(batchCtx context.Context, batchResult pipeline.BatchResult) error {
+				if batchResult.PreparedPayload != nil {
+					_, err := r.persistStoredEncodedBatch(batchCtx, "semantic_qa", batchResult.PreparedPayload, doc, nil, nil, res.ID, item.SourceGeneration)
+					return err
+				}
 				resultsByDBID := make(map[int]pipeline.TranslatedSegment, len(batchResult.Segments))
 				dbIDs := make([]int, 0, len(batchResult.Segments))
 				for _, ts := range batchResult.Segments {
 					if ts.Issues == nil {
 						continue
 					}
-					dbID, ok := docIndexToDBID[ts.Index]
+					dbID, ok := docIndexToDBID(ts.Index)
 					if !ok {
 						continue
 					}
@@ -1084,7 +1260,7 @@ func (r *JobRunner) processJobResource(
 						continue
 					}
 					var updated int
-					if row.ContentVersion != allRows[ts.Index].ContentVersion {
+					if row.ContentVersion != doc.Segments[ts.Index].ContentVersion {
 						continue
 					}
 					err := withJobResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
@@ -1131,7 +1307,7 @@ func (r *JobRunner) processJobResource(
 				resultsByDBID := make(map[int]pipeline.TranslatedSegment, len(batchResult.Segments))
 				dbIDs := make([]int, 0, len(batchResult.Segments))
 				for _, ts := range batchResult.Segments {
-					dbID, ok := docIndexToDBID[ts.Index]
+					dbID, ok := docIndexToDBID(ts.Index)
 					if !ok {
 						continue
 					}
@@ -1175,7 +1351,7 @@ func (r *JobRunner) processJobResource(
 					}
 					fresh := qa.IssuesFor(ts.Index, allIssues)
 					var updated int
-					if row.ContentVersion != allRows[ts.Index].ContentVersion {
+					if row.ContentVersion != doc.Segments[ts.Index].ContentVersion {
 						continue
 					}
 					err := withJobResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
@@ -1213,18 +1389,16 @@ func (r *JobRunner) processJobResource(
 		// adjudicate handler 的 BuildBatches 在已过滤 doc 上按 status∈{translated,edited}
 		// 且含可裁决 issue 进一步筛选，无需清空共享 doc 的 Status/Issues。
 		execOpts := []engine.ExecuteOption{
-			engine.WithSegmentFilter(segmentIndexes),
 			engine.WithBatchHandler(batchHandler),
 		}
 		if roundRowID > 0 {
 			scope := workstate.Scope{JobID: job.ID, ResourceID: res.ID, JobResourceID: item.ID, RoundID: roundRowID, RetryEpoch: job.RetryEpoch, SourceGeneration: item.SourceGeneration, SourceRevisionID: item.SourceRevisionID}
-			store := newRoundStore(r.client, scope, docIndexToDBID, snapshot, roundIdx, qaEngine, engineCfg.QA.AutoReject, r.dbDriver, memory, func() { mu.Lock(); completedCount++; mu.Unlock() })
+			store := newRoundStore(r.client, scope, nil, snapshot, roundIdx, qaEngine, engineCfg.QA.AutoReject, r.dbDriver, memory, func() { mu.Lock(); completedCount++; mu.Unlock() })
+			store.bindCanonical(doc)
 			execOpts = append(execOpts, engine.WithRoundStore(store))
 		}
 		// 非翻译轮注入跨轮增量载体：BuildBatches 据此排除上一同模式轮已解决的段。
-		if round.Mode != pipeline.RoundModeTranslate {
-			execOpts = append(execOpts, engine.WithResolvedIndices(resolvedByMode[round.Mode]))
-		}
+
 		// 流水线注入：站位信号量（同轮资源共享并发预算）与暂停闸门
 		//（退避重试等待中止信号）。单资源路径（stations/gate 为 nil）跳过。
 		if stations != nil && roundIdx < len(stations) {
@@ -1241,7 +1415,11 @@ func (r *JobRunner) processJobResource(
 			// 断点已由 executor 经 SegmentResolved 逐段实时落盘，此集合不再
 			// 承载持久化正确性职责，仅驱动下一同模式轮的 BuildBatches 过滤；
 			// 轮末无需强制落盘兜底。
-			engine.AccumulateResolved(resolvedByMode, round.Mode, result.Resolved)
+			for _, idx := range result.Resolved {
+				if idx >= 0 && idx < len(doc.Segments) {
+					doc.Segments[idx].CompletionModes |= pipeline.CompletedModeMask(round.Mode)
+				}
+			}
 			if roundIdx == lastTranslateRoundIdx && engineCfg.QA.Enabled && qa.DuplicateSourceDivergenceEnabled(engineCfg.QA.Checks) {
 				if err := r.persistDuplicateSourceDivergence(ctx, res.ID, item.SourceGeneration); err != nil {
 					roundErr = err
@@ -1279,7 +1457,7 @@ func (r *JobRunner) processJobResource(
 			}
 			if errors.Is(roundErr, context.Canceled) && completedCount > 0 {
 				r.logger.Warn("translation cancelled, preserving partial progress",
-					"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
+					"resource_id", item.ID, "completed", completedCount, "total", selectedCount)
 				_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).SetSkippedSegments(lastResult.SkippedCount).Exec(ctx)
 				_ = r.jobs.MarkJobResourceCancelled(ctx, job.ID, item.ID)
 				return nil
@@ -1594,10 +1772,11 @@ func (r *JobRunner) persistDuplicateSourceDivergence(ctx context.Context, resour
 	if len(expectedSource) != 0 {
 		generation = expectedSource[0]
 	}
-	_, rows, err := r.loadSegments(ctx, resourceID, nil)
+	rows, lease, err := service.LoadExecutionSegments(ctx, r.client, resourceID)
 	if err != nil {
 		return fmt.Errorf("load segments for duplicate source QA: %w", err)
 	}
+	defer lease.Close()
 	inputs := make([]qa.CheckInput, 0, len(rows))
 	for _, row := range rows {
 		target := ""
@@ -1673,7 +1852,8 @@ func (r *JobRunner) buildRuntimeGlossary(ctx context.Context, projectRow *ent.Pr
 	if !enabled {
 		return glossary.Nop{}, nil
 	}
-	return service.NewDatabaseGlossary(ctx, r.client, projectRow)
+	g, _, err := service.LoadExecutionGlossary(ctx, r.client, projectRow, true)
+	return g, err
 }
 
 // buildRuntimeTM 根据配置构建运行时翻译记忆，未启用则返回空实现。
@@ -1686,28 +1866,6 @@ func (r *JobRunner) buildRuntimeTM(projectRow *ent.Project, enabled bool) (tm.Tr
 		return nil, err
 	}
 	return tm.NewSQLite(r.client, scope)
-}
-
-// loadSegments 从数据库加载指定资源的所有片段，并按 selectedIDs 过滤。
-func (r *JobRunner) loadSegments(ctx context.Context, resourceID int, selectedIDs []int) ([]*ent.Segment, []*ent.Segment, error) {
-	allRows, err := r.client.Segment.Query().
-		Where(segment.ResourceIDEQ(resourceID)).
-		Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(selectedIDs) == 0 {
-		return allRows, allRows, nil
-	}
-	selectedRows, err := r.client.Segment.Query().
-		Where(segment.IDIn(selectedIDs...), segment.ResourceIDEQ(resourceID)).
-		Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	return selectedRows, allRows, nil
 }
 
 // clampInt64ToInt 将 int64 安全地转换为 int，超过 math.MaxInt32 时截断。

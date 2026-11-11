@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -53,9 +54,9 @@ func TestRubyPipelineSQLiteRoundCloseFailureRetriesWithoutHTTP(t *testing.T) {
 	f.assertUsage(t, 2)
 }
 
-func TestRubyPipelineSQLitePauseRejectsUnsafeCapacityDrain(t *testing.T) {
+func TestRubyPipelineSQLitePausePersistsRawBeforeCandidateCapacityCheck(t *testing.T) {
 	f := newRubyPipelineFixture(t, 1)
-	f.runner.pipeCfg.Candidates.ItemBytes = 256
+	f.runner.pipeCfg.Candidates.ItemBytes = 4 << 10
 	f.respond = func(ctx context.Context, request rubyPipelineRequest) (any, error) {
 		if _, err := f.jobs.PauseJob(ctx, f.ownerID, f.jobID); err != nil {
 			return nil, err
@@ -63,23 +64,41 @@ func TestRubyPipelineSQLitePauseRejectsUnsafeCapacityDrain(t *testing.T) {
 		if !f.runner.Pause(f.jobID) {
 			return nil, errors.New("Job gate was not registered")
 		}
-		return rubyPipelineResponse(request), nil
+		return map[string]any{"translations": map[string]string{"1": strings.Repeat("x", 8<<10)}}, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := f.runner.processJob(ctx, f.jobID); !errors.Is(err, pipeline.ErrCandidateCapacity) {
-		t.Fatalf("oversized admitted response during pause: %v", err)
+	if err := f.runner.processJob(ctx, f.jobID); err != nil {
+		t.Fatalf("reliable raw handoff during pause: %v", err)
 	}
 	job := f.client.Job.GetX(ctx, f.jobID)
-	if job.Status != service.JobStatusPausing || !job.PauseRequested {
-		t.Fatalf("failed handoff was reported as a safe pause: %s", job.Status)
+	if job.Status != service.JobStatusPaused || !job.PauseRequested {
+		t.Fatalf("reliable raw handoff did not finish the pause: %s", job.Status)
 	}
 	if f.client.WorkCandidate.Query().CountX(ctx) != 0 || f.client.JobRoundSegment.Query().CountX(ctx) != 0 {
 		t.Fatal("capacity failure produced accepted work")
 	}
 	request := f.client.WorkRequest.Query().OnlyX(ctx)
-	if request.State != "received" {
-		t.Fatalf("unhandled response was marked complete: %s", request.State)
+	if request.State != "completed" || request.PromotionState != "response_pending" || request.PromotionCursor != 0 || len(request.ResponsePayload) == 0 || len(request.FreezePayload) == 0 {
+		t.Fatalf("pause lost unpromoted reliable raw: %+v", request)
+	}
+	f.assertUsage(t, 1)
+	f.respond = nil
+	if _, err := f.jobs.ResumeJob(ctx, f.ownerID, f.jobID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.runner.processJob(ctx, f.jobID); err != nil && !errors.Is(err, pipeline.ErrCandidateCapacity) {
+		t.Fatalf("candidate capacity cause lost on resume: %v", err)
+	}
+	if main, align, _, _ := f.calls(); main != 1 || align != 0 {
+		t.Fatalf("reliable over-Q response was sent again: main=%d align=%d", main, align)
+	}
+	if f.client.WorkCandidate.Query().CountX(ctx) != 0 || f.client.JobRoundSegment.Query().CountX(ctx) != 0 {
+		t.Fatal("over-Q candidate produced accepted work")
+	}
+	item := f.client.WorkItem.Query().OnlyX(ctx)
+	if !strings.Contains(item.LastError, "capacity") {
+		t.Fatalf("over-Q member did not retain a capacity failure: %+v", item)
 	}
 	f.assertUsage(t, 1)
 }

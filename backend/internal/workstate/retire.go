@@ -56,10 +56,29 @@ func (s *Store) RetireCandidate(ctx context.Context, scope Scope, id string, ver
 		if successor.State == "stale" {
 			state = "stale"
 		}
-		if err := tx.WorkCandidate.UpdateOneID(candidate.ID).SetState(state).ClearPayload().SetPayloadBytes(0).Exec(ctx); err != nil {
+		if err := tx.WorkCandidate.UpdateOneID(candidate.ID).SetState(state).ClearPayload().SetGrowthReserved(false).SetPayloadBytes(0).Exec(ctx); err != nil {
 			return err
 		}
-		return tx.WorkItem.UpdateOneID(w.ID).SetCandidateID("").Exec(ctx)
+		if err := tx.WorkItem.UpdateOneID(w.ID).SetCandidateID("").Exec(ctx); err != nil {
+			return err
+		}
+		if successor.State == "pending" {
+			j, err := tx.Job.Get(ctx, scope.JobID)
+			if err != nil {
+				return err
+			}
+			state, err := decodeRuntimeState(j.PipelineRuntimeState)
+			if err != nil {
+				return err
+			}
+			if state.ProgressID == id {
+				state.ProgressID = "member:" + WorkIdentity(scope, w.SegmentID)
+				state.ResponseID = ""
+				return saveRuntimeState(ctx, tx, scope.JobID, state)
+			}
+			return nil
+		}
+		return clearRuntimeBindingTx(ctx, tx, scope.JobID, id, false)
 	})
 	return s.finishUnknown(ctx, scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
 		c, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(id)).Only(ctx)

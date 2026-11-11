@@ -16,10 +16,12 @@ func TestAbortRestoresOnlyUnsentReservation(t *testing.T) {
 			w := c.WorkItem.Query().OnlyX(ctx)
 			c.WorkItem.UpdateOneID(w.ID).SetMainAttempts(2).SetAlignmentAttempts(3).SetNetworkAttempts(5).SetMainNetworkAttempts(4).SetAlignmentNetworkAttempts(5).ExecX(ctx)
 			before := attemptsFromRow(c.WorkItem.GetX(ctx, w.ID))
-			req := Request{ID: "never-dispatched", Scope: scope, SegmentIDs: []int{seg.ID}, Stage: stage, BackendID: 1, BudgetModel: "stage_separated", InputDigest: "request", MainAttempt: stage == "main", AlignmentAttempt: stage == "alignment", MaxMainAttempts: 4, MaxAlignmentAttempts: 5}
+			req := Request{ID: "never-dispatched", Scope: scope, SegmentIDs: []int{seg.ID}, Stage: stage, BackendID: 1, BudgetModel: "stage_separated", InputDigest: "request", FreezePayload: []byte("bounded unsent frozen input"), MainAttempt: stage == "main", AlignmentAttempt: stage == "alignment", MaxMainAttempts: 4, MaxAlignmentAttempts: 5}
 			if err := s.ReserveRequest(ctx, req); err != nil {
 				t.Fatal(err)
 			}
+			row := c.WorkRequest.Query().OnlyX(ctx)
+			c.WorkRequest.UpdateOne(row).SetFreezePayload(req.FreezePayload).SetFreezeBytes(int64(len(req.FreezePayload))).ExecX(ctx)
 			c.Job.UpdateOneID(scope.JobID).SetStatus("cancelled").ExecX(ctx)
 			for range 2 {
 				if err := s.AbortRequest(ctx, req.ID); err != nil {
@@ -31,6 +33,9 @@ func TestAbortRestoresOnlyUnsentReservation(t *testing.T) {
 			}
 			if row := c.WorkRequest.Query().OnlyX(ctx); row.State != "cancelled_before_dispatch" {
 				t.Fatalf("request=%+v", row)
+			}
+			if row := c.WorkRequest.Query().OnlyX(ctx); len(row.FreezePayload) != 0 || row.FreezeBytes != 0 {
+				t.Fatal("confirmed unsent abort retained frozen backing")
 			}
 			if c.UsageRecord.Query().CountX(ctx) != 0 {
 				t.Fatal("unmade request acquired usage")

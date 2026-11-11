@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
 // The digest covers the full persisted v1 snapshot: all six rounds, Ruby retry,
@@ -98,7 +97,7 @@ func TestFrozenSelectionsPreserveSourceSemantics(t *testing.T) {
 	rounds[4].(map[string]any)["revise"].(map[string]any)["issue_codes"] = []any{}
 	client.Job.UpdateOneID(job.ID).SetExecutionConfig(job.ExecutionConfig).ExecX(ctx)
 	runLegacyExecutionMigration(t, ctx, client, credentials.keys)
-	snapshot, err := service.GetSnapshot(client.Job.GetX(ctx, job.ID))
+	snapshot, err := readFrozenExecutionTest(client.Job.GetX(ctx, job.ID))
 	if err != nil {
 		t.Fatal(err)
 	}

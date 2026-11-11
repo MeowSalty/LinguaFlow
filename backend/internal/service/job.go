@@ -86,10 +86,16 @@ type JobService struct {
 	lifecycle                  *tasklife.Coordinator
 	cancelTask                 func(int)
 	pauseTask                  func(int) bool
+	prepareBudgetCleanup       func(context.Context, int) (func(context.Context) error, error)
+	controlBudget              jobControlBudget
+	controlOwnerState          *jobControlOwners
 }
 
 // SetLifecycle is configured before serving requests or starting workers.
 func (s *JobService) SetLifecycle(coordinator *tasklife.Coordinator) { s.lifecycle = coordinator }
+func (s *JobService) SetBudgetCancellation(prepare func(context.Context, int) (func(context.Context) error, error)) {
+	s.prepareBudgetCleanup = prepare
+}
 
 // SetTaskControl keeps execution notifications inside the same control guard
 // as the corresponding durable state transition.
@@ -935,25 +941,30 @@ func NormalizeShrink(v float64) float64 {
 // --- 其他方法 ---
 
 func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
-	jobs, err := s.client.Job.Query().
-		Where(job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPausing)).
-		WithJobResources().
-		Order(ent.Asc(job.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, 0, len(jobs))
-	for _, current := range jobs {
-		recovered, err := s.recoverLegacyJob(ctx, current.ID)
+	ids := make([]int, 0, 128)
+	after := 0
+	for {
+		rows, err := s.client.Job.Query().Where(job.StatusIn(JobStatusPending, JobStatusRunning, JobStatusPausing), job.IDGT(after), workstate.SupportedExecution(workstate.ExecutionDefinitionReadLimit)).Order(ent.Asc(job.FieldID)).Limit(128).Select(job.FieldID).All(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if recovered {
-			ids = append(ids, current.ID)
+		for _, current := range rows {
+			after = current.ID
+			recovered, err := s.recoverLegacyJob(ctx, current.ID)
+			if err != nil {
+				return nil, err
+			}
+			if recovered {
+				if len(ids) == 65536 {
+					return nil, fmt.Errorf("legacy recovery ID result exceeds fixed node limit")
+				}
+				ids = append(ids, current.ID)
+			}
+		}
+		if len(rows) < 128 {
+			return ids, nil
 		}
 	}
-	return ids, nil
 }
 
 func (s *JobService) recoverLegacyJob(ctx context.Context, id int) (bool, error) {
@@ -965,14 +976,22 @@ func (s *JobService) recoverLegacyJob(ctx context.Context, id int) (bool, error)
 	if guard.Active() {
 		return false, tasklife.ErrBusy
 	}
-	current, err := s.client.Job.Query().Where(job.IDEQ(id)).WithJobResources().Only(ctx)
-	if ent.IsNotFound(err) {
+	ctx, current, release, err := s.loadControlDefinition(ctx, id, 0)
+	if ent.IsNotFound(err) || errors.Is(err, ErrJobNotFound) {
 		return false, nil
 	}
 	if err != nil {
+		var invalid *executionControlValidationError
+		if errors.As(err, &invalid) {
+			return false, s.failRecoveryJob(ctx, id, "execution recovery refused: "+err.Error())
+		}
 		return false, err
 	}
+	defer release()
 	if current.Status != JobStatusPending && current.Status != JobStatusRunning && current.Status != JobStatusPausing {
+		return false, nil
+	}
+	if err := execution.ValidateExecutionConfigFormat(current.ExecutionConfig); err != nil {
 		return false, nil
 	}
 	var sourceErr error
@@ -1019,18 +1038,9 @@ func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int
 	if count > 0 {
 		return nil
 	}
-	jobRow, err := s.client.Job.Get(ctx, jobID)
-	if err != nil {
-		return fmt.Errorf("load job: %w", err)
-	}
-	resources, err := s.client.JobResource.Query().
-		Where(jobresource.HasJobWith(job.IDEQ(jobID))).
-		All(ctx)
-	if err != nil {
-		return fmt.Errorf("load job resources: %w", err)
-	}
-	if len(resources) == 0 {
-		return nil
+	definition, ok := ctx.Value(controlDefinitionKey{}).(*controlDefinition)
+	if !ok || definition.id != jobID {
+		return fmt.Errorf("missing bounded recovery definition")
 	}
 	// 缺失或不受支持的快照绝不被解释为默认轮次。
 	type backfillRound struct {
@@ -1038,31 +1048,39 @@ func (s *JobService) backfillJobRoundsForRecovery(ctx context.Context, jobID int
 		mode  string
 	}
 	rounds := make([]backfillRound, 0, 1)
-	snapshot, err := GetSnapshot(jobRow)
-	if err != nil {
-		return err
-	}
+	snapshot := definition.snapshot
 	if snapshot != nil && len(snapshot.Rounds) > 0 {
 		for i, rd := range snapshot.Rounds {
 			rounds = append(rounds, backfillRound{index: i, mode: rd.Mode})
 		}
 	}
 	builders := make([]*ent.JobRoundCreate, 0, jobRoundBulkChunk)
-	for _, jr := range resources {
-		for _, rd := range rounds {
-			builders = append(builders, s.client.JobRound.Create().
-				SetJobID(jobID).
-				SetJobResourceID(jr.ID).
-				SetRoundIndex(rd.index).
-				SetMode(rd.mode).
-				SetStatus(JobRoundStatusPending))
-			if len(builders) == jobRoundBulkChunk {
-				if err := bulkCreateJobRounds(ctx, builders, s.client.JobRound.CreateBulk); err != nil {
-					return fmt.Errorf("create job rounds: %w", err)
+	after := 0
+	for {
+		resources, err := s.client.JobResource.Query().Where(jobresource.HasJobWith(job.IDEQ(jobID)), jobresource.IDGT(after)).Order(ent.Asc(jobresource.FieldID)).Limit(128).Select(jobresource.FieldID).All(ctx)
+		if err != nil {
+			return err
+		}
+		for _, jr := range resources {
+			after = jr.ID
+			for _, rd := range rounds {
+				builders = append(builders, s.client.JobRound.Create().
+					SetJobID(jobID).
+					SetJobResourceID(jr.ID).
+					SetRoundIndex(rd.index).
+					SetMode(rd.mode).
+					SetStatus(JobRoundStatusPending))
+				if len(builders) == jobRoundBulkChunk {
+					if err := bulkCreateJobRounds(ctx, builders, s.client.JobRound.CreateBulk); err != nil {
+						return fmt.Errorf("create job rounds: %w", err)
+					}
+					clear(builders)
+					builders = builders[:0]
 				}
-				clear(builders)
-				builders = builders[:0]
 			}
+		}
+		if len(resources) < 128 {
+			break
 		}
 	}
 	if err := bulkCreateJobRounds(ctx, builders, s.client.JobRound.CreateBulk); err != nil {
@@ -1300,7 +1318,7 @@ func (s *JobService) LoadJobExecution(ctx context.Context, jobID int) (*JobExecu
 	current, err := s.client.Job.Query().
 		Where(job.IDEQ(jobID)).
 		WithProject().
-		WithCreatedBy().
+		WithCreatedBy(func(q *ent.UserQuery) { q.Select(user.FieldID) }).
 		WithJobResources(func(q *ent.JobResourceQuery) {
 			q.WithResource().Order(ent.Asc(jobresource.FieldID))
 		}).
@@ -1318,8 +1336,14 @@ func (s *JobService) LoadJobExecution(ctx context.Context, jobID int) (*JobExecu
 	actorUserID := 0
 	if current.Edges.CreatedBy != nil {
 		actorUserID = current.Edges.CreatedBy.ID
-	} else if projectRow.OwnerUserID != nil {
-		actorUserID = *projectRow.OwnerUserID
+	} else if projectRow.OwnerOrgID == nil && projectRow.OwnerUserID != nil {
+		exists, err := s.client.User.Query().Where(user.IDEQ(*projectRow.OwnerUserID)).Exist(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			actorUserID = *projectRow.OwnerUserID
+		}
 	}
 	if actorUserID <= 0 {
 		return nil, ErrJobActorMissing
@@ -1548,7 +1572,7 @@ func (s *JobService) MarkJobResourceCancelled(ctx context.Context, jobID, jobRes
 	return nil
 }
 
-func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
+func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (result *ent.Job, err error) {
 	guard, err := s.lifecycle.Lock(ctx, "translation", jobID)
 	if err != nil {
 		return nil, err
@@ -1561,6 +1585,21 @@ func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*en
 	// 仅 pending/running/pausing/paused 可取消；completed/failed/cancelled 为终态，取消会篡改状态。
 	if current.Status != JobStatusPending && current.Status != JobStatusRunning && current.Status != JobStatusPausing && current.Status != JobStatusPaused {
 		return nil, ErrJobNotCancellable
+	}
+	if !guard.Active() && s.prepareBudgetCleanup != nil {
+		finish, prepareErr := s.prepareBudgetCleanup(ctx, jobID)
+		if prepareErr != nil {
+			return nil, prepareErr
+		}
+		// Capture inventory before changing Job status: body-free unknown
+		// attempts cease to retain RAM as soon as cancellation is durable.
+		// The finish callback verifies SQL facts even after an unknown ACK.
+		defer func() {
+			err = errors.Join(err, finish(context.WithoutCancel(ctx)))
+			if err != nil {
+				result = nil
+			}
+		}()
 	}
 	apply := func(client *ent.Client) error {
 		// Existing job controls are available to project readers, including
@@ -1698,10 +1737,16 @@ func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*en
 		return nil, err
 	}
 	defer guard.Release()
-	current, err := s.GetJob(ctx, actorUserID, jobID)
+	ctx, current, release, err := s.loadControlDefinition(ctx, jobID, actorUserID)
 	if err != nil {
 		return nil, err
 	}
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			release()
+		}
+	}()
 	if current.Status != JobStatusPaused {
 		return nil, ErrJobNotResumable
 	}
@@ -1780,7 +1825,10 @@ func (s *JobService) ResumeJob(ctx context.Context, actorUserID, jobID int) (*en
 	}
 	committed = true
 	s.publishEvent(jobID, "job_resumed", "info", "", "任务已恢复")
-	return s.GetJob(ctx, actorUserID, jobID)
+	retireControlDefinition(ctx, current)
+	result, err := s.controlResult(ctx, actorUserID, jobID, release)
+	handedOff = err == nil
+	return result, err
 }
 
 func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
@@ -1789,10 +1837,16 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 		return nil, err
 	}
 	defer guard.Release()
-	current, err := s.GetJob(ctx, actorUserID, jobID)
+	ctx, current, release, err := s.loadControlDefinition(ctx, jobID, actorUserID)
 	if err != nil {
 		return nil, err
 	}
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			release()
+		}
+	}()
 	// failed/cancelled 任务可重试；对 completed 任务重试会把它重新入队空耗 worker。
 	if current.Status != JobStatusFailed && current.Status != JobStatusCancelled {
 		return nil, ErrJobNotRetryable
@@ -1881,7 +1935,10 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return s.GetJob(ctx, actorUserID, current.ID)
+	retireControlDefinition(ctx, current)
+	result, err := s.controlResult(ctx, actorUserID, current.ID, release)
+	handedOff = err == nil
+	return result, err
 }
 
 func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
@@ -2090,6 +2147,9 @@ func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
 	if job == nil || len(job.ExecutionConfig) == 0 {
 		return nil, errors.New("missing execution snapshot")
 	}
+	if err := execution.ValidateExecutionConfigFormat(job.ExecutionConfig); err != nil {
+		return nil, err
+	}
 	raw, err := json.Marshal(job.ExecutionConfig)
 	if err != nil {
 		return nil, fmt.Errorf("marshal execution config: %w", err)
@@ -2102,6 +2162,16 @@ func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
 		return nil, err
 	}
 	return &snap, nil
+}
+
+// CheckExecutionFormat is read-only and runs before translation queue claims.
+// Historical queries and explicit cancellation/deletion do not call it.
+func (s *JobService) CheckExecutionFormat(ctx context.Context, jobID int) error {
+	err := workstate.CheckExecution(ctx, s.client, jobID)
+	if ent.IsNotFound(err) {
+		return ErrJobNotFound
+	}
+	return err
 }
 
 // GetExecutionSnapshot 从任务获取执行快照。

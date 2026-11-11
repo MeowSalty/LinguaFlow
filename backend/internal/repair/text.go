@@ -21,6 +21,9 @@ var textLineRe = regexp.MustCompile(`^\[(\d+)\]\s*(.*)`)
 //	T1 结构清理：剥离 BOM、``` 围栏、首尾非 [N] 文本
 //	T3 部分成功：缺失 ID 记入 Missing，不视为 Fatal
 func TryRepairText(text string, wantIDs []string, opt Options) Result {
+	if opt.Bounds != nil {
+		return tryRepairTextBounded(text, wantIDs, opt)
+	}
 	var repaired []string
 
 	// T1 结构清理

@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
@@ -29,6 +31,9 @@ func (s *JobService) PrepareRecovery(ctx context.Context) error {
 		for _, current := range rows {
 			afterID = current.ID
 			if err := s.prepareRecoveredJob(ctx, current.ID); err != nil {
+				if errors.Is(err, execution.ErrUnsupportedExecutionFormat) {
+					continue
+				}
 				return err
 			}
 		}
@@ -39,6 +44,9 @@ func (s *JobService) PrepareRecovery(ctx context.Context) error {
 }
 
 func (s *JobService) prepareRecoveredJob(ctx context.Context, id int) error {
+	if err := s.CheckExecutionFormat(ctx, id); err != nil {
+		return err
+	}
 	guard, err := s.lifecycle.Lock(ctx, "translation", id)
 	if err != nil {
 		return err
@@ -47,16 +55,46 @@ func (s *JobService) prepareRecoveredJob(ctx context.Context, id int) error {
 	if guard.Active() {
 		return tasklife.ErrBusy
 	}
+	count, err := s.client.JobRound.Query().Where(jobround.JobIDEQ(id)).Count(ctx)
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		var release func()
+		ctx, _, release, err = s.loadControlDefinition(ctx, id, 0)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	return s.prepareRecoveredJobState(ctx, id)
 }
 
 func (s *JobService) prepareRecoveredJobState(ctx context.Context, id int) error {
+	definition, prepared := ctx.Value(controlDefinitionKey{}).(*controlDefinition)
+	if !prepared || definition.id != id || definition.snapshot == nil {
+		count, err := s.client.JobRound.Query().Where(jobround.JobIDEQ(id)).Count(ctx)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			var release func()
+			ctx, _, release, err = s.loadControlDefinition(ctx, id, 0)
+			if err != nil {
+				return err
+			}
+			defer release()
+		}
+	}
 	return withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
 		if err := workstate.LockJob(ctx, client, id); err != nil {
 			return err
 		}
-		current, err := client.Job.Get(ctx, id)
+		current, err := client.Job.Query().Where(job.IDEQ(id)).Select(job.FieldID, job.FieldStatus, job.FieldPauseRequested).Only(ctx)
 		if err != nil {
+			return err
+		}
+		if err := workstate.CheckExecution(ctx, client, id); err != nil {
 			return err
 		}
 		if current.PauseRequested || current.Status == JobStatusPausing {
@@ -105,7 +143,5 @@ func (s *JobService) PendingTaskIDs(ctx context.Context, afterID, limit int) ([]
 	if afterID < 0 || limit < 1 || limit > 128 {
 		return nil, fmt.Errorf("invalid pending task page")
 	}
-	return s.client.Job.Query().
-		Where(job.StatusEQ(JobStatusPending), job.IDGT(afterID)).
-		Order(ent.Asc(job.FieldID)).Limit(limit).Select(job.FieldID).Ints(ctx)
+	return s.client.Job.Query().Where(job.StatusEQ(JobStatusPending), job.IDGT(afterID), workstate.SupportedExecution(workstate.ExecutionDefinitionReadLimit)).Order(ent.Asc(job.FieldID)).Limit(limit).IDs(ctx)
 }

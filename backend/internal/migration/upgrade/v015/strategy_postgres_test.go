@@ -466,7 +466,7 @@ func TestPostgresInplaceExternalRestoreAcceptance(t *testing.T) {
 	if _, err := Run(ctx, RunOptions{Directory: second.Directory, Offline: true, BackupReference: "acceptance:postgres18.6:inplace:second-source-backup"}); err != nil {
 		t.Fatal("second external inplace apply", err)
 	}
-	resolved, err := config.ResolveServerConfig(options.Inputs)
+	resolved, err := config.ResolveMaintenanceServerConfig(options.Inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -637,7 +637,7 @@ func assertPostgresRestoredRehearsal(t *testing.T, sourceOptions PlanOptions, so
 	if child.Strategy != operation.Inplace || child.DatabaseBackup != operation.BackupExternal || child.Source.Identity != parent.Target.RehearsalIdentity || child.Source.DataDir != cfg.DataDir || journal.Phase != "needs_action" || len(journal.Steps) != 0 {
 		t.Fatal("cancelled rehearsal did not retain its independent inplace/external child")
 	}
-	childInputs, err := config.ResolveServerConfig(PlannedInputs(child))
+	childInputs, err := config.ResolveMaintenanceServerConfig(PlannedInputs(child))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -783,6 +783,7 @@ func assertPostgresOldAccessTokenRejected(ctx context.Context, cfg *config.Serve
 		return err
 	}
 	defer db.Close()
+	authorizeTestExecution(cfg)
 	server, err := api.NewServer(cfg, keys, slog.New(slog.NewTextHandler(io.Discard, nil)), db, client, config.ModeServer, nil)
 	if err != nil {
 		return err

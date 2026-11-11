@@ -82,6 +82,12 @@ func (_c *JobCreate) SetNillablePauseRequested(v *bool) *JobCreate {
 	return _c
 }
 
+// SetPipelineRuntimeState sets the "pipeline_runtime_state" field.
+func (_c *JobCreate) SetPipelineRuntimeState(v []byte) *JobCreate {
+	_c.mutation.SetPipelineRuntimeState(v)
+	return _c
+}
+
 // SetProjectID sets the "project_id" field.
 func (_c *JobCreate) SetProjectID(v int) *JobCreate {
 	_c.mutation.SetProjectID(v)
@@ -551,6 +557,10 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PauseRequested(); ok {
 		_spec.SetField(job.FieldPauseRequested, field.TypeBool, value)
 		_node.PauseRequested = value
+	}
+	if value, ok := _c.mutation.PipelineRuntimeState(); ok {
+		_spec.SetField(job.FieldPipelineRuntimeState, field.TypeBytes, value)
+		_node.PipelineRuntimeState = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)

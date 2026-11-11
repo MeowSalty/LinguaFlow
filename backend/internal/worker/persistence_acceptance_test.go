@@ -17,12 +17,14 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
-func persistenceRoundStore(f *pa.Fixture) *roundStore {
+func persistenceRoundStore(t *testing.T, f *pa.Fixture) *roundStore {
 	indices := make(map[int]int, len(f.IDs))
 	for i, id := range f.IDs {
 		indices[i] = id
 	}
-	snapshot := &service.JobExecutionSnapshot{SchemaVersion: 2, Rounds: []execution.JobRoundSnapshot{{Mode: "extract", Extract: &execution.JobExtractRoundSnapshot{Concurrency: 10, BatchSize: 300, Retry: execution.RetryConfig{MaxAttempts: 2}}}}}
+	snapshot := &service.JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", Rounds: []execution.JobRoundSnapshot{{Mode: "extract", Backend: execution.BackendSnapshot{ID: 1, Name: "isolated-fake"}, Extract: &execution.JobExtractRoundSnapshot{TemplateContent: "Extract terms.", Concurrency: 10, BatchSize: 300, Retry: execution.RetryConfig{MaxAttempts: 2}}}}}
+	snapshot = completeWorkerSnapshot(t, snapshot)
+	f.SetExecutionSnapshot(t, snapshot)
 	return newRoundStore(f.Client, f.Scope, indices, snapshot, 0, nil, false, pa.Driver(), nil, nil)
 }
 func persistenceIntent(f *pa.Fixture, pool int) pipeline.RequestIntent {
@@ -48,7 +50,7 @@ func TestPersistenceHotPathCosts(t *testing.T) {
 	for _, ms := range []int{0, 1, 2, 5} {
 		t.Run(fmt.Sprintf("reserve300-delay%d", ms), func(t *testing.T) {
 			f := pa.Seed(t, 300, true)
-			store := persistenceRoundStore(f)
+			store := persistenceRoundStore(t, f)
 			f.Probe.Reset(time.Duration(ms) * time.Millisecond)
 			if err := store.Reserve(t.Context(), persistenceIntent(f, 0)); err != nil {
 				t.Fatal(err)
@@ -61,7 +63,7 @@ func TestPersistenceHotPathCosts(t *testing.T) {
 	}
 	t.Run("pool-advance300", func(t *testing.T) {
 		f := pa.Seed(t, 300, true)
-		store := persistenceRoundStore(f)
+		store := persistenceRoundStore(t, f)
 		f.Probe.Reset(0)
 		if err := store.Reserve(t.Context(), persistenceIntent(f, 1)); err != nil {
 			t.Fatal(err)
@@ -127,7 +129,7 @@ func TestPersistenceSealAndCheckpointCosts(t *testing.T) {
 
 func TestPersistenceReservationProtocol(t *testing.T) {
 	f := pa.Seed(t, 300, true)
-	store := persistenceRoundStore(f)
+	store := persistenceRoundStore(t, f)
 	in := persistenceIntent(f, 0)
 	if err := store.Reserve(t.Context(), in); err != nil {
 		t.Fatal(err)
@@ -233,7 +235,7 @@ func TestPersistenceUnknownCommit(t *testing.T) {
 	f := pa.Seed(t, 1, true)
 	ctx := t.Context()
 	row := f.Client.Segment.GetX(ctx, f.IDs[0])
-	candidate := workstate.Candidate{ID: "unknown-candidate", Version: 1, Scope: f.Scope, SegmentID: row.ID, DTOVersion: 1, Mode: "translate", SnapshotDigest: "synthetic", BaselineVersion: row.ContentVersion, BaselineStatus: string(row.Status), State: "ready_to_commit", Payload: []byte(`{"version":1}`)}
+	candidate := persistenceCandidate(t, f, row.ID)
 	if err := f.Store.SaveCandidate(ctx, candidate); err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +271,7 @@ func TestPersistencePostgresLockAndDisconnect(t *testing.T) {
 	}
 	for range 5 {
 		blocked, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-		err = persistenceRoundStore(f).Reserve(blocked, persistenceIntent(f, 0))
+		err = persistenceRoundStore(t, f).Reserve(blocked, persistenceIntent(f, 0))
 		cancel()
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("real PG row lock wait not cancelled: %v", err)
@@ -309,16 +311,30 @@ func TestPersistencePostgresLockAndDisconnect(t *testing.T) {
 	}
 }
 
-func persistenceCandidate(f *pa.Fixture, id int) workstate.Candidate {
-	row := f.Client.Segment.GetX(context.Background(), id)
-	return workstate.Candidate{ID: fmt.Sprintf("candidate-%d", id), Version: 1, Scope: f.Scope, SegmentID: id, DTOVersion: 1, Mode: "translate", SnapshotDigest: "synthetic", BaselineVersion: row.ContentVersion, BaselineStatus: string(row.Status), State: "ready_to_commit", Payload: []byte(`{"version":1}`)}
+func persistenceCandidate(t *testing.T, f *pa.Fixture, id int) workstate.Candidate {
+	t.Helper()
+	store := persistenceRoundStore(t, f)
+	row := f.Client.Segment.GetX(t.Context(), id)
+	index := 0
+	for i, member := range f.IDs {
+		if member == id {
+			index = i
+			break
+		}
+	}
+	c := &pipeline.Candidate{DTOVersion: pipeline.CandidateDTOVersion, ID: fmt.Sprintf("candidate-%d", id), WorkID: store.WorkIdentity(index), Version: 1, Index: index, Mode: pipeline.RoundModeTranslate, Format: "text", Ready: true, BaselineStatus: string(row.Status), Segment: pipeline.Segment{DBID: id, Source: row.SourceText, ContentVersion: row.ContentVersion, Status: string(row.Status), TargetIsNull: row.TargetText == nil, Translate: true}}
+	payload, err := c.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return workstate.Candidate{ID: c.ID, WorkID: c.WorkID, Version: 1, Scope: f.Scope, SegmentID: id, DTOVersion: 2, Mode: "translate", SnapshotDigest: store.digest, BaselineVersion: row.ContentVersion, BaselineTarget: row.TargetText, BaselineStatus: string(row.Status), State: "ready_to_commit", Payload: payload}
 }
 func TestPersistenceFencesAndPauseHandoff(t *testing.T) {
 	for _, boundary := range []string{"epoch", "source", "member-budget", "pause", "cancel", "aba"} {
 		t.Run(boundary, func(t *testing.T) {
 			f := pa.Seed(t, 2, true)
 			ctx := t.Context()
-			candidate := persistenceCandidate(f, f.IDs[0])
+			candidate := persistenceCandidate(t, f, f.IDs[0])
 			in := persistenceIntent(f, 0)
 			switch boundary {
 			case "epoch":
@@ -328,7 +344,7 @@ func TestPersistenceFencesAndPauseHandoff(t *testing.T) {
 			case "member-budget":
 				f.Client.WorkItem.Update().Where(workitem.SegmentIDEQ(f.IDs[1])).SetMainAttempts(3).ExecX(ctx)
 			case "pause":
-				if err := persistenceRoundStore(f).Reserve(ctx, in); err != nil {
+				if err := persistenceRoundStore(t, f).Reserve(ctx, in); err != nil {
 					t.Fatal(err)
 				}
 				f.Client.Job.UpdateOneID(f.Scope.JobID).SetStatus("pausing").SetPauseRequested(true).ExecX(ctx)
@@ -363,7 +379,7 @@ func TestPersistenceFencesAndPauseHandoff(t *testing.T) {
 				return
 			}
 			in.ID = "must-reject"
-			if err := persistenceRoundStore(f).Reserve(ctx, in); err == nil {
+			if err := persistenceRoundStore(t, f).Reserve(ctx, in); err == nil {
 				t.Fatal("fence accepted Reserve")
 			}
 			if boundary == "member-budget" {
@@ -378,7 +394,7 @@ func TestPersistenceFencesAndPauseHandoff(t *testing.T) {
 
 func TestPersistenceCandidateCursorAtomicity(t *testing.T) {
 	f := pa.Seed(t, 1, true)
-	candidate := persistenceCandidate(f, f.IDs[0])
+	candidate := persistenceCandidate(t, f, f.IDs[0])
 	cur, err := f.Store.LoadCursor(t.Context(), f.Scope, f.IDs[0])
 	if err != nil {
 		t.Fatal(err)
@@ -407,7 +423,7 @@ func TestPersistenceCandidateCursorAtomicity(t *testing.T) {
 func TestPersistenceLegacyCheckpointUnknownCommit(t *testing.T) {
 	f := pa.Seed(t, 1, true)
 	ctx := t.Context()
-	candidate := persistenceCandidate(f, f.IDs[0])
+	candidate := persistenceCandidate(t, f, f.IDs[0])
 	if err := f.Store.SaveCandidate(ctx, candidate); err != nil {
 		t.Fatal(err)
 	}
@@ -448,6 +464,7 @@ func TestPersistenceReservationUnknownBoundaries(t *testing.T) {
 	for _, mode := range []string{"committed-expired", "not-delivered", "verification-unavailable"} {
 		t.Run(mode, func(t *testing.T) {
 			f := pa.Seed(t, 300, true)
+			store := persistenceRoundStore(t, f)
 			in := persistenceIntent(f, 0)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -459,7 +476,7 @@ func TestPersistenceReservationUnknownBoundaries(t *testing.T) {
 			case "verification-unavailable":
 				f.Probe.LoseCommitWithUnavailableVerification()
 			}
-			err := persistenceRoundStore(f).Reserve(ctx, in)
+			err := store.Reserve(ctx, in)
 			f.Probe.RestoreVerification()
 			switch mode {
 			case "committed-expired":
@@ -474,7 +491,7 @@ func TestPersistenceReservationUnknownBoundaries(t *testing.T) {
 				if f.Client.WorkRequest.Query().CountX(t.Context()) != 0 {
 					t.Fatal("not-delivered reservation persisted")
 				}
-				if err := persistenceRoundStore(f).Reserve(t.Context(), in); err != nil {
+				if err := store.Reserve(t.Context(), in); err != nil {
 					t.Fatal(err)
 				}
 			case "verification-unavailable":

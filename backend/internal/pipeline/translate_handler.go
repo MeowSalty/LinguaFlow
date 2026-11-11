@@ -64,6 +64,9 @@ type TranslateHandler struct {
 
 	RoundIndex          int // execution plan round index, set by caller
 	prepareOnly         bool
+	buildBounds         *backend.BuildBounds
+	buildClaim          func(backend.Request, backend.PromptMeasure) error
+	buildMaxBytes       int64
 	RubyProtocolVersion int
 }
 
@@ -482,11 +485,13 @@ func (h *TranslateHandler) buildRequest(
 	truncatedSrc map[int]string,
 	logger *slog.Logger,
 ) (string, string, backend.Request, []string, map[int]string, []prompt.GlossaryEntry, error) {
+	glos, tmHints := h.lookupHints(ctx, doc, idxs, logger)
+	return h.buildRequestWithHints(doc, idxs, contextSet, truncatedSrc, glos, tmHints)
+}
+func (h *TranslateHandler) buildRequestWithHints(doc *Document, idxs []int, contextSet map[int]struct{}, truncatedSrc map[int]string, glos []prompt.GlossaryEntry, tmHints []prompt.TMHint) (string, string, backend.Request, []string, map[int]string, []prompt.GlossaryEntry, error) {
 	renderer := h.Renderer
 	proto := prompt.ProtocolFromResponseMode(h.ResponseMode)
 	isTextMode := proto.IsText()
-
-	glos, tmHints := h.lookupHints(ctx, doc, idxs, logger)
 
 	inputs := make([]prompt.SegmentInput, len(idxs))
 	idMap := make(map[int]string, len(idxs))
@@ -538,20 +543,28 @@ func (h *TranslateHandler) buildRequest(
 		RubyAnnotations:   rubyAnns,
 		RubyMode:          h.RubyMode,
 	}
-	sys, usr, err := renderer.Render(data)
+	b, err := candidateBounds(h.buildBounds)
 	if err != nil {
-		return "", "", backend.Request{}, nil, nil, nil, fmt.Errorf("render batch prompt (%d segs): %w", len(idxs), err)
+		return "", "", backend.Request{}, nil, nil, nil, err
 	}
-
-	req := backend.Request{
-		System: sys,
-		User:   usr,
-	}
+	req := backend.Request{}
 	if isTextMode {
 		req.ResponseFormat = "none"
 	} else {
 		req.JSONSchema = translationsSchema(wantIDs, h.InlineBootstrap, h.RubyMode != "", h.RubyProtocolVersion)
 	}
+	claim := func(m backend.PromptMeasure) error {
+		if h.buildClaim != nil {
+			return h.buildClaim(req, m)
+		}
+		return nil
+	}
+	sys, usr, err := renderer.RenderWithCreditsBounded(b, data, max(b.OutputLimit(), h.buildMaxBytes), claim)
+	if err != nil {
+		return "", "", backend.Request{}, nil, nil, nil, fmt.Errorf("render batch prompt (%d segs): %w", len(idxs), err)
+	}
+
+	req.System, req.User = sys, usr
 
 	return sys, usr, req, wantIDs, idMap, glos, nil
 }

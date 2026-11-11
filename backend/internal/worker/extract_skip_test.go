@@ -143,6 +143,18 @@ func TestDisabledGlossaryJobSkipsExtractWithoutAddingProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	snapshot := disabledGlossarySnapshot(t, endpoint)
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var executionConfig map[string]any
+	if err := json.Unmarshal(encoded, &executionConfig); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Job.UpdateOneID(jobID).SetExecutionConfig(executionConfig).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
 	job, err := client.Job.Get(ctx, jobID)
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +173,7 @@ func TestDisabledGlossaryJobSkipsExtractWithoutAddingProgress(t *testing.T) {
 	}
 	runner.SetCredentials(fixtureCredentials{}, fixtureCredentials{})
 	if err := runner.processJobResource(ctx, &service.JobExecution{Job: job, Project: project},
-		disabledGlossarySnapshot(t, endpoint), item, registry, nil, nil); err != nil {
+		snapshot, item, registry, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	item, err = client.JobResource.Get(ctx, resourceJobID)

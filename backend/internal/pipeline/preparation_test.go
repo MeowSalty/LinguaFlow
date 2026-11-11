@@ -353,7 +353,10 @@ func TestPreparationExpiredLeaseGivesReadyCompetitorPriority(t *testing.T) {
 	r := NewExecutionRuntime(a, DefaultCandidateLimits(), nil)
 	r.Configure(RuntimePolicy{PreparePending: 1, DispatchLease: 5 * time.Millisecond})
 	defer r.Close()
-	old := backend.RequestAdmissionIntent{RoundIndex: 0, BackendID: 1, ResourceID: 1, Stage: backend.RequestStageMain}
+	old := backend.RequestAdmissionIntent{RoundIndex: 0, BackendID: 1, ResourceID: 1, Stage: backend.RequestStageMain, RequestID: NewWorkID()}
+	if ok, err := a.PrepareMain(old.RequestID, old.RoundIndex, old.ResourceID, 1, 1, 0, false); err != nil || !ok {
+		t.Fatalf("warmup request input: %v", err)
+	}
 	ticket, err := r.Preparation.Try(context.Background(), old, r.Gate)
 	if err != nil {
 		t.Fatal(err)
@@ -363,6 +366,10 @@ func TestPreparationExpiredLeaseGivesReadyCompetitorPriority(t *testing.T) {
 		t.Fatal(err)
 	}
 	permit.Release()
+	old.RequestID = NewWorkID()
+	if ok, err := a.PrepareMain(old.RequestID, old.RoundIndex, old.ResourceID, 1, 1, 0, false); err != nil || !ok {
+		t.Fatalf("reserved lease input: %v", err)
+	}
 	ticket.MarkReserved()
 	b := &requestBackend{runtime: r}
 	done := make(chan error, 1)

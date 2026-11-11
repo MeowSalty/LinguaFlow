@@ -26,6 +26,7 @@ type ExecutionPlanTemplateQuery struct {
 	predicates    []predicate.ExecutionPlanTemplate
 	withOwnerUser *UserQuery
 	withOwnerOrg  *OrganizationQuery
+	modifiers     []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -301,8 +302,9 @@ func (_q *ExecutionPlanTemplateQuery) Clone() *ExecutionPlanTemplateQuery {
 		withOwnerUser: _q.withOwnerUser.Clone(),
 		withOwnerOrg:  _q.withOwnerOrg.Clone(),
 		// clone intermediate query.
-		sql:  _q.sql.Clone(),
-		path: _q.path,
+		sql:       _q.sql.Clone(),
+		path:      _q.path,
+		modifiers: append([]func(*sql.Selector){}, _q.modifiers...),
 	}
 }
 
@@ -420,6 +422,9 @@ func (_q *ExecutionPlanTemplateQuery) sqlAll(ctx context.Context, hooks ...query
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
+	if len(_q.modifiers) > 0 {
+		_spec.Modifiers = _q.modifiers
+	}
 	for i := range hooks {
 		hooks[i](ctx, _spec)
 	}
@@ -511,6 +516,9 @@ func (_q *ExecutionPlanTemplateQuery) loadOwnerOrg(ctx context.Context, query *O
 
 func (_q *ExecutionPlanTemplateQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
+	if len(_q.modifiers) > 0 {
+		_spec.Modifiers = _q.modifiers
+	}
 	_spec.Node.Columns = _q.ctx.Fields
 	if len(_q.ctx.Fields) > 0 {
 		_spec.Unique = _q.ctx.Unique != nil && *_q.ctx.Unique
@@ -579,6 +587,9 @@ func (_q *ExecutionPlanTemplateQuery) sqlQuery(ctx context.Context) *sql.Selecto
 	if _q.ctx.Unique != nil && *_q.ctx.Unique {
 		selector.Distinct()
 	}
+	for _, m := range _q.modifiers {
+		m(selector)
+	}
 	for _, p := range _q.predicates {
 		p(selector)
 	}
@@ -594,6 +605,12 @@ func (_q *ExecutionPlanTemplateQuery) sqlQuery(ctx context.Context) *sql.Selecto
 		selector.Limit(*limit)
 	}
 	return selector
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_q *ExecutionPlanTemplateQuery) Modify(modifiers ...func(s *sql.Selector)) *ExecutionPlanTemplateSelect {
+	_q.modifiers = append(_q.modifiers, modifiers...)
+	return _q.Select()
 }
 
 // ExecutionPlanTemplateGroupBy is the group-by builder for ExecutionPlanTemplate entities.
@@ -684,4 +701,10 @@ func (_s *ExecutionPlanTemplateSelect) sqlScan(ctx context.Context, root *Execut
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (_s *ExecutionPlanTemplateSelect) Modify(modifiers ...func(s *sql.Selector)) *ExecutionPlanTemplateSelect {
+	_s.modifiers = append(_s.modifiers, modifiers...)
+	return _s
 }

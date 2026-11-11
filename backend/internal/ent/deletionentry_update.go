@@ -19,8 +19,9 @@ import (
 // DeletionEntryUpdate is the builder for updating DeletionEntry entities.
 type DeletionEntryUpdate struct {
 	config
-	hooks    []Hook
-	mutation *DeletionEntryMutation
+	hooks     []Hook
+	mutation  *DeletionEntryMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the DeletionEntryUpdate builder.
@@ -300,6 +301,12 @@ func (_u *DeletionEntryUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *DeletionEntryUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *DeletionEntryUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *DeletionEntryUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -389,6 +396,7 @@ func (_u *DeletionEntryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{deletionentry.Label}
@@ -404,9 +412,10 @@ func (_u *DeletionEntryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 // DeletionEntryUpdateOne is the builder for updating a single DeletionEntry entity.
 type DeletionEntryUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *DeletionEntryMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *DeletionEntryMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -693,6 +702,12 @@ func (_u *DeletionEntryUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *DeletionEntryUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *DeletionEntryUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *DeletionEntryUpdateOne) sqlSave(ctx context.Context) (_node *DeletionEntry, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -799,6 +814,7 @@ func (_u *DeletionEntryUpdateOne) sqlSave(ctx context.Context) (_node *DeletionE
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &DeletionEntry{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

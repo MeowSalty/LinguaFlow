@@ -20,6 +20,7 @@ func (Job) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("retry_epoch").Default(0).NonNegative(),
 		field.Bool("pause_requested").Default(false),
+		field.Bytes("pipeline_runtime_state").Optional().Comment("Bounded current pipeline progress identity and fixed recovery episode inventory"),
 		field.Int("project_id").Positive().
 			Comment("所属项目 ID"),
 		field.String("status").Default("pending").

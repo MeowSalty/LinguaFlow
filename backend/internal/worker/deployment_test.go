@@ -18,6 +18,13 @@ func TestDeploymentPipelineAdmissionConsumers(t *testing.T) {
 		"LINGUAFLOW_PIPELINE_MAX_RESPONSE_MB":        "3",
 		"LINGUAFLOW_PIPELINE_CANDIDATE_WINDOW_MB":    "7",
 	}}
+	// This executes a Server configuration; budget values are deliberately
+	// test-only and never filled by deployment defaults.
+	for _, scope := range []string{"ACTOR", "INSTANCE"} {
+		for _, field := range []string{"UNCONFIRMED_MEMBERS", "PAYLOAD_BYTES", "PREPARE_OWNERS", "MAIN_RESPONSE_OWNERS", "AUX_RESPONSE_OWNERS", "BUILD_WORKERS", "QUEUED_DESCRIPTORS", "LOGICAL_STORAGE_BYTES"} {
+			inputs.Environment["LINGUAFLOW_EXECUTION_BUDGET_"+scope+"_MAX_"+field] = "1073741824"
+		}
+	}
 	resolved, err := config.ResolveServerConfig(inputs)
 	if err != nil {
 		t.Fatal(err)

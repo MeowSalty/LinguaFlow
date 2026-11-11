@@ -22,6 +22,8 @@ const (
 	FieldRetryEpoch = "retry_epoch"
 	// FieldPauseRequested holds the string denoting the pause_requested field in the database.
 	FieldPauseRequested = "pause_requested"
+	// FieldPipelineRuntimeState holds the string denoting the pipeline_runtime_state field in the database.
+	FieldPipelineRuntimeState = "pipeline_runtime_state"
 	// FieldProjectID holds the string denoting the project_id field in the database.
 	FieldProjectID = "project_id"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -115,6 +117,7 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldRetryEpoch,
 	FieldPauseRequested,
+	FieldPipelineRuntimeState,
 	FieldProjectID,
 	FieldStatus,
 	FieldTriggerType,

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -20,11 +21,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	backendentity "github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 const readinessPingTimeout = 2 * time.Second
@@ -82,6 +85,9 @@ type Server struct {
 	ready                        atomic.Bool
 	collector                    *telemetry.Collector
 	limiterPool                  *backend.LimiterPool
+	executionBudget              *resourcebudget.RootBudget
+	budgetSource                 workstate.InventorySource
+	budgetInventoryMu            sync.RWMutex
 	httpClients                  *telemetry.HTTPClients
 	runMu                        sync.Mutex
 	runCancel                    context.CancelFunc
@@ -108,9 +114,27 @@ func (s *Server) localAuthUser() (authenticatedUser, bool) {
 }
 
 func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User, addresses ...config.RuntimeAddress) (*Server, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("server configuration is required")
+	}
+	root, err := resourcebudget.New(cfg.ExecutionBudget)
+	if err != nil {
+		return nil, fmt.Errorf("execution budget: %w", err)
+	}
+	if cfg.Pipeline.MaxCandidateMB <= 0 || int64(cfg.Pipeline.MaxCandidateMB) > math.MaxInt64>>20 {
+		return nil, fmt.Errorf("invalid pipeline.max_candidate_mb")
+	}
 	if keys == nil || !keys.HasKey(keys.ActiveKeyID()) {
 		return nil, fmt.Errorf("resolved provider credential keys are required")
 	}
+	if client == nil {
+		return nil, fmt.Errorf("database client is required")
+	}
+	source := workstate.InventorySource{DB: client, Driver: cfg.Database.Driver, ItemBytes: int64(cfg.Pipeline.MaxCandidateMB) << 20}
+	if err := root.Rebuild(context.Background(), source); err != nil {
+		return nil, fmt.Errorf("rebuild execution inventory: %w", err)
+	}
+	workstate.InstallStorageHooks(client)
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -125,15 +149,17 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	}
 
 	s := &Server{
-		serverCfg:      cfg,
-		logger:         logger,
-		db:             db,
-		entClient:      client,
-		mode:           mode,
-		localUser:      localUser,
-		eventBroker:    event.NewBroker(hybridStore).WithHistorian(entEventStore),
-		sseReplayBatch: cfg.SSE.ReplayBatchSize,
-		sseMaxReplay:   cfg.SSE.MaxReplayEvents,
+		serverCfg:       cfg,
+		logger:          logger,
+		db:              db,
+		entClient:       client,
+		mode:            mode,
+		localUser:       localUser,
+		executionBudget: root,
+		budgetSource:    source,
+		eventBroker:     event.NewBroker(hybridStore).WithHistorian(entEventStore),
+		sseReplayBatch:  cfg.SSE.ReplayBatchSize,
+		sseMaxReplay:    cfg.SSE.MaxReplayEvents,
 	}
 	s.runtimeAddress = config.RuntimeAddress{Host: cfg.Host, Port: cfg.Port}
 	if len(addresses) > 0 {
@@ -192,6 +218,7 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	s.jobSvc = service.NewJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.translationPromptTemplateSvc, s.bootstrapPromptTemplateSvc, s.executionProfileSvc, jobStore, s.eventBroker)
 	s.taskLifecycle = &tasklife.Coordinator{}
 	s.jobSvc.SetLifecycle(s.taskLifecycle)
+	s.jobSvc.SetBudgetCancellation(s.prepareCancelledBudget)
 	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc, s)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc, database.DialectFor(cfg.Database.Driver), cfg.RevisionRetention, logger)
@@ -201,6 +228,7 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	s.glossarySyncSvc.SetLifecycle(s.taskLifecycle)
 	s.taskHistory = service.NewTaskHistoryService(client, s.projectSvc, s.taskLifecycle, s.eventBroker)
 	s.taskHistory.SetMaintenance(s.storageMaintenance)
+	s.taskHistory.SetBudgetDeletion(s.prepareBudgetDeletion)
 	s.taskHistory.SetLogger(logger)
 	s.settingsService.OnTaskRetentionChanged(s.taskHistory.Wake)
 	s.glossaryPruneSvc = service.NewGlossaryPruneService(client, s.projectSvc, s.backendSvc, s.glossarySvc, s.prunePromptTemplateSvc, limiterPool, logger, s.httpClients)
@@ -210,12 +238,15 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	}
 	// Deployment limits apply to synchronous previews and queued Jobs alike.
 	pipelineConfig, rssFuse := worker.PipelineRuntime(cfg.Pipeline, logger)
+	s.jobSvc.SetExecutionControlBudget(s.executionBudget, s.prepareExecutionActor, pipelineConfig.ResponseHandoffBytes)
 	previewRunner := worker.NewPreviewRunner(logger, client, limiterPool, s.httpClients)
 	previewRunner.SetCredentials(credentials, credentials)
 	previewRunner.SetPipelineLimits(pipelineConfig)
+	previewRunner.SetRootBudget(root, s.prepareExecutionActor)
 	revisionRunner := worker.NewRevisionPreviewRunner(logger, client, limiterPool, s.httpClients)
 	revisionRunner.SetCredentials(credentials, credentials)
 	revisionRunner.SetPipelineLimits(pipelineConfig)
+	revisionRunner.SetRootBudget(root, s.prepareExecutionActor)
 	revisionSemaphore := service.NewPreviewSemaphore(cfg.Preview.MaxConcurrency)
 	s.previewSvc = service.NewPreviewServiceWithSemaphore(
 		logger,
@@ -245,6 +276,7 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	quickTranslateRunner := worker.NewQuickTranslateRunner(logger, client, limiterPool, s.httpClients)
 	quickTranslateRunner.SetCredentials(credentials, credentials)
 	quickTranslateRunner.SetPipelineLimits(pipelineConfig)
+	quickTranslateRunner.SetRootBudget(root, s.prepareExecutionActor)
 	s.quickTranslateSvc = service.NewQuickTranslateService(
 		logger,
 		client,
@@ -272,6 +304,8 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 		rssFuse, s.httpClients,
 	)
 	translationRunner.SetCredentials(credentials, credentials)
+	translationRunner.SetRootBudget(root, s.prepareExecutionActor)
+	translationRunner.SetBudgetSource(source, s.budgetInventoryMu.RLocker())
 	syncTaskRunner := worker.NewSyncTaskRunner(
 		logger, client, s.glossarySyncSvc, syncQueue, s.resMutex,
 	)
@@ -280,6 +314,7 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	s.dispatcher = worker.NewDispatcher(logger, s.resMutex, cfg.Workers, translationRunner, syncTaskRunner)
 	s.dispatcher.SetRecoveryBarrier(s.taskHistory.Prepare)
 	s.jobSvc.SetTaskControl(func(id int) { s.dispatcher.CancelTask("translation", id) }, func(id int) bool { return s.dispatcher.PauseTask("translation", id) })
+	s.projectSvc.SetExecutionBudgetCleanup(&service.ExecutionBudgetCleanup{Root: root, Source: source, InventoryMu: &s.budgetInventoryMu, Lifecycle: s.taskLifecycle, FreezeRegistration: s.taskLifecycle.FreezeRegistration, CancelTranslation: func(id int) { s.dispatcher.CancelTask("translation", id) }})
 	s.glossarySyncSvc.SetTaskControl(func(id int) { s.dispatcher.CancelTask("sync", id) })
 
 	s.httpServer = &http.Server{

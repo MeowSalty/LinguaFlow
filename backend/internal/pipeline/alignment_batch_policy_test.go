@@ -133,7 +133,30 @@ func runBatchPolicyWorker(t *testing.T, runtime *ExecutionRuntime, store RoundSt
 	if err := worker.finish(update.err); err != nil && update.err == nil {
 		update.err = err
 	}
+	for _, c := range candidates {
+		loadBatchPolicyCandidate(t, runtime, store, c)
+	}
 	return update
+}
+
+func loadBatchPolicyCandidate(t *testing.T, runtime *ExecutionRuntime, store RoundStore, c *Candidate) {
+	t.Helper()
+	if !c.HeaderOnly {
+		return
+	}
+	f, err := loadCandidateFrame(context.Background(), store, c.ID, runtime.Window.limits.ItemBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := backend.NewBuildBounds(runtime.Window.limits.ItemBytes, int64(len(f.Payload)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := DecodeCandidateFrame(b, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	*c = *full
 }
 
 func batchPolicyRow(id, base string) string {
@@ -306,6 +329,9 @@ func TestAlignmentBatchPolicyUnknownMembersAreDiagnosedWithoutChangingProgress(t
 	if err := worker.finish(update.err); err != nil || update.err != nil {
 		t.Fatalf("diagnostic response failed: %+v %v", update, err)
 	}
+	for _, c := range candidates {
+		loadBatchPolicyCandidate(t, runtime, store, c)
+	}
 	if len(reporter.events) != 1 {
 		t.Fatalf("batch diagnostics emitted per member: %+v", reporter.events)
 	}
@@ -349,6 +375,9 @@ func TestAlignmentBatchPolicyNetworkRetriesKeepBatchAndMemberBudgets(t *testing.
 		t.Run(fmt.Sprintf("status=%d", status), func(t *testing.T) {
 			runtime, store, candidates, remote, round := batchPolicyFixture(t, 3)
 			candidates[0].LogicalAttempt = 1
+			if err := store.Save(context.Background(), candidates[0]); err != nil {
+				t.Fatal(err)
+			}
 			remote.call = func(context.Context, backend.Request) (*backend.Response, error) {
 				if remote.calls.Load() == 1 {
 					return nil, &backend.StatusError{StatusCode: status, RetryAfter: time.Second, Err: errors.New("temporary")}
@@ -385,6 +414,9 @@ func TestAlignmentBatchPolicyNetworkRetriesKeepBatchAndMemberBudgets(t *testing.
 func TestAlignmentBatchPolicyNetworkExhaustionIsMemberLocal(t *testing.T) {
 	runtime, store, candidates, remote, round := batchPolicyFixture(t, 3)
 	candidates[0].NetworkAttempt = 1
+	if err := store.Save(context.Background(), candidates[0]); err != nil {
+		t.Fatal(err)
+	}
 	remote.call = func(_ context.Context, req backend.Request) (*backend.Response, error) {
 		if remote.calls.Load() == 1 {
 			return nil, &backend.StatusError{StatusCode: 503, Err: errors.New("temporary")}
@@ -437,13 +469,14 @@ func TestAlignmentBatchPolicyTransientSaveFailureRetriesOnlyPersistence(t *testi
 		t.Fatalf("saved candidates missing: %+v %v", page, err)
 	}
 	for _, c := range page {
+		loadBatchPolicyCandidate(t, runtime, store, c)
 		if c.Version != 2 || c.LogicalAttempt != 1 || len(c.Alignment.Verified) != 1 {
 			t.Fatalf("local save retry changed logical progress: %+v", c)
 		}
 	}
 }
 
-func TestAlignmentBatchPolicyCompletionWaitsForAllSavesAndCommits(t *testing.T) {
+func TestAlignmentBatchPolicyResponseOwnerEndsAfterAllSavesAndCandidateCreditReachesCommit(t *testing.T) {
 	for _, failure := range []string{"none", "second_save", "second_commit"} {
 		t.Run(failure, func(t *testing.T) {
 			runtime, store, candidates, remote, round := batchPolicyFixture(t, 1)
@@ -452,17 +485,23 @@ func TestAlignmentBatchPolicyCompletionWaitsForAllSavesAndCommits(t *testing.T) 
 			}
 			injected := errors.New(failure)
 			capacityChecks := 0
-			checkCapacity := func() error {
+			checkCapacity := func(commit bool) error {
 				capacityChecks++
 				_, _, events := store.snapshot()
 				capacity := runtime.Admission.Snapshot()
-				if slices.Contains(events, "completed") || capacity.PendingResults != 1 || capacity.AlignmentInflight != 0 || len(runtime.parse) != 1 {
-					return terminalRuntimeStoreError{fmt.Errorf("batch completion released before member persistence: %+v %v", capacity, events)}
+				pending := 1
+				if commit {
+					pending = 0
+				}
+				window := runtime.Window.Snapshot()
+				p := runtime.Admission.PipelineSnapshot()
+				if slices.Contains(events, "completed") != commit || capacity.PendingResults != pending || capacity.AlignmentInflight != 0 || len(runtime.parse) != 0 || window.Segments < 1 || window.Bytes < 1 || p.CandidateBytes+p.GrowthBytes < int64(window.Segments)*runtime.Window.limits.ItemBytes {
+					return terminalRuntimeStoreError{fmt.Errorf("response/candidate durable boundary changed (commit=%t): %+v window%+v %v", commit, capacity, window, events)}
 				}
 				return nil
 			}
 			store.onSave = func(_ context.Context, c *Candidate) error {
-				if err := checkCapacity(); err != nil {
+				if err := checkCapacity(false); err != nil {
 					return err
 				}
 				if c.Index == 1 && failure == "second_save" {
@@ -471,7 +510,7 @@ func TestAlignmentBatchPolicyCompletionWaitsForAllSavesAndCommits(t *testing.T) 
 				return nil
 			}
 			store.onCommit = func(_ context.Context, c *Candidate) error {
-				if err := checkCapacity(); err != nil {
+				if err := checkCapacity(true); err != nil {
 					return err
 				}
 				if c.Index == 1 && failure == "second_commit" {
@@ -484,7 +523,7 @@ func TestAlignmentBatchPolicyCompletionWaitsForAllSavesAndCommits(t *testing.T) 
 				t.Fatalf("member storage error propagation: %v", result.err)
 			}
 			_, _, events := store.snapshot()
-			if slices.Contains(events, "completed") != (failure == "none") || remote.calls.Load() != 1 {
+			if slices.Contains(events, "completed") != (failure != "second_save") || remote.calls.Load() != 1 {
 				t.Fatalf("storage error caused request completion or model replay: %v calls=%d", events, remote.calls.Load())
 			}
 			wantChecks, wantCompleted := 4, 2
@@ -507,6 +546,7 @@ func TestAlignmentBatchPolicyCompletionWaitsForAllSavesAndCommits(t *testing.T) 
 				}
 				foundSaved := false
 				for _, c := range page {
+					loadBatchPolicyCandidate(t, runtime, store, c)
 					if c.Ready && len(c.Alignment.Verified) == 2 && c.LastAlignmentRequestID != "" {
 						foundSaved = true
 					}

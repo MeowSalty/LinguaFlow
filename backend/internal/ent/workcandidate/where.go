@@ -120,6 +120,16 @@ func BaselineTarget(v string) predicate.WorkCandidate {
 	return predicate.WorkCandidate(sql.FieldEQ(FieldBaselineTarget, v))
 }
 
+// BaselineDigest applies equality check predicate on the "baseline_digest" field. It's identical to BaselineDigestEQ.
+func BaselineDigest(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldEQ(FieldBaselineDigest, v))
+}
+
+// BaselineTargetIsNull applies equality check predicate on the "baseline_target_is_null" field. It's identical to BaselineTargetIsNullEQ.
+func BaselineTargetIsNull(v bool) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldEQ(FieldBaselineTargetIsNull, v))
+}
+
 // BaselineStatus applies equality check predicate on the "baseline_status" field. It's identical to BaselineStatusEQ.
 func BaselineStatus(v string) predicate.WorkCandidate {
 	return predicate.WorkCandidate(sql.FieldEQ(FieldBaselineStatus, v))
@@ -133,6 +143,16 @@ func State(v string) predicate.WorkCandidate {
 // PayloadBytes applies equality check predicate on the "payload_bytes" field. It's identical to PayloadBytesEQ.
 func PayloadBytes(v int64) predicate.WorkCandidate {
 	return predicate.WorkCandidate(sql.FieldEQ(FieldPayloadBytes, v))
+}
+
+// GrowthReserved applies equality check predicate on the "growth_reserved" field. It's identical to GrowthReservedEQ.
+func GrowthReserved(v bool) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldEQ(FieldGrowthReserved, v))
+}
+
+// PipelineHeader applies equality check predicate on the "pipeline_header" field. It's identical to PipelineHeaderEQ.
+func PipelineHeader(v []byte) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldEQ(FieldPipelineHeader, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -780,6 +800,81 @@ func BaselineTargetContainsFold(v string) predicate.WorkCandidate {
 	return predicate.WorkCandidate(sql.FieldContainsFold(FieldBaselineTarget, v))
 }
 
+// BaselineDigestEQ applies the EQ predicate on the "baseline_digest" field.
+func BaselineDigestEQ(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldEQ(FieldBaselineDigest, v))
+}
+
+// BaselineDigestNEQ applies the NEQ predicate on the "baseline_digest" field.
+func BaselineDigestNEQ(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldNEQ(FieldBaselineDigest, v))
+}
+
+// BaselineDigestIn applies the In predicate on the "baseline_digest" field.
+func BaselineDigestIn(vs ...string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldIn(FieldBaselineDigest, vs...))
+}
+
+// BaselineDigestNotIn applies the NotIn predicate on the "baseline_digest" field.
+func BaselineDigestNotIn(vs ...string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldNotIn(FieldBaselineDigest, vs...))
+}
+
+// BaselineDigestGT applies the GT predicate on the "baseline_digest" field.
+func BaselineDigestGT(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldGT(FieldBaselineDigest, v))
+}
+
+// BaselineDigestGTE applies the GTE predicate on the "baseline_digest" field.
+func BaselineDigestGTE(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldGTE(FieldBaselineDigest, v))
+}
+
+// BaselineDigestLT applies the LT predicate on the "baseline_digest" field.
+func BaselineDigestLT(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldLT(FieldBaselineDigest, v))
+}
+
+// BaselineDigestLTE applies the LTE predicate on the "baseline_digest" field.
+func BaselineDigestLTE(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldLTE(FieldBaselineDigest, v))
+}
+
+// BaselineDigestContains applies the Contains predicate on the "baseline_digest" field.
+func BaselineDigestContains(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldContains(FieldBaselineDigest, v))
+}
+
+// BaselineDigestHasPrefix applies the HasPrefix predicate on the "baseline_digest" field.
+func BaselineDigestHasPrefix(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldHasPrefix(FieldBaselineDigest, v))
+}
+
+// BaselineDigestHasSuffix applies the HasSuffix predicate on the "baseline_digest" field.
+func BaselineDigestHasSuffix(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldHasSuffix(FieldBaselineDigest, v))
+}
+
+// BaselineDigestEqualFold applies the EqualFold predicate on the "baseline_digest" field.
+func BaselineDigestEqualFold(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldEqualFold(FieldBaselineDigest, v))
+}
+
+// BaselineDigestContainsFold applies the ContainsFold predicate on the "baseline_digest" field.
+func BaselineDigestContainsFold(v string) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldContainsFold(FieldBaselineDigest, v))
+}
+
+// BaselineTargetIsNullEQ applies the EQ predicate on the "baseline_target_is_null" field.
+func BaselineTargetIsNullEQ(v bool) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldEQ(FieldBaselineTargetIsNull, v))
+}
+
+// BaselineTargetIsNullNEQ applies the NEQ predicate on the "baseline_target_is_null" field.
+func BaselineTargetIsNullNEQ(v bool) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldNEQ(FieldBaselineTargetIsNull, v))
+}
+
 // BaselineStatusEQ applies the EQ predicate on the "baseline_status" field.
 func BaselineStatusEQ(v string) predicate.WorkCandidate {
 	return predicate.WorkCandidate(sql.FieldEQ(FieldBaselineStatus, v))
@@ -948,6 +1043,66 @@ func PayloadBytesLT(v int64) predicate.WorkCandidate {
 // PayloadBytesLTE applies the LTE predicate on the "payload_bytes" field.
 func PayloadBytesLTE(v int64) predicate.WorkCandidate {
 	return predicate.WorkCandidate(sql.FieldLTE(FieldPayloadBytes, v))
+}
+
+// GrowthReservedEQ applies the EQ predicate on the "growth_reserved" field.
+func GrowthReservedEQ(v bool) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldEQ(FieldGrowthReserved, v))
+}
+
+// GrowthReservedNEQ applies the NEQ predicate on the "growth_reserved" field.
+func GrowthReservedNEQ(v bool) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldNEQ(FieldGrowthReserved, v))
+}
+
+// PipelineHeaderEQ applies the EQ predicate on the "pipeline_header" field.
+func PipelineHeaderEQ(v []byte) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldEQ(FieldPipelineHeader, v))
+}
+
+// PipelineHeaderNEQ applies the NEQ predicate on the "pipeline_header" field.
+func PipelineHeaderNEQ(v []byte) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldNEQ(FieldPipelineHeader, v))
+}
+
+// PipelineHeaderIn applies the In predicate on the "pipeline_header" field.
+func PipelineHeaderIn(vs ...[]byte) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldIn(FieldPipelineHeader, vs...))
+}
+
+// PipelineHeaderNotIn applies the NotIn predicate on the "pipeline_header" field.
+func PipelineHeaderNotIn(vs ...[]byte) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldNotIn(FieldPipelineHeader, vs...))
+}
+
+// PipelineHeaderGT applies the GT predicate on the "pipeline_header" field.
+func PipelineHeaderGT(v []byte) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldGT(FieldPipelineHeader, v))
+}
+
+// PipelineHeaderGTE applies the GTE predicate on the "pipeline_header" field.
+func PipelineHeaderGTE(v []byte) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldGTE(FieldPipelineHeader, v))
+}
+
+// PipelineHeaderLT applies the LT predicate on the "pipeline_header" field.
+func PipelineHeaderLT(v []byte) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldLT(FieldPipelineHeader, v))
+}
+
+// PipelineHeaderLTE applies the LTE predicate on the "pipeline_header" field.
+func PipelineHeaderLTE(v []byte) predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldLTE(FieldPipelineHeader, v))
+}
+
+// PipelineHeaderIsNil applies the IsNil predicate on the "pipeline_header" field.
+func PipelineHeaderIsNil() predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldIsNull(FieldPipelineHeader))
+}
+
+// PipelineHeaderNotNil applies the NotNil predicate on the "pipeline_header" field.
+func PipelineHeaderNotNil() predicate.WorkCandidate {
+	return predicate.WorkCandidate(sql.FieldNotNull(FieldPipelineHeader))
 }
 
 // PayloadIsNil applies the IsNil predicate on the "payload" field.

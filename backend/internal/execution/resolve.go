@@ -22,6 +22,12 @@ const DefaultsVersion = 1
 // Resolve 掌管应用层默认值。适配器负责提供已授权的资产、真实的模板内容
 // 与稳定的凭据绑定。此处不发生任何 I/O。
 func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
+	if (in.SchemaVersion != 0 || in.DefaultsVersion != 0) && (in.SchemaVersion != SnapshotSchemaVersion || in.DefaultsVersion != SnapshotDefaultsVersion) {
+		return nil, ValidateExecutionFormat(in.SchemaVersion, in.DefaultsVersion, in.ResponseFormatVersion)
+	}
+	if in.ResponseFormatVersion != 0 && in.ResponseFormatVersion != ResponseFormatVersion {
+		return nil, ValidateExecutionFormat(in.SchemaVersion, in.DefaultsVersion, in.ResponseFormatVersion)
+	}
 	data, err := json.Marshal(in)
 	if err != nil {
 		return nil, errors.New("execution input cannot be serialized")
@@ -31,6 +37,7 @@ func Resolve(in JobExecutionSnapshot) (*ResolvedExecutionSpec, error) {
 		return nil, err
 	}
 	out.SchemaVersion, out.DefaultsVersion = SnapshotSchemaVersion, SnapshotDefaultsVersion
+	out.ResponseFormatVersion = ResponseFormatVersion
 	out.RubyProtocolVersion, out.RubyValidatorVersion = RubyProtocolVersion, RubyValidatorVersion
 	out.RubyBatchProtocolVersion = RubyBatchProtocolVersion
 	if out.RetryReminderTemplate == "" {

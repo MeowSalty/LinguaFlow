@@ -65,6 +65,7 @@ type RoundState struct {
 }
 
 type Candidate struct {
+	PipelineHeader         []byte
 	ID                     string
 	WorkID                 string
 	LastAlignmentRequestID string
@@ -77,21 +78,28 @@ type Candidate struct {
 	SnapshotDigest         string
 	BaselineVersion        int64
 	BaselineTarget         *string
+	BaselineDigest         string
+	BaselineTargetIsNull   bool
 	BaselineStatus         string
 	State                  string
 	Payload                json.RawMessage
+	PayloadLimit           int64
 }
 
 type Request struct {
-	ID          string
-	CandidateID string
-	Scope       Scope
-	SegmentIDs  []int
-	Members     []RequestMember
-	Stage       string
-	BackendID   int
-	BudgetModel string
-	InputDigest string
+	ID               string
+	CandidateID      string
+	Scope            Scope
+	SegmentIDs       []int
+	Members          []RequestMember
+	Stage            string
+	BackendID        int
+	BudgetModel      string
+	InputDigest      string
+	FreezePayload    []byte
+	SnapshotDigest   string
+	PromotionMembers []PromotionMember
+	BusinessBound    int64
 	// Logical attempts are distinct from individual network invocations. The
 	// caller sets these only when opening a new main/alignment logical attempt.
 	MainAttempt          bool
@@ -136,19 +144,22 @@ const (
 )
 
 type CommitInput struct {
-	Scope            Scope
-	SegmentID        int
-	CommitID         string
-	CandidateID      string
-	CandidateVersion int64
-	BaselineVersion  int64
-	BaselineTarget   *string
-	BaselineStatus   string
-	Target           string
-	Status           string // empty preserves current status
-	Issues           []qa.QualityIssue
-	ClearReview      bool
-	Noop             bool
+	Scope                Scope
+	SegmentID            int
+	CommitID             string
+	CandidateID          string
+	CandidateVersion     int64
+	BaselineVersion      int64
+	BaselineTarget       *string
+	BaselineDigest       string
+	BaselineTargetIsNull bool
+	BaselineStatus       string
+	Target               string
+	Status               string // empty preserves current status
+	Issues               []qa.QualityIssue
+	IssuesPayload        []byte // bounded JSON, borrowed from one opaque commit payload
+	ClearReview          bool
+	Noop                 bool
 }
 
 type CommitResult struct {

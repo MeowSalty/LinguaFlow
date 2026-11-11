@@ -19,8 +19,9 @@ import (
 // ExportArtifactUpdate is the builder for updating ExportArtifact entities.
 type ExportArtifactUpdate struct {
 	config
-	hooks    []Hook
-	mutation *ExportArtifactMutation
+	hooks     []Hook
+	mutation  *ExportArtifactMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the ExportArtifactUpdate builder.
@@ -319,6 +320,12 @@ func (_u *ExportArtifactUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ExportArtifactUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ExportArtifactUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ExportArtifactUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -437,6 +444,7 @@ func (_u *ExportArtifactUpdate) sqlSave(ctx context.Context) (_node int, err err
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{exportartifact.Label}
@@ -452,9 +460,10 @@ func (_u *ExportArtifactUpdate) sqlSave(ctx context.Context) (_node int, err err
 // ExportArtifactUpdateOne is the builder for updating a single ExportArtifact entity.
 type ExportArtifactUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *ExportArtifactMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *ExportArtifactMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -760,6 +769,12 @@ func (_u *ExportArtifactUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *ExportArtifactUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ExportArtifactUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *ExportArtifactUpdateOne) sqlSave(ctx context.Context) (_node *ExportArtifact, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -895,6 +910,7 @@ func (_u *ExportArtifactUpdateOne) sqlSave(ctx context.Context) (_node *ExportAr
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &ExportArtifact{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

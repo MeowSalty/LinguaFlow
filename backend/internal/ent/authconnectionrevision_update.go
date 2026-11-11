@@ -18,8 +18,9 @@ import (
 // AuthConnectionRevisionUpdate is the builder for updating AuthConnectionRevision entities.
 type AuthConnectionRevisionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *AuthConnectionRevisionMutation
+	hooks     []Hook
+	mutation  *AuthConnectionRevisionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the AuthConnectionRevisionUpdate builder.
@@ -87,6 +88,12 @@ func (_u *AuthConnectionRevisionUpdate) check() error {
 		return errors.New(`ent: clearing a required unique edge "AuthConnectionRevision.connection"`)
 	}
 	return nil
+}
+
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AuthConnectionRevisionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AuthConnectionRevisionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
 }
 
 func (_u *AuthConnectionRevisionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
@@ -158,6 +165,7 @@ func (_u *AuthConnectionRevisionUpdate) sqlSave(ctx context.Context) (_node int,
 	if _u.mutation.AppliedTestIDCleared() {
 		_spec.ClearField(authconnectionrevision.FieldAppliedTestID, field.TypeString)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{authconnectionrevision.Label}
@@ -173,9 +181,10 @@ func (_u *AuthConnectionRevisionUpdate) sqlSave(ctx context.Context) (_node int,
 // AuthConnectionRevisionUpdateOne is the builder for updating a single AuthConnectionRevision entity.
 type AuthConnectionRevisionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *AuthConnectionRevisionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *AuthConnectionRevisionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -250,6 +259,12 @@ func (_u *AuthConnectionRevisionUpdateOne) check() error {
 		return errors.New(`ent: clearing a required unique edge "AuthConnectionRevision.connection"`)
 	}
 	return nil
+}
+
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *AuthConnectionRevisionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *AuthConnectionRevisionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
 }
 
 func (_u *AuthConnectionRevisionUpdateOne) sqlSave(ctx context.Context) (_node *AuthConnectionRevision, err error) {
@@ -338,6 +353,7 @@ func (_u *AuthConnectionRevisionUpdateOne) sqlSave(ctx context.Context) (_node *
 	if _u.mutation.AppliedTestIDCleared() {
 		_spec.ClearField(authconnectionrevision.FieldAppliedTestID, field.TypeString)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &AuthConnectionRevision{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

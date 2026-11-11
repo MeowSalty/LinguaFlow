@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
@@ -158,10 +160,37 @@ func TestExactLegacyV1BinaryInterruptedOperationAcceptance(t *testing.T) {
 		}
 	}
 	deployment := filepath.Join(target, "deployment.yaml")
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &deployment, Environment: map[string]string{}})
+	resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &deployment, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The original binary cannot create columns introduced by the current
+	// service. Refusal without schema initialization must remain read-only.
+	targetBefore := legacyAcceptanceTree(t, target)
+	resolved.Config.AutoMigrate = false
+	probeDB, _, probeErr := database.Open(t.Context(), &resolved.Config)
+	if probeDB != nil {
+		_ = probeDB.Close()
+	}
+	if probeErr == nil || !strings.Contains(probeErr.Error(), "missing jobs.pipeline_runtime_state") {
+		t.Fatal("current startup did not refuse incomplete original schema", probeErr)
+	}
+	afterProbe := legacyAcceptanceTree(t, target)
+	// Reading this WAL database refreshes only its shared-lock file timestamp.
+	// Keep byte/hash and identity checks even for this exact lock sidecar.
+	lockPath := resolved.Config.DatabasePath() + "-shm"
+	if before, existed := targetBefore[lockPath]; existed {
+		if after, exists := afterProbe[lockPath]; exists && after.Proof == before.Proof && after.Identity == before.Identity {
+			after.Modified = before.Modified
+			afterProbe[lockPath] = after
+		}
+	}
+	if !reflect.DeepEqual(targetBefore, afterProbe) {
+		t.Fatal("schema refusal changed original target files or business state")
+	}
+	// Initialize current columns through normal startup, then retain the
+	// original authentication and interrupted-operation acceptance checks.
+	resolved.Config.AutoMigrate = true
 	db, client, err := database.Open(t.Context(), &resolved.Config)
 	if err != nil {
 		t.Fatal("normal startup after original binary resumed", err)
@@ -196,7 +225,7 @@ func TestExactLegacyV1BinaryInterruptedOperationAcceptance(t *testing.T) {
 func retainedLegacyReleaseFixture(t *testing.T, root string) (string, string) {
 	t.Helper()
 	configPath, temporarySource := cliReleaseFixture(t)
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &configPath, Environment: map[string]string{}})
+	resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &configPath, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,6 +246,25 @@ func retainedLegacyReleaseFixture(t *testing.T, root string) (string, string) {
 	resolved.Config.Database.DSN = filepath.Join(sourceDir, "linguaflow.db")
 	resolved.Config.Credentials.KeyringFile = filepath.Join(sourceDir, "keyring.json")
 	data, err := config.EncodeServerDocument(resolved.Config, config.LogConfig{Level: "info", Format: "text"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The preserved v0.16 executable has a strict deployment field catalog.
+	// Its fixture must not acquire the current response handoff setting.
+	var deployment map[string]any
+	if err := yaml.Unmarshal(data, &deployment); err != nil {
+		t.Fatal(err)
+	}
+	server, ok := deployment["server"].(map[string]any)
+	if !ok {
+		t.Fatal("legacy fixture server object is missing")
+	}
+	pipeline, ok := server["pipeline"].(map[string]any)
+	if !ok {
+		t.Fatal("legacy fixture pipeline object is missing")
+	}
+	delete(pipeline, "response_handoff_mb")
+	data, err = yaml.Marshal(deployment)
 	if err != nil {
 		t.Fatal(err)
 	}

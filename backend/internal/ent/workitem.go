@@ -38,8 +38,12 @@ type WorkItem struct {
 	RetryEpoch int64 `json:"retry_epoch,omitempty"`
 	// State holds the value of the "state" field.
 	State string `json:"state,omitempty"`
+	// MemberOwned holds the value of the "member_owned" field.
+	MemberOwned bool `json:"member_owned,omitempty"`
 	// CandidateID holds the value of the "candidate_id" field.
 	CandidateID string `json:"candidate_id,omitempty"`
+	// ResponseRequestID holds the value of the "response_request_id" field.
+	ResponseRequestID string `json:"response_request_id,omitempty"`
 	// PoolIndex holds the value of the "pool_index" field.
 	PoolIndex int `json:"pool_index,omitempty"`
 	// MainAttempts holds the value of the "main_attempts" field.
@@ -132,9 +136,11 @@ func (*WorkItem) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case workitem.FieldCursor:
 			values[i] = new([]byte)
+		case workitem.FieldMemberOwned:
+			values[i] = new(sql.NullBool)
 		case workitem.FieldID, workitem.FieldJobID, workitem.FieldResourceID, workitem.FieldJobRoundID, workitem.FieldSegmentID, workitem.FieldRetryEpoch, workitem.FieldPoolIndex, workitem.FieldMainAttempts, workitem.FieldAlignmentAttempts, workitem.FieldNetworkAttempts, workitem.FieldMainNetworkAttempts, workitem.FieldAlignmentNetworkAttempts:
 			values[i] = new(sql.NullInt64)
-		case workitem.FieldState, workitem.FieldCandidateID, workitem.FieldPromptPhase, workitem.FieldLastError:
+		case workitem.FieldState, workitem.FieldCandidateID, workitem.FieldResponseRequestID, workitem.FieldPromptPhase, workitem.FieldLastError:
 			values[i] = new(sql.NullString)
 		case workitem.FieldCreatedAt, workitem.FieldUpdatedAt, workitem.FieldNextAttemptAt:
 			values[i] = new(sql.NullTime)
@@ -207,11 +213,23 @@ func (_m *WorkItem) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.State = value.String
 			}
+		case workitem.FieldMemberOwned:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field member_owned", values[i])
+			} else if value.Valid {
+				_m.MemberOwned = value.Bool
+			}
 		case workitem.FieldCandidateID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field candidate_id", values[i])
 			} else if value.Valid {
 				_m.CandidateID = value.String
+			}
+		case workitem.FieldResponseRequestID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field response_request_id", values[i])
+			} else if value.Valid {
+				_m.ResponseRequestID = value.String
 			}
 		case workitem.FieldPoolIndex:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -356,8 +374,14 @@ func (_m *WorkItem) String() string {
 	builder.WriteString("state=")
 	builder.WriteString(_m.State)
 	builder.WriteString(", ")
+	builder.WriteString("member_owned=")
+	builder.WriteString(fmt.Sprintf("%v", _m.MemberOwned))
+	builder.WriteString(", ")
 	builder.WriteString("candidate_id=")
 	builder.WriteString(_m.CandidateID)
+	builder.WriteString(", ")
+	builder.WriteString("response_request_id=")
+	builder.WriteString(_m.ResponseRequestID)
 	builder.WriteString(", ")
 	builder.WriteString("pool_index=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PoolIndex))

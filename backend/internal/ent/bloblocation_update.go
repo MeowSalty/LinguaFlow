@@ -20,8 +20,9 @@ import (
 // BlobLocationUpdate is the builder for updating BlobLocation entities.
 type BlobLocationUpdate struct {
 	config
-	hooks    []Hook
-	mutation *BlobLocationMutation
+	hooks     []Hook
+	mutation  *BlobLocationMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the BlobLocationUpdate builder.
@@ -283,6 +284,12 @@ func (_u *BlobLocationUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *BlobLocationUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *BlobLocationUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *BlobLocationUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -386,6 +393,7 @@ func (_u *BlobLocationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{bloblocation.Label}
@@ -401,9 +409,10 @@ func (_u *BlobLocationUpdate) sqlSave(ctx context.Context) (_node int, err error
 // BlobLocationUpdateOne is the builder for updating a single BlobLocation entity.
 type BlobLocationUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *BlobLocationMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *BlobLocationMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -672,6 +681,12 @@ func (_u *BlobLocationUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *BlobLocationUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *BlobLocationUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *BlobLocationUpdateOne) sqlSave(ctx context.Context) (_node *BlobLocation, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -792,6 +807,7 @@ func (_u *BlobLocationUpdateOne) sqlSave(ctx context.Context) (_node *BlobLocati
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &BlobLocation{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

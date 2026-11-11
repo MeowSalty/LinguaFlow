@@ -44,6 +44,46 @@ const (
 	FieldDebits = "debits"
 	// FieldGlossaryReceipt holds the string denoting the glossary_receipt field in the database.
 	FieldGlossaryReceipt = "glossary_receipt"
+	// FieldFreezePayload holds the string denoting the freeze_payload field in the database.
+	FieldFreezePayload = "freeze_payload"
+	// FieldFreezeBytes holds the string denoting the freeze_bytes field in the database.
+	FieldFreezeBytes = "freeze_bytes"
+	// FieldResponsePayload holds the string denoting the response_payload field in the database.
+	FieldResponsePayload = "response_payload"
+	// FieldResponseBytes holds the string denoting the response_bytes field in the database.
+	FieldResponseBytes = "response_bytes"
+	// FieldResponseFormatVersion holds the string denoting the response_format_version field in the database.
+	FieldResponseFormatVersion = "response_format_version"
+	// FieldSnapshotDigest holds the string denoting the snapshot_digest field in the database.
+	FieldSnapshotDigest = "snapshot_digest"
+	// FieldFreezeDigest holds the string denoting the freeze_digest field in the database.
+	FieldFreezeDigest = "freeze_digest"
+	// FieldResponseDigest holds the string denoting the response_digest field in the database.
+	FieldResponseDigest = "response_digest"
+	// FieldCorrectedTargets holds the string denoting the corrected_targets field in the database.
+	FieldCorrectedTargets = "corrected_targets"
+	// FieldCorrectedTargetIndex holds the string denoting the corrected_target_index field in the database.
+	FieldCorrectedTargetIndex = "corrected_target_index"
+	// FieldCorrectedTargetBytes holds the string denoting the corrected_target_bytes field in the database.
+	FieldCorrectedTargetBytes = "corrected_target_bytes"
+	// FieldCorrectedTargetDigest holds the string denoting the corrected_target_digest field in the database.
+	FieldCorrectedTargetDigest = "corrected_target_digest"
+	// FieldPromotionMembers holds the string denoting the promotion_members field in the database.
+	FieldPromotionMembers = "promotion_members"
+	// FieldPromotionCursor holds the string denoting the promotion_cursor field in the database.
+	FieldPromotionCursor = "promotion_cursor"
+	// FieldPromotionCount holds the string denoting the promotion_count field in the database.
+	FieldPromotionCount = "promotion_count"
+	// FieldBusinessBound holds the string denoting the business_bound field in the database.
+	FieldBusinessBound = "business_bound"
+	// FieldResponseTruncated holds the string denoting the response_truncated field in the database.
+	FieldResponseTruncated = "response_truncated"
+	// FieldPromotionState holds the string denoting the promotion_state field in the database.
+	FieldPromotionState = "promotion_state"
+	// FieldPromotionStatus holds the string denoting the promotion_status field in the database.
+	FieldPromotionStatus = "promotion_status"
+	// FieldHandoffAt holds the string denoting the handoff_at field in the database.
+	FieldHandoffAt = "handoff_at"
 	// FieldUsageRecordID holds the string denoting the usage_record_id field in the database.
 	FieldUsageRecordID = "usage_record_id"
 	// FieldBudgetModel holds the string denoting the budget_model field in the database.
@@ -111,6 +151,26 @@ var Columns = []string{
 	FieldMembers,
 	FieldDebits,
 	FieldGlossaryReceipt,
+	FieldFreezePayload,
+	FieldFreezeBytes,
+	FieldResponsePayload,
+	FieldResponseBytes,
+	FieldResponseFormatVersion,
+	FieldSnapshotDigest,
+	FieldFreezeDigest,
+	FieldResponseDigest,
+	FieldCorrectedTargets,
+	FieldCorrectedTargetIndex,
+	FieldCorrectedTargetBytes,
+	FieldCorrectedTargetDigest,
+	FieldPromotionMembers,
+	FieldPromotionCursor,
+	FieldPromotionCount,
+	FieldBusinessBound,
+	FieldResponseTruncated,
+	FieldPromotionState,
+	FieldPromotionStatus,
+	FieldHandoffAt,
 	FieldUsageRecordID,
 	FieldBudgetModel,
 	FieldInputDigest,
@@ -159,6 +219,46 @@ var (
 	DefaultLogicalAttempt int
 	// LogicalAttemptValidator is a validator for the "logical_attempt" field. It is called by the builders before save.
 	LogicalAttemptValidator func(int) error
+	// DefaultFreezeBytes holds the default value on creation for the "freeze_bytes" field.
+	DefaultFreezeBytes int64
+	// FreezeBytesValidator is a validator for the "freeze_bytes" field. It is called by the builders before save.
+	FreezeBytesValidator func(int64) error
+	// DefaultResponseBytes holds the default value on creation for the "response_bytes" field.
+	DefaultResponseBytes int64
+	// ResponseBytesValidator is a validator for the "response_bytes" field. It is called by the builders before save.
+	ResponseBytesValidator func(int64) error
+	// DefaultResponseFormatVersion holds the default value on creation for the "response_format_version" field.
+	DefaultResponseFormatVersion int
+	// ResponseFormatVersionValidator is a validator for the "response_format_version" field. It is called by the builders before save.
+	ResponseFormatVersionValidator func(int) error
+	// DefaultSnapshotDigest holds the default value on creation for the "snapshot_digest" field.
+	DefaultSnapshotDigest string
+	// DefaultFreezeDigest holds the default value on creation for the "freeze_digest" field.
+	DefaultFreezeDigest string
+	// DefaultResponseDigest holds the default value on creation for the "response_digest" field.
+	DefaultResponseDigest string
+	// DefaultCorrectedTargetBytes holds the default value on creation for the "corrected_target_bytes" field.
+	DefaultCorrectedTargetBytes int64
+	// CorrectedTargetBytesValidator is a validator for the "corrected_target_bytes" field. It is called by the builders before save.
+	CorrectedTargetBytesValidator func(int64) error
+	// DefaultCorrectedTargetDigest holds the default value on creation for the "corrected_target_digest" field.
+	DefaultCorrectedTargetDigest string
+	// DefaultPromotionCursor holds the default value on creation for the "promotion_cursor" field.
+	DefaultPromotionCursor int
+	// PromotionCursorValidator is a validator for the "promotion_cursor" field. It is called by the builders before save.
+	PromotionCursorValidator func(int) error
+	// DefaultPromotionCount holds the default value on creation for the "promotion_count" field.
+	DefaultPromotionCount int
+	// PromotionCountValidator is a validator for the "promotion_count" field. It is called by the builders before save.
+	PromotionCountValidator func(int) error
+	// DefaultBusinessBound holds the default value on creation for the "business_bound" field.
+	DefaultBusinessBound int64
+	// BusinessBoundValidator is a validator for the "business_bound" field. It is called by the builders before save.
+	BusinessBoundValidator func(int64) error
+	// DefaultResponseTruncated holds the default value on creation for the "response_truncated" field.
+	DefaultResponseTruncated bool
+	// DefaultPromotionState holds the default value on creation for the "promotion_state" field.
+	DefaultPromotionState string
 	// UsageRecordIDValidator is a validator for the "usage_record_id" field. It is called by the builders before save.
 	UsageRecordIDValidator func(int) error
 	// BudgetModelValidator is a validator for the "budget_model" field. It is called by the builders before save.
@@ -246,6 +346,76 @@ func ByCandidateID(opts ...sql.OrderTermOption) OrderOption {
 // ByLogicalAttempt orders the results by the logical_attempt field.
 func ByLogicalAttempt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLogicalAttempt, opts...).ToFunc()
+}
+
+// ByFreezeBytes orders the results by the freeze_bytes field.
+func ByFreezeBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFreezeBytes, opts...).ToFunc()
+}
+
+// ByResponseBytes orders the results by the response_bytes field.
+func ByResponseBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResponseBytes, opts...).ToFunc()
+}
+
+// ByResponseFormatVersion orders the results by the response_format_version field.
+func ByResponseFormatVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResponseFormatVersion, opts...).ToFunc()
+}
+
+// BySnapshotDigest orders the results by the snapshot_digest field.
+func BySnapshotDigest(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSnapshotDigest, opts...).ToFunc()
+}
+
+// ByFreezeDigest orders the results by the freeze_digest field.
+func ByFreezeDigest(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFreezeDigest, opts...).ToFunc()
+}
+
+// ByResponseDigest orders the results by the response_digest field.
+func ByResponseDigest(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResponseDigest, opts...).ToFunc()
+}
+
+// ByCorrectedTargetBytes orders the results by the corrected_target_bytes field.
+func ByCorrectedTargetBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCorrectedTargetBytes, opts...).ToFunc()
+}
+
+// ByCorrectedTargetDigest orders the results by the corrected_target_digest field.
+func ByCorrectedTargetDigest(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCorrectedTargetDigest, opts...).ToFunc()
+}
+
+// ByPromotionCursor orders the results by the promotion_cursor field.
+func ByPromotionCursor(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPromotionCursor, opts...).ToFunc()
+}
+
+// ByPromotionCount orders the results by the promotion_count field.
+func ByPromotionCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPromotionCount, opts...).ToFunc()
+}
+
+// ByBusinessBound orders the results by the business_bound field.
+func ByBusinessBound(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBusinessBound, opts...).ToFunc()
+}
+
+// ByResponseTruncated orders the results by the response_truncated field.
+func ByResponseTruncated(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResponseTruncated, opts...).ToFunc()
+}
+
+// ByPromotionState orders the results by the promotion_state field.
+func ByPromotionState(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPromotionState, opts...).ToFunc()
+}
+
+// ByHandoffAt orders the results by the handoff_at field.
+func ByHandoffAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldHandoffAt, opts...).ToFunc()
 }
 
 // ByUsageRecordID orders the results by the usage_record_id field.

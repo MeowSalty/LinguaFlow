@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // csvHeader 是 FileGlossary 写出的固定首行。Load 时若首行与之大小写无关相等则跳过。
@@ -26,11 +27,12 @@ var csvHeader = []string{"source", "target", "case_sensitive", "forbidden", "man
 //
 // 并发：Lookup 持读锁；Add/Save 持写/读锁。Save 走 os.CreateTemp + os.Rename 原子写。
 type FileGlossary struct {
-	path     string
-	mu       sync.RWMutex
-	entries  []Entry
-	bySource map[string]int // 推荐条目按 source、禁译条目按 source+target 去重
-	dirty    bool           // Add 过且尚未 Save
+	entrySnapshot atomic.Pointer[EntrySnapshot]
+	path          string
+	mu            sync.RWMutex
+	entries       []Entry
+	bySource      map[string]int // 推荐条目按 source、禁译条目按 source+target 去重
+	dirty         bool           // Add 过且尚未 Save
 }
 
 // NewMemory 返回一个没有 path 的空 FileGlossary。
@@ -278,6 +280,7 @@ func (g *FileGlossary) SnapshotSources() []string {
 // addLocked 追加一条（不排序、不去重、不上锁）。调用方须已持锁且保证唯一性。
 func (g *FileGlossary) addLocked(e Entry) {
 	g.entries = append(g.entries, e)
+	g.entrySnapshot.Store(&EntrySnapshot{Entry: e, Order: len(g.entries), Previous: g.entrySnapshot.Load()})
 	g.bySource[normKey(e)] = len(g.entries) - 1
 }
 

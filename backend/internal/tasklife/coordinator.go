@@ -23,15 +23,108 @@ type entry struct {
 // Coordinator has a usable zero value. A control guard is short lived; a claim
 // remains active through admission, waiting, execution, and writer shutdown.
 type Coordinator struct {
-	mu      sync.Mutex
-	entries map[key]*entry
+	mu                  sync.Mutex
+	entries             map[key]*entry
+	registrationFrozen  bool
+	registrationReaders int
+	registrationChanged chan struct{}
 }
 
 type Guard struct {
-	owner *Coordinator
-	key   key
-	entry *entry
-	once  sync.Once
+	owner        *Coordinator
+	key          key
+	entry        *entry
+	once         sync.Once
+	registration bool
+}
+
+func (c *Coordinator) registrationNotifyLocked() {
+	if c.registrationChanged != nil {
+		close(c.registrationChanged)
+	}
+	c.registrationChanged = make(chan struct{})
+}
+
+// LockRegistration fences new queue claims during a cascading deletion.
+// Existing claims stay active through writer shutdown, and ordinary control
+// guards remain available to complete, reconcile, or cancel those claims.
+func (c *Coordinator) LockRegistration(ctx context.Context, kind string, id int) (*Guard, error) {
+	if c == nil {
+		return c.Lock(ctx, kind, id)
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		if !c.registrationFrozen {
+			c.registrationReaders++
+			c.mu.Unlock()
+			break
+		}
+		if c.registrationChanged == nil {
+			c.registrationChanged = make(chan struct{})
+		}
+		changed := c.registrationChanged
+		c.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-changed:
+		}
+	}
+	g, err := c.Lock(ctx, kind, id)
+	if err != nil {
+		c.mu.Lock()
+		c.registrationReaders--
+		c.registrationNotifyLocked()
+		c.mu.Unlock()
+		return nil, err
+	}
+	g.registration = true
+	return g, nil
+}
+
+// FreezeRegistration is a cancellable global registration fence. It retains
+// no per-task or historical metadata. Queue claims accepted before the fence
+// must be cancelled and joined by the caller before deleting SQL facts.
+func (c *Coordinator) FreezeRegistration(ctx context.Context) (func(), error) {
+	if c == nil {
+		return func() {}, nil
+	}
+	owned := false
+	for {
+		if err := ctx.Err(); err != nil {
+			if owned {
+				c.mu.Lock()
+				c.registrationFrozen = false
+				c.registrationNotifyLocked()
+				c.mu.Unlock()
+			}
+			return nil, err
+		}
+		c.mu.Lock()
+		if !owned && !c.registrationFrozen {
+			c.registrationFrozen = true
+			owned = true
+		}
+		if owned && c.registrationReaders == 0 {
+			c.mu.Unlock()
+			var once sync.Once
+			return func() {
+				once.Do(func() { c.mu.Lock(); c.registrationFrozen = false; c.registrationNotifyLocked(); c.mu.Unlock() })
+			}, nil
+		}
+		if c.registrationChanged == nil {
+			c.registrationChanged = make(chan struct{})
+		}
+		changed := c.registrationChanged
+		c.mu.Unlock()
+		select {
+		case <-ctx.Done():
+		case <-changed:
+		}
+	}
 }
 
 // Lock serializes control and registration for one task. Never acquire this
@@ -124,5 +217,11 @@ func (g *Guard) Release() {
 	g.once.Do(func() {
 		g.entry.gate <- struct{}{}
 		g.owner.unref(g.key, g.entry, false)
+		if g.registration {
+			g.owner.mu.Lock()
+			g.owner.registrationReaders--
+			g.owner.registrationNotifyLocked()
+			g.owner.mu.Unlock()
+		}
 	})
 }

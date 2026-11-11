@@ -30,6 +30,9 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 	if setter, ok := round.Handler.(interface{ SetGate(*PauseGate) }); ok {
 		setter.SetGate(round.Gate)
 	}
+	if canonicalStoredHandler(round.Handler) {
+		return runCanonicalStoredRound(ctx, round, doc, batchHandler, logger, reporter)
+	}
 	state, err := round.Store.Load(ctx)
 	if err != nil {
 		return RunRoundResult{}, &StorageError{Err: err}
@@ -263,6 +266,9 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 	}()
 	callCtx := session.Context(ctx)
 	result := handler.ProcessBatch(callCtx, doc, job.idxs, job.attempt, logger)
+	if session.deferred != nil {
+		return batchResult{waitCapacity: session.deferred, deferred: true}
+	}
 	if result.waitCapacity != nil {
 		return result
 	}

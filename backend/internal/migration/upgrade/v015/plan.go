@@ -343,7 +343,7 @@ func compareNarrow(n *config.MigrationDatabaseInputs, r *config.ResolvedServer) 
 }
 
 func ResolveProbedInputs(inputs config.ServerInputs, n *config.MigrationDatabaseInputs) (*config.ResolvedServer, error) {
-	r, err := config.ResolveServerConfig(inputs)
+	r, err := config.ResolveMaintenanceServerConfig(inputs)
 	if err != nil {
 		return nil, err
 	}

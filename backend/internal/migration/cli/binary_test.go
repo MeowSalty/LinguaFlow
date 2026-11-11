@@ -72,7 +72,7 @@ func TestBuiltCLIReleaseAcceptance(t *testing.T) {
 			run(t, "verify", "--operation-dir", opdir)
 			run(t, "resume", "--operation-dir", opdir, "--offline")
 			deployment := filepath.Join(target, "deployment.yaml")
-			resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &deployment, Environment: map[string]string{}})
+			resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &deployment, Environment: map[string]string{}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -137,7 +137,7 @@ func builtCLIInplaceAcceptance(t *testing.T, binary, mode string, run func(*test
 	run(t, "status", "--operation-dir", opdir)
 	run(t, "verify", "--operation-dir", opdir)
 	run(t, "resume", "--operation-dir", opdir, "--offline")
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &configPath, Environment: map[string]string{}})
+	resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &configPath, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}

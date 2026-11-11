@@ -22,8 +22,11 @@ func (WorkCandidate) Fields() []ent.Field {
 		field.String("snapshot_digest").NotEmpty(), field.String("mode").NotEmpty(),
 		field.Int64("source_generation").NonNegative(), field.Int("source_revision_id").Optional().Nillable(),
 		field.Int64("baseline_version").Positive(), field.String("baseline_target").Optional().Nillable(),
+		field.String("baseline_digest").Default(""), field.Bool("baseline_target_is_null").Default(false),
 		field.String("baseline_status"), field.String("state").Default("pending_alignment"),
 		field.Int64("payload_bytes").Default(0).NonNegative(),
+		field.Bool("growth_reserved").Default(false),
+		field.Bytes("pipeline_header").Optional(),
 		field.JSON("payload", json.RawMessage{}).Optional(),
 	}
 }

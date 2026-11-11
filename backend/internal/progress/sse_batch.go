@@ -1,6 +1,9 @@
 package progress
 
-import "unicode/utf8"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // MaxSSEBatchContentBytes is the per-field limit for sent/received content in batch SSE metadata.
 const MaxSSEBatchContentBytes = 128 * 1024
@@ -10,7 +13,7 @@ const MaxSSEBatchContentBytes = 128 * 1024
 func TruncateSSEContent(s string) (content string, truncated bool, originalLen int) {
 	originalLen = len(s)
 	if originalLen <= MaxSSEBatchContentBytes {
-		return s, false, originalLen
+		return strings.Clone(s), false, originalLen
 	}
 	end := MaxSSEBatchContentBytes
 	for end > 0 && !utf8.ValidString(s[:end]) {
@@ -19,7 +22,7 @@ func TruncateSSEContent(s string) (content string, truncated bool, originalLen i
 	if end == 0 {
 		return "", true, originalLen
 	}
-	return s[:end], true, originalLen
+	return strings.Clone(s[:end]), true, originalLen
 }
 
 // BatchLevelFromStatus maps batch metadata status to SSE level.

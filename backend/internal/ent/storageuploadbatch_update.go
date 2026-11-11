@@ -20,8 +20,9 @@ import (
 // StorageUploadBatchUpdate is the builder for updating StorageUploadBatch entities.
 type StorageUploadBatchUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageUploadBatchMutation
+	hooks     []Hook
+	mutation  *StorageUploadBatchMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageUploadBatchUpdate builder.
@@ -164,6 +165,12 @@ func (_u *StorageUploadBatchUpdate) defaults() {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageUploadBatchUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageUploadBatchUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageUploadBatchUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(storageuploadbatch.Table, storageuploadbatch.Columns, sqlgraph.NewFieldSpec(storageuploadbatch.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
@@ -205,6 +212,7 @@ func (_u *StorageUploadBatchUpdate) sqlSave(ctx context.Context) (_node int, err
 	if _u.mutation.LeaseUntilCleared() {
 		_spec.ClearField(storageuploadbatch.FieldLeaseUntil, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storageuploadbatch.Label}
@@ -220,9 +228,10 @@ func (_u *StorageUploadBatchUpdate) sqlSave(ctx context.Context) (_node int, err
 // StorageUploadBatchUpdateOne is the builder for updating a single StorageUploadBatch entity.
 type StorageUploadBatchUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageUploadBatchMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageUploadBatchMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -372,6 +381,12 @@ func (_u *StorageUploadBatchUpdateOne) defaults() {
 	}
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageUploadBatchUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageUploadBatchUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageUploadBatchUpdateOne) sqlSave(ctx context.Context) (_node *StorageUploadBatch, err error) {
 	_spec := sqlgraph.NewUpdateSpec(storageuploadbatch.Table, storageuploadbatch.Columns, sqlgraph.NewFieldSpec(storageuploadbatch.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
@@ -430,6 +445,7 @@ func (_u *StorageUploadBatchUpdateOne) sqlSave(ctx context.Context) (_node *Stor
 	if _u.mutation.LeaseUntilCleared() {
 		_spec.ClearField(storageuploadbatch.FieldLeaseUntil, field.TypeTime)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageUploadBatch{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

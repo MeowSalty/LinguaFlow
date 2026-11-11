@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	sdk "github.com/anthropics/anthropic-sdk-go"
-
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
@@ -50,106 +48,46 @@ func TestAnthropicThinkingBudget(t *testing.T) {
 	}
 }
 
-func TestBuildParams_ThinkingSkipsSampling(t *testing.T) {
-	temp := 0.2
-	topP := 0.9
-	req := backend.Request{
-		System:      "sys",
-		User:        "user",
-		Model:       "claude-sonnet-4-20250514",
-		MaxTokens:   8192,
-		Temperature: &temp,
-		TopP:        &topP,
+func TestWireThinkingSkipsSampling(t *testing.T) {
+	temp, top := 0.2, 0.9
+	for _, level := range []backend.ThinkingLevel{"", backend.ThinkingOff, backend.ThinkingMedium} {
+		t.Run(string(level), func(t *testing.T) {
+			b := &Backend{model: "claude", maxTokens: 8192, temperature: &temp, topP: &top, thinking: backend.Thinking{Level: level, Set: level != ""}}
+			p, _, err := b.wireParams(backend.Request{User: "user"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if level == backend.ThinkingMedium {
+				thinking := p["thinking"].(map[string]any)
+				if thinking["budget_tokens"] != int64(4096) {
+					t.Fatal("thinking budget")
+				}
+				if _, ok := p["temperature"]; ok {
+					t.Fatal("temperature with thinking")
+				}
+				if _, ok := p["top_p"]; ok {
+					t.Fatal("top_p with thinking")
+				}
+			} else {
+				if p["temperature"] != temp || p["top_p"] != top {
+					t.Fatal("sampling omitted")
+				}
+				if level == backend.ThinkingOff && p["thinking"].(map[string]any)["type"] != "disabled" {
+					t.Fatal("thinking off")
+				}
+				if level == "" {
+					if _, ok := p["thinking"]; ok {
+						t.Fatal("thinking unset")
+					}
+				}
+			}
+		})
 	}
-
-	t.Run("unset omits thinking and keeps temperature/top_p", func(t *testing.T) {
-		b := &Backend{
-			model:       "claude-sonnet-4-20250514",
-			maxTokens:   8192,
-			temperature: &temp,
-			topP:        &topP,
-		}
-		params, _, err := b.buildParams(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if params.Thinking.OfEnabled != nil || params.Thinking.OfDisabled != nil {
-			t.Fatal("want Thinking omitted when thinking_level unset")
-		}
-		if !params.Temperature.Valid() || params.Temperature.Value != temp {
-			t.Fatalf("Temperature: valid=%v value=%v want %v", params.Temperature.Valid(), params.Temperature.Value, temp)
-		}
-		if !params.TopP.Valid() || params.TopP.Value != topP {
-			t.Fatalf("TopP: valid=%v value=%v want %v", params.TopP.Valid(), params.TopP.Value, topP)
-		}
-	})
-
-	t.Run("explicit off disables thinking and keeps temperature/top_p", func(t *testing.T) {
-		b := &Backend{
-			model:       "claude-sonnet-4-20250514",
-			maxTokens:   8192,
-			temperature: &temp,
-			topP:        &topP,
-			thinking:    backend.Thinking{Level: backend.ThinkingOff, Set: true},
-		}
-		params, _, err := b.buildParams(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if params.Thinking.OfDisabled == nil {
-			t.Fatal("want Thinking disabled when off")
-		}
-		if params.Thinking.OfEnabled != nil {
-			t.Fatal("want Thinking enabled unset when off")
-		}
-		if !params.Temperature.Valid() || params.Temperature.Value != temp {
-			t.Fatalf("Temperature: valid=%v value=%v want %v", params.Temperature.Valid(), params.Temperature.Value, temp)
-		}
-		if !params.TopP.Valid() || params.TopP.Value != topP {
-			t.Fatalf("TopP: valid=%v value=%v want %v", params.TopP.Valid(), params.TopP.Value, topP)
-		}
-	})
-
-	t.Run("enabled sets budget and drops sampling", func(t *testing.T) {
-		b := &Backend{
-			model:       "claude-sonnet-4-20250514",
-			maxTokens:   8192,
-			temperature: &temp,
-			topP:        &topP,
-			thinking:    backend.Thinking{Level: backend.ThinkingMedium, Set: true},
-		}
-		params, _, err := b.buildParams(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if params.Thinking.OfEnabled == nil {
-			t.Fatal("want Thinking enabled")
-		}
-		if params.Thinking.OfEnabled.BudgetTokens != 4096 {
-			t.Fatalf("BudgetTokens: got %d want 4096", params.Thinking.OfEnabled.BudgetTokens)
-		}
-		if params.Temperature.Valid() {
-			t.Fatalf("Temperature should be unset when thinking enabled, got %v", params.Temperature.Value)
-		}
-		if params.TopP.Valid() {
-			t.Fatalf("TopP should be unset when thinking enabled, got %v", params.TopP.Value)
-		}
-	})
-
-	t.Run("enabled with small max_tokens errors", func(t *testing.T) {
-		b := &Backend{
-			model:     "claude-sonnet-4-20250514",
-			maxTokens: 1024,
-			thinking:  backend.Thinking{Level: backend.ThinkingLow, Set: true},
-		}
-		small := backend.Request{System: "s", User: "u", MaxTokens: 1024}
-		_, _, err := b.buildParams(small)
-		if err == nil {
-			t.Fatal("want error when max_tokens <= 1024")
-		}
-	})
+	b := &Backend{model: "claude", maxTokens: 1024, thinking: backend.Thinking{Level: backend.ThinkingLow, Set: true}}
+	if _, _, err := b.wireParams(backend.Request{User: "user"}); err == nil {
+		t.Fatal("small thinking max accepted")
+	}
 }
-
 func TestFactory_InvalidThinkingLevel(t *testing.T) {
 	_, err := factory(backend.Config{
 		Options: map[string]any{
@@ -175,15 +113,15 @@ func TestFrozenThinkingBudgetOverridesCurrentCalculation(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer created.Close()
-			params, _, err := created.(*Backend).buildParams(backend.Request{User: "hello"})
+			params, _, err := created.(*Backend).wireParams(backend.Request{User: "hello"})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if level == "high" {
-				if params.Thinking.OfEnabled == nil || params.Thinking.OfEnabled.BudgetTokens != 1536 {
-					t.Fatalf("frozen budget lost: %+v", params.Thinking)
+				if params["thinking"].(map[string]any)["budget_tokens"] != int64(1536) {
+					t.Fatalf("frozen budget lost: %+v", params["thinking"])
 				}
-			} else if params.Thinking.OfEnabled != nil {
+			} else if params["thinking"] != nil && params["thinking"].(map[string]any)["type"] == "enabled" {
 				t.Fatal("budget must not implicitly enable thinking")
 			}
 		})
@@ -198,9 +136,9 @@ func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
 	b := &Backend{name: "claude", model: "claude-sonnet-4", thinking: backend.Thinking{Level: backend.ThinkingHigh, Set: true}}
 
 	t.Run("non_empty_text_returns_truncated", func(t *testing.T) {
-		msg := &sdk.Message{
-			Content:    []sdk.ContentBlockUnion{{Type: "text", Text: `{"items":[{"t":1}`}},
-			StopReason: sdk.StopReasonMaxTokens,
+		msg := &messageWire{
+			Content:    []messageBlock{{Type: "text", Text: `{"items":[{"t":1}`}},
+			StopReason: "max_tokens",
 		}
 		resp, err := b.responseFromMessage(msg, false)
 		if err != nil {
@@ -215,13 +153,13 @@ func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
 	})
 
 	t.Run("non_empty_tool_use_input_returns_truncated", func(t *testing.T) {
-		msg := &sdk.Message{
-			Content: []sdk.ContentBlockUnion{{
+		msg := &messageWire{
+			Content: []messageBlock{{
 				Type:  "tool_use",
 				Name:  toolName,
 				Input: json.RawMessage(`{"items":[]}`),
 			}},
-			StopReason: sdk.StopReasonMaxTokens,
+			StopReason: "max_tokens",
 		}
 		resp, err := b.responseFromMessage(msg, true)
 		if err != nil {
@@ -236,9 +174,9 @@ func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
 	})
 
 	t.Run("non_max_tokens_stop_keeps_truncated_false", func(t *testing.T) {
-		msg := &sdk.Message{
-			Content:    []sdk.ContentBlockUnion{{Type: "text", Text: "done"}},
-			StopReason: sdk.StopReasonEndTurn,
+		msg := &messageWire{
+			Content:    []messageBlock{{Type: "text", Text: "done"}},
+			StopReason: "end_turn",
 		}
 		resp, err := b.responseFromMessage(msg, false)
 		if err != nil {
@@ -250,9 +188,9 @@ func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
 	})
 
 	t.Run("empty_content_returns_empty_response_error", func(t *testing.T) {
-		msg := &sdk.Message{
-			Content:    []sdk.ContentBlockUnion{}, // 无 text/tool_use 块
-			StopReason: sdk.StopReasonMaxTokens,
+		msg := &messageWire{
+			Content:    []messageBlock{}, // 无 text/tool_use 块
+			StopReason: "max_tokens",
 		}
 		resp, err := b.responseFromMessage(msg, false)
 		if err == nil {
@@ -265,8 +203,8 @@ func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
 		if !errors.As(err, &ere) {
 			t.Fatalf("want *backend.EmptyResponseError, got %T: %v", err, err)
 		}
-		if ere.FinishReason != string(sdk.StopReasonMaxTokens) {
-			t.Fatalf("FinishReason = %q, want %q", ere.FinishReason, sdk.StopReasonMaxTokens)
+		if ere.FinishReason != string("max_tokens") {
+			t.Fatalf("FinishReason = %q, want %q", ere.FinishReason, "max_tokens")
 		}
 		if backend.IsRetryable(err) {
 			t.Fatal("empty truncated response must not be retryable")
@@ -276,9 +214,9 @@ func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
 	t.Run("thinking_enabled_no_longer_errors_on_truncation", func(t *testing.T) {
 		// 旧契约：thinking 开启时截断报"shares max_tokens"错。新契约下该文案随
 		// 报错分支一并移除，截断一律以 Truncated 标志返回。
-		msg := &sdk.Message{
-			Content:    []sdk.ContentBlockUnion{{Type: "text", Text: "partial"}},
-			StopReason: sdk.StopReasonMaxTokens,
+		msg := &messageWire{
+			Content:    []messageBlock{{Type: "text", Text: "partial"}},
+			StopReason: "max_tokens",
 		}
 		resp, err := b.responseFromMessage(msg, false)
 		if err != nil {
@@ -295,9 +233,9 @@ func TestResponseFromMessage_TruncatedSignal(t *testing.T) {
 // backend.IsRetryable 归为不可重试。refusal stop_reason 是内容过滤的典型信号。
 func TestExtractResponseText_EmptyContent(t *testing.T) {
 	b := &Backend{name: "claude", model: "claude-sonnet-4"}
-	msg := &sdk.Message{
-		Content:    []sdk.ContentBlockUnion{}, // 无 text/tool_use 块
-		StopReason: sdk.StopReasonRefusal,
+	msg := &messageWire{
+		Content:    []messageBlock{}, // 无 text/tool_use 块
+		StopReason: "refusal",
 	}
 
 	t.Run("no_text_content", func(t *testing.T) {
@@ -306,8 +244,8 @@ func TestExtractResponseText_EmptyContent(t *testing.T) {
 		if !errors.As(err, &ere) {
 			t.Fatalf("want *backend.EmptyResponseError, got %T: %v", err, err)
 		}
-		if ere.FinishReason != string(sdk.StopReasonRefusal) {
-			t.Fatalf("FinishReason = %q, want %q", ere.FinishReason, sdk.StopReasonRefusal)
+		if ere.FinishReason != string("refusal") {
+			t.Fatalf("FinishReason = %q, want %q", ere.FinishReason, "refusal")
 		}
 		if ere.PromptTokens != 512 {
 			t.Fatalf("PromptTokens = %d, want 512", ere.PromptTokens)
@@ -318,21 +256,21 @@ func TestExtractResponseText_EmptyContent(t *testing.T) {
 	})
 
 	t.Run("empty_tool_use_input", func(t *testing.T) {
-		msgWithTool := &sdk.Message{
-			Content: []sdk.ContentBlockUnion{{
+		msgWithTool := &messageWire{
+			Content: []messageBlock{{
 				Type:  "tool_use",
 				Name:  toolName,
 				Input: nil, // 空 input
 			}},
-			StopReason: sdk.StopReasonToolUse,
+			StopReason: "tool_use",
 		}
 		_, err := extractResponseText(msgWithTool, true, b, msgWithTool.StopReason, 256)
 		var ere *backend.EmptyResponseError
 		if !errors.As(err, &ere) {
 			t.Fatalf("want *backend.EmptyResponseError, got %T: %v", err, err)
 		}
-		if ere.FinishReason != string(sdk.StopReasonToolUse) {
-			t.Fatalf("FinishReason = %q, want %q", ere.FinishReason, sdk.StopReasonToolUse)
+		if ere.FinishReason != string("tool_use") {
+			t.Fatalf("FinishReason = %q, want %q", ere.FinishReason, "tool_use")
 		}
 		if backend.IsRetryable(err) {
 			t.Fatal("empty tool_use input must not be retryable")

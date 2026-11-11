@@ -2,12 +2,15 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
@@ -15,6 +18,181 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
+
+func storedHandlerInputLimit(ctx context.Context) int64 {
+	if runtime := ExecutionRuntimeFromContext(ctx); runtime != nil {
+		return runtime.handoffLimit()
+	}
+	return 64 << 20
+}
+
+func storedHandlerOutputLimit(ctx context.Context) int64 {
+	if runtime := ExecutionRuntimeFromContext(ctx); runtime != nil {
+		return runtime.responseLimit()
+	}
+	return backend.DefaultMaxResponseBytes
+}
+
+func runStoredHandlerCPU(ctx context.Context, fn func() error) error {
+	if runtime := ExecutionRuntimeFromContext(ctx); runtime != nil {
+		return runtime.Run(ctx, fn)
+	}
+	return backend.RunBuild(ctx, fn)
+}
+
+func releaseStoredRequestText(ctx context.Context, req *backend.Request, system, user *string) {
+	if ExecutionRuntimeFromContext(ctx) != nil {
+		req.System, req.User = "", ""
+		*system, *user = "", ""
+	}
+}
+
+func storedProgressEvent(ctx context.Context, evt progress.BatchEvent) progress.BatchEvent {
+	if ExecutionRuntimeFromContext(ctx) != nil {
+		evt.SystemPrompt, evt.UserMessage, evt.SentContent, evt.ReceivedContent, evt.ResponseContent = "", "", "", "", ""
+		evt.JSONSchema, evt.AddedGlossary = nil, nil
+	}
+	return evt
+}
+
+// Only finite CPU work runs under this permit. Network and storage stay at the
+// caller, while every default stored handler uses the same R/J build limits.
+func runStoredHandlerBuild(ctx context.Context, fn func(*backend.BuildBounds) error) error {
+	runtime := ExecutionRuntimeFromContext(ctx)
+	output := backend.DefaultMaxResponseBytes
+	if runtime != nil {
+		output = runtime.responseLimit()
+	}
+	build := func() error {
+		b, err := backend.NewBuildBounds(output, storedHandlerInputLimit(ctx))
+		if err != nil {
+			return err
+		}
+		return fn(b)
+	}
+	if runtime != nil {
+		return runtime.Run(ctx, build)
+	}
+	return backend.RunBuild(ctx, build)
+}
+
+// This planner allocates one exact index backing and exact outer view arrays.
+// Views have capacity=len so later append cannot overwrite another batch.
+// The private predicate and WordCount are fixed handler code, with no I/O.
+func buildStoredScopeBounded(ctx context.Context, doc *Document, pending []int, codes []string, include func(*Segment, map[string]struct{}) bool, constraint BatchConstraint, span int, continuous bool) ([][]int, int, error) {
+	var result [][]int
+	count := 0
+	err := runStoredHandlerBuild(ctx, func(b *backend.BuildBounds) error {
+		if e := b.ReserveNodes(int64(len(codes))+4, 1024); e != nil {
+			return e
+		}
+		codeSet := make(map[string]struct{}, len(codes))
+		for _, code := range codes {
+			codeSet[code] = struct{}{}
+		}
+		eligible := func(i int) bool {
+			if doc.ResolvedIndices != nil {
+				if _, done := doc.ResolvedIndices[i]; done {
+					return false
+				}
+			}
+			return include(&doc.Segments[i], codeSet)
+		}
+		if pending != nil {
+			count = len(pending)
+		} else {
+			for i := range doc.Segments {
+				if eligible(i) {
+					count++
+				}
+			}
+		}
+		if count == 0 {
+			return nil
+		}
+		if e := b.ReserveNodes(int64(count), 8); e != nil {
+			return e
+		}
+		if e := b.ReserveNodes(1, 24); e != nil {
+			return e
+		}
+		scan := make([]int, count)
+		if pending != nil {
+			copy(scan, pending)
+		} else {
+			at := 0
+			for i := range doc.Segments {
+				if eligible(i) {
+					scan[at] = i
+					at++
+				}
+			}
+		}
+		if e := b.ReserveNodes(int64(count)+1, 24); e != nil {
+			return e
+		}
+		result = make([][]int, 0, count)
+		if constraint.MaxSegments <= 0 && constraint.MaxWords <= 0 && span <= 0 {
+			result = append(result, scan[:len(scan):len(scan)])
+			return nil
+		}
+		split := func(lo, hi int, keepLast bool) []int {
+			start, words := lo, 0
+			for i := lo; i < hi; i++ {
+				idx := scan[i]
+				next := CountWords(doc.Segments[idx].Source)
+				if constraint.WordCount != nil {
+					next = constraint.WordCount(doc.Segments[idx])
+				}
+				if i > start && (constraint.exceeds(i-start, words, next) || (span > 0 && idx-scan[start] > span)) {
+					result = append(result, scan[start:i:i])
+					start, words = i, 0
+				}
+				words += next
+			}
+			last := scan[start:hi:hi]
+			if !keepLast {
+				result = append(result, last)
+			}
+			return last
+		}
+		if !continuous {
+			split(0, count, false)
+			return nil
+		}
+		if e := b.ReserveNodes(int64(count)+1, 24); e != nil {
+			return e
+		}
+		leftovers := make([][]int, 0, count)
+		start := 0
+		for i := 1; i <= count; i++ {
+			if i != count && scan[i] == scan[i-1]+1 {
+				continue
+			}
+			last := split(start, i, true)
+			leftovers = append(leftovers, last)
+			start = i
+		}
+		slices.SortStableFunc(leftovers, func(a, z []int) int {
+			if len(a) != len(z) {
+				if len(a) > len(z) {
+					return -1
+				}
+				return 1
+			}
+			if a[0] < z[0] {
+				return -1
+			}
+			if a[0] > z[0] {
+				return 1
+			}
+			return 0
+		})
+		result = append(result, leftovers...)
+		return nil
+	})
+	return result, count, err
+}
 
 // ExtractHandler 实现 RoundHandler，执行术语抽取批次处理。
 // 整个 handler 是「尽力而为」：单批失败仅 warn，不阻断 pipeline。
@@ -78,80 +256,27 @@ func (h *ExtractHandler) emitBatchOutcome(evt progress.BatchEvent) {
 // batch_size 和 max_words_per_batch 都为 0 时，不分批，全部一次发送。
 // pending==nil（池 0）时自行扫描 doc（排除跨轮已解决段）；pending!=nil（池>0）时
 // 仅对给定 unresolved 重切，避免全量重扫。返回的批次交给 executor 执行。
-func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document, pending []int, _ int) ([][]int, error) {
-	logger := h.logger()
-
-	if h.Renderer == nil {
-		logger.Warn("extract handler: renderer is nil, skipping")
+func (h *ExtractHandler) BuildBatches(ctx context.Context, doc *Document, pending []int, _ int) ([][]int, error) {
+	if h.Renderer == nil || len(h.Backends) == 0 || h.Glossary == nil {
 		return nil, nil
 	}
-	if len(h.Backends) == 0 {
-		logger.Warn("extract handler: no backends, skipping")
-		return nil, nil
-	}
-	if h.Glossary == nil {
-		logger.Warn("extract handler: glossary is nil, skipping")
-		return nil, nil
-	}
-
-	var scan []int
-	if pending != nil {
-		// 池>0：仅处理给定 unresolved（已通过池 0 过滤），避免全量重扫。
-		scan = pending
-	} else {
-		for i := range doc.Segments {
-			seg := &doc.Segments[i]
-			if seg.Skip {
-				continue
-			}
-			t := seg.OriginalSource
-			if t == "" {
-				t = seg.Source
-			}
-			if strings.TrimSpace(t) == "" {
-				continue
-			}
-			// 跨轮增量：池 0 排除上一同模式轮已解决的段。
-			if doc.ResolvedIndices != nil {
-				if _, ok := doc.ResolvedIndices[i]; ok {
-					continue
-				}
-			}
-			scan = append(scan, i)
+	batches, count, err := buildStoredScopeBounded(ctx, doc, pending, nil, func(seg *Segment, _ map[string]struct{}) bool {
+		if seg.Skip {
+			return false
 		}
+		text := seg.OriginalSource
+		if text == "" {
+			text = seg.Source
+		}
+		return strings.TrimSpace(text) != ""
+	}, BatchConstraint{MaxSegments: h.BatchSize, MaxWords: h.MaxWordsPerBatch}, 0, true)
+	if err != nil {
+		return nil, err
 	}
-
-	if len(scan) == 0 {
-		logger.Info("extract handler: no text to scan")
-		return nil, nil
-	}
-
-	// 记录池 0 扫描的去重段数，供 Finalize 的 all-failed 检测使用。
-	// pending==nil 唯一标识池 0；后续池的重切不再覆盖此值。
 	if pending == nil {
-		h.scannedSegments.Store(int64(len(scan)))
+		h.scannedSegments.Store(int64(count))
 	}
-
-	constraint := BatchConstraint{
-		MaxSegments: h.BatchSize,
-		MaxWords:    h.MaxWordsPerBatch,
-	}
-
-	// 两者都为 0 → 不分批，全部一次发送
-	if constraint.MaxSegments <= 0 && constraint.MaxWords <= 0 {
-		logger.Info("extract handler: no batch limit, sending all segments at once",
-			"segments", len(scan))
-		return [][]int{scan}, nil
-	}
-
-	batches := BuildContinuousPendingBatches(doc, scan, constraint)
-
-	logger.Info("extract handler: batches built",
-		"segments", len(scan),
-		"batches", len(batches),
-		"batch_size", h.BatchSize,
-		"max_words_per_batch", h.MaxWordsPerBatch)
-
+	h.logger().Info("extract handler: batches built", "segments", count, "batches", len(batches), "batch_size", h.BatchSize, "max_words_per_batch", h.MaxWordsPerBatch)
 	return batches, nil
 }
 
@@ -165,34 +290,57 @@ func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document, pending 
 //   - 全 backend 失败（非致命）→ unresolved（进下一池重试）
 //   - 成功 → 空 batchResult（resolved 由 executor 统计）
 func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
+	emit := func(evt progress.BatchEvent) { h.emitBatchOutcome(storedProgressEvent(ctx, evt)) }
 	start := time.Now()
 
 	// 从索引取文本（优先用 OriginalSource）
-	texts := make([]string, 0, len(idxs))
-	for _, idx := range idxs {
-		seg := &doc.Segments[idx]
-		t := seg.OriginalSource
-		if t == "" {
-			t = seg.Source
+	var texts []string
+	inputErr := runStoredHandlerBuild(ctx, func(b *backend.BuildBounds) error {
+		if err := b.ReserveNodes(int64(len(idxs))+1, 1024); err != nil {
+			return err
 		}
-		texts = append(texts, t)
+		texts = make([]string, 0, len(idxs))
+		for _, idx := range idxs {
+			seg := &doc.Segments[idx]
+			t := seg.OriginalSource
+			if t == "" {
+				t = seg.Source
+			}
+			texts = append(texts, t)
+		}
+		return nil
+	})
+	if inputErr != nil {
+		if errors.Is(inputErr, backend.ErrBuildCapacity) {
+			return batchResult{failedSegments: idxs}
+		}
+		return batchResult{unresolved: idxs}
 	}
-
-	existing := h.collectExisting(ctx, texts, doc, logger)
+	existing, inputErr := h.collectExistingBounded(ctx, texts, doc, logger)
+	if inputErr != nil {
+		if storageFailure(inputErr) {
+			return batchResult{err: inputErr}
+		}
+		if errors.Is(inputErr, backend.ErrBuildCapacity) {
+			return batchResult{failedSegments: idxs}
+		}
+		return batchResult{unresolved: idxs}
+	}
 
 	proto := prompt.ProtocolFromResponseMode(h.ResponseMode)
 	isTextMode := proto.IsText()
-	sys, usr, err := h.Renderer.Render(prompt.BootstrapData{
-		SourceLang: doc.SourceLang,
-		TargetLang: doc.TargetLang,
-		Texts:      texts,
-		Existing:   existing,
-		MaxTerms:   h.calcMaxTerms(texts),
-		Protocol:   proto,
+	requestBase := backend.Request{}
+	err := runStoredHandlerBuild(ctx, func(b *backend.BuildBounds) (err error) {
+		if isTextMode {
+			requestBase.ResponseFormat = "none"
+			return nil
+		}
+		requestBase.JSONSchema, err = prompt.BootstrapSchemaBounded(b)
+		return err
 	})
 	if err != nil {
 		logger.Warn("extract render failed", "err", err)
-		h.emitBatchOutcome(progress.BatchEvent{
+		emit(progress.BatchEvent{
 			Stage:        "extract",
 			SegmentIDs:   segmentIDStringsFromDoc(doc, idxs),
 			SegmentCount: len(idxs),
@@ -202,20 +350,16 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			ErrorMessage: err.Error(),
 			RoundIndex:   h.RoundIndex,
 		})
+		if errors.Is(err, backend.ErrBuildCapacity) {
+			return batchResult{failedSegments: idxs}
+		}
 		return batchResult{unresolved: idxs}
 	}
 
 	// 非 text：只挂 JSONSchema，不强制 ResponseFormat，由 backend 默认决定是否用 schema。
 	// text：强制 ResponseFormat=none，不挂 schema。
-	req := backend.Request{
-		System: sys,
-		User:   usr,
-	}
-	if isTextMode {
-		req.ResponseFormat = "none"
-	} else {
-		req.JSONSchema = prompt.BootstrapSchema()
-	}
+	var req backend.Request
+	var sys, usr string
 
 	// 单后端：直接调用 b.Translate（不再用 backend.WithRetry 包裹）。
 	// 在途重试由 executor 的 retry 通道统一处理。
@@ -224,7 +368,25 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 	for _, b := range h.Backends {
 		lastBackend = b.Name()
 		callStart := time.Now()
+		req, err = RenderStoredRequestBounded(ctx, b, requestBase, func(bounds *backend.BuildBounds, claim func(backend.PromptMeasure) error) (string, string, error) {
+			return h.Renderer.RenderWithCreditsBounded(bounds, prompt.BootstrapData{SourceLang: doc.SourceLang, TargetLang: doc.TargetLang, Texts: texts, Existing: existing, MaxTerms: h.calcMaxTerms(texts), Protocol: proto}, storedHandlerInputLimit(ctx), claim)
+		})
+		if err != nil {
+			if d := workDeferred(err); d != nil {
+				return batchResult{waitCapacity: d, deferred: true}
+			}
+			if storageFailure(err) {
+				return batchResult{err: err}
+			}
+			if errors.Is(err, backend.ErrBuildCapacity) {
+				return batchResult{failedSegments: idxs}
+			}
+			lastErr = err
+			continue
+		}
+		sys, usr = req.System, req.User
 		resp, callErr := b.Translate(ctx, req)
+		releaseStoredRequestText(ctx, &req, &sys, &usr)
 		if storageFailure(callErr) {
 			return batchResult{err: callErr}
 		}
@@ -239,7 +401,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			if isFatalBackendError(callErr) {
 				logger.Warn("extract backend fatal error, deferring to cross-round",
 					"backend", b.Name(), "err", callErr)
-				h.emitBatchOutcome(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+				emit(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
 				return batchResult{fatalUnresolved: idxs}
 			}
 
@@ -247,7 +409,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			if backend.IsRetryable(callErr) {
 				logger.Warn("extract backend retryable error, will backoff and retry",
 					"backend", b.Name(), "err", callErr)
-				h.emitBatchOutcome(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+				emit(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
 				wait := backoffDuration(attempt, h.Retry, callErr)
 				if retry := storedBackoffRetry(ctx, idxs, attempt, wait); retry != nil {
 					return batchResult{retry: retry}
@@ -278,13 +440,43 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			logTruncatedResponse(logger, b.Name())
 		}
 
-		parsed, parseRepaired, perr := repair.ParseBootstrapByMode(resp.Text, isTextMode, h.Repair, false)
+		var entriesPayload []byte
+		var parsedCount int
+		var parseRepaired []string
+		perr := runStoredHandlerBuild(ctx, func(b *backend.BuildBounds) error {
+			if int64(len(resp.Text)) > b.OutputLimit() {
+				return backend.ErrBuildCapacity
+			}
+			opt := h.Repair
+			opt.Bounds = b
+			parsed, repaired, e := repair.ParseBootstrapByMode(resp.Text, isTextMode, opt, false)
+			parseRepaired = repaired
+			if e != nil {
+				return e
+			}
+			parsedCount = len(parsed)
+			if e = b.ReserveNodes(int64(len(parsed))+1, 1024); e != nil {
+				return e
+			}
+			candidates := make([]glossary.Entry, 0, len(parsed))
+			for _, entry := range parsed {
+				if utf8.RuneCountInString(entry.Source) < h.MinSourceLen {
+					continue
+				}
+				candidates = append(candidates, glossary.Entry{Source: entry.Source, Target: entry.Target, Mandatory: false, Notes: entry.Notes})
+			}
+			entriesPayload, e = b.EncodeJSON(candidates, b.OutputLimit())
+			return e
+		})
 		if perr != nil {
 			logger.Warn("extract parse failed",
 				"backend", b.Name(), "err", perr,
 				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
 				"repaired", parseRepaired)
 			lastErr = perr
+			if errors.Is(perr, backend.ErrBuildCapacity) {
+				return batchResult{failedSegments: idxs}
+			}
 			continue
 		}
 		if len(parseRepaired) > 0 {
@@ -292,39 +484,35 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 				"backend", b.Name(), "ops", parseRepaired)
 		}
 
-		candidates := make([]glossary.Entry, 0, len(parsed))
-		for _, e := range parsed {
-			if len([]rune(e.Source)) < h.MinSourceLen {
-				continue
-			}
-			candidates = append(candidates, glossary.Entry{
-				Source:    e.Source,
-				Target:    e.Target,
-				Mandatory: false,
-				Notes:     e.Notes,
-			})
+		if ExecutionRuntimeFromContext(ctx) != nil {
+			resp.Text = ""
+			lastResponse = ""
 		}
-		res, addErr := h.Glossary.Add(ctx, candidates...)
+		res, addErr := glossary.AddEncoded(ctx, h.Glossary, entriesPayload, storedHandlerOutputLimit(ctx), runStoredHandlerCPU)
+		entriesPayload = nil
+		if storageFailure(addErr) {
+			return batchResult{err: addErr}
+		}
 		if addErr != nil {
 			logger.Warn("glossary add failed", "err", addErr)
 		}
-		added := len(res.Added)
+		added := res.Added
 		logger.Debug("extract batch ok",
 			"backend", b.Name(),
 			"batch_segments", len(texts),
-			"parsed", len(parsed),
+			"parsed", parsedCount,
 			"added", added,
-			"skipped", len(res.Skipped),
+			"skipped", res.Skipped,
 			"prompt_tokens", resp.Usage.PromptTokens,
 			"completion_tokens", resp.Usage.CompletionTokens)
 		atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 		atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
 		status := "success"
-		if addErr != nil || len(res.Skipped) > 0 {
+		if addErr != nil || res.Skipped > 0 {
 			status = "partial"
 		}
-		h.emitBatchOutcome(progress.BatchEvent{
+		emit(progress.BatchEvent{
 			Stage:           "extract",
 			SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
 			SegmentCount:    len(idxs),
@@ -335,7 +523,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			OutputTokens:    resp.Usage.CompletionTokens,
 			SentContent:     usr,
 			ReceivedContent: resp.Text,
-			AddedGlossary:   toBootstrapEntries(res.Added),
+			AddedGlossary:   nil, // Compact result keeps counts, not complete entries.
 			Truncated:       resp.Truncated,
 			Repaired:        parseRepaired,
 			RoundIndex:      h.RoundIndex,
@@ -352,7 +540,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 	if lastErr != nil {
 		logger.Warn("extract batch failed (all backends exhausted)", "err", lastErr)
 	}
-	h.emitBatchOutcome(progress.BatchEvent{
+	emit(progress.BatchEvent{
 		Stage:           "extract",
 		SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
 		SegmentCount:    len(idxs),
@@ -397,6 +585,88 @@ func (h *ExtractHandler) collectExisting(ctx context.Context, texts []string, do
 		}
 	}
 	return out
+}
+
+func (h *ExtractHandler) collectExistingBounded(ctx context.Context, texts []string, doc *Document, logger *slog.Logger) ([]string, error) {
+	if h.Glossary == nil {
+		return nil, nil
+	}
+	var budget *backend.BuildBounds
+	var seen map[string]struct{}
+	var out []string
+	err := runStoredHandlerBuild(ctx, func(b *backend.BuildBounds) error {
+		budget = b
+		if e := b.ReserveNodes(1, 1024); e != nil {
+			return e
+		}
+		seen = make(map[string]struct{})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, text := range texts {
+		var sources []string
+		var hits []glossary.Entry
+		var e error
+		if sourceLookup, ok := h.Glossary.(glossary.SourcesLookup); ok {
+			sources, e = sourceLookup.LookupSourcesBounded(ctx, text, doc.SourceLang, doc.TargetLang, storedHandlerInputLimit(ctx), runStoredHandlerCPU)
+		} else {
+			hits, e = h.Glossary.Lookup(ctx, text, doc.SourceLang, doc.TargetLang)
+		}
+		if e != nil {
+			if errors.Is(e, backend.ErrBuildCapacity) || storageFailure(e) {
+				return nil, e
+			}
+			logger.Warn("glossary lookup failed during extract", "err", e)
+			continue
+		}
+		build := func() error {
+			appendSource := func(source string) error {
+				if _, ok := seen[source]; ok {
+					return nil
+				}
+				if e := budget.ReserveNodes(1, 1024); e != nil {
+					return e
+				}
+				if e := budget.ReserveText(int64(len(source)), int64(len(source))); e != nil {
+					return e
+				}
+				seen[source] = struct{}{}
+				var e error
+				out, e = backend.AppendNode(budget, out, source)
+				if e != nil {
+					return e
+				}
+				return nil
+			}
+			for _, source := range sources {
+				if e := appendSource(source); e != nil {
+					return e
+				}
+			}
+			for _, hit := range hits {
+				if hit.Forbidden {
+					continue
+				}
+				if e := appendSource(hit.Source); e != nil {
+					return e
+				}
+			}
+			return nil
+		}
+		if runtime := ExecutionRuntimeFromContext(ctx); runtime != nil {
+			e = runtime.Run(ctx, build)
+		} else {
+			e = backend.RunBuild(ctx, build)
+		}
+		hits = nil
+		sources = nil
+		if e != nil {
+			return nil, e
+		}
+	}
+	return out, nil
 }
 
 // calcMaxTerms 基于文本字词数动态计算本批最大术语抽取数。

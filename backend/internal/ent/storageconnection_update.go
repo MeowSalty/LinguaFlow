@@ -18,8 +18,9 @@ import (
 // StorageConnectionUpdate is the builder for updating StorageConnection entities.
 type StorageConnectionUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageConnectionMutation
+	hooks     []Hook
+	mutation  *StorageConnectionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageConnectionUpdate builder.
@@ -497,6 +498,12 @@ func (_u *StorageConnectionUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageConnectionUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageConnectionUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageConnectionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -605,6 +612,7 @@ func (_u *StorageConnectionUpdate) sqlSave(ctx context.Context) (_node int, err 
 	if value, ok := _u.mutation.RemoteUseState(); ok {
 		_spec.SetField(storageconnection.FieldRemoteUseState, field.TypeEnum, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storageconnection.Label}
@@ -620,9 +628,10 @@ func (_u *StorageConnectionUpdate) sqlSave(ctx context.Context) (_node int, err 
 // StorageConnectionUpdateOne is the builder for updating a single StorageConnection entity.
 type StorageConnectionUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageConnectionMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageConnectionMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -1107,6 +1116,12 @@ func (_u *StorageConnectionUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageConnectionUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageConnectionUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageConnectionUpdateOne) sqlSave(ctx context.Context) (_node *StorageConnection, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -1232,6 +1247,7 @@ func (_u *StorageConnectionUpdateOne) sqlSave(ctx context.Context) (_node *Stora
 	if value, ok := _u.mutation.RemoteUseState(); ok {
 		_spec.SetField(storageconnection.FieldRemoteUseState, field.TypeEnum, value)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageConnection{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

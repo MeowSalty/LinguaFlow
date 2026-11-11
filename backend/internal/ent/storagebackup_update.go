@@ -18,8 +18,9 @@ import (
 // StorageBackupUpdate is the builder for updating StorageBackup entities.
 type StorageBackupUpdate struct {
 	config
-	hooks    []Hook
-	mutation *StorageBackupMutation
+	hooks     []Hook
+	mutation  *StorageBackupMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the StorageBackupUpdate builder.
@@ -144,6 +145,12 @@ func (_u *StorageBackupUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageBackupUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageBackupUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageBackupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -174,6 +181,7 @@ func (_u *StorageBackupUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.ManifestCleared() {
 		_spec.ClearField(storagebackup.FieldManifest, field.TypeJSON)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{storagebackup.Label}
@@ -189,9 +197,10 @@ func (_u *StorageBackupUpdate) sqlSave(ctx context.Context) (_node int, err erro
 // StorageBackupUpdateOne is the builder for updating a single StorageBackup entity.
 type StorageBackupUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *StorageBackupMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *StorageBackupMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -323,6 +332,12 @@ func (_u *StorageBackupUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *StorageBackupUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *StorageBackupUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *StorageBackupUpdateOne) sqlSave(ctx context.Context) (_node *StorageBackup, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -370,6 +385,7 @@ func (_u *StorageBackupUpdateOne) sqlSave(ctx context.Context) (_node *StorageBa
 	if _u.mutation.ManifestCleared() {
 		_spec.ClearField(storagebackup.FieldManifest, field.TypeJSON)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &StorageBackup{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

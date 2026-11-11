@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -20,6 +21,14 @@ type windowResourceStore struct {
 	roundID    int
 }
 
+// These fixtures fill sixteen ordinary member slots. The final contract bills
+// main occupancy to S, with one additional slot reserved for unique progress.
+func windowFixtureLimits() CandidateLimits {
+	l := DefaultCandidateLimits()
+	l.Segments = 17
+	return l
+}
+
 func (s *windowResourceStore) ResourceIdentity() int { return s.resourceID }
 func (s *windowResourceStore) RoundIdentity() int    { return s.roundID }
 
@@ -29,32 +38,26 @@ type windowBatchProbe struct {
 	mu               sync.Mutex
 	indices          [][]int
 	attempts         []int
-	builds           atomic.Int32
 }
 
-func (*windowBatchProbe) ModeName() string { return RoundModeTranslate }
-func (h *windowBatchProbe) BuildBatches(_ context.Context, doc *Document, pending []int, _ int) ([][]int, error) {
-	h.builds.Add(1)
-	if pending == nil {
-		for i := range doc.Segments {
-			pending = append(pending, i)
-		}
-	}
-	var batches [][]int
-	for len(pending) > 0 {
-		n := min(h.batchSize, len(pending))
-		batches = append(batches, append([]int(nil), pending[:n]...))
-		pending = pending[n:]
-	}
-	return batches, nil
+func (h *windowBatchProbe) handler(t *testing.T, r *ExecutionRuntime) *TranslateHandler {
+	t.Helper()
+	return &TranslateHandler{Backend: BindRequestBackend(&windowProbeBackend{probe: h}, 1, 0, r), Renderer: newTestRenderer(t), BatchSize: h.batchSize, Logger: quietLogger()}
 }
-func (h *windowBatchProbe) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, l *slog.Logger) batchResult {
-	return h.PrepareBatch(ctx, doc, idxs, attempt, l)
-}
-func (h *windowBatchProbe) PrepareBatch(ctx context.Context, doc *Document, idxs []int, attempt int, _ *slog.Logger) batchResult {
+
+type windowProbeBackend struct{ probe *windowBatchProbe }
+
+func (*windowProbeBackend) Name() string { return "window-provider-probe" }
+func (*windowProbeBackend) Close() error { return nil }
+func (b *windowProbeBackend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
+	session, ok := ctx.Value(requestSessionKey{}).(*requestSession)
+	if !ok {
+		return nil, errors.New("probe provider has no frozen request session")
+	}
+	h := b.probe
 	h.mu.Lock()
-	h.indices = append(h.indices, append([]int(nil), idxs...))
-	h.attempts = append(h.attempts, attempt)
+	h.indices = append(h.indices, append([]int(nil), session.intent.Indices...))
+	h.attempts = append(h.attempts, session.intent.Attempt)
 	first := len(h.indices) == 1
 	h.mu.Unlock()
 	if first && h.entered != nil {
@@ -64,19 +67,29 @@ func (h *windowBatchProbe) PrepareBatch(ctx context.Context, doc *Document, idxs
 		select {
 		case <-h.release:
 		case <-ctx.Done():
-			return batchResult{err: ctx.Err()}
+			return nil, ctx.Err()
 		}
 	}
-	result := batchResult{}
-	for _, idx := range idxs {
-		c := newCandidate(doc.Segments[idx], idx, RoundModeTranslate, "text")
-		c.Ready = true
-		c.Segment.Target = "accepted"
-		result.candidates = append(result.candidates, c)
+	var input struct {
+		Segments map[string]struct {
+			Translate bool `json:"translate"`
+		} `json:"segments"`
 	}
-	return result
+	if err := json.Unmarshal([]byte(req.User), &input); err != nil {
+		return nil, err
+	}
+	translations := map[string]string{}
+	for id, member := range input.Segments {
+		if member.Translate {
+			translations[id] = "accepted"
+		}
+	}
+	raw, err := json.Marshal(map[string]any{"translations": translations})
+	if err != nil {
+		return nil, err
+	}
+	return &backend.Response{Text: string(raw)}, nil
 }
-func (*windowBatchProbe) Finalize(context.Context, *Document, []int) error { return nil }
 func (h *windowBatchProbe) snapshot() ([][]int, []int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -95,8 +108,12 @@ func waitWindowProbe(t *testing.T, fn func() bool) {
 
 func TestCandidateWindowClassifiesStaticLimitAndBusy(t *testing.T) {
 	w := NewCandidateWindow(CandidateLimits{Segments: 8, Bytes: 4 << 20, ItemBytes: 1 << 20})
-	if got, _ := w.TryReserveOwned("oversize", 5, 1, nil); got != WindowTooLarge {
-		t.Fatalf("static byte limit: %v", got)
+	if got := w.mainBatchLimit(1); got != 8 {
+		t.Fatalf("static ordinary S-1 member limit: %d", got)
+	}
+	singleton := NewCandidateWindow(CandidateLimits{Segments: 1, Bytes: 4 << 20, ItemBytes: 1 << 20})
+	if got, _ := singleton.TryReserveOwned("oversize", 2, 1, nil); got != WindowTooLarge {
+		t.Fatalf("static singleton member limit: %v", got)
 	}
 	if got, _ := w.TryReserveOwned("owner", 4, 1, nil); got != WindowGranted {
 		t.Fatal(got)
@@ -144,30 +161,58 @@ func TestCandidateWindowClassifiesStaticLimitAndBusy(t *testing.T) {
 	}
 }
 
-func TestStagedWindowHardLimitSplitsOnlyOversizeBatch(t *testing.T) {
-	r := stagedTestRuntime(t, CandidateLimits{Segments: 8, Bytes: 4 << 20, ItemBytes: 1 << 20})
+func TestStagedWindowFullBatchIndependentOfConcurrency(t *testing.T) {
+	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewExecutionRuntime(a, CandidateLimits{Segments: 8, Bytes: 4 << 20, ItemBytes: 1 << 20}, nil)
+	defer r.Close()
 	h := &windowBatchProbe{batchSize: 8}
 	store := &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 1}
-	result, err := RunStagedRound(context.Background(), Round{Concurrency: 2, Handler: h}, newTestDoc(8), store, r, quietLogger(), progress.Nop{})
+	result, err := RunStagedRound(context.Background(), Round{Concurrency: 2, Handler: h.handler(t, r)}, newTestDoc(8), store, r, quietLogger(), progress.Nop{})
 	if err != nil || len(result.Resolved) != 8 {
 		t.Fatalf("split failed: %+v %v", result, err)
 	}
 	batches, _ := h.snapshot()
-	if len(batches) != 2 || len(batches[0]) != 4 || len(batches[1]) != 4 {
-		t.Fatalf("busy fragmented legal batches: %v", batches)
+	if len(batches) != 1 || len(batches[0]) != 8 {
+		t.Fatalf("C2 changed original full n8/S8: %v", batches)
 	}
 }
 
 func TestStagedWindowActiveOwnerWaitsWithSameBatchAndAttempt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	r := stagedTestRuntime(t, CandidateLimits{Segments: 8, Bytes: 4 << 20, ItemBytes: 1 << 20})
 	first := &windowBatchProbe{batchSize: 4, entered: make(chan struct{}), release: make(chan struct{})}
 	ownerStore := &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 1}
 	ownerDone := make(chan error, 1)
+	done := make(chan error, 1)
+	ownerJoined, secondJoined, secondStarted := false, false, false
+	var releaseOnce sync.Once
+	cleanup := func() {
+		releaseOnce.Do(func() { close(first.release) })
+		cancel()
+		if !ownerJoined {
+			<-ownerDone
+			ownerJoined = true
+		}
+		if secondStarted && !secondJoined {
+			<-done
+			secondJoined = true
+		}
+	}
+	defer cleanup()
+	fail := func(format string, args ...any) { cleanup(); t.Fatalf(format, args...) }
 	go func() {
-		_, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: first}, newTestDoc(4), ownerStore, r, quietLogger(), nil)
+		_, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: first.handler(t, r)}, newTestDoc(4), ownerStore, r, quietLogger(), nil)
 		ownerDone <- err
 	}()
-	awaitSignal(t, first.entered)
+	select {
+	case <-first.entered:
+	case <-ctx.Done():
+		fail("owner provider barrier did not start")
+	}
 	second := &windowBatchProbe{batchSize: 4}
 	store := &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 2}
 	_, _ = store.Seal(context.Background(), []int{0, 1, 2, 3})
@@ -177,9 +222,9 @@ func TestStagedWindowActiveOwnerWaitsWithSameBatchAndAttempt(t *testing.T) {
 	}
 	_ = store.Cursors(context.Background(), cursors)
 	reporter := &countingReporter{}
-	done := make(chan error, 1)
+	secondStarted = true
 	go func() {
-		result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Retry: backend.RetryPolicy{MaxAttempts: 2}, Handler: second}, newTestDoc(4), store, r, quietLogger(), reporter)
+		result, err := RunStagedRound(ctx, Round{Concurrency: 1, Retry: backend.RetryPolicy{MaxAttempts: 2}, Handler: second.handler(t, r)}, newTestDoc(4), store, r, quietLogger(), reporter)
 		if err == nil && len(result.Resolved) != 4 {
 			err = errors.New("waiting member lost")
 		}
@@ -188,18 +233,22 @@ func TestStagedWindowActiveOwnerWaitsWithSameBatchAndAttempt(t *testing.T) {
 	waitWindowProbe(t, func() bool {
 		n, _ := r.Preparation.Peaks()
 		pending, _ := r.Preparation.Snapshot()
-		return n >= 2 && pending == 1
+		return n >= 1 && pending == 0 && r.Window.Snapshot().Segments == 4
 	})
 	if batches, _ := second.snapshot(); len(batches) != 0 {
-		t.Fatalf("busy batch dispatched early: %v", batches)
+		fail("busy batch dispatched early: %v", batches)
 	}
-	close(first.release)
+	releaseOnce.Do(func() { close(first.release) })
 	if err := awaitRuntimeResult(t, ownerDone); err != nil {
-		t.Fatal(err)
+		ownerJoined = true
+		fail("owner failed: %v", err)
 	}
+	ownerJoined = true
 	if err := awaitRuntimeResult(t, done); err != nil {
-		t.Fatal(err)
+		secondJoined = true
+		fail("waiter failed: %v", err)
 	}
+	secondJoined = true
 	batches, attempts := second.snapshot()
 	if len(batches) != 1 || len(batches[0]) != 4 || attempts[0] != 1 {
 		t.Fatalf("busy changed batch/attempt: %v %v", batches, attempts)
@@ -212,27 +261,32 @@ func TestStagedWindowActiveOwnerWaitsWithSameBatchAndAttempt(t *testing.T) {
 func TestStagedWindowInactiveRecoveryOwnerYieldsThenResumes(t *testing.T) {
 	r := stagedTestRuntime(t, CandidateLimits{Segments: 8, Bytes: 4 << 20, ItemBytes: 1 << 20})
 	foreign := &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 9}
-	draftDoc := newTestDoc(1)
-	_, _ = foreign.Seal(context.Background(), []int{0})
-	c := newCandidate(draftDoc.Segments[0], 0, RoundModeTranslate, "text")
-	c.Ready = true
-	c.Segment.Target = "saved"
-	_ = foreign.Save(context.Background(), c)
-	data, _ := c.Encode()
-	if err := r.Window.RestoreScoped(c.ID, int64(len(data)), 9, 0); err != nil {
-		t.Fatal(err)
+	// Four inactive durable members leave three ordinary S slots; a retained
+	// four-member batch must yield without fragmenting on unknown scope owners.
+	draftDoc := newTestDoc(4)
+	_, _ = foreign.Seal(context.Background(), []int{0, 1, 2, 3})
+	for i := range draftDoc.Segments {
+		c := newCandidate(draftDoc.Segments[i], i, RoundModeTranslate, "text")
+		c.Ready = true
+		c.Segment.Target = "saved"
+		if err := foreign.Save(context.Background(), c); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.Window.RestoreScoped(c.ID, c.StoredBytes, 9, 0); err != nil {
+			t.Fatal(err)
+		}
 	}
 	store := &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 1}
 	h := &windowBatchProbe{batchSize: 4}
 	doc := newTestDoc(4)
-	result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h}, doc, store, r, quietLogger(), nil)
+	result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h.handler(t, r)}, doc, store, r, quietLogger(), nil)
 	if !errors.Is(err, ErrResourceYield) || len(result.Unresolved) != 4 {
 		t.Fatalf("inactive owner did not yield: %+v %v", result, err)
 	}
-	if _, err = RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: &windowBatchProbe{batchSize: 1}}, draftDoc, foreign, r, quietLogger(), nil); err != nil {
+	if _, err = RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: (&windowBatchProbe{batchSize: 1}).handler(t, r)}, draftDoc, foreign, r, quietLogger(), nil); err != nil {
 		t.Fatal(err)
 	}
-	if result, err = RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h}, doc, store, r, quietLogger(), nil); err != nil || len(result.Resolved) != 4 {
+	if result, err = RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h.handler(t, r)}, doc, store, r, quietLogger(), nil); err != nil || len(result.Resolved) != 4 {
 		t.Fatalf("yield did not resume: %+v %v", result, err)
 	}
 	batches, _ := h.snapshot()
@@ -258,13 +312,13 @@ func TestStagedWindowWaitingPauseCancelLeavesMembersAndCredit(t *testing.T) {
 		}
 		done := make(chan outcome, 1)
 		go func() {
-			result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h}, newTestDoc(4), store, r, quietLogger(), nil)
+			result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h.handler(t, r)}, newTestDoc(4), store, r, quietLogger(), nil)
 			done <- outcome{result, err}
 		}()
 		waitWindowProbe(t, func() bool {
 			peak, _ := r.Preparation.Peaks()
 			pending, _ := r.Preparation.Snapshot()
-			return peak > 0 && pending == 0 && h.builds.Load() > 1
+			return peak > 0 && pending == 0 && r.Window.Snapshot().Segments > 0
 		})
 		if pause {
 			r.Gate.Pause()
@@ -305,17 +359,27 @@ func TestCandidateWindowGrowthRemainsImmediateAndDoesNotWaitForProducer(t *testi
 	_ = w.RestoreScoped("candidate", 8, 1, 0)
 	_ = w.RestoreScoped("other", 2, 2, 0)
 	_, _ = w.TryReserveOwned("main", 1, 2, nil)
-	if err := w.ReserveResize("candidate", 10); !errors.Is(err, ErrCandidateCapacity) {
-		t.Fatalf("growth busy must retain existing failure semantics: %v", err)
+	if err := w.ReserveResize("candidate", 10); !errors.Is(err, backend.ErrPipelineCapacity) {
+		t.Fatalf("growth without full Q pregrant must fail immediately: %v", err)
 	}
-	w.Release("main")
+	if err := w.ledger.AttachProgress(backend.PipelineRuntimeState{Version: 1, ProgressID: "candidate"}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := w.ledger.ReserveCandidateGrowth("candidate"); err != nil || !ok {
+		t.Fatalf("growth pregrant: %v %v", ok, err)
+	}
 	if err := w.ReserveResize("candidate", 10); err != nil {
 		t.Fatal(err)
 	}
+	// Main owns only member S. It must not manufacture a W wait after this
+	// consumer acquired its full Q before dispatch/save.
+	w.Release("main")
+	w.Release("candidate")
+	w.Release("other")
 }
 
 func TestWindowConsumerDoesNotReviveEarlierInstanceClaims(t *testing.T) {
-	w := NewCandidateWindow(DefaultCandidateLimits())
+	w := NewCandidateWindow(windowFixtureLimits())
 	if err := w.RestoreScoped("recovered", 100, 1, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -340,10 +404,10 @@ func TestWindowConsumerDoesNotReviveEarlierInstanceClaims(t *testing.T) {
 	}
 }
 
-func TestStagedWindowSameResourceFutureRoundWithoutClaimYields(t *testing.T) {
-	// Even a singleton cannot fit this restored window. HEAD already yielded
-	// such a blocked resource; a current consumer must not turn that into a wait.
-	r := stagedTestRuntime(t, CandidateLimits{Segments: 1, Bytes: 1 << 20, ItemBytes: 1 << 20})
+func TestStagedWindowSameResourceFutureRoundWithoutClaimMakesProgress(t *testing.T) {
+	// The fixed recovery exception permits the earliest singleton while a
+	// later header remains pinned. The later body is never claimed or decoded.
+	r := stagedTestRuntime(t, CandidateLimits{Segments: 2, Bytes: 1 << 20, ItemBytes: 1 << 20})
 	if err := r.Window.RestoreScoped("future-round", 100, 1, 2); err != nil {
 		t.Fatal(err)
 	}
@@ -355,19 +419,19 @@ func TestStagedWindowSameResourceFutureRoundWithoutClaimYields(t *testing.T) {
 	}
 	done := make(chan outcome, 1)
 	go func() {
-		result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h}, newTestDoc(1), store, r, quietLogger(), nil)
+		result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h.handler(t, r)}, newTestDoc(1), store, r, quietLogger(), nil)
 		done <- outcome{result, err}
 	}()
 	select {
 	case out := <-done:
-		if !errors.Is(out.err, ErrResourceYield) || len(out.result.Unresolved) != 1 {
-			t.Fatalf("future round should yield, not be silently accepted: %+v", out)
+		if out.err != nil || len(out.result.Resolved) != 1 || len(out.result.Unresolved) != 0 {
+			t.Fatalf("earliest singleton failed beside future pin: %+v", out)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("same-resource future candidate caused permanent wait")
 	}
-	if batches, _ := h.snapshot(); len(batches) != 0 {
-		t.Fatal("blocked current round ran")
+	if batches, _ := h.snapshot(); len(batches) != 1 || len(batches[0]) != 1 {
+		t.Fatal("earliest singleton was replayed or fragmented")
 	}
 	if snapshot := r.Window.Snapshot(); snapshot.Segments != 1 || snapshot.Bytes != 100 {
 		t.Fatalf("future recovery accounting discarded: %+v", snapshot)
@@ -402,7 +466,7 @@ func TestStagedWindowCurrentScopeRecoveryPageClaimsConsumer(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &windowBatchProbe{batchSize: 1}
-	result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h}, doc, store, r, quietLogger(), nil)
+	result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h.handler(t, r)}, doc, store, r, quietLogger(), nil)
 	if err != nil || len(result.Resolved) != 1 || store.claims.Load() != 1 {
 		t.Fatalf("current recovery did not claim active consumer: %+v %v claims=%d", result, err, store.claims.Load())
 	}
@@ -412,7 +476,7 @@ func TestStagedWindowCurrentScopeRecoveryPageClaimsConsumer(t *testing.T) {
 }
 
 func TestStagedWindowPartialFuturePinCompletesEarlierAndRecoversLater(t *testing.T) {
-	r := stagedTestRuntime(t, DefaultCandidateLimits())
+	r := stagedTestRuntime(t, windowFixtureLimits())
 	future := &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 1, roundID: 2}
 	futureDoc := newTestDoc(1)
 	_, _ = future.Seal(context.Background(), []int{0})
@@ -439,12 +503,12 @@ func TestStagedWindowPartialFuturePinCompletesEarlierAndRecoversLater(t *testing
 	_ = current.Cursors(context.Background(), cursors)
 	h := &windowBatchProbe{batchSize: 16}
 	reporter := &countingReporter{}
-	result, err := RunStagedRound(context.Background(), Round{Concurrency: 2, Retry: backend.RetryPolicy{MaxAttempts: 2}, Handler: h}, newTestDoc(16), current, r, quietLogger(), reporter)
+	result, err := RunStagedRound(context.Background(), Round{Concurrency: 2, Retry: backend.RetryPolicy{MaxAttempts: 2}, Handler: h.handler(t, r)}, newTestDoc(16), current, r, quietLogger(), reporter)
 	if err != nil || len(result.Resolved) != 16 || len(result.Unresolved) != 0 {
 		t.Fatalf("partial future pin stopped earlier round: %+v %v", result, err)
 	}
 	batches, attempts := h.snapshot()
-	if len(batches) != 2 || len(batches[0]) != 8 || len(batches[1]) != 8 || attempts[0] != 1 || attempts[1] != 1 {
+	if len(batches) != 1 || len(batches[0]) != 16 || attempts[0] != 1 {
 		t.Fatalf("fixed-pin split changed members/attempt: %v %v", batches, attempts)
 	}
 	seen := make(map[int]bool)
@@ -463,7 +527,7 @@ func TestStagedWindowPartialFuturePinCompletesEarlierAndRecoversLater(t *testing
 		t.Fatalf("later draft capacity discarded: %+v", got)
 	}
 	laterHandler := &windowBatchProbe{batchSize: 1}
-	result, err = RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: laterHandler}, futureDoc, future, r, quietLogger(), nil)
+	result, err = RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: laterHandler.handler(t, r)}, futureDoc, future, r, quietLogger(), nil)
 	if err != nil || len(result.Resolved) != 1 || futureDoc.Segments[0].Target != "durable later result" {
 		t.Fatalf("later round could not recover original draft: %+v %v", result, err)
 	}
@@ -475,7 +539,7 @@ func TestStagedWindowPartialFuturePinCompletesEarlierAndRecoversLater(t *testing
 func TestStagedWindowPinAndActiveOccupancyWaitAfterFixedSplit(t *testing.T) {
 	for _, pin := range []bool{false, true} {
 		t.Run(map[bool]string{false: "active_only", true: "fixed_pin_and_active"}[pin], func(t *testing.T) {
-			r := stagedTestRuntime(t, DefaultCandidateLimits())
+			r := stagedTestRuntime(t, windowFixtureLimits())
 			if pin {
 				if err := r.Window.RestoreScoped("future", 1024, 1, 2); err != nil {
 					t.Fatal(err)
@@ -492,7 +556,7 @@ func TestStagedWindowPinAndActiveOccupancyWaitAfterFixedSplit(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			go func() {
-				result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h}, newTestDoc(16), store, r, quietLogger(), nil)
+				result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h.handler(t, r)}, newTestDoc(16), store, r, quietLogger(), nil)
 				if err == nil && len(result.Resolved) != 16 {
 					err = errors.New("fixed-pin wait lost members")
 				}
@@ -501,7 +565,7 @@ func TestStagedWindowPinAndActiveOccupancyWaitAfterFixedSplit(t *testing.T) {
 			waitWindowProbe(t, func() bool {
 				peak, _ := r.Preparation.Peaks()
 				pending, _ := r.Preparation.Snapshot()
-				return peak > 0 && pending == 0 && h.builds.Load() > 1
+				return peak > 0 && pending == 0 && r.Window.Snapshot().Segments > 0
 			})
 			select {
 			case err := <-done:
@@ -516,8 +580,7 @@ func TestStagedWindowPinAndActiveOccupancyWaitAfterFixedSplit(t *testing.T) {
 				t.Fatal(err)
 			}
 			batches, _ := h.snapshot()
-			if pin && (len(batches) != 2 || len(batches[0]) != 8 || len(batches[1]) != 8) ||
-				!pin && (len(batches) != 1 || len(batches[0]) != 16) {
+			if len(batches) != 1 || len(batches[0]) != 16 {
 				t.Fatalf("batch ceiling did not distinguish fixed/live occupancy: %v", batches)
 			}
 		})
@@ -527,7 +590,7 @@ func TestStagedWindowPinAndActiveOccupancyWaitAfterFixedSplit(t *testing.T) {
 func TestCandidateWindowFixedPinRequiresDurableScopeAndCompleteRecovery(t *testing.T) {
 	for _, kind := range []string{"future", "same_round", "foreign_resource", "unknown_resource", "unknown_round", "active_future", "active_foreign_page", "active_same_future_page", "unknown_active_foreign_page", "unconfirmed_reservation", "unconfirmed_transfer"} {
 		t.Run(kind, func(t *testing.T) {
-			w := NewCandidateWindow(DefaultCandidateLimits())
+			w := NewCandidateWindow(windowFixtureLimits())
 			consumer := w.EnterScope(1, 1)
 			defer consumer.Leave()
 			resourceID, roundID := 1, 2
@@ -552,9 +615,12 @@ func TestCandidateWindowFixedPinRequiresDurableScopeAndCompleteRecovery(t *testi
 					t.Fatal(result)
 				}
 				if kind == "unconfirmed_transfer" {
-					if err := w.Transfer("occupancy", "draft", 1024); err != nil {
-						t.Fatal(err)
+					if ok, err := w.ledger.BeginPromotion("occupancy", "draft", 1024, false); err != nil || !ok {
+						t.Fatalf("unconfirmed promotion pregrant: %v %v", ok, err)
 					}
+					defer w.ledger.AbortPromotion("draft")
+					// Transfer is the durable transaction ACK boundary. Before it,
+					// a staged body cannot become a fixed recovery pin.
 				}
 				old.Leave()
 			} else {
@@ -590,7 +656,9 @@ func TestCandidateWindowFixedPinRequiresDurableScopeAndCompleteRecovery(t *testi
 }
 
 func TestStagedWindowTwoResourcesFuturePinsMakeProgressWithOneResourceSlot(t *testing.T) {
-	r := stagedTestRuntime(t, DefaultCandidateLimits())
+	limits := windowFixtureLimits()
+	limits.Segments = 400
+	r := stagedTestRuntime(t, limits)
 	futureStores := make([]*windowResourceStore, 2)
 	futureDocs := make([]*Document, 2)
 	for resource := 1; resource <= 2; resource++ {
@@ -624,15 +692,15 @@ func TestStagedWindowTwoResourcesFuturePinsMakeProgressWithOneResourceSlot(t *te
 		<-resourceSlot
 		current := &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: resource, roundID: 1}
 		h := &windowBatchProbe{batchSize: 300}
-		result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h}, newTestDoc(300), current, r, quietLogger(), nil)
+		result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h.handler(t, r)}, newTestDoc(300), current, r, quietLogger(), nil)
 		if err != nil || len(result.Resolved) != 300 || len(result.Unresolved) != 0 {
 			t.Fatalf("resource %d made no progress with partial foreign pins: %+v %v", resource, result, err)
 		}
 		batches, attempts := h.snapshot()
-		firstSize := 4
-		if resource == 2 { // A's later round has now consumed its original drafts.
-			firstSize = 9
-		}
+		// Main reserves S only: sixteen ordinary slots minus eight/four
+		// durable future members. Fixed prefix halving selects eight in either
+		// case; later live occupancy may wait but cannot rehalve that prefix.
+		firstSize := 300
 		if len(batches) == 0 || len(batches[0]) != firstSize {
 			t.Fatalf("resource %d did not fit fixed recovery ceiling: %v", resource, batches)
 		}
@@ -652,7 +720,7 @@ func TestStagedWindowTwoResourcesFuturePinsMakeProgressWithOneResourceSlot(t *te
 			t.Fatalf("earlier round changed future recovery accounting: %+v", snapshot)
 		}
 		laterHandler := &windowBatchProbe{batchSize: 4}
-		result, err = RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: laterHandler}, futureDocs[resource-1], futureStores[resource-1], r, quietLogger(), nil)
+		result, err = RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: laterHandler.handler(t, r)}, futureDocs[resource-1], futureStores[resource-1], r, quietLogger(), nil)
 		if err != nil || len(result.Resolved) != 4 {
 			t.Fatalf("resource %d lost sequential future recovery: %+v %v", resource, result, err)
 		}
@@ -673,7 +741,7 @@ func TestStagedWindowTwoResourcesFuturePinsMakeProgressWithOneResourceSlot(t *te
 
 func TestCandidateWindowMultipleRecoveryPinsSingletonBoundary(t *testing.T) {
 	for _, available := range []int64{10, 9} {
-		w := NewCandidateWindow(CandidateLimits{Segments: 8, Bytes: 40, ItemBytes: 10})
+		w := NewCandidateWindow(CandidateLimits{Segments: 5, Bytes: 40, ItemBytes: 10})
 		consumer := w.EnterScope(1, 1)
 		consumer.RecoveryComplete()
 		defer consumer.Leave()
@@ -685,16 +753,22 @@ func TestCandidateWindowMultipleRecoveryPinsSingletonBoundary(t *testing.T) {
 		if result, _ := w.TryReserveOwned("batch", 2, 1, consumer); result != WindowPinnedLimit {
 			t.Fatal("multiple recovery pins did not form a fixed ceiling")
 		}
-		want := WindowGranted
-		if available < 10 {
-			want = WindowBusy
+		if result, _ := w.TryReserveOwned("singleton", 1, 1, consumer); result != WindowPinnedLimit {
+			t.Fatalf("all ordinary S pinned before progress: %v", result)
 		}
-		if result, _ := w.TryReserveOwned("singleton", 1, 1, consumer); result != want {
-			t.Fatalf("available %d: singleton got %v want %v", available, result, want)
+		state, err := w.ledger.MemoryProgress("singleton", "singleton", 1, 0)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if want == WindowBusy && w.CanDrainFor(consumer) {
-			t.Fatal("fully pinned singleton shortage did not yield")
+		if err = w.ledger.AttachProgress(state); err != nil {
+			t.Fatal(err)
 		}
+		if result, _ := w.TryReserveOwned("singleton", 1, 1, consumer); result != WindowGranted {
+			t.Fatalf("available W %d: unique S singleton got %v", available, result)
+		}
+		// W does not precharge Q for main. Actual promotion/growth must later
+		// acquire W under this same fixed owner and remain within B0+Q.
+		w.Release("singleton")
 	}
 }
 
@@ -723,7 +797,7 @@ func (p *windowReleaseLogProbe) WithAttrs([]slog.Attr) slog.Handler { return p }
 func (p *windowReleaseLogProbe) WithGroup(string) slog.Handler      { return p }
 
 func TestStagedWindowReleaseBetweenBusyAndYieldRetriesRetainedBatch(t *testing.T) {
-	r := stagedTestRuntime(t, DefaultCandidateLimits())
+	r := stagedTestRuntime(t, windowFixtureLimits())
 	_ = r.Window.RestoreScoped("future", 1024, 1, 2)
 	owner := r.Window.EnterScope(9, 9)
 	defer owner.Leave()
@@ -739,18 +813,18 @@ func TestStagedWindowReleaseBetweenBusyAndYieldRetriesRetainedBatch(t *testing.T
 	defer slog.SetDefault(previous)
 	h := &windowBatchProbe{batchSize: 16}
 	store := &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 1, roundID: 1}
-	result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h}, newTestDoc(16), store, r, quietLogger(), nil)
+	result, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: h.handler(t, r)}, newTestDoc(16), store, r, quietLogger(), nil)
 	if err != nil || len(result.Resolved) != 16 || !logProbe.hit.Load() {
 		t.Fatalf("released capacity caused a false sole-resource yield: %+v %v hook=%v", result, err, logProbe.hit.Load())
 	}
 	batches, _ := h.snapshot()
-	if len(batches) != 2 || len(batches[0]) != 8 || len(batches[1]) != 8 {
+	if len(batches) != 1 || len(batches[0]) != 16 {
 		t.Fatalf("release raced batch was rebuilt: %v", batches)
 	}
 }
 
 func TestCandidateWindowForeignEnteredScopeMustLeaveBeforePin(t *testing.T) {
-	w := NewCandidateWindow(DefaultCandidateLimits())
+	w := NewCandidateWindow(windowFixtureLimits())
 	current := w.EnterScope(1, 1)
 	defer current.Leave()
 	current.RecoveryComplete()
@@ -775,7 +849,7 @@ func TestCandidateWindowForeignEnteredScopeMustLeaveBeforePin(t *testing.T) {
 func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 	for _, outcome := range []string{"exit", "completed_without_claim", "claim_and_release"} {
 		t.Run(outcome, func(t *testing.T) {
-			r := stagedTestRuntime(t, DefaultCandidateLimits())
+			r := stagedTestRuntime(t, windowFixtureLimits())
 			_ = r.Window.RestoreScoped("unclaimed", 1024, 9, 2)
 			foreign := r.Window.EnterScope(9, 2)
 			defer foreign.Leave()
@@ -785,7 +859,7 @@ func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
-				result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h}, newTestDoc(16), store, r, quietLogger(), nil)
+				result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h.handler(t, r)}, newTestDoc(16), store, r, quietLogger(), nil)
 				if err == nil && len(result.Resolved) != 16 {
 					err = errors.New("page-loader wait lost members")
 				}
@@ -794,7 +868,7 @@ func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 			waitWindowProbe(t, func() bool {
 				peak, _ := r.Preparation.Peaks()
 				pending, _ := r.Preparation.Snapshot()
-				return peak > 0 && pending == 0 && h.builds.Load() > 1
+				return peak > 0 && pending == 0 && r.Window.Snapshot().Segments > 0
 			})
 			select {
 			case err := <-done:
@@ -806,10 +880,7 @@ func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 			}
 			if outcome == "completed_without_claim" {
 				foreign.RecoveryComplete()
-				if err := awaitRuntimeResult(t, done); !errors.Is(err, ErrResourceYield) {
-					t.Fatalf("exhausted page retained a false consumption proof: %v", err)
-				}
-				return
+				// All stock is now a proven pin: original n16 plus pin1 fits S17.
 			}
 			if outcome == "claim_and_release" {
 				if err := r.Window.ClaimRecovered("unclaimed", 1024, foreign); err != nil {
@@ -828,8 +899,7 @@ func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 				t.Fatal(err)
 			}
 			batches, _ := h.snapshot()
-			if outcome == "exit" && (len(batches) != 2 || len(batches[0]) != 8 || len(batches[1]) != 8) ||
-				outcome == "claim_and_release" && (len(batches) != 1 || len(batches[0]) != 16) {
+			if len(batches) != 1 || len(batches[0]) != 16 {
 				t.Fatalf("page outcome changed the wrong batch ceiling: %v", batches)
 			}
 		})
@@ -838,7 +908,7 @@ func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 
 func TestStagedWindowFixedPinWaitPauseCancelPreservesBatch(t *testing.T) {
 	for _, pause := range []bool{true, false} {
-		r := stagedTestRuntime(t, DefaultCandidateLimits())
+		r := stagedTestRuntime(t, windowFixtureLimits())
 		_ = r.Window.RestoreScoped("future", 1024, 1, 2)
 		owner := r.Window.EnterScope(9, 9)
 		defer owner.Leave()
@@ -853,13 +923,13 @@ func TestStagedWindowFixedPinWaitPauseCancelPreservesBatch(t *testing.T) {
 		}
 		done := make(chan outcome, 1)
 		go func() {
-			result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h}, newTestDoc(16), store, r, quietLogger(), nil)
+			result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h.handler(t, r)}, newTestDoc(16), store, r, quietLogger(), nil)
 			done <- outcome{result, err}
 		}()
 		waitWindowProbe(t, func() bool {
 			peak, _ := r.Preparation.Peaks()
 			pending, _ := r.Preparation.Snapshot()
-			return peak > 0 && pending == 0 && h.builds.Load() > 1
+			return peak > 0 && pending == 0 && r.Window.Snapshot().Segments > 0
 		})
 		if pause {
 			r.Gate.Pause()
@@ -877,7 +947,9 @@ func TestStagedWindowFixedPinWaitPauseCancelPreservesBatch(t *testing.T) {
 		if batches, _ := h.snapshot(); len(batches) != 0 {
 			t.Fatal("cancelled fixed-pin batch dispatched")
 		}
-		if got := r.Window.Snapshot(); got.Segments != 9 || got.Bytes != 8<<20+1024 {
+		// Eight active main members own S; only the actual future candidate
+		// body owns W. Pause/Cancel cannot turn either into phantom payload Q.
+		if got := r.Window.Snapshot(); got.Segments != 9 || got.Bytes != 1024 {
 			t.Fatalf("waiting changed durable/active accounting: %+v", got)
 		}
 		if pending, _ := r.Preparation.Snapshot(); pending != 0 {
@@ -915,44 +987,101 @@ func (p *windowGrantLogProbe) Handle(_ context.Context, record slog.Record) erro
 func (p *windowGrantLogProbe) WithAttrs([]slog.Attr) slog.Handler { return p }
 func (p *windowGrantLogProbe) WithGroup(string) slog.Handler      { return p }
 func TestStagedWindowMultipleWaitersDoNotWakeEachOthersPreparation(t *testing.T) {
-	logProbe := &windowGrantLogProbe{}
-	previous := slog.Default()
-	slog.SetDefault(slog.New(logProbe))
-	defer slog.SetDefault(previous)
 	r := stagedTestRuntime(t, CandidateLimits{Segments: 8, Bytes: 4 << 20, ItemBytes: 1 << 20})
 	owner := &windowBatchProbe{batchSize: 4, entered: make(chan struct{}), release: make(chan struct{})}
-	ownerDone := make(chan error, 1)
-	go func() {
-		_, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: owner}, newTestDoc(4), &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 1}, r, quietLogger(), nil)
-		ownerDone <- err
-	}()
-	awaitSignal(t, owner.entered)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	done := make(chan error, 3)
+	joined := 0
 	var releaseOnce sync.Once
-	defer releaseOnce.Do(func() { close(owner.release) })
-	done := make(chan error, 2)
-	for _, resourceID := range []int{2, 3} {
-		go func() {
-			_, err := RunStagedRound(context.Background(), Round{Concurrency: 1, Handler: &windowBatchProbe{batchSize: 4}}, newTestDoc(4), &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: resourceID}, r, quietLogger(), nil)
+	open := func() { releaseOnce.Do(func() { close(owner.release) }) }
+	cleanup := func() {
+		open()
+		cancel()
+		for joined < 3 {
+			<-done
+			joined++
+		}
+	}
+	go func() {
+		result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: owner.handler(t, r)}, newTestDoc(4), &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 1}, r, quietLogger(), nil)
+		if err == nil && len(result.Resolved) != 4 {
+			err = errors.New("owner lost members")
+		}
+		done <- err
+	}()
+	select {
+	case <-owner.entered:
+	case <-ctx.Done():
+		open()
+		cancel()
+		<-done
+		t.Fatal(ctx.Err())
+	}
+	probes := []*windowBatchProbe{{batchSize: 4}, {batchSize: 4}}
+	stores := []*windowResourceStore{{RoundStore: NewMemoryRoundStore(nil), resourceID: 2}, {RoundStore: NewMemoryRoundStore(nil), resourceID: 3}}
+	for i := range probes {
+		go func(i int) {
+			result, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: probes[i].handler(t, r)}, newTestDoc(4), stores[i], r, quietLogger(), nil)
+			if err == nil && len(result.Resolved) != 4 {
+				err = errors.New("waiter lost members")
+			}
 			done <- err
-		}()
+		}(i)
 	}
-	waitWindowProbe(t, func() bool {
-		pending, _ := r.Preparation.Snapshot()
-		return logProbe.first.Load() > 0 && logProbe.second.Load() > 0 && pending == 1
-	})
-	// Each waiter may retry once when the other coordinator first enters the
-	// window. Preparation notifications alone cannot keep granting either one.
-	time.Sleep(150 * time.Millisecond)
-	if a, b := logProbe.first.Load(), logProbe.second.Load(); a > 2 || b > 2 {
-		t.Fatalf("busy waiters repeatedly woke preparation: %d/%d", a, b)
+	defer cleanup()
+	fail := func(format string, args ...any) { cleanup(); t.Fatalf(format, args...) }
+	for {
+		wake := r.Preparation.Changed()
+		pending, queued := r.Preparation.Snapshot()
+		if pending == 0 && queued == 2 {
+			break
+		}
+		select {
+		case <-wake:
+		case err := <-done:
+			joined++
+			fail("coordinator overtook held owner: %v", err)
+		case <-ctx.Done():
+			fail("waiter descriptor queue failed: %v", ctx.Err())
+		}
 	}
-	releaseOnce.Do(func() { close(owner.release) })
-	if err := awaitRuntimeResult(t, ownerDone); err != nil {
-		t.Fatal(err)
+	// Short build tickets are gone while the two cold descriptors remain.
+	// Neither waiter may produce an intent/attempt or HTTP before the owner
+	// releases its durable response capacity; the queues share no sticky ticket.
+	if s := r.Admission.PipelineSnapshot(); s.MainOwners[0] != 1 || s.PreparedBytes != 0 {
+		fail("waiters retained build/response credit: %+v", s)
 	}
-	for range 2 {
-		if err := awaitRuntimeResult(t, done); err != nil {
-			t.Fatal(err)
+	for i, probe := range probes {
+		if batches, _ := probe.snapshot(); len(batches) != 0 {
+			fail("waiter%d dispatched before owner", i)
+		}
+		state, err := stores[i].Load(ctx)
+		if err != nil {
+			fail("load waiter: %v", err)
+		}
+		for _, c := range state.Cursors {
+			if c.Attempt != 0 || c.Pool != 0 {
+				fail("waiter advanced durable attempt: %+v", c)
+			}
+		}
+	}
+	open()
+	for joined < 3 {
+		select {
+		case err := <-done:
+			joined++
+			if err != nil {
+				fail("wake completion: %v", err)
+			}
+		case <-ctx.Done():
+			fail("owner release did not wake retained waiters: %v", ctx.Err())
+		}
+	}
+	for i, probe := range probes {
+		batches, attempts := probe.snapshot()
+		if len(batches) != 1 || len(batches[0]) != 4 || len(attempts) != 1 || attempts[0] != 0 {
+			fail("waiter%d rebuilt or retried: %v/%v", i, batches, attempts)
 		}
 	}
 }

@@ -2,6 +2,7 @@ package workstate
 
 import (
 	"context"
+	"entgo.io/ent/dialect/sql"
 	"errors"
 	"fmt"
 	"reflect"
@@ -66,12 +67,15 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		}
 		terminal := func(outcome Outcome) error {
 			result.Outcome = outcome
-			if err := tx.WorkItem.UpdateOneID(w.ID).SetState(string(outcome)).Exec(ctx); err != nil {
+			if err := tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(false).SetState(string(outcome)).Exec(ctx); err != nil {
 				return err
 			}
 			if in.CandidateID != "" {
-				_, err := tx.WorkCandidate.Update().Where(workcandidate.IdentityEQ(in.CandidateID), workcandidate.WorkItemIDEQ(w.ID), workcandidate.VersionEQ(in.CandidateVersion)).SetState(string(outcome)).ClearPayload().SetPayloadBytes(0).Save(ctx)
-				return err
+				_, err := tx.WorkCandidate.Update().Where(workcandidate.IdentityEQ(in.CandidateID), workcandidate.WorkItemIDEQ(w.ID), workcandidate.VersionEQ(in.CandidateVersion)).SetState(string(outcome)).ClearPayload().SetGrowthReserved(false).SetPayloadBytes(0).Save(ctx)
+				if err != nil {
+					return err
+				}
+				return clearRuntimeBindingTx(ctx, tx, in.Scope.JobID, in.CandidateID, false)
 			}
 			return nil
 		}
@@ -80,7 +84,7 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 			return nil
 		}
 		if in.CandidateID != "" {
-			current, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(in.CandidateID), workcandidate.WorkItemIDEQ(w.ID)).Only(ctx)
+			current, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(in.CandidateID), workcandidate.WorkItemIDEQ(w.ID)).Select(workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldVersion, workcandidate.FieldBaselineVersion, workcandidate.FieldState).Only(ctx)
 			if ent.IsNotFound(err) || w.CandidateID != in.CandidateID || (err == nil && current.Version != in.CandidateVersion) {
 				result.Outcome = Stale
 				return nil
@@ -89,18 +93,18 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 				return err
 			}
 		}
-		row, err := lockSegment(ctx, tx, in.Scope, in.SegmentID, in.BaselineVersion)
+		row, err := lockSegment(ctx, tx, in.Scope, in.SegmentID, in.BaselineVersion, in.IssuesPayload != nil)
 		if errors.Is(err, ErrStale) {
 			return terminal(Stale)
 		}
 		if err != nil {
 			return err
 		}
-		if !sameString(row.TargetText, in.BaselineTarget) || string(row.Status) != in.BaselineStatus {
+		if !candidateBaselineMatches(Candidate{BaselineTarget: in.BaselineTarget, BaselineDigest: in.BaselineDigest, BaselineTargetIsNull: in.BaselineTargetIsNull}, row.TargetText) || string(row.Status) != in.BaselineStatus {
 			return terminal(Stale)
 		}
 		if in.CandidateID != "" {
-			c, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(in.CandidateID), workcandidate.WorkItemIDEQ(w.ID)).Only(ctx)
+			c, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(in.CandidateID), workcandidate.WorkItemIDEQ(w.ID)).Select(workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldVersion, workcandidate.FieldBaselineVersion, workcandidate.FieldState).Only(ctx)
 			if ent.IsNotFound(err) {
 				return terminal(Stale)
 			}
@@ -120,21 +124,55 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 				status = in.Status
 			}
 			changed := row.TargetText == nil || *row.TargetText != in.Target || string(row.Status) != status || !reflect.DeepEqual(row.QualityIssues, in.Issues) || (in.ClearReview && row.ReviewComment != nil)
-			if changed {
-				u := tx.Segment.UpdateOneID(row.ID).Where(segment.ContentVersionEQ(in.BaselineVersion)).SetTargetText(in.Target).SetStatus(segment.Status(status))
-				if len(in.Issues) > 0 {
-					u.SetQualityIssues(in.Issues)
-				} else {
-					u.ClearQualityIssues()
-				}
-				if in.ClearReview {
-					u.ClearReviewComment()
-				}
-				updated, err := u.Save(ctx)
+			if in.IssuesPayload != nil {
+				same, err := tx.Segment.Query().Where(segment.IDEQ(row.ID), func(s *sql.Selector) {
+					s.Where(storageJSONEquality(s, segment.FieldQualityIssues, in.IssuesPayload, true))
+				}).Exist(ctx)
 				if err != nil {
 					return err
 				}
-				result.ContentVersion = updated.ContentVersion
+				review := false
+				if in.ClearReview {
+					var err error
+					review, err = tx.Segment.Query().Where(segment.IDEQ(row.ID), segment.ReviewCommentNotNil()).Exist(ctx)
+					if err != nil {
+						return err
+					}
+				}
+				changed = row.TargetText == nil || *row.TargetText != in.Target || string(row.Status) != status || !same || review
+			}
+			if changed {
+				if in.IssuesPayload != nil {
+					u := tx.Segment.Update().Where(segment.IDEQ(row.ID), segment.ContentVersionEQ(in.BaselineVersion)).SetTargetText(in.Target).SetStatus(segment.Status(status)).ClearQualityIssues().Modify(func(u *sql.UpdateBuilder) {
+						u.Set(segment.FieldQualityIssues, sql.Expr("CAST(? AS TEXT)", in.IssuesPayload))
+					})
+					if in.ClearReview {
+						u.ClearReviewComment()
+					}
+					n, err := u.Save(ctx)
+					if err != nil {
+						return err
+					}
+					if n != 1 {
+						return ErrStale
+					}
+					result.ContentVersion = in.BaselineVersion + 1
+				} else {
+					u := tx.Segment.UpdateOneID(row.ID).Where(segment.ContentVersionEQ(in.BaselineVersion)).SetTargetText(in.Target).SetStatus(segment.Status(status))
+					if len(in.Issues) > 0 {
+						u.SetQualityIssues(in.Issues)
+					} else {
+						u.ClearQualityIssues()
+					}
+					if in.ClearReview {
+						u.ClearReviewComment()
+					}
+					updated, err := u.Save(ctx)
+					if err != nil {
+						return err
+					}
+					result.ContentVersion = updated.ContentVersion
+				}
 				if err := tx.Resource.UpdateOneID(in.Scope.ResourceID).AddTranslationGeneration(1).Exec(ctx); err != nil {
 					return err
 				}
@@ -148,16 +186,16 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		if _, err := confirm(ctx, tx, in.Scope.JobID, in.Scope.RoundID, []Confirmation{{SegmentID: in.SegmentID, CommitID: in.CommitID, CandidateID: in.CandidateID, Outcome: outcome}}, true); err != nil {
 			return err
 		}
-		if err := tx.WorkItem.UpdateOneID(w.ID).SetState("resolved").ClearNextAttemptAt().Exec(ctx); err != nil {
+		if err := tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(false).SetState("resolved").ClearNextAttemptAt().Exec(ctx); err != nil {
 			return err
 		}
 		if in.CandidateID != "" {
-			if _, err := tx.WorkCandidate.Update().Where(workcandidate.IdentityEQ(in.CandidateID)).SetState("completed").ClearPayload().SetPayloadBytes(0).Save(ctx); err != nil {
+			if _, err := tx.WorkCandidate.Update().Where(workcandidate.IdentityEQ(in.CandidateID)).SetState("completed").ClearPayload().SetGrowthReserved(false).SetPayloadBytes(0).Save(ctx); err != nil {
 				return err
 			}
 		}
 		result.Outcome = outcome
-		return nil
+		return clearRuntimeBindingTx(ctx, tx, in.Scope.JobID, in.CandidateID, false)
 	})
 	if err == nil {
 		return result, nil

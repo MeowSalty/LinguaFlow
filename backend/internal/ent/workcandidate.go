@@ -45,12 +45,20 @@ type WorkCandidate struct {
 	BaselineVersion int64 `json:"baseline_version,omitempty"`
 	// BaselineTarget holds the value of the "baseline_target" field.
 	BaselineTarget *string `json:"baseline_target,omitempty"`
+	// BaselineDigest holds the value of the "baseline_digest" field.
+	BaselineDigest string `json:"baseline_digest,omitempty"`
+	// BaselineTargetIsNull holds the value of the "baseline_target_is_null" field.
+	BaselineTargetIsNull bool `json:"baseline_target_is_null,omitempty"`
 	// BaselineStatus holds the value of the "baseline_status" field.
 	BaselineStatus string `json:"baseline_status,omitempty"`
 	// State holds the value of the "state" field.
 	State string `json:"state,omitempty"`
 	// PayloadBytes holds the value of the "payload_bytes" field.
 	PayloadBytes int64 `json:"payload_bytes,omitempty"`
+	// GrowthReserved holds the value of the "growth_reserved" field.
+	GrowthReserved bool `json:"growth_reserved,omitempty"`
+	// PipelineHeader holds the value of the "pipeline_header" field.
+	PipelineHeader []byte `json:"pipeline_header,omitempty"`
 	// Payload holds the value of the "payload" field.
 	Payload json.RawMessage `json:"payload,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -84,11 +92,13 @@ func (*WorkCandidate) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case workcandidate.FieldPayload:
+		case workcandidate.FieldPipelineHeader, workcandidate.FieldPayload:
 			values[i] = new([]byte)
+		case workcandidate.FieldBaselineTargetIsNull, workcandidate.FieldGrowthReserved:
+			values[i] = new(sql.NullBool)
 		case workcandidate.FieldID, workcandidate.FieldVersion, workcandidate.FieldWorkItemID, workcandidate.FieldDtoVersion, workcandidate.FieldSourceGeneration, workcandidate.FieldSourceRevisionID, workcandidate.FieldBaselineVersion, workcandidate.FieldPayloadBytes:
 			values[i] = new(sql.NullInt64)
-		case workcandidate.FieldIdentity, workcandidate.FieldParentRequestID, workcandidate.FieldSnapshotDigest, workcandidate.FieldMode, workcandidate.FieldBaselineTarget, workcandidate.FieldBaselineStatus, workcandidate.FieldState:
+		case workcandidate.FieldIdentity, workcandidate.FieldParentRequestID, workcandidate.FieldSnapshotDigest, workcandidate.FieldMode, workcandidate.FieldBaselineTarget, workcandidate.FieldBaselineDigest, workcandidate.FieldBaselineStatus, workcandidate.FieldState:
 			values[i] = new(sql.NullString)
 		case workcandidate.FieldCreatedAt, workcandidate.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -193,6 +203,18 @@ func (_m *WorkCandidate) assignValues(columns []string, values []any) error {
 				_m.BaselineTarget = new(string)
 				*_m.BaselineTarget = value.String
 			}
+		case workcandidate.FieldBaselineDigest:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field baseline_digest", values[i])
+			} else if value.Valid {
+				_m.BaselineDigest = value.String
+			}
+		case workcandidate.FieldBaselineTargetIsNull:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field baseline_target_is_null", values[i])
+			} else if value.Valid {
+				_m.BaselineTargetIsNull = value.Bool
+			}
 		case workcandidate.FieldBaselineStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field baseline_status", values[i])
@@ -210,6 +232,18 @@ func (_m *WorkCandidate) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field payload_bytes", values[i])
 			} else if value.Valid {
 				_m.PayloadBytes = value.Int64
+			}
+		case workcandidate.FieldGrowthReserved:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field growth_reserved", values[i])
+			} else if value.Valid {
+				_m.GrowthReserved = value.Bool
+			}
+		case workcandidate.FieldPipelineHeader:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field pipeline_header", values[i])
+			} else if value != nil {
+				_m.PipelineHeader = *value
 			}
 		case workcandidate.FieldPayload:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -303,6 +337,12 @@ func (_m *WorkCandidate) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
+	builder.WriteString("baseline_digest=")
+	builder.WriteString(_m.BaselineDigest)
+	builder.WriteString(", ")
+	builder.WriteString("baseline_target_is_null=")
+	builder.WriteString(fmt.Sprintf("%v", _m.BaselineTargetIsNull))
+	builder.WriteString(", ")
 	builder.WriteString("baseline_status=")
 	builder.WriteString(_m.BaselineStatus)
 	builder.WriteString(", ")
@@ -311,6 +351,12 @@ func (_m *WorkCandidate) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("payload_bytes=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PayloadBytes))
+	builder.WriteString(", ")
+	builder.WriteString("growth_reserved=")
+	builder.WriteString(fmt.Sprintf("%v", _m.GrowthReserved))
+	builder.WriteString(", ")
+	builder.WriteString("pipeline_header=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PipelineHeader))
 	builder.WriteString(", ")
 	builder.WriteString("payload=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Payload))

@@ -247,19 +247,40 @@ func TestRubyCLIStagedHTTPConcurrencyAndCancellation(t *testing.T) {
 func assertRubyCLIBudgets(t *testing.T, runtime *pipeline.ExecutionRuntime, backendID int) {
 	t.Helper()
 	var permits []*backend.RequestPermit
+	var prepared, candidates []string
 	defer func() {
 		for _, permit := range permits {
 			permit.Release()
 		}
+		for _, id := range prepared {
+			runtime.Admission.ReleasePrepared(id)
+		}
+		for _, id := range candidates {
+			runtime.Admission.ReleaseBudgetEntry(id)
+		}
 	}()
-	for _, probe := range []struct {
+	for index, probe := range []struct {
 		stage backend.RequestStage
 		want  bool
 	}{
 		{backend.RequestStageMain, true}, {backend.RequestStageMain, false},
 		{backend.RequestStageAlignment, true}, {backend.RequestStageAlignment, true}, {backend.RequestStageAlignment, false},
 	} {
-		permit, _, err := runtime.Admission.TryAdmit(context.Background(), backend.RequestAdmissionIntent{RoundIndex: 0, BackendID: backendID, Stage: probe.stage}, runtime.Gate)
+		id := fmt.Sprintf("cli-budget-%d", index)
+		intent := backend.RequestAdmissionIntent{RequestID: id, RoundIndex: 0, BackendID: backendID, Stage: probe.stage}
+		if probe.stage == backend.RequestStageMain {
+			if ok, err := runtime.Admission.PrepareMain(id, 0, 0, 0, 32, 0, false); err != nil || !ok {
+				t.Fatalf("prepare CLI main budget: %v/%v", ok, err)
+			}
+			prepared = append(prepared, id)
+		} else {
+			if err := runtime.Admission.RestoreBudgetEntry(id, backend.PipelineBudgetEntry{Count: 1, Bytes: 1024, Durable: true}); err != nil {
+				t.Fatal(err)
+			}
+			candidates = append(candidates, id)
+			intent.CandidateIDs, intent.InputBytes = []string{id}, 32
+		}
+		permit, _, err := runtime.Admission.TryAdmit(context.Background(), intent, runtime.Gate)
 		if permit != nil {
 			permits = append(permits, permit)
 		}

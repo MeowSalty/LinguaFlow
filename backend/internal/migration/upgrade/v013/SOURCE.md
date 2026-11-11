@@ -77,8 +77,11 @@ The supported target has execution schema **1**, execution defaults **1**,
 initialization **1**, encrypted credential format **1**, and SQLite time format
 **1**. Entry points check execution and initialization versions; conversion
 checks the actual written encrypted rows; SQLite opens through the normal strict
-database format check after conversion. Current execution validation is only
-used to reject an incompatible result, never to supply source defaults.
+database format check after conversion. `target.go` owns the historical 1/1
+structural validator and root JSON encoding; it never invokes the current
+execution validator or supplies current defaults. The current service still
+rejects this historical target before execution. New execution fields such as
+`response_format_version` are absent from the frozen target JSON.
 
 `testdata/source-assets.json` pins normalized source template SHA-256 hashes.
 `TestFrozenExecutionGolden` pins the entire canonical target snapshot for a

@@ -45,6 +45,10 @@ func unknownCommit(err error) bool {
 // Transaction retries only errors proving that the transaction did not commit.
 // Connection failures during COMMIT are returned for identity-based verification.
 func Transaction(ctx context.Context, client *ent.Client, fn func(*ent.Client) error) error {
+	return transaction(ctx, client, fn)
+}
+
+func transaction(ctx context.Context, client *ent.Client, fn func(*ent.Client) error) error {
 	deadline := persistence.Deadline(ctx)
 	if deadline.IsZero() {
 		deadline = time.Now().Add(120 * time.Second)
@@ -59,6 +63,22 @@ func Transaction(ctx context.Context, client *ent.Client, fn func(*ent.Client) e
 		maxAttempts = 1
 	}
 	for attempt := 0; ; attempt++ {
+		storage, _ := ctx.Value(storageBudgetKey{}).(*StorageBudget)
+		if storage != nil {
+			if err := storage.begin(ctx); err != nil {
+				return err
+			}
+		}
+		finish := func(err error) error {
+			if storage == nil {
+				return err
+			}
+			// Receipt settlement must query committed facts even when the caller
+			// was cancelled after COMMIT. Never refund from a cancelled read.
+			factCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			return errors.Join(err, storage.finish(factCtx, err))
+		}
 		started := time.Now()
 		at := minTime(time.Now().Add(persistence.ExecutionTimeout(ctx)), deadline)
 		attemptCtx, cancel := context.WithDeadline(ctx, at)
@@ -69,7 +89,7 @@ func Transaction(ctx context.Context, client *ent.Client, fn func(*ent.Client) e
 			cancel()
 			err = &TransactionError{Phase: "begin", Outcome: "not_committed", Primary: err}
 			persistence.ObserveTransaction(ctx, "transaction", "not_committed", time.Since(started), err)
-			return err
+			return finish(err)
 		}
 		// The callback's context is supplied by its owner; the driver transaction
 		// is bounded here as well, including direct callers outside Save.
@@ -115,6 +135,7 @@ func Transaction(ctx context.Context, client *ent.Client, fn func(*ent.Client) e
 			}
 		}
 		persistence.ObserveTransaction(ctx, "transaction", outcome, time.Since(started), err)
+		err = finish(err)
 		if err == nil || attempt+1 >= maxAttempts || ctx.Err() != nil || !time.Now().Before(deadline) || !transactionConflict(err) || unknownCommit(err) {
 			return err
 		}

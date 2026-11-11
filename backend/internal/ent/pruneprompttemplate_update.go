@@ -20,8 +20,9 @@ import (
 // PrunePromptTemplateUpdate is the builder for updating PrunePromptTemplate entities.
 type PrunePromptTemplateUpdate struct {
 	config
-	hooks    []Hook
-	mutation *PrunePromptTemplateMutation
+	hooks     []Hook
+	mutation  *PrunePromptTemplateMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the PrunePromptTemplateUpdate builder.
@@ -215,6 +216,12 @@ func (_u *PrunePromptTemplateUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *PrunePromptTemplateUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *PrunePromptTemplateUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *PrunePromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -300,6 +307,7 @@ func (_u *PrunePromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, er
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{pruneprompttemplate.Label}
@@ -315,9 +323,10 @@ func (_u *PrunePromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, er
 // PrunePromptTemplateUpdateOne is the builder for updating a single PrunePromptTemplate entity.
 type PrunePromptTemplateUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *PrunePromptTemplateMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *PrunePromptTemplateMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -518,6 +527,12 @@ func (_u *PrunePromptTemplateUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *PrunePromptTemplateUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *PrunePromptTemplateUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *PrunePromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *PrunePromptTemplate, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -620,6 +635,7 @@ func (_u *PrunePromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *Pru
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &PrunePromptTemplate{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

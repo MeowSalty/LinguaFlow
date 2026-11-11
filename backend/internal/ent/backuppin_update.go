@@ -19,8 +19,9 @@ import (
 // BackupPinUpdate is the builder for updating BackupPin entities.
 type BackupPinUpdate struct {
 	config
-	hooks    []Hook
-	mutation *BackupPinMutation
+	hooks     []Hook
+	mutation  *BackupPinMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // Where appends a list predicates to the BackupPinUpdate builder.
@@ -147,6 +148,12 @@ func (_u *BackupPinUpdate) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *BackupPinUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *BackupPinUpdate {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *BackupPinUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -197,6 +204,7 @@ func (_u *BackupPinUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{backuppin.Label}
@@ -212,9 +220,10 @@ func (_u *BackupPinUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 // BackupPinUpdateOne is the builder for updating a single BackupPin entity.
 type BackupPinUpdateOne struct {
 	config
-	fields   []string
-	hooks    []Hook
-	mutation *BackupPinMutation
+	fields    []string
+	hooks     []Hook
+	mutation  *BackupPinMutation
+	modifiers []func(*sql.UpdateBuilder)
 }
 
 // SetUpdatedAt sets the "updated_at" field.
@@ -348,6 +357,12 @@ func (_u *BackupPinUpdateOne) check() error {
 	return nil
 }
 
+// Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
+func (_u *BackupPinUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *BackupPinUpdateOne {
+	_u.modifiers = append(_u.modifiers, modifiers...)
+	return _u
+}
+
 func (_u *BackupPinUpdateOne) sqlSave(ctx context.Context) (_node *BackupPin, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
@@ -415,6 +430,7 @@ func (_u *BackupPinUpdateOne) sqlSave(ctx context.Context) (_node *BackupPin, er
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	_spec.AddModifiers(_u.modifiers...)
 	_node = &BackupPin{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues

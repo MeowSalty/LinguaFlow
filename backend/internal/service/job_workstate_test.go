@@ -37,7 +37,7 @@ func seedDurableJobWork(t *testing.T) (*jobRoundTestEnv, *ent.Job, *ent.JobResou
 	if err := store.RecordRequest(ctx, parent.ID, workstate.RequestResult{State: "completed"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SaveCandidate(ctx, workstate.Candidate{ID: "retained-candidate", ParentRequestID: parent.ID, Version: 1, Scope: scope, SegmentID: seg.ID, DTOVersion: 1, Mode: "translate", SnapshotDigest: "frozen", BaselineVersion: seg.ContentVersion, BaselineStatus: string(seg.Status), State: "pending_alignment", Payload: []byte(`{"valid":true}`)}); err != nil {
+	if err := store.SaveCandidate(ctx, workstate.Candidate{ID: "retained-candidate", ParentRequestID: parent.ID, Version: 1, Scope: scope, SegmentID: seg.ID, DTOVersion: 2, Mode: "translate", SnapshotDigest: "frozen", BaselineVersion: seg.ContentVersion, BaselineStatus: string(seg.Status), State: "pending_alignment", Payload: []byte(`{"valid":true}`)}); err != nil {
 		t.Fatal(err)
 	}
 	item := env.client.WorkItem.Query().Where(workitem.JobRoundIDEQ(round.ID)).OnlyX(ctx)

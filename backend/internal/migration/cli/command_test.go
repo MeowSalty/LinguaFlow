@@ -294,7 +294,7 @@ func currentFixtureMode(t *testing.T, mode string) (string, *config.ResolvedServ
 	execute(t, "upgrade", "plan", "--mode", mode, "--config", configPath, "--operation-dir", operationDir, "--target-data-dir", target)
 	execute(t, "upgrade", "apply", "--operation-dir", operationDir, "--offline")
 	configPath = filepath.Join(target, "deployment.yaml")
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &configPath, Environment: map[string]string{}})
+	resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &configPath, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}

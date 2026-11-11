@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 )
 
 // ProtectConfig 控制内容保护的行为。
@@ -131,12 +133,14 @@ type PipelineConfig struct {
 	// MaxInflightResources 在途资源数上限（每任务口径；兜住每资源句柄开销）；
 	// 必须为正；缺省为 8。
 	MaxInflightResources int `yaml:"max_inflight_resources"`
-	// Candidate limits cover reservations, saved drafts, alignment, and commit.
-	// They are deployment capacity policy, independent of plan concurrency.
+	// S bounds all unconfirmed members. W covers actual candidates and growth;
+	// J independently covers prepared input and reliable raw response handoff.
+	// These deployment capacities are independent of plan request concurrency.
 	CandidateWindowSegments int `yaml:"candidate_window_segments"`
 	CandidateWindowMB       int `yaml:"candidate_window_mb"`
 	MaxCandidateMB          int `yaml:"max_candidate_mb"`
 	MaxResponseMB           int `yaml:"max_response_mb"`
+	ResponseHandoffMB       int `yaml:"response_handoff_mb"`
 	// RssLimitMB 进程级 RSS 保险丝上限（MB）；0 = 关闭。
 	// 双水位：≥85% 暂停所有任务的新资源准入（只出不进），≤70% 恢复。
 	// 触发不改变任务状态（任务保持 running，资源排队），仅记结构化日志。
@@ -158,6 +162,7 @@ func DefaultPipelineConfig() PipelineConfig {
 		CandidateWindowMB:       16,
 		MaxCandidateMB:          1,
 		MaxResponseMB:           1,
+		ResponseHandoffMB:       64,
 		RssLimitMB:              0,
 	}
 }
@@ -253,29 +258,32 @@ func DefaultSSEConfig() SSEConfig {
 }
 
 type ServerConfig struct {
-	Host              string               `yaml:"host"`
-	Port              int                  `yaml:"port"`
-	Mode              string               `yaml:"mode"` // "server" (default) | "local"
-	ServiceName       string               `yaml:"service_name"`
-	DataDir           string               `yaml:"data_dir"`
-	AutoMigrate       bool                 `yaml:"auto_migrate"`
-	JWTSecret         string               `yaml:"jwt_secret"`
-	JWTIssuer         string               `yaml:"jwt_issuer"`
-	JWTExpiry         time.Duration        `yaml:"jwt_expiry"`
-	RefreshExpiry     time.Duration        `yaml:"refresh_token_expiry"`
-	ShutdownTimeout   time.Duration        `yaml:"shutdown_timeout"`
-	RevisionRetention time.Duration        `yaml:"revision_retention"`
-	Database          DatabaseConfig       `yaml:"database"`
-	Workers           WorkerConfig         `yaml:"workers"`
-	Pipeline          PipelineConfig       `yaml:"pipeline"`
-	Preview           PreviewConfig        `yaml:"preview"`
-	QuickTranslate    QuickTranslateConfig `yaml:"quick_translate"`
-	SSE               SSEConfig            `yaml:"sse"`
-	CORS              CORSConfig           `yaml:"cors"`
-	Authentication    AuthDeploymentConfig `yaml:"authentication"`
-	Credentials       CredentialsConfig    `yaml:"credentials"`
-	Storage           StorageConfig        `yaml:"storage"`
-	ServeUI           bool                 `yaml:"serve_ui"`
+	// ExecutionBudget has no defaults: deployment must authorize finite actor
+	// and process limits before either serve or local execution can start.
+	ExecutionBudget   resourcebudget.Policy `yaml:"execution_budget"`
+	Host              string                `yaml:"host"`
+	Port              int                   `yaml:"port"`
+	Mode              string                `yaml:"mode"` // "server" (default) | "local"
+	ServiceName       string                `yaml:"service_name"`
+	DataDir           string                `yaml:"data_dir"`
+	AutoMigrate       bool                  `yaml:"auto_migrate"`
+	JWTSecret         string                `yaml:"jwt_secret"`
+	JWTIssuer         string                `yaml:"jwt_issuer"`
+	JWTExpiry         time.Duration         `yaml:"jwt_expiry"`
+	RefreshExpiry     time.Duration         `yaml:"refresh_token_expiry"`
+	ShutdownTimeout   time.Duration         `yaml:"shutdown_timeout"`
+	RevisionRetention time.Duration         `yaml:"revision_retention"`
+	Database          DatabaseConfig        `yaml:"database"`
+	Workers           WorkerConfig          `yaml:"workers"`
+	Pipeline          PipelineConfig        `yaml:"pipeline"`
+	Preview           PreviewConfig         `yaml:"preview"`
+	QuickTranslate    QuickTranslateConfig  `yaml:"quick_translate"`
+	SSE               SSEConfig             `yaml:"sse"`
+	CORS              CORSConfig            `yaml:"cors"`
+	Authentication    AuthDeploymentConfig  `yaml:"authentication"`
+	Credentials       CredentialsConfig     `yaml:"credentials"`
+	Storage           StorageConfig         `yaml:"storage"`
+	ServeUI           bool                  `yaml:"serve_ui"`
 }
 
 // AuthDeploymentConfig defines the deployment-owned boundary around external
@@ -428,10 +436,15 @@ func DefaultServerConfig() *ServerConfig {
 
 // ValidateServerConfig 校验完整解析后的配置，且不做任何修改。
 func ValidateServerConfig(c *ServerConfig) error {
-	return validateServerConfig(c, true)
+	return validateServerConfig(c, true, true)
 }
 
-func validateServerConfig(c *ServerConfig, requireSecret bool) error {
+func validateServerConfig(c *ServerConfig, requireSecret, requireExecution bool) error {
+	if requireExecution {
+		if err := ValidateExecutionBudget(c.ExecutionBudget); err != nil {
+			return err
+		}
+	}
 	if c.Mode != ModeServer && c.Mode != ModeLocal {
 		return fmt.Errorf("server.mode must be one of %s|%s", ModeServer, ModeLocal)
 	}
@@ -490,7 +503,8 @@ func validateServerConfig(c *ServerConfig, requireSecret bool) error {
 		"pipeline.max_inflight_weight_mb": c.Pipeline.MaxInflightWeightMB, "pipeline.max_inflight_resources": c.Pipeline.MaxInflightResources,
 		"pipeline.candidate_window_segments": c.Pipeline.CandidateWindowSegments, "pipeline.candidate_window_mb": c.Pipeline.CandidateWindowMB,
 		"pipeline.max_candidate_mb": c.Pipeline.MaxCandidateMB, "pipeline.max_response_mb": c.Pipeline.MaxResponseMB,
-		"preview.max_concurrency": c.Preview.MaxConcurrency, "quick_translate.max_concurrency": c.QuickTranslate.MaxConcurrency,
+		"pipeline.response_handoff_mb": c.Pipeline.ResponseHandoffMB,
+		"preview.max_concurrency":      c.Preview.MaxConcurrency, "quick_translate.max_concurrency": c.QuickTranslate.MaxConcurrency,
 		"sse.ring_buffer_capacity": c.SSE.RingBufferCapacity, "sse.replay_batch_size": c.SSE.ReplayBatchSize, "sse.max_replay_events": c.SSE.MaxReplayEvents,
 	} {
 		if value <= 0 {
@@ -510,7 +524,7 @@ func validateServerConfig(c *ServerConfig, requireSecret bool) error {
 	if uint64(c.Pipeline.MaxInflightWeightMB) > uint64(1<<63-1)/(1024*1024) || uint64(c.Pipeline.RssLimitMB) > uint64(1<<63-1)/(1024*1024) {
 		return fmt.Errorf("server.pipeline MB limits exceed supported byte size arithmetic")
 	}
-	for _, mb := range []int{c.Pipeline.CandidateWindowMB, c.Pipeline.MaxCandidateMB, c.Pipeline.MaxResponseMB} {
+	for _, mb := range []int{c.Pipeline.CandidateWindowMB, c.Pipeline.MaxCandidateMB, c.Pipeline.MaxResponseMB, c.Pipeline.ResponseHandoffMB} {
 		if uint64(mb) > uint64(1<<63-1)/(1024*1024) {
 			return fmt.Errorf("server.pipeline candidate/response limits exceed supported byte size arithmetic")
 		}

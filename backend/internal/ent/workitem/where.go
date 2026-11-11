@@ -95,9 +95,19 @@ func State(v string) predicate.WorkItem {
 	return predicate.WorkItem(sql.FieldEQ(FieldState, v))
 }
 
+// MemberOwned applies equality check predicate on the "member_owned" field. It's identical to MemberOwnedEQ.
+func MemberOwned(v bool) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldEQ(FieldMemberOwned, v))
+}
+
 // CandidateID applies equality check predicate on the "candidate_id" field. It's identical to CandidateIDEQ.
 func CandidateID(v string) predicate.WorkItem {
 	return predicate.WorkItem(sql.FieldEQ(FieldCandidateID, v))
+}
+
+// ResponseRequestID applies equality check predicate on the "response_request_id" field. It's identical to ResponseRequestIDEQ.
+func ResponseRequestID(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldEQ(FieldResponseRequestID, v))
 }
 
 // PoolIndex applies equality check predicate on the "pool_index" field. It's identical to PoolIndexEQ.
@@ -410,6 +420,16 @@ func StateContainsFold(v string) predicate.WorkItem {
 	return predicate.WorkItem(sql.FieldContainsFold(FieldState, v))
 }
 
+// MemberOwnedEQ applies the EQ predicate on the "member_owned" field.
+func MemberOwnedEQ(v bool) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldEQ(FieldMemberOwned, v))
+}
+
+// MemberOwnedNEQ applies the NEQ predicate on the "member_owned" field.
+func MemberOwnedNEQ(v bool) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldNEQ(FieldMemberOwned, v))
+}
+
 // CandidateIDEQ applies the EQ predicate on the "candidate_id" field.
 func CandidateIDEQ(v string) predicate.WorkItem {
 	return predicate.WorkItem(sql.FieldEQ(FieldCandidateID, v))
@@ -473,6 +493,71 @@ func CandidateIDEqualFold(v string) predicate.WorkItem {
 // CandidateIDContainsFold applies the ContainsFold predicate on the "candidate_id" field.
 func CandidateIDContainsFold(v string) predicate.WorkItem {
 	return predicate.WorkItem(sql.FieldContainsFold(FieldCandidateID, v))
+}
+
+// ResponseRequestIDEQ applies the EQ predicate on the "response_request_id" field.
+func ResponseRequestIDEQ(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldEQ(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDNEQ applies the NEQ predicate on the "response_request_id" field.
+func ResponseRequestIDNEQ(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldNEQ(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDIn applies the In predicate on the "response_request_id" field.
+func ResponseRequestIDIn(vs ...string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldIn(FieldResponseRequestID, vs...))
+}
+
+// ResponseRequestIDNotIn applies the NotIn predicate on the "response_request_id" field.
+func ResponseRequestIDNotIn(vs ...string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldNotIn(FieldResponseRequestID, vs...))
+}
+
+// ResponseRequestIDGT applies the GT predicate on the "response_request_id" field.
+func ResponseRequestIDGT(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldGT(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDGTE applies the GTE predicate on the "response_request_id" field.
+func ResponseRequestIDGTE(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldGTE(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDLT applies the LT predicate on the "response_request_id" field.
+func ResponseRequestIDLT(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldLT(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDLTE applies the LTE predicate on the "response_request_id" field.
+func ResponseRequestIDLTE(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldLTE(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDContains applies the Contains predicate on the "response_request_id" field.
+func ResponseRequestIDContains(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldContains(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDHasPrefix applies the HasPrefix predicate on the "response_request_id" field.
+func ResponseRequestIDHasPrefix(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldHasPrefix(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDHasSuffix applies the HasSuffix predicate on the "response_request_id" field.
+func ResponseRequestIDHasSuffix(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldHasSuffix(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDEqualFold applies the EqualFold predicate on the "response_request_id" field.
+func ResponseRequestIDEqualFold(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldEqualFold(FieldResponseRequestID, v))
+}
+
+// ResponseRequestIDContainsFold applies the ContainsFold predicate on the "response_request_id" field.
+func ResponseRequestIDContainsFold(v string) predicate.WorkItem {
+	return predicate.WorkItem(sql.FieldContainsFold(FieldResponseRequestID, v))
 }
 
 // PoolIndexEQ applies the EQ predicate on the "pool_index" field.

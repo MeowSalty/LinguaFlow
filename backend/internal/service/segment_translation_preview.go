@@ -61,17 +61,18 @@ type PreviewRoundSummary struct {
 
 // PreviewResult 是预览运行产出的具体结果类型。
 type PreviewResult struct {
-	Status        string // "success" | "partial" | "failed"
-	SegmentID     int
-	SourceText    string
-	TargetText    string
-	QualityIssues []qa.QualityIssue
-	Baseline      *PreviewBaseline
-	Snapshot      *JobExecutionSnapshot
-	Metrics       []backend.MeterMetrics
-	Collector     *preview.MemoryCollector
-	RoundSummary  []PreviewRoundSummary
-	Warnings      []string
+	ExecutionInputOwnership `json:"-"`
+	Status                  string // "success" | "partial" | "failed"
+	SegmentID               int
+	SourceText              string
+	TargetText              string
+	QualityIssues           []qa.QualityIssue
+	Baseline                *PreviewBaseline
+	Snapshot                *JobExecutionSnapshot
+	Metrics                 []backend.MeterMetrics
+	Collector               *preview.MemoryCollector
+	RoundSummary            []PreviewRoundSummary
+	Warnings                []string
 }
 
 // PreviewRunner 是执行单段预览的接口。
@@ -90,18 +91,19 @@ type PreviewRunner interface {
 
 // PreviewOutput 是单段翻译预览的输出。
 type PreviewOutput struct {
-	Status         string // "success" | "partial" | "failed"
-	SegmentID      int
-	SourceText     string
-	TargetText     string
-	QualityIssues  []qa.QualityIssue
-	Snapshot       *JobExecutionSnapshot
-	ApplyToken     string
-	ApplyExpiresAt time.Time
-	Warnings       []string
-	RoundSummary   []PreviewRoundSummary
-	Usage          UsageSummary
-	BatchEvents    []progress.BatchEvent
+	ExecutionInputOwnership `json:"-"`
+	Status                  string // "success" | "partial" | "failed"
+	SegmentID               int
+	SourceText              string
+	TargetText              string
+	QualityIssues           []qa.QualityIssue
+	Snapshot                *JobExecutionSnapshot
+	ApplyToken              string
+	ApplyExpiresAt          time.Time
+	Warnings                []string
+	RoundSummary            []PreviewRoundSummary
+	Usage                   UsageSummary
+	BatchEvents             []progress.BatchEvent
 }
 
 // UsageSummary 汇总一次预览运行的 API 用量。
@@ -203,6 +205,17 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 	// 为预览应用超时限制。
 	previewCtx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
+	previewCtx = WithExecutionActor(previewCtx, input.ActorUserID)
+	previewCtx, inputErr := PrepareExecutionInputs(previewCtx, s.previewRunner)
+	if inputErr != nil {
+		return nil, inputErr
+	}
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			ExecutionInputOwner(previewCtx).ReleaseExecutionInputs()
+		}
+	}()
 
 	// 1. 校验项目写入权限。
 	projectRow, err := s.projects.requireProjectAccess(previewCtx, input.ActorUserID, input.ProjectID, true)
@@ -213,6 +226,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 	// 2. 校验资源与分段的归属。
 	_, err = s.client.Segment.Query().
 		Where(segment.IDEQ(input.SegmentID), segment.ResourceIDEQ(input.ResourceID)).
+		Select(segment.FieldID).
 		Only(previewCtx)
 	if err != nil {
 		return nil, ErrSegmentNotFound
@@ -250,10 +264,7 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 	snapshot.ExplicitSegmentSelection = true
 
 	// 6. 按 segment_index 顺序加载资源的全部分段。
-	allSegments, err := s.client.Segment.Query().
-		Where(segment.ResourceIDEQ(input.ResourceID)).
-		Order(segment.BySegmentIndex(), segment.ByID()).
-		All(previewCtx)
+	allSegments, _, err := LoadExecutionSegments(previewCtx, s.client, input.ResourceID)
 	if err != nil {
 		return nil, fmt.Errorf("preview: load segments: %w", err)
 	}
@@ -281,6 +292,16 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 		"",
 	)
 	if err != nil {
+		if result != nil {
+			metrics := aggregateMetrics(result.Metrics)
+			if metrics.APICalls > 0 {
+				usageCtx, cancel := context.WithTimeout(context.WithoutCancel(previewCtx), 5*time.Second)
+				defer cancel()
+				if usageErr := s.recordUsage(usageCtx, input, projectRow, metrics); usageErr != nil {
+					s.logger.Warn("preview: failed execution usage record", "err", usageErr)
+				}
+			}
+		}
 		return nil, fmt.Errorf("preview: execute: %w", err)
 	}
 
@@ -332,19 +353,27 @@ func (s *PreviewService) RunPreview(ctx context.Context, input PreviewInput) (*P
 	}
 
 	// 11. 为 HTTP 适配层保留完整的批次诊断信息。
-	events := result.Collector.Events()
+	var events []progress.BatchEvent
+	if result.Collector != nil {
+		events = result.Collector.Events()
+		if err := result.Collector.Err(); err != nil {
+			return nil, err
+		}
+	}
 
+	handedOff = true
 	return &PreviewOutput{
-		Status:         result.Status,
-		SegmentID:      result.SegmentID,
-		SourceText:     result.SourceText,
-		TargetText:     result.TargetText,
-		QualityIssues:  result.QualityIssues,
-		Snapshot:       result.Snapshot,
-		ApplyToken:     applyToken,
-		ApplyExpiresAt: applyExpiresAt,
-		Warnings:       result.Warnings,
-		RoundSummary:   result.RoundSummary,
+		ExecutionInputOwnership: ExecutionInputOwner(previewCtx),
+		Status:                  result.Status,
+		SegmentID:               result.SegmentID,
+		SourceText:              result.SourceText,
+		TargetText:              result.TargetText,
+		QualityIssues:           result.QualityIssues,
+		Snapshot:                result.Snapshot,
+		ApplyToken:              applyToken,
+		ApplyExpiresAt:          applyExpiresAt,
+		Warnings:                result.Warnings,
+		RoundSummary:            result.RoundSummary,
 		Usage: UsageSummary{
 			APICalls:     usageMetrics.APICalls,
 			InputTokens:  usageMetrics.InputTokens,
