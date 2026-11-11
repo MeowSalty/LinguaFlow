@@ -135,7 +135,7 @@ func storageBinaryColumn(column string) bool {
 		column = column[i+1:]
 	}
 	switch column {
-	case "freeze_payload", "response_payload", "corrected_targets", "corrected_target_index", "promotion_status", "pipeline_header":
+	case "freeze_payload", "response_payload", "corrected_targets", "corrected_target_index", "promotion_status", "pipeline_header", "pipeline_runtime_state":
 		return true
 	default:
 		return false
@@ -237,6 +237,15 @@ func (s InventorySource) Runtime(ctx context.Context, jobID int) (segments, cand
 		err = fmt.Errorf("invalid inventory source")
 		return
 	}
+	var runtimeBytes int64
+	err = s.row(ctx, s.bind("SELECT "+s.length("pipeline_runtime_state")+" FROM jobs WHERE id=?"), jobID).Scan(&runtimeBytes)
+	if err != nil {
+		return
+	}
+	if runtimeBytes > RuntimeStateLimit {
+		err = ErrManifest
+		return
+	}
 	err = s.row(ctx, s.bind("SELECT COUNT(*) FROM work_items WHERE job_id=? AND (member_owned OR state IN ('candidate','response_pending'))"), jobID).Scan(&segments)
 	if err != nil {
 		return
@@ -247,9 +256,12 @@ func (s InventorySource) Runtime(ctx context.Context, jobID int) (segments, cand
 		return
 	}
 	c := "c.payload_bytes"
-	progress := "(SELECT json_extract(pipeline_runtime_state,'$.progress_id') FROM jobs WHERE id=w.job_id)"
+	// Runtime state is a bounded byte column. Parse only that bound in SQL;
+	// NULL and empty storage have the same no-progress semantics as its codec.
+	stateLength := s.length("pipeline_runtime_state")
+	progress := fmt.Sprintf("(SELECT CASE WHEN %s>0 AND %s<=%d THEN json_extract(pipeline_runtime_state,'$.progress_id') END FROM jobs WHERE id=w.job_id)", stateLength, stateLength, RuntimeStateLimit)
 	if s.Driver == "postgres" {
-		progress = "(SELECT pipeline_runtime_state->>'progress_id' FROM jobs WHERE id=w.job_id)"
+		progress = fmt.Sprintf("(SELECT CASE WHEN %s<=%d THEN NULLIF(convert_from(pipeline_runtime_state,'UTF8'),'')::jsonb->>'progress_id' END FROM jobs WHERE id=w.job_id)", stateLength, RuntimeStateLimit)
 	}
 	err = s.row(ctx, s.bind("SELECT COALESCE(SUM("+c+"),0),COALESCE(SUM(CASE WHEN (c.growth_reserved OR w.alignment_attempts>0 OR w.alignment_network_attempts>0 OR c.identity="+progress+") AND "+c+"<? THEN ?-"+c+" ELSE 0 END),0) FROM work_candidates c JOIN work_items w ON w.id=c.work_item_id WHERE w.job_id=? AND c.state IN ('pending_alignment','ready_to_commit')"), s.ItemBytes, s.ItemBytes, jobID).Scan(&candidates, &growth)
 	return
