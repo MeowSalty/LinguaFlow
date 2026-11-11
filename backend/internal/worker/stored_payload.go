@@ -3,6 +3,7 @@ package worker
 import (
 	"bytes"
 	"context"
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"fmt"
 
@@ -90,8 +91,15 @@ func (r *JobRunner) persistStoredEncodedBatch(ctx context.Context, mode string, 
 			}
 			var changed int
 			err = withJobResourceTranslation(ctx, r.client, resource, generation, func(client *ent.Client) error {
-				q := client.Segment.Update().Where(segment.IDEQ(dbid), segment.ContentVersionEQ(doc.Segments[idx].ContentVersion)).ClearQualityIssues().Modify(func(u *sql.UpdateBuilder) {
-					u.Set(segment.FieldQualityIssues, sql.Expr("CAST(? AS TEXT)", issuePayload))
+				q := client.Segment.Update().Where(segment.IDEQ(dbid), segment.ContentVersionEQ(doc.Segments[idx].ContentVersion)).SetQualityIssues(nil).Modify(func(u *sql.UpdateBuilder) {
+					u.Set(segment.FieldQualityIssues, sql.ExprFunc(func(b *sql.Builder) {
+						b.WriteString("CAST(").Arg(issuePayload)
+						if b.Dialect() == dialect.Postgres {
+							b.WriteString(" AS JSONB)")
+						} else {
+							b.WriteString(" AS TEXT)")
+						}
+					}))
 				})
 				if mode == "semantic_qa" {
 					q.Where(segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited))
