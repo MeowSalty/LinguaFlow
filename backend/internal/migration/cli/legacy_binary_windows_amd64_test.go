@@ -160,7 +160,7 @@ func TestExactLegacyV1BinaryInterruptedOperationAcceptance(t *testing.T) {
 		}
 	}
 	deployment := filepath.Join(target, "deployment.yaml")
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &deployment, Environment: map[string]string{}})
+	resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &deployment, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestExactLegacyV1BinaryInterruptedOperationAcceptance(t *testing.T) {
 func retainedLegacyReleaseFixture(t *testing.T, root string) (string, string) {
 	t.Helper()
 	configPath, temporarySource := cliReleaseFixture(t)
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &configPath, Environment: map[string]string{}})
+	resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &configPath, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -63,6 +63,17 @@ type sourcedValue struct {
 }
 
 func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
+	return resolveServerConfig(in, true)
+}
+
+// ResolveMaintenanceServerConfig parses deployment inputs for maintenance and
+// inspection which do not execute models. It does not authorize a Server:
+// bootstrap and NewServer must still validate the complete execution policy.
+func ResolveMaintenanceServerConfig(in ServerInputs) (*ResolvedServer, error) {
+	return resolveServerConfig(in, false)
+}
+
+func resolveServerConfig(in ServerInputs, requireExecution bool) (*ResolvedServer, error) {
 	if _, present := in.Environment["LINGUAFLOW_STORAGE_LIMITS_CAPACITY_BYTES"]; present {
 		return nil, fmt.Errorf("LINGUAFLOW_STORAGE_LIMITS_CAPACITY_BYTES has been removed; use LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES for initialization and the storage quota API for existing spaces")
 	}
@@ -216,7 +227,7 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 	resolveStorageDirectories(&r.Config, values)
 	// 在使用派生的依赖路径之前先校验路径与容量。缺失的本地密钥单独解析，
 	// 绝不用占位值顶替。
-	if err := validateServerConfig(&r.Config, false); err != nil {
+	if err := validateServerConfig(&r.Config, false, requireExecution); err != nil {
 		return nil, err
 	}
 	if in.Mode == ModeLocal {
@@ -239,7 +250,7 @@ func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 			r.Config.Credentials.KeyringFile = filepath.Join(r.Config.DataDir, "credentials-keyring.json")
 		}
 	}
-	if err := validateServerConfig(&r.Config, !r.LocalSecretPending); err != nil {
+	if err := validateServerConfig(&r.Config, !r.LocalSecretPending, requireExecution); err != nil {
 		return nil, err
 	}
 	if r.Log.Level != "debug" && r.Log.Level != "info" && r.Log.Level != "warn" && r.Log.Level != "error" {

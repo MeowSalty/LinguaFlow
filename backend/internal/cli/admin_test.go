@@ -68,7 +68,7 @@ func TestAdministratorCredentialReencryptCommand(t *testing.T) {
 		}
 	}
 	writeKeys("old", true)
-	cfg := config.DefaultServerConfig()
+	cfg := testServerConfig()
 	cfg.DataDir = dir
 	cfg.JWTSecret = strings.Repeat("j", 32)
 	cfg.Credentials.KeyringFile = keyringPath

@@ -18,7 +18,7 @@ import (
 )
 
 func TestPrepareDatabaseRejectsOldAccountsBeforeSchemaChanges(t *testing.T) {
-	cfg := config.DefaultServerConfig()
+	cfg := testServerConfig()
 	cfg.DataDir = t.TempDir()
 	db, err := sql.Open("sqlite", cfg.DatabasePath())
 	if err != nil {
@@ -64,7 +64,7 @@ func TestPrepareDatabaseAutomaticDataMigration(t *testing.T) {
 				t.Setenv("LINGUAFLOW_CREDENTIALS_KEYRING_FILE", keyring)
 			}
 			t.Setenv("LINGUAFLOW_DATA_DIR", dir)
-			resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: mode, Environment: config.Environment()})
+			resolved, err := resolveTestServerConfig(config.ServerInputs{Mode: mode, Environment: config.Environment()})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -135,7 +135,7 @@ func TestPrepareDatabaseDoesNotInitialize(t *testing.T) {
 	clearDeploymentEnvironment(t)
 	dir := t.TempDir()
 	t.Setenv("LINGUAFLOW_DATA_DIR", dir)
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: config.ModeLocal, Environment: config.Environment()})
+	resolved, err := resolveTestServerConfig(config.ServerInputs{Mode: config.ModeLocal, Environment: config.Environment()})
 	if err != nil {
 		t.Fatal(err)
 	}

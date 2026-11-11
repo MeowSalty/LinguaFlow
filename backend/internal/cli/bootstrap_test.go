@@ -18,7 +18,7 @@ import (
 func localResolution(t *testing.T) *config.ResolvedServer {
 	t.Helper()
 	dir := t.TempDir()
-	r, err := config.ResolveServerConfig(config.ServerInputs{Mode: config.ModeLocal, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{
+	r, err := resolveTestServerConfig(config.ServerInputs{Mode: config.ModeLocal, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{
 		"LINGUAFLOW_DATA_DIR": filepath.Join(dir, "instance"), "LINGUAFLOW_PORT": "0",
 		"LINGUAFLOW_DATABASE_DRIVER": "postgres", "LINGUAFLOW_DATABASE_DSN": "postgres://localhost/ignored",
 	}})
@@ -119,7 +119,7 @@ func TestBindListenerKeepsRequestedPort(t *testing.T) {
 	if requested > 65526 {
 		t.Skip("allocated port leaves no sequential candidate range")
 	}
-	cfg := config.DefaultServerConfig()
+	cfg := testServerConfig()
 	cfg.Mode = config.ModeLocal
 	cfg.Host = "127.0.0.1"
 	cfg.Port = requested
@@ -133,7 +133,7 @@ func TestBindListenerKeepsRequestedPort(t *testing.T) {
 	}
 }
 func TestBindListenerIPv6AndBrowserURL(t *testing.T) {
-	cfg := config.DefaultServerConfig()
+	cfg := testServerConfig()
 	cfg.Mode = config.ModeLocal
 	cfg.Host = "::1"
 	cfg.Port = 0
@@ -158,7 +158,7 @@ func TestLocalOfflineMissingAndCorruptSecrets(t *testing.T) {
 	if err := os.WriteFile(r.LocalSecretPath, []byte("broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := config.ResolveServerConfig(config.ServerInputs{Mode: config.ModeLocal, WorkingDirectory: r.Config.DataDir, UserConfigDir: r.Config.DataDir, Environment: map[string]string{"LINGUAFLOW_DATA_DIR": r.Config.DataDir}})
+	_, err := resolveTestServerConfig(config.ServerInputs{Mode: config.ModeLocal, WorkingDirectory: r.Config.DataDir, UserConfigDir: r.Config.DataDir, Environment: map[string]string{"LINGUAFLOW_DATA_DIR": r.Config.DataDir}})
 	if err == nil || !strings.Contains(err.Error(), "malformed") {
 		t.Fatalf("corrupt secret accepted: %v", err)
 	}

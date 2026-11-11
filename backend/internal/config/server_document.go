@@ -14,6 +14,11 @@ func EncodeServerDocument(cfg ServerConfig, log LogConfig) ([]byte, error) {
 	r := &ResolvedServer{Config: cfg, Log: log}
 	root := map[string]any{"kind": "server", "version": 1}
 	for _, f := range serverFields {
+		// An unconfigured maintenance deployment has no execution authority.
+		// Preserve that absence instead of publishing sixteen invalid zero caps.
+		if strings.HasPrefix(f.Key, "server.execution_budget.") && cfg.ExecutionBudget == (ExecutionBudgetConfig{}) {
+			continue
+		}
 		if strings.HasPrefix(f.Key, "bootstrap.") || f.Key == "server.credentials.master_key" || cfg.IsLocal() && f.Modes == "serve" {
 			continue
 		}

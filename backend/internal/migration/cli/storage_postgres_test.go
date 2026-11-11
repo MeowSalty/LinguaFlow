@@ -210,7 +210,7 @@ func currentPostgresStorageFixture(t *testing.T, dsn string) (string, *config.Re
 	if _, err := credential.PublishPrivateFile(path, data); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &path, Environment: map[string]string{}})
+	resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &path, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,6 +26,7 @@ func clearDeploymentEnvironment(t *testing.T) {
 
 func TestConfigCommandsDoNotPrepareInstance(t *testing.T) {
 	clearDeploymentEnvironment(t)
+	executionBudgetTestEnvironment(t)
 	for _, action := range []string{"check", "explain"} {
 		t.Run(action, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "not-created")
@@ -49,6 +50,7 @@ func TestConfigCommandsDoNotPrepareInstance(t *testing.T) {
 
 func TestConfigCommandsRespectExplicitFlags(t *testing.T) {
 	clearDeploymentEnvironment(t)
+	executionBudgetTestEnvironment(t)
 	t.Setenv("LINGUAFLOW_HOST", "0.0.0.0")
 	t.Setenv("LINGUAFLOW_PORT", "18090")
 	dir := filepath.Join(t.TempDir(), "instance")

@@ -38,7 +38,7 @@ func TestAdministratorInitializationCommands(t *testing.T) {
 	run("initialize", "--username", " INITIAL-ADMIN ", "--password-stdin")
 	run("initialize")
 	run("create", "--username", " BACKUP-ADMIN ", "--password-stdin")
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: config.ModeServer, Environment: config.Environment()})
+	resolved, err := resolveTestServerConfig(config.ServerInputs{Mode: config.ModeServer, Environment: config.Environment()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,10 +15,10 @@ import (
 func masterKeyInputs(t *testing.T, mode string) ServerInputs {
 	t.Helper()
 	dir := t.TempDir()
-	return ServerInputs{Mode: mode, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{
+	return withExecutionBudget(ServerInputs{Mode: mode, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{
 		"LINGUAFLOW_JWT_SECRET": strings.Repeat("j", 32),
 		"LINGUAFLOW_DATA_DIR":   filepath.Join(dir, "instance"),
-	}}
+	}})
 }
 
 func TestDeploymentMasterKeySources(t *testing.T) {

@@ -84,7 +84,7 @@ func TestPostgresServeReleaseDumpRestoreAcceptance(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	resolved, err := config.ResolveServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &configs[0], Environment: map[string]string{}})
+	resolved, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &configs[0], Environment: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestPostgresServeReleaseDumpRestoreAcceptance(t *testing.T) {
 		t.Fatal("dump wrote source", err)
 	}
 	deployment := filepath.Join(p.Target.DataDir, "deployment.yaml")
-	targetInputs, err := config.ResolveServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &deployment, Environment: map[string]string{}})
+	targetInputs, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: "serve", ConfigPath: &deployment, Environment: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}

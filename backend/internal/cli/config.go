@@ -58,6 +58,9 @@ func resolveDeployment(cmd *cobra.Command, rt *appCtx, mode string) (*config.Res
 	if cmd.Flags().Changed("log-format") {
 		in.Overrides["log.format"] = rt.logFormat
 	}
+	if cmd.Name() == "explain" || (cmd.Name() != "check" && cmd.Name() != "serve" && cmd.Name() != "local" && cmd.Name() != "linguaflow") {
+		return config.ResolveMaintenanceServerConfig(in)
+	}
 	return config.ResolveServerConfig(in)
 }
 

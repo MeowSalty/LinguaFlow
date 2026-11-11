@@ -49,7 +49,7 @@ func TestReleasedUsernameSwapAndEmailNullAcceptance(t *testing.T) {
 				t.Fatal(err)
 			}
 			deployment := filepath.Join(options.TargetDataDir, "deployment.yaml")
-			targetConfig, err := config.ResolveServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &deployment, Environment: map[string]string{}})
+			targetConfig, err := config.ResolveMaintenanceServerConfig(config.ServerInputs{Mode: mode, ConfigPath: &deployment, Environment: map[string]string{}})
 			if err != nil {
 				t.Fatal(err)
 			}

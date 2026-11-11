@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 )
 
 // ProtectConfig 控制内容保护的行为。
@@ -256,29 +258,32 @@ func DefaultSSEConfig() SSEConfig {
 }
 
 type ServerConfig struct {
-	Host              string               `yaml:"host"`
-	Port              int                  `yaml:"port"`
-	Mode              string               `yaml:"mode"` // "server" (default) | "local"
-	ServiceName       string               `yaml:"service_name"`
-	DataDir           string               `yaml:"data_dir"`
-	AutoMigrate       bool                 `yaml:"auto_migrate"`
-	JWTSecret         string               `yaml:"jwt_secret"`
-	JWTIssuer         string               `yaml:"jwt_issuer"`
-	JWTExpiry         time.Duration        `yaml:"jwt_expiry"`
-	RefreshExpiry     time.Duration        `yaml:"refresh_token_expiry"`
-	ShutdownTimeout   time.Duration        `yaml:"shutdown_timeout"`
-	RevisionRetention time.Duration        `yaml:"revision_retention"`
-	Database          DatabaseConfig       `yaml:"database"`
-	Workers           WorkerConfig         `yaml:"workers"`
-	Pipeline          PipelineConfig       `yaml:"pipeline"`
-	Preview           PreviewConfig        `yaml:"preview"`
-	QuickTranslate    QuickTranslateConfig `yaml:"quick_translate"`
-	SSE               SSEConfig            `yaml:"sse"`
-	CORS              CORSConfig           `yaml:"cors"`
-	Authentication    AuthDeploymentConfig `yaml:"authentication"`
-	Credentials       CredentialsConfig    `yaml:"credentials"`
-	Storage           StorageConfig        `yaml:"storage"`
-	ServeUI           bool                 `yaml:"serve_ui"`
+	// ExecutionBudget has no defaults: deployment must authorize finite actor
+	// and process limits before either serve or local execution can start.
+	ExecutionBudget   resourcebudget.Policy `yaml:"execution_budget"`
+	Host              string                `yaml:"host"`
+	Port              int                   `yaml:"port"`
+	Mode              string                `yaml:"mode"` // "server" (default) | "local"
+	ServiceName       string                `yaml:"service_name"`
+	DataDir           string                `yaml:"data_dir"`
+	AutoMigrate       bool                  `yaml:"auto_migrate"`
+	JWTSecret         string                `yaml:"jwt_secret"`
+	JWTIssuer         string                `yaml:"jwt_issuer"`
+	JWTExpiry         time.Duration         `yaml:"jwt_expiry"`
+	RefreshExpiry     time.Duration         `yaml:"refresh_token_expiry"`
+	ShutdownTimeout   time.Duration         `yaml:"shutdown_timeout"`
+	RevisionRetention time.Duration         `yaml:"revision_retention"`
+	Database          DatabaseConfig        `yaml:"database"`
+	Workers           WorkerConfig          `yaml:"workers"`
+	Pipeline          PipelineConfig        `yaml:"pipeline"`
+	Preview           PreviewConfig         `yaml:"preview"`
+	QuickTranslate    QuickTranslateConfig  `yaml:"quick_translate"`
+	SSE               SSEConfig             `yaml:"sse"`
+	CORS              CORSConfig            `yaml:"cors"`
+	Authentication    AuthDeploymentConfig  `yaml:"authentication"`
+	Credentials       CredentialsConfig     `yaml:"credentials"`
+	Storage           StorageConfig         `yaml:"storage"`
+	ServeUI           bool                  `yaml:"serve_ui"`
 }
 
 // AuthDeploymentConfig defines the deployment-owned boundary around external
@@ -431,10 +436,15 @@ func DefaultServerConfig() *ServerConfig {
 
 // ValidateServerConfig 校验完整解析后的配置，且不做任何修改。
 func ValidateServerConfig(c *ServerConfig) error {
-	return validateServerConfig(c, true)
+	return validateServerConfig(c, true, true)
 }
 
-func validateServerConfig(c *ServerConfig, requireSecret bool) error {
+func validateServerConfig(c *ServerConfig, requireSecret, requireExecution bool) error {
+	if requireExecution {
+		if err := ValidateExecutionBudget(c.ExecutionBudget); err != nil {
+			return err
+		}
+	}
 	if c.Mode != ModeServer && c.Mode != ModeLocal {
 		return fmt.Errorf("server.mode must be one of %s|%s", ModeServer, ModeLocal)
 	}
