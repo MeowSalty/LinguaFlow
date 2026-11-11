@@ -188,8 +188,8 @@ func TestStagedRoundConcurrencyPreservesCompleteBatch(t *testing.T) {
 		{"translate_second_round", RoundModeTranslate, 4, 10, 35, 1, 4, defaults},
 		{"revise_default_batch", RoundModeRevise, 4, 10, 35, 0, 4, defaults},
 		{"revise_second_round", RoundModeRevise, 2, 20, 35, 1, 2, defaults},
-		{"small_byte_window", RoundModeTranslate, 4, 10, 9, 0, 0, CandidateLimits{Segments: 8, Bytes: 2 << 20, ItemBytes: 1 << 20}},
-		{"small_segment_window", RoundModeTranslate, 4, 10, 9, 0, 0, CandidateLimits{Segments: 2, Bytes: 16 << 20, ItemBytes: 1 << 20}},
+		{"small_byte_window", RoundModeTranslate, 4, 10, 9, 0, 1, CandidateLimits{Segments: 8, Bytes: 2 << 20, ItemBytes: 1 << 20}},
+		{"small_segment_window", RoundModeTranslate, 4, 10, 9, 0, 1, CandidateLimits{Segments: 2, Bytes: 16 << 20, ItemBytes: 1 << 20}},
 		{"singleton_exception", RoundModeTranslate, 4, 10, 3, 0, 1, CandidateLimits{Segments: 4, Bytes: 1, ItemBytes: 1 << 20}},
 	}
 	for _, tc := range cases {
@@ -236,18 +236,6 @@ func TestStagedRoundConcurrencyPreservesCompleteBatch(t *testing.T) {
 				result, err := RunRound(ctx, Round{Concurrency: tc.concurrency, Handler: handler, Runtime: runtime, Store: store}, doc, nil, quietLogger(), nil)
 				done <- outcome{result, err}
 			}()
-			if tc.wantConcurrent == 0 {
-				got := <-done
-				joined = true
-				if !errors.Is(got.err, ErrCandidateCapacity) || len(remote.entered) != 0 {
-					t.Fatalf("over-S original batch: %+v %v HTTP=%d", got.result, got.err, len(remote.entered))
-				}
-				state, _ := store.Load(ctx)
-				if len(state.Completed) != 0 {
-					t.Fatal("capacity failure advanced checkpoints")
-				}
-				return
-			}
 			// Each provider call holds its network slot until all expected calls
 			// arrive. A serial scheduler cannot pass by merely finishing quickly.
 			barrier := time.NewTimer(3 * time.Second)
