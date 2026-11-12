@@ -45,6 +45,26 @@ type stagedEvent struct {
 	members               []stagedEvent
 }
 
+// These counters belong to the coordinator. Workers remain in flight until
+// their terminal event has been applied, including paid saves and recovery pages.
+type stagedInFlight struct {
+	main, candidates, promotions int
+	candidatePage, responsePage  bool
+}
+
+func (s stagedInFlight) pending() bool {
+	return s.main+s.candidates+s.promotions != 0 || s.candidatePage || s.responsePage
+}
+
+// Once production stops, wait only for workers that can still post an event.
+// Cancellation can arrive after the coordinator's earlier idle check.
+func (s stagedInFlight) drain(events <-chan stagedEvent) (stagedEvent, bool) {
+	if !s.pending() {
+		return stagedEvent{}, false
+	}
+	return <-events, true
+}
+
 // ErrResourceYield suspends an unfinished resource after all its callbacks have
 // joined. Its persisted cursors remain authoritative on re-admission.
 var ErrResourceYield = errors.New("resource yields to recovered candidates")
@@ -744,7 +764,8 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				}(idxs, pool, attempt, input, reservation, ticket)
 			}
 		}
-		if mainActive+candidateActive+promotionActive == 0 && !pageActive && !responsePageActive {
+		inFlight := stagedInFlight{mainActive, candidateActive, promotionActive, pageActive, responsePageActive}
+		if !inFlight.pending() {
 			if firstErr != nil || runCtx.Err() != nil || paused() || yielded {
 				break
 			}
@@ -819,7 +840,14 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		}
 		changed := windowChanged
 		if runCtx.Err() != nil || paused() {
-			apply(<-events)
+			e, received := inFlight.drain(events)
+			if !received {
+				if timer != nil {
+					timer.Stop()
+				}
+				break
+			}
+			apply(e)
 		} else {
 			select {
 			case e := <-events:

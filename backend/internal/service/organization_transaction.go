@@ -43,15 +43,15 @@ func withOrganizationMutation(ctx context.Context, client *ent.Client, orgID int
 func withOrganizationTransaction(ctx context.Context, client *ent.Client, mutate func(*ent.Client) error) error {
 	retryDeadline := time.Now().Add(organizationTransactionRetryBudget)
 	for attempt := 0; ; attempt++ {
-		if err := ctx.Err(); err != nil {
+		if err := organizationTransactionContextError(ctx); err != nil {
 			return err
 		}
 		err := organizationTransactionAttempt(ctx, client, mutate)
-		if err != nil && ctx.Err() != nil {
+		if contextErr := organizationTransactionContextError(ctx); err != nil && contextErr != nil {
 			// Cancellation may let database/sql start automatic rollback before
 			// our explicit Rollback. Preserve any uncertain rollback diagnostic,
 			// while reporting cancellation and never retrying the operation.
-			return errors.Join(ctx.Err(), err)
+			return errors.Join(contextErr, err)
 		}
 		if err == nil || !isOrganizationTransactionConflict(err) {
 			return err
@@ -64,7 +64,7 @@ func withOrganizationTransaction(ctx context.Context, client *ent.Client, mutate
 			}
 		}
 		if remaining <= 0 {
-			return err
+			return errors.Join(organizationTransactionContextError(ctx), err)
 		}
 		delay := organizationTransactionRetryDelay(attempt)
 		if delay > remaining {
@@ -77,13 +77,26 @@ func withOrganizationTransaction(ctx context.Context, client *ent.Client, mutate
 			return ctx.Err()
 		case <-timer.C:
 		}
-		if err := ctx.Err(); err != nil {
+		if err := organizationTransactionContextError(ctx); err != nil {
 			return err
 		}
 		if !time.Now().Before(retryDeadline) {
-			return err
+			return errors.Join(organizationTransactionContextError(ctx), err)
 		}
 	}
+}
+
+// The deadline can expire before the context's cancellation timer runs. Check
+// both signals so scheduling that timer later cannot permit another attempt
+// or return a conflict instead of the caller's deadline error.
+func organizationTransactionContextError(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return nil
 }
 
 func organizationTransactionRetryDelay(attempt int) time.Duration {

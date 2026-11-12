@@ -238,7 +238,9 @@ func (s InventorySource) Runtime(ctx context.Context, jobID int) (segments, cand
 		return
 	}
 	var runtimeBytes int64
-	err = s.row(ctx, s.bind("SELECT "+s.length("pipeline_runtime_state")+" FROM jobs WHERE id=?"), jobID).Scan(&runtimeBytes)
+	// A deleted job has no runtime state, but its remaining backing still
+	// needs to be counted below before cleanup can release inventory.
+	err = s.row(ctx, s.bind("SELECT COALESCE(MAX("+s.length("pipeline_runtime_state")+"),0) FROM jobs WHERE id=?"), jobID).Scan(&runtimeBytes)
 	if err != nil {
 		return
 	}
