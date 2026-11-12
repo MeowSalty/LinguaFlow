@@ -4,10 +4,10 @@ LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（�
 
 | 方式 | 默认模式 | 默认端口 | 说明 |
 | --- | --- | --- | --- |
-| 预编译二进制 / 双击运行 | 本地模式 | `18080` | 免登录，推荐上手 |
+| 预编译二进制 / 双击运行 | 本地模式 | `18080` | 免登录，推荐上手；需先注入执行预算环境变量（见下文） |
 | `linguaflow local` | 本地模式 | `18080` | 同上 |
-| Docker 镜像默认 | 服务器模式（预览） | `8080` | 需注入密钥与管理员后启动；见下方说明 |
-| `linguaflow serve` | 服务器模式（预览） | `8080` | 需部署配置与密钥；见 [使用模式](/zh/guide/modes) |
+| Docker 镜像默认 | 服务器模式（预览） | `8080` | 需注入执行预算、密钥与管理员后启动；见下方说明 |
+| `linguaflow serve` | 服务器模式（预览） | `8080` | 需部署配置、执行预算与密钥；见 [使用模式](/zh/guide/modes) |
 
 跑通第一次翻译请先看 [快速开始 · Web](/zh/guide/getting-started)。
 
@@ -26,14 +26,15 @@ LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（�
 
 ## Docker 部署
 
-::: warning 容器默认是服务器模式，且必须提供密钥
-官方镜像默认执行服务器模式（端口 `8080`），与本机双击二进制进入的本地模式不同。服务器模式启动前**必须**提供三类输入，缺一即拒绝启动：
+::: warning 容器默认是服务器模式，且必须提供执行预算与密钥
+官方镜像默认执行服务器模式（端口 `8080`），与本机双击二进制进入的本地模式不同。服务器模式启动前**必须**提供四类输入，缺一即拒绝启动：
 
-1. **JWT 签名密钥** — `LINGUAFLOW_JWT_SECRET`（≥32 字节随机值）
-2. **凭据加密密钥** — `LINGUAFLOW_CREDENTIALS_MASTER_KEY`（32 字节随机值的 Base64）
-3. **初始管理员** — `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD`（`_EMAIL` 可选；仅首次初始化需要）
+1. **执行预算** — `server.execution_budget` 的 16 项资源上限（serve / local 通用，无默认值；见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填)）
+2. **JWT 签名密钥** — `LINGUAFLOW_JWT_SECRET`（≥32 字节随机值）
+3. **凭据加密密钥** — `LINGUAFLOW_CREDENTIALS_MASTER_KEY`（32 字节随机值的 Base64）
+4. **初始管理员** — `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD`（`_EMAIL` 可选；仅首次初始化需要）
 
-三个值都可用 `linguaflow secrets generate --stdout` 生成；JWT secret 与凭据加密密钥必须是两个不同的随机值。服务器模式仍在完善中，适合试用，不建议作为生产唯一依赖。个人本机请优先使用 [预编译二进制](#预编译二进制)。
+密钥类值都可用 `linguaflow secrets generate --stdout` 生成；JWT secret 与凭据加密密钥必须是两个不同的随机值。服务器模式仍在完善中，适合试用，不建议作为生产唯一依赖。个人本机请优先使用 [预编译二进制](#预编译二进制)。
 :::
 
 ### 基本部署
@@ -44,6 +45,22 @@ docker run -d \
   --name linguaflow \
   -p 8080:8080 \
   -v linguaflow-data:/app/data \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS=4096 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES=1073741824 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS=64 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_MAIN_RESPONSE_OWNERS=64 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_AUX_RESPONSE_OWNERS=64 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_BUILD_WORKERS=64 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_QUEUED_DESCRIPTORS=4096 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_LOGICAL_STORAGE_BYTES=1073741824 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_UNCONFIRMED_MEMBERS=65536 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PAYLOAD_BYTES=1073741824 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PREPARE_OWNERS=256 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_MAIN_RESPONSE_OWNERS=256 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_AUX_RESPONSE_OWNERS=256 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_BUILD_WORKERS=256 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_QUEUED_DESCRIPTORS=4096 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES=1073741824 \
   -e LINGUAFLOW_JWT_SECRET="$(linguaflow secrets generate --stdout)" \
   -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="$(linguaflow secrets generate --stdout)" \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -54,7 +71,7 @@ docker run -d \
 浏览器访问 `http://localhost:8080`，用上面的管理员账号登录后使用。
 
 ::: warning 密钥保存与复用
-JWT secret 与凭据加密密钥请保存到密码管理器或部署平台的秘密配置中，并在**每次重建容器时注入同一份值**——凭据加密密钥一旦更换，数据库里已保存的 AI 密钥将无法解密。首次初始化成功后，`LINGUAFLOW_BOOTSTRAP_ADMIN_*` 变量可以不再注入（账号与注册政策已存入数据库）。
+JWT secret 与凭据加密密钥请保存到密码管理器或部署平台的秘密配置中，并在**每次重建容器时注入同一份值**——凭据加密密钥一旦更换，数据库里已保存的 AI 密钥将无法解密。执行预算同样要每次注入同一份值（写进部署文档或部署平台的环境变量配置均可，不必逐条手敲）。首次初始化成功后，`LINGUAFLOW_BOOTSTRAP_ADMIN_*` 变量可以不再注入（账号与注册政策已存入数据库）。
 :::
 
 ::: warning 旧版本数据目录不兼容
@@ -67,7 +84,7 @@ JWT secret 与凭据加密密钥请保存到密码管理器或部署平台的秘
 
 ### Docker Compose
 
-SQLite（默认）+ 环境变量注入密钥的部署示例：
+SQLite（默认）+ 环境变量注入密钥的部署示例（执行预算用 env_file 注入更清爽，见下）：
 
 ```yaml
 services:
@@ -79,6 +96,8 @@ services:
       - "8080:8080"
     volumes:
       - linguaflow-data:/app/data
+    env_file:
+      - linguaflow-budget.env   # 16 个 LINGUAFLOW_EXECUTION_BUDGET_* 变量（见下）
     environment:
       LINGUAFLOW_DATA_DIR: /app/data
       # 以下三项建议通过部署平台的秘密配置或 .env 注入，不要明文提交
@@ -90,6 +109,29 @@ services:
 volumes:
   linguaflow-data:
 ```
+
+`linguaflow-budget.env`（执行预算示例值，按需调整）：
+
+```bash
+LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS=4096
+LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES=1073741824
+LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS=64
+LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_MAIN_RESPONSE_OWNERS=64
+LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_AUX_RESPONSE_OWNERS=64
+LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_BUILD_WORKERS=64
+LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_QUEUED_DESCRIPTORS=4096
+LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_LOGICAL_STORAGE_BYTES=1073741824
+LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_UNCONFIRMED_MEMBERS=65536
+LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PAYLOAD_BYTES=1073741824
+LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PREPARE_OWNERS=256
+LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_MAIN_RESPONSE_OWNERS=256
+LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_AUX_RESPONSE_OWNERS=256
+LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_BUILD_WORKERS=256
+LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_QUEUED_DESCRIPTORS=4096
+LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES=1073741824
+```
+
+字段含义与取值建议见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填)；也可以不用 env 文件，把这些字段直接写进 `server.yaml` 部署文档。
 
 在 Compose 文件同级放一个 `.env`（加入 `.gitignore`，不要提交）：
 
@@ -104,7 +146,7 @@ LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD=<强密码>
 敏感值支持 `_FILE` 后缀的环境变量，指向容器内可读的文件路径，配合 Docker secrets 或 bind mount 使用（如 `LINGUAFLOW_JWT_SECRET_FILE: /run/secrets/jwt-secret`）。JWT secret、凭据加密密钥、数据库 DSN 与管理员密码均支持该形式。
 :::
 
-使用 PostgreSQL 的部署示例（适合高并发场景）：
+使用 PostgreSQL 的部署示例（适合高并发场景；执行预算同样必填，可复用上面的 `linguaflow-budget.env` 写法）：
 
 ```yaml
 services:
@@ -114,6 +156,8 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    env_file:
+      - linguaflow-budget.env
     environment:
       LINGUAFLOW_JWT_SECRET: ${LINGUAFLOW_JWT_SECRET:?需要至少 32 字节的随机值}
       LINGUAFLOW_CREDENTIALS_MASTER_KEY: ${LINGUAFLOW_CREDENTIALS_MASTER_KEY:?需要 32 字节随机值的 Base64}
@@ -158,8 +202,9 @@ Compose 示例中常用变量：
 | 变量 | 用途 |
 | --- | --- |
 | `LINGUAFLOW_DATA_DIR` | 数据目录（SQLite 文件等） |
-| `LINGUAFLOW_JWT_SECRET` | JWT 签名密钥（必需，≥32 字节；支持 `_FILE`） |
-| `LINGUAFLOW_CREDENTIALS_MASTER_KEY` | 凭据加密密钥（必需；支持 `_FILE`） |
+| `LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_*` / `_INSTANCE_MAX_*` | 执行预算 16 项上限（serve / local 都必填，见 [执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填)） |
+| `LINGUAFLOW_JWT_SECRET` | JWT 签名密钥（serve 必需，≥32 字节；支持 `_FILE`） |
+| `LINGUAFLOW_CREDENTIALS_MASTER_KEY` | 凭据加密密钥（serve 必需；支持 `_FILE`） |
 | `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | 首次初始化的管理员（`_EMAIL` 可选；密码支持 `_FILE`） |
 | `LINGUAFLOW_BOOTSTRAP_REGISTRATION_ENABLED` | 是否开放注册（默认 `false`，也可登录后管理员在设置页开启） |
 | `LINGUAFLOW_DATABASE_DRIVER` / `DSN` | 切换 PostgreSQL 时使用（`DSN` 支持 `_FILE`） |
@@ -240,15 +285,54 @@ HuggingFace Spaces 默认使用 7860 端口，`Dockerfile.hf` 已自动配置。
 
 ```bash [Linux / macOS]
 chmod +x linguaflow
+# 首次启动前注入执行预算（16 项，serve / local 通用、无默认值）
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS=4096
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES=1073741824
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS=64
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_MAIN_RESPONSE_OWNERS=64
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_AUX_RESPONSE_OWNERS=64
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_BUILD_WORKERS=64
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_QUEUED_DESCRIPTORS=4096
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_LOGICAL_STORAGE_BYTES=1073741824
+export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_UNCONFIRMED_MEMBERS=65536
+export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PAYLOAD_BYTES=1073741824
+export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PREPARE_OWNERS=256
+export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_MAIN_RESPONSE_OWNERS=256
+export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_AUX_RESPONSE_OWNERS=256
+export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_BUILD_WORKERS=256
+export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_QUEUED_DESCRIPTORS=4096
+export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES=1073741824
 ./linguaflow
 # 本地模式，自动打开 http://127.0.0.1:18080
+# 之后每次启动都需要这些变量——建议写入启动脚本或 shell 配置
 ```
 
 ```powershell [Windows]
+# 先注入执行预算（16 项，serve / local 通用、无默认值），再启动：
+$env:LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS = '4096'
+$env:LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES = '1073741824'
+$env:LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS = '64'
+$env:LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_MAIN_RESPONSE_OWNERS = '64'
+$env:LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_AUX_RESPONSE_OWNERS = '64'
+$env:LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_BUILD_WORKERS = '64'
+$env:LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_QUEUED_DESCRIPTORS = '4096'
+$env:LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_LOGICAL_STORAGE_BYTES = '1073741824'
+$env:LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_UNCONFIRMED_MEMBERS = '65536'
+$env:LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PAYLOAD_BYTES = '1073741824'
+$env:LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PREPARE_OWNERS = '256'
+$env:LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_MAIN_RESPONSE_OWNERS = '256'
+$env:LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_AUX_RESPONSE_OWNERS = '256'
+$env:LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_BUILD_WORKERS = '256'
+$env:LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_QUEUED_DESCRIPTORS = '4096'
+$env:LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES = '1073741824'
 .\linguaflow.exe
-# 或资源管理器中双击；本地模式，端口 18080
+# 本地模式，端口 18080
 ```
 
+:::
+
+::: warning 执行预算缺失会拒绝启动
+本地模式（含双击运行）也要求执行预算：未注入 16 个 `LINGUAFLOW_EXECUTION_BUDGET_*` 环境变量时程序直接报错退出。双击启动的用户请先用[系统环境变量设置](https://learn.microsoft.com/zh-cn/windows/win32/sysinfo/environment-variables)（Windows「编辑账户的环境变量」）或启动脚本固化这些值，再双击运行。字段含义与取值建议见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填)。
 :::
 
 ::: tip 校验文件完整性

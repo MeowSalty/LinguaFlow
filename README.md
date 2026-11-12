@@ -199,11 +199,27 @@ linguaflow translate -i docs.md -o out.md --to zh --glossary-path terms.csv
 
 ### Docker
 
-容器默认服务器模式，启动前必须注入 JWT 签名密钥、凭据加密密钥与初始管理员（可用 `linguaflow secrets generate --stdout` 生成随机密钥）：
+容器默认服务器模式，启动前必须注入执行预算（16 个 `LINGUAFLOW_EXECUTION_BUDGET_*` 变量）、JWT 签名密钥、凭据加密密钥与初始管理员（密钥可用 `linguaflow secrets generate --stdout` 生成）：
 
 ```bash
 docker pull ghcr.io/meowsalty/linguaflow:latest
 docker run -d -p 8080:8080 -v linguaflow-data:/app/data \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS=4096 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES=1073741824 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS=64 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_MAIN_RESPONSE_OWNERS=64 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_AUX_RESPONSE_OWNERS=64 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_BUILD_WORKERS=64 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_QUEUED_DESCRIPTORS=4096 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_LOGICAL_STORAGE_BYTES=1073741824 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_UNCONFIRMED_MEMBERS=65536 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PAYLOAD_BYTES=1073741824 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PREPARE_OWNERS=256 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_MAIN_RESPONSE_OWNERS=256 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_AUX_RESPONSE_OWNERS=256 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_BUILD_WORKERS=256 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_QUEUED_DESCRIPTORS=4096 \
+  -e LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES=1073741824 \
   -e LINGUAFLOW_JWT_SECRET="<32 字节随机值>" \
   -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="<另一个独立随机值>" \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -212,7 +228,7 @@ docker run -d -p 8080:8080 -v linguaflow-data:/app/data \
 ```
 
 > [!IMPORTANT]
-> 凭据加密密钥请长期保存、重建容器时注入同一份值——更换后数据库中已保存的 AI 密钥将无法解密。Compose 部署与密钥文件（`_FILE`）方式见[安装部署文档](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)。
+> 执行预算在服务器模式与本地模式下都必填、无默认值，缺失即拒绝启动；字段含义与取值建议见[配置参考](https://meowsalty.github.io/LinguaFlow/zh/guide/configuration)。凭据加密密钥请长期保存、重建容器时注入同一份值——更换后数据库中已保存的 AI 密钥将无法解密。Compose 部署与密钥文件（`_FILE`）方式见[安装部署文档](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)。
 
 ### 从源码构建
 
@@ -227,13 +243,16 @@ task backend:local:build
 
 ### 启动本地模式
 
-本地模式无需登录，适合个人使用。
+本地模式无需登录，适合个人使用。**执行预算必须先注入**：16 个 `LINGUAFLOW_EXECUTION_BUDGET_*` 环境变量（serve / local 通用、无默认值），双击启动的用户请先把值写进系统环境变量，否则程序会直接报错退出。完整变量清单与参考值见[配置参考](https://meowsalty.github.io/LinguaFlow/zh/guide/configuration)。
 
-**双击运行**：直接双击编译好的 `linguaflow`（或 `linguaflow.exe`）即可启动，会自动打开浏览器。
-
-**命令行启动**：
+**命令行启动**（预算注入后）：
 
 ```bash
+# 单人使用的参考值，按需调整；建议写入启动脚本
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS=4096
+export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES=1073741824
+# ... 其余 14 个变量见配置参考 ...
+
 ./bin/linguaflow local
 ```
 
@@ -257,7 +276,7 @@ task backend:local:build
 > [!NOTE]
 > 服务器模式目前仍属预览能力，功能持续完善中，暂不建议作为生产环境的唯一依赖。想先看看效果，可直接注册[在线预览](#在线预览)实例。
 
-与本地模式不同，服务器模式**不会自动生成密钥**，启动前需要：`kind: server` 部署文档、≥32 字节的 JWT 签名密钥、凭据加密密钥，以及首次初始化的管理员输入：
+与本地模式不同，服务器模式**不会自动生成密钥**，启动前需要：`kind: server` 部署文档（或环境变量形式的）执行预算、≥32 字节的 JWT 签名密钥、凭据加密密钥，以及首次初始化的管理员输入：
 
 ```bash
 # 生成部署文档与密钥材料
@@ -290,7 +309,7 @@ export LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>"
 | 数据库 | SQLite（默认） / PostgreSQL（服务器模式） |
 | API    | OpenAPI 3.0                               |
 
-项目采用前后端分离架构，支持单机部署或分离部署。本地模式默认使用嵌入式 SQLite 开箱即用；服务器模式除 SQLite 外，还支持通过环境变量切换到 PostgreSQL 以满足高并发场景。
+项目采用前后端分离架构，支持单机部署或分离部署。本地模式使用嵌入式 SQLite；服务器模式除 SQLite 外，还支持通过环境变量切换到 PostgreSQL 以满足高并发场景。两种模式都要求显式配置执行预算（`server.execution_budget`），由部署者授权有限的资源额度。
 
 ---
 
