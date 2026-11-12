@@ -418,16 +418,20 @@ linguaflow-migrate verify --operation-dir /var/linguaflow/upgrade-op
 ### 旧存储导入示例
 
 ```bash
-# 生成导入计划（默认读取 <data_dir>/jobs，可用 --legacy-root 覆盖）
+# 生成导入计划（默认读取 <data_dir>/jobs，可用 --legacy-root 覆盖；只支持 inplace 策略）
 linguaflow-migrate storage plan --mode serve --config server.yaml \
   --operation-dir /var/linguaflow/storage-op
 
-# 停服后执行导入
+# 停服后执行导入；PostgreSQL 时需用 --backup-reference 声明外部备份出处
 linguaflow-migrate storage apply --operation-dir /var/linguaflow/storage-op --offline
 ```
 
 ::: info 配额与清单
-旧存储导入会记录两层配额（见 [配置文件与环境变量 · 对象存储](/zh/guide/configuration#server-storage-—-对象存储)）；serve 模式要求两个配额都已显式配置。若此前已生成过迁移清单文件（ManifestVersion=1），可用 `storage plan --manifest <文件>` 接管继续。
+旧存储导入会记录两层配额（见 [配置文件与环境变量 · 对象存储](/zh/guide/configuration#server-storage-—-对象存储)）；serve 模式要求两个配额都已显式配置。若此前已生成过迁移清单文件（ManifestVersion=1），可用 `storage plan --manifest <文件>` 只读接管继续。
+:::
+
+::: warning 与版本升级相同的纪律
+`storage` 操作与 `upgrade` 一样冻结工具构建摘要、强制 `--offline` 并校验保护收据与基线证据：请固定使用同一个二进制跑完全程，中途不要重新编译替换；SQLite 导入中断可用 `status` / `resume` 续跑。计划冻结后也不要手工改动操作目录里的任何文件。
 :::
 
 ### 从源码运行（Taskfile）
