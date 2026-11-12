@@ -13,6 +13,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
@@ -221,12 +222,30 @@ func TestBudgetIntegrationActorScanAndInactiveCleanup(t *testing.T) {
 			}
 			want := actual
 			want.LogicalStorageBytes = bytes
+			if operation == "delete" {
+				if _, err := c.Job.Get(ctx, j.ID); !ent.IsNotFound(err) {
+					t.Fatalf("deleted job still present: %v", err)
+				}
+				if want != (resourcebudget.Vector{}) {
+					t.Fatalf("deleted job retained inventory: %+v", want)
+				}
+			}
 			got := s.executionBudget.Snapshot(u.ID)
 			if got.Instance != want || got.Actor != want {
 				t.Fatalf("lost or duplicated cleanup credit: root=%+v actual=%+v", got, want)
 			}
 			if before.PayloadBytes <= want.PayloadBytes || before.LogicalStorageBytes <= want.LogicalStorageBytes {
 				t.Fatalf("cleanup did not remove reliable backing before=%+v after=%+v", before, want)
+			}
+			rebuilt, err := resourcebudget.New(testServerConfig().ExecutionBudget)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := rebuilt.Rebuild(ctx, s.budgetSource); err != nil {
+				t.Fatal(err)
+			}
+			if rebuilt.Snapshot(0).Instance != want {
+				t.Fatalf("cleanup credit differs from durable rebuild: live=%+v rebuilt=%+v", want, rebuilt.Snapshot(0).Instance)
 			}
 			t.Logf("%s serialized behind actor scan; retained S/P/storage=%+v", operation, want)
 		})

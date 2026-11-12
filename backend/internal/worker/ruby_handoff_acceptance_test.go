@@ -36,6 +36,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	pa "github.com/MeowSalty/LinguaFlow/backend/internal/persistenceacceptance"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -468,7 +469,10 @@ func TestRubyHandoffAcceptanceHTTPRecoveryGrowthThirtyTwo(t *testing.T) {
 	}
 }
 func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
-	const count = 32
+	count := 4
+	if pa.FullWorkload() {
+		count = 32
+	}
 	const initialBytes = 512 << 10
 	counts := []int{count}
 	if fullJ {
@@ -643,7 +647,7 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 		return map[string]any{"ruby_output": entries}, nil
 	}
 	limits := pipeline.DefaultCandidateLimits()
-	limits.Bytes = (16 << 20) + (1 << 19) // one existing half-MiB draft can grow to Q.
+	limits.Bytes = int64(count+1) * initialBytes // exactly one half-MiB draft can grow to Q.
 	runtime, err := NewExecutionRuntime(f.snapshot, f.pool, nil, limits)
 	if err != nil {
 		t.Fatal(err)
@@ -726,7 +730,7 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 		fail("load growth episode: %v", err)
 	}
 	snap := runtime.Admission.PipelineSnapshot()
-	expectedN := int64(32)
+	expectedN := int64(count)
 	if fullJ {
 		expectedN++
 	}
@@ -737,7 +741,7 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 		fail("real candidate did not grow about0.5->0.75MiB: %d", grown)
 	}
 	if snap.CandidateBytes+snap.GrowthBytes > max(limits.Bytes, limits.ItemBytes) || snap.ProgressID != state.ProgressID {
-		fail("growth admitted all32 expansions/second borrower: %+v %+v", snap, state)
+		fail("growth admitted a second borrower: %+v %+v", snap, state)
 	}
 	mu.Lock()
 	callsAtCommit := httpCalls
@@ -758,10 +762,10 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 	mu.Lock()
 	calls, actualPeak := httpCalls, peak
 	mu.Unlock()
-	if calls != 32 || actualPeak > 8 {
+	if calls != count || actualPeak > 8 {
 		fail("growth actual aux calls%d peak%d", calls, actualPeak)
 	}
-	if n := f.client.JobRoundSegment.Query().CountX(context.Background()); n != 32 {
+	if n := f.client.JobRoundSegment.Query().CountX(context.Background()); n != count {
 		fail("growth checkpoint%d", n)
 	}
 	end := runtime.Admission.PipelineSnapshot()
@@ -772,12 +776,24 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 	if end.CandidateBytes != 0 || end.GrowthBytes != 0 || end.Segments != expectedRemaining || end.AuxOwners != 0 {
 		fail("growth terminal credits: %+v", end)
 	}
-	usageCalls := 32
+	usageCalls := count
 	if fullJ {
 		usageCalls++
 	}
 	f.assertUsage(t, usageCalls)
-	t.Logf("real_DTO_bytes=32*%d grown_first=%d W=16MiB Q=1MiB A=8 J=%d future_raw_fills_J=%v real_aux_calls=%d peak=%d fixed_episode=%+v first_commit=%+v terminal=%+v", initialBytes, grown, handoff, fullJ, calls, actualPeak, state, snap, end)
+	logCapacityFact(t, fmt.Sprintf("ruby-growth-%t", fullJ), map[string]any{"driver": f.dbDriver, "members": count, "initial_bytes": initialBytes, "candidate_capacity": limits.Bytes, "grown_first": grown, "provider_calls": calls, "provider_peak": actualPeak, "future_raw": fullJ, "remaining_members": end.Segments})
+	t.Logf("real_DTO_bytes=%d*%d grown_first=%d W=%d Q=1MiB A=8 J=%d future_raw_fills_J=%v real_aux_calls=%d peak=%d fixed_episode=%+v first_commit=%+v terminal=%+v", count, initialBytes, grown, limits.Bytes, handoff, fullJ, calls, actualPeak, state, snap, end)
+}
+
+// These are durable/HTTP facts, not SQL timing samples. The focused capacity
+// runner checks them alongside passed tests before reporting acceptance.
+func logCapacityFact(t *testing.T, name string, facts map[string]any) {
+	t.Helper()
+	data, err := json.Marshal(map[string]any{"name": name, "facts": facts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("capacity_fact=%s", data)
 }
 
 type handoffHTTPBarrier struct {
@@ -1136,18 +1152,30 @@ func TestRubyHandoffAcceptanceHTTPBoundedProtectionContextAndMetadata(t *testing
 }
 
 func TestRubyHandoffAcceptanceHTTPHandoffCapacity(t *testing.T) {
-	for _, tc := range []struct {
+	type capacityCase struct {
 		name                            string
 		count, batch, actualBatch, peak int
 		j                               int64
 		s, c                            int
-	}{
+	}
+	cases := []capacityCase{
 		{"default_batch10_complete10_J64", 256, 10, 10, 25, 64 << 20, 0, 0},
 		{"default_batch10_complete10_J16", 256, 10, 10, 3, 16 << 20, 0, 0},
 		{"explicit_batch1_J16", 65, 1, 1, 12, 16 << 20, 0, 0},
 		{"complete10_S321_C32", 321, 10, 10, 32, 64 << 20, 321, 32},
 		{"complete10_S256_C4", 41, 10, 10, 4, 64 << 20, 256, 4},
-	} {
+	}
+	if !pa.FullWorkload() {
+		// Smaller S still holds complete n=10 requests at an exact member
+		// boundary. J16 retains its real response-bound peak of three; C32
+		// remains configured so the test observes capacity, not a reduced C.
+		cases = []capacityCase{
+			{"complete10_S41_C32", 41, 10, 10, 4, 64 << 20, 41, 32},
+			{"complete10_J16", 41, 10, 10, 3, 16 << 20, 0, 0},
+			{"explicit_batch1_J16", 14, 1, 1, 12, 16 << 20, 0, 0},
+		}
+	}
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			limits := pipeline.DefaultCandidateLimits()
 			if tc.s > 0 {
@@ -1289,6 +1317,7 @@ func runHandoffHTTPCase(t *testing.T, mode string, concurrency, count, batch, ac
 	if peak != wantPeak || calls != wantCalls {
 		fail("real HTTP peak=%d calls=%d; want=%d/%d", peak, calls, wantPeak, wantCalls)
 	}
+	logCapacityFact(t, t.Name(), map[string]any{"driver": f.dbDriver, "members": count, "batch": actualBatch, "provider_calls": calls, "provider_peak": peak, "handoff_capacity": handoff, "candidate_segments": limits.Segments, "requested_main": concurrency})
 	for i, n := range memberCounts {
 		if n < 1 || n > actualBatch || i < wantPeak && n != actualBatch {
 			fail("actual HTTP request %d members=%d; fair n=%d", i, n, actualBatch)

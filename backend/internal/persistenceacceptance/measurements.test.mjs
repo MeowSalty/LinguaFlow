@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initializeSamples, validateMeasurements } from './measurements.mjs';
+import { initializeSamples, validateMeasurements, validateCapacityMeasurements } from './measurements.mjs';
 
 function timings(operations, phases) {
   const result = { pending_owner_peak: 10, coordinator_intent_peak: 10, normal_queue_peak: 16, reliable_queue_peak: 32, completion_peak: 10 };
@@ -124,4 +124,36 @@ test('reusing a report directory cannot carry samples into a new run', async () 
     assert.equal(await readFile(path, 'utf8'), '');
     assert.throws(() => validateMeasurements([], options), /empty report/);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('focused capacity acceptance rejects small, missing and duplicate actual facts', () => {
+  function report() {
+    const translation = fullSamples()[4];
+    translation.name = 'translation2x1x300';
+    Object.assign(translation.extra, { resources: 2, source_batches: 2, segments: 600, completed: 600, total: 600, body_updated: 600, facts: 600, candidate_records: 600, provider_calls: 6, usage_records: 6, actual_llm_batches: 6, completed_request_records: 6, request_records: 9, resource_completed: [300, 300], request_size_distribution: { 100: 6 }, model_size_distribution: { 100: 6 }, commit_correlations: { events: 600, missing: 0, request_count: 6 } });
+    const measurements = ['seal5000', 'checkpoint300', 'calibrate'].map(name => measured({ name, driver: 'sqlite3' })).concat(translation);
+    const facts = [false, true].map(fullJ => ({ name: 'ruby-growth-' + fullJ, facts: { driver: 'sqlite', members: 32, initial_bytes: 512 * 1024, candidate_capacity: 33 * 512 * 1024, grown_first: 750 * 1024, provider_calls: 32, provider_peak: 8, future_raw: fullJ, remaining_members: fullJ ? 1 : 0 } }));
+    for (const [name, members, batch, peak, handoff, segments, concurrency] of [
+      ['default_batch10_complete10_J64', 256, 10, 25, 64, 256, 32],
+      ['default_batch10_complete10_J16', 256, 10, 3, 16, 256, 32],
+      ['explicit_batch1_J16', 65, 1, 12, 16, 256, 32],
+      ['complete10_S321_C32', 321, 10, 32, 64, 321, 32],
+      ['complete10_S256_C4', 41, 10, 4, 64, 256, 4],
+    ]) facts.push({ name: 'TestRubyHandoffAcceptanceHTTPHandoffCapacity/' + name, facts: { driver: 'sqlite', members, batch, provider_calls: Math.ceil(members / batch), provider_peak: peak, handoff_capacity: handoff * 1024 * 1024, candidate_segments: segments, requested_main: concurrency } });
+    return { measurements, facts };
+  }
+  const valid = report();
+  assert.doesNotThrow(() => validateCapacityMeasurements(valid.measurements, valid.facts));
+  for (const change of [
+    value => { value.facts[0].facts.members = 4; },
+    value => { value.facts.pop(); },
+    value => { value.facts[1] = value.facts[0]; },
+    value => { value.facts[2].facts.provider_peak--; },
+    value => { value.measurements[3].extra.source_batch_size = 20; },
+    value => { value.measurements[3].extra.completed--; },
+  ]) {
+    const value = report();
+    change(value);
+    assert.throws(() => validateCapacityMeasurements(value.measurements, value.facts), /Invalid persistence measurement/);
+  }
 });

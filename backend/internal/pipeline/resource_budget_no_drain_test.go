@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,6 +63,11 @@ func TestStagedFixedRecoveryCapacityPrecedesBlockedPreparation(t *testing.T) {
 			if err := root.Claim(holder, "holder", resourcebudget.Vector{PrepareOwners: 1}); err != nil {
 				t.Fatal(err)
 			}
+			var releaseOnce sync.Once
+			releaseHolder := func() {
+				releaseOnce.Do(func() { root.Release(holder, "holder", resourcebudget.Vector{PrepareOwners: 1}) })
+			}
+			defer releaseHolder()
 			candidateLimits := DefaultCandidateLimits()
 			candidateLimits.Segments = 1
 			r := stagedTestRuntime(t, candidateLimits)
@@ -105,8 +111,14 @@ func TestStagedFixedRecoveryCapacityPrecedesBlockedPreparation(t *testing.T) {
 				case <-time.After(25 * time.Millisecond):
 				}
 				cancel()
-				if err := <-done; !errors.Is(err, context.Canceled) {
-					t.Fatalf("blocked active producer did not cancel: %v", err)
+				select {
+				case err := <-done:
+					if !errors.Is(err, context.Canceled) {
+						t.Fatalf("blocked active producer did not cancel: %v", err)
+					}
+				case <-time.After(3 * time.Second):
+					releaseHolder()
+					t.Fatal("cancelled idle coordinator did not join after releasing preparation capacity")
 				}
 			} else {
 				select {
@@ -134,7 +146,7 @@ func TestStagedFixedRecoveryCapacityPrecedesBlockedPreparation(t *testing.T) {
 			if snapshot := r.Window.Snapshot(); snapshot.Segments != 1 {
 				t.Fatalf("paid recovery inventory removed: %+v", snapshot)
 			}
-			root.Release(holder, "holder", resourcebudget.Vector{PrepareOwners: 1})
+			releaseHolder()
 		})
 	}
 }

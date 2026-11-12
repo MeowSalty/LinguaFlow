@@ -148,14 +148,18 @@ func persistenceResources(t *testing.T, batches int) []*pa.Fixture {
 	return persistenceResourceFixtures(t, 7, batches)
 }
 
-func persistenceResourceFixtures(t *testing.T, resources, batches int) []*pa.Fixture {
+func persistenceResourceFixtures(t *testing.T, resources, batches int, sizes ...int) []*pa.Fixture {
 	t.Helper()
-	first := pa.Seed(t, batches*300, true)
+	size := 300
+	if len(sizes) > 0 {
+		size = sizes[0]
+	}
+	first := pa.Seed(t, batches*size, true)
 	fixtures := []*pa.Fixture{first}
 	project := *first.Client.Resource.GetX(t.Context(), first.Scope.ResourceID).ProjectID
 	for i := 1; i < resources; i++ {
 		resource := first.Client.Resource.Create().SetProjectID(project).SetPath(fmt.Sprintf("resource%d.txt", i)).SetStoragePath(fmt.Sprintf("resource%d.txt", i)).SetFormat("txt").SaveX(t.Context())
-		fixtures = append(fixtures, pa.SeedResource(t, first.Client, first.DB, first.Probe, project, first.Scope.JobID, resource.ID, batches*300, true))
+		fixtures = append(fixtures, pa.SeedResource(t, first.Client, first.DB, first.Probe, project, first.Scope.JobID, resource.ID, batches*size, true))
 	}
 	return fixtures
 }

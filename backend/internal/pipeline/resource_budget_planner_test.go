@@ -41,7 +41,7 @@ func TestBudgetContractStreamingPlannerPreservesPublicBatch(t *testing.T) {
 	}
 }
 func TestBudgetContractPlannerStaticPrefixesPreservePublicPriority(t *testing.T) {
-	doc := newTestDoc(650)
+	doc := newTestDoc(65)
 	rangeOf := func(lo, hi int) []int {
 		indices := make([]int, hi-lo)
 		for i := range indices {
@@ -53,10 +53,10 @@ func TestBudgetContractPlannerStaticPrefixesPreservePublicPriority(t *testing.T)
 		name    string
 		indices []int
 	}{
-		{"large_continuous", rangeOf(0, 600)},
-		{"split_run_before_short_remainder", append(rangeOf(0, 20), rangeOf(30, 650)...)},
-		{"longer_remainder_after_full_prefix", append(rangeOf(0, 280), rangeOf(300, 590)...)},
-		{"equal_remainders_use_source_order", append(rangeOf(0, 280), rangeOf(300, 580)...)},
+		{"large_continuous", rangeOf(0, 40)},
+		{"split_run_before_short_remainder", append(rangeOf(0, 2), rangeOf(10, 52)...)},
+		{"longer_remainder_after_full_prefix", append(rangeOf(0, 18), rangeOf(30, 49)...)},
+		{"equal_remainders_use_source_order", append(rangeOf(0, 18), rangeOf(30, 48)...)},
 		{"sparse", []int{0, 1, 3, 8, 9, 10, 11, 12, 20, 22, 23}},
 	}
 	for _, tc := range cases {
@@ -65,7 +65,7 @@ func TestBudgetContractPlannerStaticPrefixesPreservePublicPriority(t *testing.T)
 				for _, pool := range []int{0, 2} {
 					for _, words := range []int{0, 40} {
 						t.Run(fmt.Sprintf("%s/limit%d/context%d/pool%d/words%d", tc.name, limit, window, pool, words), func(t *testing.T) {
-							h := &TranslateHandler{BatchSize: 300, MaxWordsPerBatch: words, FallbackShrink: 0.5, Context: ContextConfig{Enabled: window > 0, Before: window, After: window}}
+							h := &TranslateHandler{BatchSize: 20, MaxWordsPerBatch: words, FallbackShrink: 0.5, Context: ContextConfig{Enabled: window > 0, Before: window, After: window}}
 							remaining := slices.Clone(tc.indices)
 							seen := make(map[int]bool)
 							for len(remaining) > 0 {
@@ -93,6 +93,30 @@ func TestBudgetContractPlannerStaticPrefixesPreservePublicPriority(t *testing.T)
 						})
 					}
 				}
+			}
+		}
+	}
+}
+
+// Keep the real 300-member public boundary without rebuilding every remaining
+// public batch hundreds of times for a one-member window.
+func TestBudgetContractPlannerDefaultWindowBoundary(t *testing.T) {
+	doc := newTestDoc(650)
+	indices := make([]int, 600)
+	for i := range indices {
+		indices[i] = i
+	}
+	for _, window := range []int{0, 2} {
+		h := &TranslateHandler{BatchSize: 300, Context: ContextConfig{Enabled: window > 0, Before: window, After: window}}
+		want, err := h.BuildBatches(t.Context(), doc, indices, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, limit := range []int{1, 2, 8, DefaultCandidateLimits().Segments} {
+			b, _ := backend.NewBuildBounds(1<<20, 1<<20)
+			got, err := PlanNextMainBatchBounded(b, h, doc, plannerIndexVisitor(indices), 0, limit)
+			if err != nil || !slices.Equal(got, want[0][:min(len(want[0]), limit)]) {
+				t.Fatalf("context=%d limit=%d got=%v err=%v", window, limit, got, err)
 			}
 		}
 	}
@@ -152,11 +176,14 @@ func TestBudgetContractPlannerRejectsInvalidBoundsBeforeAllocation(t *testing.T)
 func TestStagedWindowLargeBatchCompletesAndResumes(t *testing.T) {
 	for _, window := range []int{0, 2} {
 		t.Run(fmt.Sprintf("context%d", window), func(t *testing.T) {
-			r := stagedTestRuntime(t, DefaultCandidateLimits())
+			limits := DefaultCandidateLimits()
+			limits.Segments = 16
+			r := stagedTestRuntime(t, limits)
 			h := &windowBatchProbe{batchSize: 300}
 			handler := h.handler(t, r)
 			handler.Context = ContextConfig{Enabled: window > 0, Before: window, After: window}
-			doc := newTestDoc(300)
+			// The long run after the three ineligible entries still exceeds S16.
+			doc := newTestDoc(24)
 			doc.Segments[3].Skip = true
 			doc.Segments[4].Translate = false
 			doc.Segments[5].Source = " "
@@ -165,12 +192,14 @@ func TestStagedWindowLargeBatchCompletesAndResumes(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			out, err := RunStagedRound(ctx, round, doc, store, r, quietLogger(), nil)
-			if err != nil || len(out.Resolved) != 297 || len(out.Unresolved) != 0 {
+			if err != nil || len(out.Resolved) != 21 || len(out.Unresolved) != 0 {
 				t.Fatalf("out=%+v err=%v", out, err)
 			}
 			batches, _ := h.snapshot()
 			seen := make(map[int]bool)
+			fullPrefix := false
 			for _, batch := range batches {
+				fullPrefix = fullPrefix || len(batch) == limits.Segments
 				if len(batch) > r.Window.limits.Segments || !slices.IsSorted(batch) {
 					t.Fatalf("invalid batch: %v", batch)
 				}
@@ -181,7 +210,7 @@ func TestStagedWindowLargeBatchCompletesAndResumes(t *testing.T) {
 					seen[idx] = true
 				}
 			}
-			if len(batches) < 2 || len(seen) != 297 {
+			if !fullPrefix || len(batches) < 2 || len(seen) != 21 {
 				t.Fatalf("batches=%d members=%d", len(batches), len(seen))
 			}
 			if _, err := RunStagedRound(ctx, round, doc, store, r, quietLogger(), nil); err != nil {
@@ -199,7 +228,7 @@ func TestStagedWindowLargeBatchCompletesAndResumes(t *testing.T) {
 }
 
 func TestStagedWindowLargeBatchPreservesFuturePin(t *testing.T) {
-	for _, tc := range []struct{ segments, pins, count int }{{256, 1, 300}, {17, 4, 30}, {17, 16, 4}, {17, 17, 30}, {17, 18, 30}} {
+	for _, tc := range []struct{ segments, pins, count int }{{16, 1, 20}, {17, 4, 20}, {17, 16, 4}, {17, 17, 20}, {17, 18, 20}} {
 		t.Run(fmt.Sprintf("S%d/pins%d", tc.segments, tc.pins), func(t *testing.T) {
 			limits := DefaultCandidateLimits()
 			limits.Segments = tc.segments

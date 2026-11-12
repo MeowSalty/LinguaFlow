@@ -26,6 +26,7 @@ tasks:
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - node --test ./internal/persistenceacceptance/measurements.test.mjs
+      - node --check ./internal/persistenceacceptance/capacity.mjs
 
   test:persistence:
     desc: 隔离 SQLite 持久化协议、批处理和故障验收
@@ -40,6 +41,13 @@ tasks:
     cmds:
       - task: test:persistence:runner
       - node ./internal/persistenceacceptance/run.mjs --postgres {{.CLI_ARGS}}
+
+  test:persistence:capacity:
+    desc: 显式 SQLite 满规模封存、共享翻译、响应窗口与恢复增长验收（校验实际样本）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - task: test:persistence:runner
+      - node ./internal/persistenceacceptance/capacity.mjs
 
   bench:persistence:
     desc: 相同 SQLite/隔离 PostgreSQL 夹具的 SQL 数、延迟和全流水线压力对照
@@ -351,7 +359,7 @@ tasks:
     vars:
       IMAGE: '{{default "linguaflow:development" .IMAGE}}'
     cmds:
-      - docker build -f ../Dockerfile -t {{.IMAGE}} ..
+      - docker build --pull -f ../Dockerfile -t {{.IMAGE}} ..
 
   test:
     desc: 后端测试（可通过 CLI_ARGS 指定包或测试选项）

@@ -32,6 +32,12 @@ type Fixture struct {
 	IDs    []int
 }
 
+// FullWorkload selects full size only in an explicitly invoked acceptance
+// runner. Ordinary CI checks the same protocols on smaller fixtures.
+func FullWorkload() bool {
+	return os.Getenv("LINGUAFLOW_PERSISTENCE_DRIVER") != ""
+}
+
 func Driver() string {
 	if os.Getenv("LINGUAFLOW_PERSISTENCE_DRIVER") == dialect.Postgres {
 		return dialect.Postgres

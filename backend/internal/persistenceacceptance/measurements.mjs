@@ -115,3 +115,31 @@ export function validateMeasurements(measurements, { driver, protocol, bench }) 
     translation(one(measurements, 'translation2x1x300', driver), 2, 1);
   }
 }
+
+export function validateCapacityMeasurements(measurements, facts) {
+  requireCondition(measurements.length === 4 && measurements.every(sample => sample.driver === 'sqlite3'), 'capacity sample matrix');
+  for (const sample of measurements) measuredSample(sample);
+  for (const name of ['seal5000', 'checkpoint300', 'calibrate']) one(measurements, name, 'sqlite3');
+  translation(one(measurements, 'translation2x1x300', 'sqlite3'), 2, 1);
+  requireCondition(facts.length === 7, 'capacity fact matrix');
+  function fact(name) {
+    const matches = facts.filter(value => value.name === name);
+    requireCondition(matches.length === 1 && matches[0].facts?.driver === 'sqlite', 'capacity fact ' + name);
+    finiteNumbers(matches[0]);
+    return matches[0].facts;
+  }
+  for (const fullJ of [false, true]) {
+    const extra = fact('ruby-growth-' + fullJ);
+    exact(extra, { members: 32, initial_bytes: 512 * 1024, candidate_capacity: 33 * 512 * 1024, provider_calls: 32, future_raw: fullJ, remaining_members: fullJ ? 1 : 0 });
+    requireCondition(extra.grown_first >= 700 * 1024 && extra.grown_first <= 800 * 1024 && extra.provider_peak > 0 && extra.provider_peak <= 8, 'real recovery growth/HTTP facts');
+  }
+  for (const [name, members, batch, peak, handoff, segments, concurrency] of [
+    ['default_batch10_complete10_J64', 256, 10, 25, 64, 256, 32],
+    ['default_batch10_complete10_J16', 256, 10, 3, 16, 256, 32],
+    ['explicit_batch1_J16', 65, 1, 12, 16, 256, 32],
+    ['complete10_S321_C32', 321, 10, 32, 64, 321, 32],
+    ['complete10_S256_C4', 41, 10, 4, 64, 256, 4],
+  ]) {
+    exact(fact('TestRubyHandoffAcceptanceHTTPHandoffCapacity/' + name), { members, batch, provider_calls: Math.ceil(members / batch), provider_peak: peak, handoff_capacity: handoff * 1024 * 1024, candidate_segments: segments, requested_main: concurrency });
+  }
+}

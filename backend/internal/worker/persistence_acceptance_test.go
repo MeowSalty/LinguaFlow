@@ -76,19 +76,25 @@ func TestPersistenceHotPathCosts(t *testing.T) {
 }
 
 func TestPersistenceSealAndCheckpointCosts(t *testing.T) {
-	f := pa.Seed(t, 5000, false)
+	// 502 sealed members and 501 confirmations cross both 500-row SQL chunks
+	// while retaining an unfinished member. Full acceptance keeps seal5000.
+	count, confirmed := 502, 501
+	if pa.FullWorkload() {
+		count, confirmed = 5000, 300
+	}
+	f := pa.Seed(t, count, false)
 	f.Probe.Reset(0)
 	if _, err := f.Store.SealRound(t.Context(), f.Scope, f.IDs); err != nil {
 		t.Fatal(err)
 	}
-	persistenceReport(t, f.Probe, "seal5000", nil)
+	persistenceReport(t, f.Probe, fmt.Sprintf("seal%d", count), nil)
 	f.Probe.Reset(0)
 	err := workstate.Transaction(t.Context(), f.Client, func(tx *ent.Client) error {
 		if err := workstate.LockJob(t.Context(), tx, f.Scope.JobID); err != nil {
 			return err
 		}
-		facts := make([]workstate.Confirmation, 300)
-		for i, id := range f.IDs[:300] {
+		facts := make([]workstate.Confirmation, confirmed)
+		for i, id := range f.IDs[:confirmed] {
 			facts[i] = workstate.Confirmation{SegmentID: id}
 		}
 		_, err := workstate.Confirm(t.Context(), tx, f.Scope.JobID, f.Scope.RoundID, facts)
@@ -97,7 +103,7 @@ func TestPersistenceSealAndCheckpointCosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	persistenceReport(t, f.Probe, "checkpoint300", nil)
+	persistenceReport(t, f.Probe, fmt.Sprintf("checkpoint%d", confirmed), nil)
 	f.Probe.Reset(0)
 	if err := workstate.Transaction(t.Context(), f.Client, func(tx *ent.Client) error {
 		if err := workstate.LockJob(t.Context(), tx, f.Scope.JobID); err != nil {
@@ -109,7 +115,7 @@ func TestPersistenceSealAndCheckpointCosts(t *testing.T) {
 	}
 	persistenceReport(t, f.Probe, "calibrate", nil)
 	job := f.Client.Job.GetX(t.Context(), f.Scope.JobID)
-	if job.ProgressCompleted != 300 || job.ProgressTotal != 5000 {
+	if job.ProgressCompleted != int64(confirmed) || job.ProgressTotal != int64(count) {
 		t.Fatalf("progress=%d/%d", job.ProgressCompleted, job.ProgressTotal)
 	}
 	// Published SegmentID-only replay remains legal and does not recount.
@@ -122,7 +128,7 @@ func TestPersistenceSealAndCheckpointCosts(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if f.Client.Job.GetX(t.Context(), f.Scope.JobID).ProgressCompleted != 300 {
+	if f.Client.Job.GetX(t.Context(), f.Scope.JobID).ProgressCompleted != int64(confirmed) {
 		t.Fatal("legacy replay recounted progress")
 	}
 }

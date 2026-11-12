@@ -159,16 +159,26 @@ func TestPersistenceTranslationLoadMatrix(t *testing.T) {
 	}
 }
 
-// Keep the production batch size and shared candidate window while limiting
-// normal CI to two competing resources and one source batch each.
+// Ordinary CI crosses a shared candidate window with two resources. Explicit
+// acceptance keeps the production 300/256 size and its report sample.
 func TestPersistenceTranslationContract(t *testing.T) {
-	persistenceTranslationLoad(t, 2, 1, 0, "translation2x1x300")
+	if pa.FullWorkload() {
+		persistenceTranslationLoad(t, 2, 1, 0, "translation2x1x300")
+		return
+	}
+	persistenceTranslationLoad(t, 2, 1, 0, "translation2x1x20", 20)
 }
 
-func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sampleName string) {
+func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sampleName string, sizes ...int) {
 	t.Helper()
-	fixtures := persistenceResourceFixtures(t, resources, batches)
-	wantResourceSegments := batches * 300
+	size := 300
+	limits := pipeline.DefaultCandidateLimits()
+	if len(sizes) > 0 {
+		size = sizes[0]
+		limits.Segments = 16
+	}
+	fixtures := persistenceResourceFixtures(t, resources, batches, size)
+	wantResourceSegments := batches * size
 	wantSegments := resources * wantResourceSegments
 	// This bounds the whole workload harness, not an individual save.
 	// Product SQL execution and logical handoff budgets remain 30/120s.
@@ -178,7 +188,7 @@ func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sample
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := pipeline.NewExecutionRuntime(admission, pipeline.DefaultCandidateLimits(), nil)
+	runtime := pipeline.NewExecutionRuntime(admission, limits, nil)
 	runtime.JobID = fixtures[0].Scope.JobID
 	runtime.Lifetime = ctx
 	defer runtime.Close()
@@ -201,7 +211,7 @@ func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sample
 		for i, id := range fixture.IDs {
 			indices[i] = id
 		}
-		snapshot := &service.JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", Rounds: []execution.JobRoundSnapshot{{Mode: "translate", Backend: execution.BackendSnapshot{ID: 1, Name: "isolated-fake"}, Translate: &execution.JobTranslateRoundSnapshot{Prompt: execution.PromptSnapshot{Content: "Translate; return JSON translations."}, Concurrency: 10, BatchSize: 300, Retry: execution.RetryConfig{MaxAttempts: 1}}}}}
+		snapshot := &service.JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", Rounds: []execution.JobRoundSnapshot{{Mode: "translate", Backend: execution.BackendSnapshot{ID: 1, Name: "isolated-fake"}, Translate: &execution.JobTranslateRoundSnapshot{Prompt: execution.PromptSnapshot{Content: "Translate; return JSON translations."}, Concurrency: 10, BatchSize: size, Retry: execution.RetryConfig{MaxAttempts: 1}}}}}
 		snapshot = completeWorkerSnapshot(t, snapshot)
 		fixture.SetExecutionSnapshot(t, snapshot)
 		store := newRoundStore(fixture.Client, fixture.Scope, indices, snapshot, 0, nil, false, pa.Driver(), nil, nil)
@@ -216,7 +226,7 @@ func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sample
 		if err != nil {
 			t.Fatal(err)
 		}
-		handler := &pipeline.TranslateHandler{Backend: pipeline.BindRequestBackend(model, 1, 0, runtime), Renderer: renderer, BatchSize: 300, Logger: logger, Reporter: reporter}
+		handler := &pipeline.TranslateHandler{Backend: pipeline.BindRequestBackend(model, 1, 0, runtime), Renderer: renderer, BatchSize: size, Logger: logger, Reporter: reporter}
 		doc := &pipeline.Document{SourceLang: "en", TargetLang: "zh"}
 		rows := fixture.Client.Segment.Query().Where(segment.ResourceIDEQ(fixture.Scope.ResourceID)).Order(segment.BySegmentIndex()).AllX(ctx)
 		for _, row := range rows {
@@ -319,6 +329,9 @@ func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sample
 			continue
 		}
 		requests++
+		if len(request.SegmentIds) < 1 || len(request.SegmentIds) > limits.Segments {
+			invalidRequests++
+		}
 		if request.State != "completed" || !request.UsageKnown || request.InputTokens != 3 || request.OutputTokens != 5 || request.UsageRecordID == nil {
 			invalidRequests++
 		}
@@ -353,7 +366,7 @@ func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sample
 		}
 	}
 	correlations := observer.summary()
-	extra := map[string]any{"delay_ms": ms, "resources": resources, "source_batches": resources * batches, "source_batch_size": 300, "actual_llm_batches": requests, "request_size_distribution": requestSizes, "model_size_distribution": model.sizeDistribution(), "default_candidate_segments": pipeline.DefaultCandidateLimits().Segments, "split_reason": "source batches exceed or compete for the shared default candidate window", "segments": wantSegments, "provider_calls": model.calls.Load(), "provider_peak": model.peak.Load(), "resource_yields": yields.Load(), "completed": job.ProgressCompleted, "total": job.ProgressTotal, "body_updated": bodyUpdated, "facts": facts, "candidate_records": candidates, "request_records": len(requestRows), "completed_request_records": requests, "aborted_request_records": abortedRequests, "invalid_aborted_requests": invalidAbortedRequests, "usage_records": usage, "invalid_requests": invalidRequests, "duplicate_or_missing_members": duplicateOrMissingMembers, "resource_completed": resourceCompleted, "failures": failures, "timings": timings.summary(), "commit_correlations": correlations}
+	extra := map[string]any{"delay_ms": ms, "resources": resources, "source_batches": resources * batches, "source_batch_size": size, "actual_llm_batches": requests, "request_size_distribution": requestSizes, "model_size_distribution": model.sizeDistribution(), "default_candidate_segments": limits.Segments, "split_reason": "source batches exceed or compete for the shared candidate window", "segments": wantSegments, "provider_calls": model.calls.Load(), "provider_peak": model.peak.Load(), "resource_yields": yields.Load(), "completed": job.ProgressCompleted, "total": job.ProgressTotal, "body_updated": bodyUpdated, "facts": facts, "candidate_records": candidates, "request_records": len(requestRows), "completed_request_records": requests, "aborted_request_records": abortedRequests, "invalid_aborted_requests": invalidAbortedRequests, "usage_records": usage, "invalid_requests": invalidRequests, "duplicate_or_missing_members": duplicateOrMissingMembers, "resource_completed": resourceCompleted, "failures": failures, "timings": timings.summary(), "commit_correlations": correlations}
 	persistenceReport(t, fixtures[0].Probe, sampleName, extra)
 	if int64(requests) != model.calls.Load() || usage != requests || job.ProgressCompleted != int64(wantSegments) || job.ProgressTotal != int64(wantSegments) || bodyUpdated != wantSegments || facts != wantSegments || candidates != wantSegments || invalidRequests != 0 || invalidAbortedRequests != 0 || duplicateOrMissingMembers != 0 || len(memberCounts) != wantSegments || !reflect.DeepEqual(requestSizes, model.sizeDistribution()) {
 		t.Fatalf("translation requests/body/facts do not satisfy the source workload: %v", extra)
