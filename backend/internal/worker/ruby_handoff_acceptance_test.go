@@ -36,6 +36,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	pa "github.com/MeowSalty/LinguaFlow/backend/internal/persistenceacceptance"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -99,9 +100,24 @@ func TestRubyHandoffAcceptanceHTTPOriginalMemberMetadataExceedsFixedO(t *testing
 		}
 		return rubyPipelineResponse(request), nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	// Confirming 128 durable members needs bounded headroom when race and
+	// coverage instrumentation share CPU with other package tests.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	if err := f.runner.processJob(ctx, f.jobID); err != nil {
+		main, align, sources, alignment := f.calls()
+		t.Logf("metadata failure: main_HTTP=%d aux_HTTP=%d source_members=%d aux_batches=%d observed_metadata=%d root=%+v", main, align, len(sources), len(alignment), observed.Load(), root.Snapshot(0))
+		factCtx, factCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer factCancel()
+		facts, factErr := f.client.JobRoundSegment.Query().Where(jobroundsegment.HasJobRoundWith(jobround.JobIDEQ(f.jobID))).Count(factCtx)
+		t.Logf("metadata failure: confirmed=%d read_error=%v", facts, factErr)
+		requests, readErr := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).Select(workrequest.FieldStage, workrequest.FieldState, workrequest.FieldPromotionState, workrequest.FieldPromotionCursor, workrequest.FieldPromotionCount, workrequest.FieldLastError).Order(ent.Desc(workrequest.FieldID)).Limit(16).All(factCtx)
+		if readErr != nil {
+			t.Logf("metadata request diagnostics: %v", readErr)
+		}
+		for _, request := range requests {
+			t.Logf("metadata request: stage=%s state=%s promotion=%s cursor=%d/%d error=%v", request.Stage, request.State, request.PromotionState, request.PromotionCursor, request.PromotionCount, request.LastError)
+		}
 		t.Fatal(err)
 	}
 	row := f.client.Job.GetX(ctx, f.jobID)
@@ -453,7 +469,10 @@ func TestRubyHandoffAcceptanceHTTPRecoveryGrowthThirtyTwo(t *testing.T) {
 	}
 }
 func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
-	const count = 32
+	count := 4
+	if pa.FullWorkload() {
+		count = 32
+	}
 	const initialBytes = 512 << 10
 	counts := []int{count}
 	if fullJ {
@@ -628,7 +647,7 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 		return map[string]any{"ruby_output": entries}, nil
 	}
 	limits := pipeline.DefaultCandidateLimits()
-	limits.Bytes = (16 << 20) + (1 << 19) // one existing half-MiB draft can grow to Q.
+	limits.Bytes = int64(count+1) * initialBytes // exactly one half-MiB draft can grow to Q.
 	runtime, err := NewExecutionRuntime(f.snapshot, f.pool, nil, limits)
 	if err != nil {
 		t.Fatal(err)
@@ -711,7 +730,7 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 		fail("load growth episode: %v", err)
 	}
 	snap := runtime.Admission.PipelineSnapshot()
-	expectedN := int64(32)
+	expectedN := int64(count)
 	if fullJ {
 		expectedN++
 	}
@@ -722,7 +741,7 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 		fail("real candidate did not grow about0.5->0.75MiB: %d", grown)
 	}
 	if snap.CandidateBytes+snap.GrowthBytes > max(limits.Bytes, limits.ItemBytes) || snap.ProgressID != state.ProgressID {
-		fail("growth admitted all32 expansions/second borrower: %+v %+v", snap, state)
+		fail("growth admitted a second borrower: %+v %+v", snap, state)
 	}
 	mu.Lock()
 	callsAtCommit := httpCalls
@@ -743,10 +762,10 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 	mu.Lock()
 	calls, actualPeak := httpCalls, peak
 	mu.Unlock()
-	if calls != 32 || actualPeak > 8 {
+	if calls != count || actualPeak > 8 {
 		fail("growth actual aux calls%d peak%d", calls, actualPeak)
 	}
-	if n := f.client.JobRoundSegment.Query().CountX(context.Background()); n != 32 {
+	if n := f.client.JobRoundSegment.Query().CountX(context.Background()); n != count {
 		fail("growth checkpoint%d", n)
 	}
 	end := runtime.Admission.PipelineSnapshot()
@@ -757,12 +776,24 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 	if end.CandidateBytes != 0 || end.GrowthBytes != 0 || end.Segments != expectedRemaining || end.AuxOwners != 0 {
 		fail("growth terminal credits: %+v", end)
 	}
-	usageCalls := 32
+	usageCalls := count
 	if fullJ {
 		usageCalls++
 	}
 	f.assertUsage(t, usageCalls)
-	t.Logf("real_DTO_bytes=32*%d grown_first=%d W=16MiB Q=1MiB A=8 J=%d future_raw_fills_J=%v real_aux_calls=%d peak=%d fixed_episode=%+v first_commit=%+v terminal=%+v", initialBytes, grown, handoff, fullJ, calls, actualPeak, state, snap, end)
+	logCapacityFact(t, fmt.Sprintf("ruby-growth-%t", fullJ), map[string]any{"driver": f.dbDriver, "members": count, "initial_bytes": initialBytes, "candidate_capacity": limits.Bytes, "grown_first": grown, "provider_calls": calls, "provider_peak": actualPeak, "future_raw": fullJ, "remaining_members": end.Segments})
+	t.Logf("real_DTO_bytes=%d*%d grown_first=%d W=%d Q=1MiB A=8 J=%d future_raw_fills_J=%v real_aux_calls=%d peak=%d fixed_episode=%+v first_commit=%+v terminal=%+v", count, initialBytes, grown, limits.Bytes, handoff, fullJ, calls, actualPeak, state, snap, end)
+}
+
+// These are durable/HTTP facts, not SQL timing samples. The focused capacity
+// runner checks them alongside passed tests before reporting acceptance.
+func logCapacityFact(t *testing.T, name string, facts map[string]any) {
+	t.Helper()
+	data, err := json.Marshal(map[string]any{"name": name, "facts": facts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("capacity_fact=%s", data)
 }
 
 type handoffHTTPBarrier struct {
@@ -1121,18 +1152,30 @@ func TestRubyHandoffAcceptanceHTTPBoundedProtectionContextAndMetadata(t *testing
 }
 
 func TestRubyHandoffAcceptanceHTTPHandoffCapacity(t *testing.T) {
-	for _, tc := range []struct {
+	type capacityCase struct {
 		name                            string
 		count, batch, actualBatch, peak int
 		j                               int64
 		s, c                            int
-	}{
+	}
+	cases := []capacityCase{
 		{"default_batch10_complete10_J64", 256, 10, 10, 25, 64 << 20, 0, 0},
 		{"default_batch10_complete10_J16", 256, 10, 10, 3, 16 << 20, 0, 0},
 		{"explicit_batch1_J16", 65, 1, 1, 12, 16 << 20, 0, 0},
 		{"complete10_S321_C32", 321, 10, 10, 32, 64 << 20, 321, 32},
 		{"complete10_S256_C4", 41, 10, 10, 4, 64 << 20, 256, 4},
-	} {
+	}
+	if !pa.FullWorkload() {
+		// Smaller S still holds complete n=10 requests at an exact member
+		// boundary. J16 retains its real response-bound peak of three; C32
+		// remains configured so the test observes capacity, not a reduced C.
+		cases = []capacityCase{
+			{"complete10_S41_C32", 41, 10, 10, 4, 64 << 20, 41, 32},
+			{"complete10_J16", 41, 10, 10, 3, 16 << 20, 0, 0},
+			{"explicit_batch1_J16", 14, 1, 1, 12, 16 << 20, 0, 0},
+		}
+	}
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			limits := pipeline.DefaultCandidateLimits()
 			if tc.s > 0 {
@@ -1274,6 +1317,7 @@ func runHandoffHTTPCase(t *testing.T, mode string, concurrency, count, batch, ac
 	if peak != wantPeak || calls != wantCalls {
 		fail("real HTTP peak=%d calls=%d; want=%d/%d", peak, calls, wantPeak, wantCalls)
 	}
+	logCapacityFact(t, t.Name(), map[string]any{"driver": f.dbDriver, "members": count, "batch": actualBatch, "provider_calls": calls, "provider_peak": peak, "handoff_capacity": handoff, "candidate_segments": limits.Segments, "requested_main": concurrency})
 	for i, n := range memberCounts {
 		if n < 1 || n > actualBatch || i < wantPeak && n != actualBatch {
 			fail("actual HTTP request %d members=%d; fair n=%d", i, n, actualBatch)
@@ -1751,7 +1795,7 @@ func logHandoffAcceptanceFailure(t *testing.T, f *rubyPipelineFixture, runtime *
 	f.mu.Lock()
 	httpCalls := len(f.requests)
 	f.mu.Unlock()
-	t.Logf("failure ledger=%+v work=%v candidates=%v requests=%v fixture_HTTP_calls=%d", runtime.Admission.PipelineSnapshot(), states, candidates, requests, httpCalls)
+	t.Logf("failure ledger=%+v work=%v candidates=%v requests=%v fixture_request_records=%d", runtime.Admission.PipelineSnapshot(), states, candidates, requests, httpCalls)
 }
 
 type handoffCrashBoundaryStore struct {
@@ -2586,7 +2630,9 @@ func TestRubyHandoffAcceptanceHTTPSimultaneousRawDurableBeforeConsumers(t *testi
 					return body
 				}
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			// A 32-response wave near 1 MiB exercises durable handoff rather
+			// than latency; allow bounded CPU headroom for race and coverage.
+			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
 			limits := pipeline.DefaultCandidateLimits()
 			// S reserves one progress member; this wave fills ordinary S-1.
@@ -2637,6 +2683,11 @@ func TestRubyHandoffAcceptanceHTTPSimultaneousRawDurableBeforeConsumers(t *testi
 			}
 			defer cleanup()
 			fail := func(format string, args ...any) {
+				httpBarrier.mu.Lock()
+				calls, active, peak := httpBarrier.calls, httpBarrier.active, httpBarrier.peak
+				members := append([]int(nil), httpBarrier.members...)
+				httpBarrier.mu.Unlock()
+				t.Logf("pre-cleanup real_HTTP calls=%d active=%d peak=%d request_members=%v ledger=%+v", calls, active, peak, members, runtime.Admission.PipelineSnapshot())
 				if ctx.Err() != nil {
 					stack := make([]byte, 512<<10)
 					t.Logf("pre-cleanup goroutine stack:\n%s", stack[:goRuntime.Stack(stack, true)])
@@ -2668,7 +2719,7 @@ func TestRubyHandoffAcceptanceHTTPSimultaneousRawDurableBeforeConsumers(t *testi
 			}
 			httpBarrier.open()
 			seen := map[string]bool{}
-			diagnostic := time.NewTimer(29 * time.Second)
+			diagnostic := time.NewTimer(119 * time.Second)
 			defer diagnostic.Stop()
 			for len(seen) < count {
 				select {
@@ -2862,7 +2913,13 @@ func TestRubyHandoffAcceptanceRunnerFuturePinsLoweredWindow(t *testing.T) {
 	}
 }
 
-func TestRubyHandoffAcceptanceRunnerFuture16NeedsFullS32(t *testing.T) {
+func TestRubyHandoffAcceptanceRunnerFixedFuture16PreservesPaidBatch(t *testing.T) {
+	for _, limit := range []int{17, 32} {
+		t.Run(fmt.Sprintf("S%d", limit), func(t *testing.T) { runHandoffRunnerFixedFuture16(t, limit) })
+	}
+}
+
+func runHandoffRunnerFixedFuture16(t *testing.T, limit int) {
 	ctx := context.Background()
 	f, barrier := newHandoffHTTPFixture(t, "translate", 4, 16, 16)
 	barrier.open()
@@ -2918,31 +2975,12 @@ func TestRubyHandoffAcceptanceRunnerFuture16NeedsFullS32(t *testing.T) {
 		t.Fatal("fixture did not own full reliable future16")
 	}
 	freezeDigest := raw.SnapshotDigest
-	rawPayload := append([]byte(nil), raw.ResponsePayload...)
-	f.runner.pipeCfg.Candidates = pipeline.CandidateLimits{Segments: 17, Bytes: 16 << 20, ItemBytes: 1 << 20}
+	f.runner.pipeCfg.Candidates = pipeline.CandidateLimits{Segments: limit, Bytes: 16 << 20, ItemBytes: 1 << 20}
 	f.runner.pipeCfg.MaxInflightResources = 1
 	run := func() error {
 		runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
 		return f.runner.processJob(runCtx, f.jobID)
-	}
-	firstErr := run()
-	barrier.mu.Lock()
-	before := barrier.calls
-	barrier.mu.Unlock()
-	if before != 1 || f.client.Job.GetX(ctx, f.jobID).Status != service.JobStatusFailed {
-		t.Fatalf("S17 future16+new16 must fail HTTP0 after seed1, calls=%d status=%s err=%v", before, f.client.Job.GetX(ctx, f.jobID).Status, firstErr)
-	}
-	preserved := f.client.WorkRequest.GetX(ctx, raw.ID)
-	if preserved.PromotionCursor != 0 || preserved.SnapshotDigest != freezeDigest || !bytes.Equal(preserved.ResponsePayload, rawPayload) || f.client.JobRoundSegment.Query().CountX(ctx) != 0 {
-		t.Fatal("capacity failure changed reliable raw or checkpoints")
-	}
-	f.runner.pipeCfg.Candidates.Segments = 32
-	if f.client.Job.GetX(ctx, f.jobID).Status != service.JobStatusFailed {
-		t.Fatal("policy update resumed failed Job")
-	}
-	if _, err = f.jobs.RetryJob(ctx, f.ownerID, f.jobID); err != nil {
-		t.Fatal(err)
 	}
 	if err = run(); err != nil {
 		t.Fatal(err)
@@ -2951,17 +2989,37 @@ func TestRubyHandoffAcceptanceRunnerFuture16NeedsFullS32(t *testing.T) {
 	calls := barrier.calls
 	members := append([]int(nil), barrier.members...)
 	barrier.mu.Unlock()
-	if calls != 2 || len(members) != 2 || members[0] != 16 || members[1] != 16 {
-		t.Fatalf("S32 split or replayed raw: HTTP=%d members=%v", calls, members)
+	wantCalls, wantNewBatch := 2, 16
+	if limit == 17 {
+		wantCalls, wantNewBatch = 17, 1
+	}
+	if calls != wantCalls || len(members) != wantCalls || members[0] != 16 {
+		t.Fatalf("S%d replayed or changed paid raw: HTTP=%d members=%v", limit, calls, members)
+	}
+	for _, n := range members[1:] {
+		if n != wantNewBatch {
+			t.Fatalf("S%d new prefix must have %d members: %v", limit, wantNewBatch, members)
+		}
+	}
+	seen := make(map[int]int)
+	for _, request := range f.client.WorkRequest.Query().Where(workrequest.JobRoundIDEQ(f.roundIDs[0]), workrequest.StateEQ("completed")).AllX(ctx) {
+		for _, id := range request.SegmentIds {
+			seen[id]++
+		}
+	}
+	for _, row := range f.client.Segment.Query().Where(segment.ResourceIDEQ(f.resourceIDs[0])).AllX(ctx) {
+		if seen[row.ID] != 1 {
+			t.Fatalf("new revision member%d dispatched %d times", row.ID, seen[row.ID])
+		}
 	}
 	if n := f.client.JobRoundSegment.Query().CountX(ctx); n != 32 || f.client.Job.GetX(ctx, f.jobID).Status != service.JobStatusCompleted {
-		t.Fatalf("S32 incomplete checkpoint=%d status=%s", n, f.client.Job.GetX(ctx, f.jobID).Status)
+		t.Fatalf("S%d incomplete checkpoint=%d status=%s", limit, n, f.client.Job.GetX(ctx, f.jobID).Status)
 	}
-	if last := f.client.WorkRequest.GetX(ctx, raw.ID); last.PromotionCursor != 16 || len(last.ResponsePayload) != 0 {
-		t.Fatal("future raw was not consumed exactly once")
+	if last := f.client.WorkRequest.GetX(ctx, raw.ID); last.PromotionCount != 16 || last.PromotionCursor != 16 || last.Identity != raw.Identity || last.SnapshotDigest != freezeDigest || len(last.ResponsePayload) != 0 {
+		t.Fatal("future raw identity changed or was not consumed exactly once")
 	}
-	f.assertUsage(t, 2)
-	t.Log("max_resources=1: S17 future16+new16 has no runnable consumer; S32 Retry full32 drains early then future, two original n16 HTTP total")
+	f.assertUsage(t, wantCalls)
+	t.Logf("S%d fixed future16: new batch%d, new members unique, original paid n16 unchanged, HTTP/usage%d, checkpoints32", limit, wantNewBatch, calls)
 }
 
 func TestRubyHandoffAcceptanceRunnerOneResourceSlotDrainsOtherRaw16(t *testing.T) {
@@ -3024,8 +3082,19 @@ func TestRubyHandoffAcceptanceRunnerOneResourceSlotDrainsOtherRaw16(t *testing.T
 	f.assertUsage(t, 2)
 	t.Log("max_resources1 first resource yields at S17/fixed raw16; second current-scope raw drains, then full original16 dispatches once")
 }
-func runHandoffRunnerFuturePins(t *testing.T, business bool) {
+
+type handoffRunnerFuturePinsOptions struct {
+	segments     int
+	emptyEarlier bool
+	canProgress  bool
+}
+
+func runHandoffRunnerFuturePins(t *testing.T, business bool, options ...handoffRunnerFuturePinsOptions) {
 	ctx := context.Background()
+	option, runTimeout := handoffRunnerFuturePinsOptions{segments: 1}, 30*time.Second
+	if len(options) > 0 {
+		option, runTimeout = options[0], 5*time.Second
+	}
 	barrier := &handoffHTTPBarrier{entered: make(chan struct{}, 32), release: make(chan struct{})}
 	barrier.open()
 	server := httptest.NewServer(http.HandlerFunc(barrier.serve))
@@ -3057,7 +3126,11 @@ func runHandoffRunnerFuturePins(t *testing.T, business bool) {
 	}
 	for _, row := range f.client.Segment.Query().AllX(ctx) {
 		source := fmt.Sprintf("future-source-%d", row.ID)
-		f.client.Segment.UpdateOneID(row.ID).SetSourceText(source).SetTargetText("accepted-" + source).SetStatus(segment.StatusTranslated).SetQualityIssues([]qa.QualityIssue{{Code: "calque", Severity: qa.SeverityWarning, Message: "noop revision"}}).ExecX(ctx)
+		var issues []qa.QualityIssue
+		if !option.emptyEarlier {
+			issues = []qa.QualityIssue{{Code: "calque", Severity: qa.SeverityWarning, Message: "noop revision"}}
+		}
+		f.client.Segment.UpdateOneID(row.ID).SetSourceText(source).SetTargetText("accepted-" + source).SetStatus(segment.StatusTranslated).SetQualityIssues(issues).ExecX(ctx)
 	}
 	project := f.client.Job.QueryProject(f.client.Job.GetX(ctx, f.jobID)).OnlyX(ctx)
 	large := strings.Repeat("规范", 130000)
@@ -3133,21 +3206,67 @@ func runHandoffRunnerFuturePins(t *testing.T, business bool) {
 	if n := f.client.WorkRequest.Query().Where(workrequest.PromotionCursorEQ(1), workrequest.PromotionCountEQ(2), workrequest.StateEQ("completed")).CountX(ctx); n != 2 {
 		t.Fatalf("future fixture needs2 reliable raw prefix1/2, got%d", n)
 	}
-	f.runner.pipeCfg.Candidates = pipeline.CandidateLimits{Segments: 1, Bytes: 16 << 20, ItemBytes: 1 << 20}
+	paidOriginal := f.client.WorkRequest.Query().Where(workrequest.StateEQ("completed")).AllX(ctx)
+	f.runner.pipeCfg.Candidates = pipeline.CandidateLimits{Segments: option.segments, Bytes: 16 << 20, ItemBytes: 1 << 20}
 	f.runner.pipeCfg.MaxInflightResources = 1
 	f.runner.pipeCfg.MaxResponseBytes = 1 << 20
 	f.runner.pipeCfg.ResponseHandoffBytes = 64 << 20
 	barrier.mu.Lock()
 	before := barrier.calls
 	barrier.mu.Unlock()
-	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	runCtx, cancel := context.WithTimeout(ctx, runTimeout)
 	err := f.runner.processJob(runCtx, f.jobID)
 	cancel()
 	barrier.mu.Lock()
 	failedCalls := barrier.calls
 	barrier.mu.Unlock()
+	if option.emptyEarlier {
+		if err != nil || failedCalls != before || f.client.Job.GetX(ctx, f.jobID).Status != service.JobStatusCompleted || f.client.JobRoundSegment.Query().CountX(ctx) != 4 {
+			t.Fatalf("empty early rounds did not reach consumable future raw: HTTP%d->%d err=%v", before, failedCalls, err)
+		}
+		f.assertUsage(t, before)
+		return
+	}
+	if option.canProgress {
+		barrier.mu.Lock()
+		members := append([]int(nil), barrier.members...)
+		barrier.mu.Unlock()
+		if err != nil || f.client.Job.GetX(ctx, f.jobID).Status != service.JobStatusCompleted || f.client.JobRoundSegment.Query().CountX(ctx) != 8 {
+			t.Fatalf("fixed future inventory left a legal singleton but work did not finish: HTTP%d->%d err=%v", before, failedCalls, err)
+		}
+		newMembers := 0
+		for _, n := range members[before:] {
+			if n < 1 || n > 2 {
+				t.Fatalf("new request exceeds source batch: %v", members)
+			}
+			newMembers += n
+		}
+		if len(members) <= before || members[before] != 1 || newMembers != 4 {
+			t.Fatalf("fixed-prefix singleton or original work lost: %v", members)
+		}
+		for _, original := range paidOriginal {
+			recovered := f.client.WorkRequest.GetX(ctx, original.ID)
+			if recovered.Identity != original.Identity || recovered.PromotionCount != 2 || recovered.PromotionCursor != 2 || recovered.SnapshotDigest != original.SnapshotDigest {
+				t.Fatalf("fixed prefix changed a paid original request: %+v", recovered)
+			}
+		}
+		seen := make(map[int]int)
+		for _, request := range f.client.WorkRequest.Query().Where(workrequest.StateEQ("completed"), workrequest.JobRoundIDIn(f.roundIDs...)).AllX(ctx) {
+			for _, id := range request.SegmentIds {
+				seen[id]++
+			}
+		}
+		for _, row := range f.client.Segment.Query().AllX(ctx) {
+			if seen[row.ID] != 1 {
+				t.Fatalf("new source member was missed or sent twice: segment%d count%d", row.ID, seen[row.ID])
+			}
+		}
+		f.assertUsage(t, failedCalls)
+		t.Logf("S%d/fixed4 made a singleton prefix; original paid n2 unchanged; HTTP=%d new_members=%d checkpoints=8", option.segments, failedCalls, newMembers)
+		return
+	}
 	if failedCalls != before {
-		t.Fatalf("overlarge original n2 dispatched after S1: HTTP %d -> %d err=%v", before, failedCalls, err)
+		t.Fatalf("blocked future n2 dispatched under S%d: HTTP %d -> %d err=%v", option.segments, before, failedCalls, err)
 	}
 	if f.client.WorkRequest.Query().Where(workrequest.PromotionCursorEQ(1), workrequest.PromotionCountEQ(2), workrequest.StateEQ("completed")).CountX(ctx) != 2 {
 		t.Fatal("capacity failure deleted reliable future raw")
@@ -3192,7 +3311,7 @@ func runHandoffRunnerFuturePins(t *testing.T, business bool) {
 		t.Fatalf("terminal lifecycle leaked: %+v %v", terminal, err)
 	}
 	f.assertUsage(t, calls)
-	t.Logf("S1 n2 failed HTTP0 preserving raw; S8 explicit Retry original n2; actual_HTTP=%d", calls)
+	t.Logf("S%d n2 failed HTTP0 preserving raw; S8 explicit Retry original n2; actual_HTTP=%d", option.segments, calls)
 }
 
 // Rebuild the same header-only global inventory as the production Job runner

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -53,6 +54,7 @@ type controlledMetrics struct {
 	bytesPeak                           int64
 	firstVisible, lastMain              time.Time
 	alignmentMembers, maxAlignmentBatch int
+	stageOverlap                        bool
 }
 
 type controlledHTTP struct {
@@ -66,6 +68,11 @@ type controlledHTTP struct {
 	server                          *httptest.Server
 	pool                            *backend.LimiterPool
 	sameBackend                     bool
+	mainBeforeAlignment             int
+	alignmentBarrier                chan struct{}
+	alignmentBarrierOnce            sync.Once
+	alignmentBarrierTarget          int
+	barrierEntered                  chan struct{}
 }
 
 func newControlledHTTP(tb testing.TB, sameBackend bool, rpm int) *controlledHTTP {
@@ -110,6 +117,11 @@ func (f *controlledHTTP) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	f.metrics.alignmentPeak = max(f.metrics.alignmentPeak, f.alignmentInflight)
 	f.metrics.totalPeak = max(f.metrics.totalPeak, f.mainInflight+f.alignmentInflight)
 	f.metrics.backendPeak = max(f.metrics.backendPeak, f.backendInflight[id])
+	f.metrics.stageOverlap = f.metrics.stageOverlap || f.mainInflight > 0 && f.alignmentInflight > 0
+	mainCalls := f.metrics.mainCalls
+	if f.alignmentBarrier != nil && mainCalls > f.mainBeforeAlignment && f.alignmentInflight >= f.alignmentBarrierTarget {
+		f.alignmentBarrierOnce.Do(func() { close(f.alignmentBarrier) })
+	}
 	f.mu.Unlock()
 	defer func() {
 		f.mu.Lock()
@@ -126,6 +138,24 @@ func (f *controlledHTTP) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
+	}
+	// Finish the HTTP/1 request body before waiting so client cancellation can
+	// propagate through net/http's connection reader on a failed barrier.
+	if _, err := io.Copy(io.Discard, r.Body); err != nil {
+		return
+	}
+	// The first main cohort supplies alignment work. Hold later main calls and
+	// the first alignment cohort until both independent stages are present;
+	// elapsed HTTP latency is not evidence of scheduler overlap.
+	if f.alignmentBarrier != nil && (alignment || mainCalls > f.mainBeforeAlignment) {
+		if f.barrierEntered != nil {
+			f.barrierEntered <- struct{}{}
+		}
+		select {
+		case <-f.alignmentBarrier:
+		case <-r.Context().Done():
+			return
+		}
 	}
 	delay := 4 * time.Millisecond
 	if alignment {
@@ -421,6 +451,12 @@ func TestRubyAlignmentControlledHTTPBudgets(t *testing.T) {
 	for _, tc := range []controlledCase{controlledCases[2], controlledCases[3], controlledCases[6], controlledCases[8]} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newControlledHTTP(t, true, 0)
+			if !tc.shared {
+				f.mainBeforeAlignment = tc.main
+				f.alignmentBarrier = make(chan struct{})
+				f.alignmentBarrierTarget = min(tc.align, 2)
+				t.Cleanup(func() { f.alignmentBarrierOnce.Do(func() { close(f.alignmentBarrier) }) })
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			doc, err := runControlledPipeline(ctx, f, tc)
@@ -428,13 +464,56 @@ func TestRubyAlignmentControlledHTTPBudgets(t *testing.T) {
 				t.Fatal(err)
 			}
 			m := checkControlledRun(t, f, doc, tc)
-			if !tc.shared && m.totalPeak <= tc.main {
+			if !tc.shared && !m.stageOverlap {
 				t.Fatalf("independent stages failed to overlap: %+v", m)
 			}
 			if tc.align > 1 && m.alignmentPeak < 2 {
 				t.Fatalf("explicit A>1 remained serial: %+v", m)
 			}
 		})
+	}
+}
+
+func TestControlledHTTPBarrierCallerCancellation(t *testing.T) {
+	f := newControlledHTTP(t, true, 0)
+	f.alignmentBarrier = make(chan struct{})
+	f.alignmentBarrierTarget = 1
+	f.barrierEntered = make(chan struct{}, 1)
+	t.Cleanup(func() { f.alignmentBarrierOnce.Do(func() { close(f.alignmentBarrier) }) })
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, f.server.URL+"/main", bytes.NewBufferString(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		response, err := f.server.Client().Do(request)
+		if response != nil {
+			response.Body.Close()
+		}
+		done <- err
+	}()
+	select {
+	case <-f.barrierEntered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("HTTP handler did not enter the intentionally unsatisfied barrier")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("cancelled HTTP request succeeded")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("barrier kept the cancelled client alive")
+	}
+	joined := make(chan struct{})
+	go func() { f.joined.Wait(); close(joined) }()
+	select {
+	case <-joined:
+	case <-time.After(3 * time.Second):
+		t.Fatal("barrier kept the disconnected HTTP handler alive")
 	}
 }
 

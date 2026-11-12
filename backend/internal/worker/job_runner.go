@@ -14,13 +14,17 @@ import (
 	"sync"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
@@ -357,9 +361,22 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 				break
 			}
 			for _, header := range headers {
-				_, ok := rowToRound[header.Scope.RoundID]
+				roundIndex, ok := rowToRound[header.Scope.RoundID]
 				if !ok {
 					return workstate.ErrManifest
+				}
+				if roundIndex >= 0 && roundIndex < len(snapshot.Rounds) && header.Cursor < header.MemberCount {
+					mode := snapshot.Rounds[roundIndex].Mode
+					if (mode == "translate" || mode == "revise") && header.MemberCount > requestRuntime.BudgetLimits().Segments {
+						failure := fmt.Errorf("saved main request %s original members %d exceed recovery limit %d: %w", header.RequestID, header.MemberCount, requestRuntime.BudgetLimits().Segments, pipeline.ErrCandidateCapacity)
+						// No resource has started. This shared startup failure blocks
+						// every pending resource, while paid SQL facts remain retained.
+						var stateErr error
+						for _, item := range pending {
+							stateErr = errors.Join(stateErr, r.jobs.MarkJobResourceFailed(jobCtx, jobID, item.ID, failure))
+						}
+						return errors.Join(failure, stateErr, r.jobs.ReconcileJob(jobCtx, jobID))
+					}
 				}
 				if requestRuntime.Admission.RuntimeState().BusinessOwner == header.RequestID {
 					copy := header
@@ -483,13 +500,18 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		}
 		exits := make(chan resourceExit, max(1, len(pending)))
 		queue := append([]*ent.JobResource(nil), pending...)
+		var parked []*ent.JobResource
+		progressBefore, err := r.recoveryProgress(jobCtx, jobID)
+		if err != nil {
+			return err
+		}
 		active := 0
 		resourceLimit := r.pipeCfg.MaxInflightResources
 		if resourceLimit <= 0 {
 			resourceLimit = max(1, len(queue))
 		}
 		var drainErr error
-		for len(queue) > 0 || active > 0 {
+		for len(queue) > 0 || active > 0 || len(parked) > 0 {
 			for len(queue) > 0 && active < resourceLimit && jobCtx.Err() == nil && !gate.Paused() && drainErr == nil {
 				item := queue[0]
 				queue = queue[1:]
@@ -499,19 +521,40 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 				}()
 			}
 			if active == 0 {
+				if len(queue) > 0 || len(parked) == 0 || jobCtx.Err() != nil || gate.Paused() || drainErr != nil {
+					break
+				}
+				// Every resource in this pass has joined. Only persisted progress
+				// authorizes another pass; capacity broadcasts and aborts do not.
+				progressAfter, err := r.recoveryProgress(jobCtx, jobID)
+				if err != nil {
+					drainErr = err
+					break
+				}
+				if progressAfter != progressBefore {
+					queue, parked = parked, nil
+					progressBefore = progressAfter
+					continue
+				}
+				// A complete fair pass proved that no runnable scope can claim
+				// this restored stock. Establish its fixed ceiling once, then
+				// let the existing planner try a smaller legal source prefix.
+				if requestRuntime.Window.FixUnclaimedRecovery() {
+					queue, parked = parked, nil
+					continue
+				}
+				capacityErr := fmt.Errorf("%w: every runnable resource yielded without persisted recovery progress", backend.ErrPipelineCapacity)
+				var stateErr error
+				for _, item := range parked {
+					stateErr = errors.Join(stateErr, r.jobs.MarkJobResourceFailed(jobCtx, jobID, item.ID, capacityErr))
+				}
+				drainErr = errors.Join(capacityErr, stateErr)
 				break
 			}
 			done := <-exits
 			active--
 			if errors.Is(done.err, pipeline.ErrResourceYield) {
-				if len(queue) == 0 && active == 0 {
-					drainErr = fmt.Errorf("%w: candidate capacity is owned by work outside runnable resources", backend.ErrPipelineCapacity)
-					if err := r.jobs.MarkJobResourceFailed(jobCtx, jobID, done.item.ID, drainErr); err != nil {
-						drainErr = errors.Join(drainErr, err)
-					}
-				} else {
-					queue = append(queue, done.item)
-				}
+				parked = append(parked, done.item)
 			} else if done.err != nil && drainErr == nil {
 				drainErr = done.err
 			}
@@ -546,6 +589,34 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 	reconcileErr := r.jobs.ReconcileJob(reconcileCtx, jobID)
 	r.eventBroker.Purge(jobID)
 	return reconcileErr
+}
+
+type recoveryProgress struct {
+	confirmed, promoted, finishedRounds int64
+}
+
+// These fixed scalar facts exclude cache calibration and preparation writes.
+func (r *JobRunner) recoveryProgress(ctx context.Context, jobID int) (recoveryProgress, error) {
+	confirmed, err := r.client.JobRoundSegment.Query().Where(jobroundsegment.HasJobRoundWith(jobround.JobIDEQ(jobID))).Count(ctx)
+	if err != nil {
+		return recoveryProgress{}, err
+	}
+	var rows []struct {
+		Promoted int64 `json:"promoted"`
+	}
+	if err := r.client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.StateEQ("completed"), workrequest.PromotionCountGT(0)).Aggregate(func(sel *sql.Selector) string {
+		return sql.As("COALESCE(SUM("+sel.C(workrequest.FieldPromotionCursor)+"),0)", "promoted")
+	}).Scan(ctx, &rows); err != nil {
+		return recoveryProgress{}, err
+	}
+	if len(rows) != 1 {
+		return recoveryProgress{}, workstate.ErrManifest
+	}
+	finished, err := r.client.JobRound.Query().Where(jobround.JobIDEQ(jobID), jobround.StatusIn(service.JobRoundStatusCompleted, service.JobRoundStatusSkipped)).Count(ctx)
+	if err != nil {
+		return recoveryProgress{}, err
+	}
+	return recoveryProgress{confirmed: int64(confirmed), promoted: rows[0].Promoted, finishedRounds: int64(finished)}, nil
 }
 
 // DTO/Q is canonical JSON; the adapter independently commits enough K for

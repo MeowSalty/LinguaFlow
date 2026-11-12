@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -144,13 +145,21 @@ func persistenceWireReporter(r *pipeline.ExecutionRuntime, opts *progress.DBRepo
 	opts.Saver = r.PersistenceSaver()
 }
 func persistenceResources(t *testing.T, batches int) []*pa.Fixture {
+	return persistenceResourceFixtures(t, 7, batches)
+}
+
+func persistenceResourceFixtures(t *testing.T, resources, batches int, sizes ...int) []*pa.Fixture {
 	t.Helper()
-	first := pa.Seed(t, batches*300, true)
+	size := 300
+	if len(sizes) > 0 {
+		size = sizes[0]
+	}
+	first := pa.Seed(t, batches*size, true)
 	fixtures := []*pa.Fixture{first}
 	project := *first.Client.Resource.GetX(t.Context(), first.Scope.ResourceID).ProjectID
-	for i := 1; i < 7; i++ {
+	for i := 1; i < resources; i++ {
 		resource := first.Client.Resource.Create().SetProjectID(project).SetPath(fmt.Sprintf("resource%d.txt", i)).SetStoragePath(fmt.Sprintf("resource%d.txt", i)).SetFormat("txt").SaveX(t.Context())
-		fixtures = append(fixtures, pa.SeedResource(t, first.Client, first.DB, first.Probe, project, first.Scope.JobID, resource.ID, batches*300, true))
+		fixtures = append(fixtures, pa.SeedResource(t, first.Client, first.DB, first.Probe, project, first.Scope.JobID, resource.ID, batches*size, true))
 	}
 	return fixtures
 }
@@ -204,9 +213,9 @@ func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persis
 	}
 	return r, observer, done
 }
-func persistenceJoin(done <-chan error) []string {
+func persistenceJoin(done <-chan error, resources int) []string {
 	var failures []string
-	for range 7 {
+	for range resources {
 		if err := <-done; err != nil {
 			failures = append(failures, err.Error())
 		}
@@ -215,6 +224,9 @@ func persistenceJoin(done <-chan error) []string {
 }
 
 func TestPersistenceLoadMatrix(t *testing.T) {
+	if os.Getenv("LINGUAFLOW_PERSISTENCE_DRIVER") == "" {
+		t.Skip("long extraction matrix: run task backend:test:persistence or task backend:bench:persistence with its explicit driver")
+	}
 	for _, ms := range []int{0, 1, 2, 5} {
 		t.Run(fmt.Sprintf("delay%d", ms), func(t *testing.T) {
 			fixtures := persistenceResources(t, 10)
@@ -222,7 +234,7 @@ func TestPersistenceLoadMatrix(t *testing.T) {
 			probe.Reset(time.Duration(ms) * time.Millisecond)
 			model := &persistenceFastModel{}
 			r, observer, done := persistenceRunResources(t, fixtures, model)
-			failures := persistenceJoin(done)
+			failures := persistenceJoin(done, len(fixtures))
 			observer.stopSampling()
 			r.Close()
 			job := fixtures[0].Client.Job.GetX(t.Context(), fixtures[0].Scope.JobID)
@@ -331,10 +343,35 @@ func TestPersistenceSharedConcurrencyReachesTen(t *testing.T) {
 		}
 	}
 	close(release)
-	failures := persistenceJoin(done)
+	failures := persistenceJoin(done, len(fixtures))
 	observer.stopSampling()
 	r.Close()
 	if !reached || model.peak.Load() != 10 || len(failures) > 0 {
 		t.Fatalf("full call path failed to reach shared capacity 10: peak=%d failures=%v", model.peak.Load(), failures)
 	}
+	job := fixtures[0].Client.Job.GetX(t.Context(), fixtures[0].Scope.JobID)
+	usage := fixtures[0].Client.UsageRecord.Query().CountX(t.Context())
+	if model.calls.Load() != 14 || usage != 14 || job.ProgressCompleted != 4200 || job.ProgressTotal != 4200 {
+		t.Fatalf("representative extraction calls=%d usage=%d progress=%d/%d", model.calls.Load(), usage, job.ProgressCompleted, job.ProgressTotal)
+	}
+	for _, fixture := range fixtures {
+		if got := fixture.Client.JobRound.GetX(t.Context(), fixture.Scope.RoundID).SegmentCompleted; got != 600 {
+			t.Fatalf("representative extraction resource completed=%d, want 600", got)
+		}
+	}
+	timings := observer.summary()
+	for _, operation := range []string{"reserve", "sent", "received", "completed", "checkpoint", "stage_initialize"} {
+		for _, phase := range []string{"save_queue", "query", "exec"} {
+			if _, measured := timings[operation+"."+phase]; !measured {
+				t.Fatalf("required %s.%s observation missing", operation, phase)
+			}
+		}
+	}
+	for key, capacity := range map[string]int{"pending_owner_peak": 16, "coordinator_intent_peak": 16, "normal_queue_peak": 16, "reliable_queue_peak": 32, "completion_peak": 16} {
+		peak, measured := timings[key].(int)
+		if !measured || peak > capacity {
+			t.Fatalf("%s=%v exceeds %d or was not measured", key, timings[key], capacity)
+		}
+	}
+	persistenceReport(t, fixtures[0].Probe, "extraction7x2x300", map[string]any{"resources": 7, "batches": 14, "segments": 4200, "provider_calls": model.calls.Load(), "provider_peak": model.peak.Load(), "usage_records": usage, "completed": job.ProgressCompleted, "total": job.ProgressTotal, "timings": timings})
 }

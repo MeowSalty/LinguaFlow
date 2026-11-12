@@ -32,6 +32,17 @@ func (a *RequestAdmission) capacityLocked(intent RequestAdmissionIntent, exact b
 	if a.budget != nil && intent.Stage == RequestStageMain && a.mainPriority && (intent.ResourceID != a.priorityResource || intent.RoundIndex != a.priorityRound) {
 		return 0, "fair_main_turn", nil
 	}
+	if a.budget != nil && intent.Stage == RequestStageMain && !exact && intent.RequestID == "" {
+		// A granted full owner excludes every other producer independently of
+		// the next input's size. Anonymous preparation hints must see it before
+		// reserving a durable request. Candidate promotion broadcasts can wake
+		// a waiter while this owner still needs its complete response budget.
+		for _, owned := range a.budget.requests {
+			if owned.full && owned.granted {
+				return 0, "full_owner", nil
+			}
+		}
+	}
 	if a.budget == nil || !exact && intent.RequestID == "" {
 		return 0, "", nil
 	}
@@ -58,7 +69,27 @@ type PipelineBudgetEntry struct {
 	Reservation, Durable, Progress bool
 	GrowthDurable                  bool
 	Replaced                       []string
+	// Snapshots align with Replaced and preserve the bounded member records
+	// if an admitted replacement is aborted before becoming durable.
+	replacedEntries []replacedMemberEntry
 }
+
+// Replacement snapshots contain scalar member state only. They cannot retain
+// another request's snapshot tree, even across repeated retries and renames.
+type replacedMemberEntry struct {
+	ResourceID, RoundID     int
+	Bytes, Growth           int64
+	Progress, GrowthDurable bool
+}
+
+func snapshotReplacedMember(e PipelineBudgetEntry) replacedMemberEntry {
+	return replacedMemberEntry{ResourceID: e.ResourceID, RoundID: e.RoundID, Bytes: e.Bytes, Growth: e.Growth, Progress: e.Progress, GrowthDurable: e.GrowthDurable}
+}
+
+func (e replacedMemberEntry) budgetEntry() PipelineBudgetEntry {
+	return PipelineBudgetEntry{ResourceID: e.ResourceID, RoundID: e.RoundID, Count: 1, Bytes: e.Bytes, Growth: e.Growth, Progress: e.Progress, GrowthDurable: e.GrowthDurable, Reservation: true, Durable: true}
+}
+
 type PipelineBudgetSnapshot struct {
 	OwnedPayloads                                                                             OwnedPayloadSnapshot
 	RequestedMain, EffectiveMain                                                              map[int]int
@@ -348,6 +379,19 @@ func (a *RequestAdmission) BudgetEntries() map[string]PipelineBudgetEntry {
 	return out
 }
 
+// UnclaimedRecoveryMembers reports only restored scalar stock with no live or
+// individually attached activity. The scheduler must separately prove that
+// every runnable resource has tried its real selection frontier and joined.
+func (a *RequestAdmission) UnclaimedRecoveryMembers() (int64, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	b := a.budget
+	if b == nil || !b.inventoryRestored || len(b.entries) != 0 || len(b.requests) != 0 || a.prepareOwners != 0 || a.buildWorkers != 0 || a.descriptors != 0 {
+		return 0, false
+	}
+	return b.baseSegments, true
+}
+
 func (a *RequestAdmission) ReserveMembers(key string, count, resource, round int, progress bool) (bool, error) {
 	return a.ReserveMembersReplacing(key, count, resource, round, progress, nil)
 }
@@ -368,13 +412,22 @@ func (a *RequestAdmission) PrepareMembers(key string, count, resource, round int
 		return false, ErrPipelineCapacity
 	}
 	seen := map[string]bool{}
+	replaced := make([]string, 0, len(replacements))
+	previous := make([]replacedMemberEntry, 0, len(replacements))
 	for _, id := range replacements {
 		if id == "" || seen[id] {
 			return false, ErrPipelineCapacity
 		}
 		seen[id] = true
-		if e, ok := b.entries[id]; ok && (!e.Reservation || !e.Durable || e.Count != 1 || e.ResourceID != resource || e.RoundID != round) {
-			return false, ErrPipelineCapacity
+		if e, ok := b.entries[id]; ok {
+			if !e.Reservation || !e.Durable || e.Count != 1 || e.PlannedCount != 0 || len(e.Replaced) != 0 || e.ResourceID != resource || e.RoundID != round {
+				return false, ErrPipelineCapacity
+			}
+			// Fresh canonical members have no reservation to replace. Recording
+			// their keys would manufacture durable inventory when a preparation
+			// fails and ReleaseBudgetEntry restores the replaced reservations.
+			replaced = append(replaced, id)
+			previous = append(previous, snapshotReplacedMember(e))
 		}
 	}
 	metadataAdded := false
@@ -391,7 +444,7 @@ func (a *RequestAdmission) PrepareMembers(key string, count, resource, round int
 			return false, a.classifyRootCapacityLocked(e)
 		}
 	}
-	b.entries[key] = PipelineBudgetEntry{ResourceID: resource, RoundID: round, PlannedCount: count, Reservation: true, Replaced: append([]string(nil), replacements...)}
+	b.entries[key] = PipelineBudgetEntry{ResourceID: resource, RoundID: round, PlannedCount: count, Reservation: true, Replaced: replaced, replacedEntries: previous}
 	a.notifyLocked()
 	return true, nil
 }
@@ -422,7 +475,7 @@ func (a *RequestAdmission) ReserveMembersReplacing(key string, count, resource, 
 		}
 		seen[id] = true
 		if e, ok := b.entries[id]; ok {
-			if !e.Reservation || !e.Durable || e.Count != 1 || e.ResourceID != resource || e.RoundID != round {
+			if !e.Reservation || !e.Durable || e.Count != 1 || e.PlannedCount != 0 || len(e.Replaced) != 0 || e.ResourceID != resource || e.RoundID != round {
 				return false, ErrPipelineCapacity
 			}
 			replaced = append(replaced, id)
@@ -438,11 +491,13 @@ func (a *RequestAdmission) ReserveMembersReplacing(key string, count, resource, 
 		return false, nil
 	}
 	previous := make(map[string]PipelineBudgetEntry, len(replaced))
+	previousEntries := make([]replacedMemberEntry, 0, len(replaced))
 	for _, id := range replaced {
 		previous[id] = b.entries[id]
+		previousEntries = append(previousEntries, snapshotReplacedMember(b.entries[id]))
 		delete(b.entries, id)
 	}
-	b.entries[key] = PipelineBudgetEntry{ResourceID: resource, RoundID: round, Count: count, Reservation: true, Progress: progress, Replaced: replaced}
+	b.entries[key] = PipelineBudgetEntry{ResourceID: resource, RoundID: round, Count: count, Reservation: true, Progress: progress, Replaced: replaced, replacedEntries: previousEntries}
 	if err := a.syncRootLocked(0); err != nil {
 		delete(b.entries, key)
 		for _, id := range replaced {
@@ -471,6 +526,7 @@ func (a *RequestAdmission) RenameMembers(from, to string) error {
 	if from == to {
 		e.Durable = true
 		e.Replaced = nil
+		e.replacedEntries = nil
 		b.entries[to] = e
 		a.notifyLocked()
 		return nil
@@ -481,6 +537,7 @@ func (a *RequestAdmission) RenameMembers(from, to string) error {
 	delete(b.entries, from)
 	e.Durable = true
 	e.Replaced = nil
+	e.replacedEntries = nil
 	b.entries[to] = e
 	if b.progressID == from {
 		b.progressID = to
@@ -490,38 +547,48 @@ func (a *RequestAdmission) RenameMembers(from, to string) error {
 }
 
 func (a *RequestAdmission) RestoreBudgetEntry(key string, e PipelineBudgetEntry) error {
+	_, err := a.RestoreBudgetEntryWithTransfer(key, e)
+	return err
+}
+
+// RestoreBudgetEntryWithTransfer reports the members actually moved from
+// restored scalar stock. An existing identity, including newly admitted HTTP
+// credit, never consumes that stock again when its window view is recovered.
+func (a *RequestAdmission) RestoreBudgetEntryWithTransfer(key string, e PipelineBudgetEntry) (int64, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	b := a.budget
-	if b == nil || key == "" || e.Count < 1 || e.Bytes < 0 || e.Bytes > b.limits.Item && !e.Reservation {
-		return ErrPipelineCapacity
+	if b == nil || key == "" || e.Count < 1 || e.Bytes < 0 || e.Bytes > b.limits.Item && !e.Reservation || len(e.Replaced) != len(e.replacedEntries) {
+		return 0, ErrPipelineCapacity
 	}
 	if old, ok := b.entries[key]; ok {
 		if old.Count != e.Count || old.Bytes != e.Bytes {
-			return ErrPipelineCapacity
+			return 0, ErrPipelineCapacity
 		}
-		return nil
+		return 0, nil
 	}
 	if b.progressID == key {
 		e.Progress = true
 	}
 	if e.Progress && b.progressID != "" && b.progressID != key {
-		return ErrPipelineCapacity
+		return 0, ErrPipelineCapacity
 	}
+	var transferred int64
 	if b.inventoryRestored {
 		if int64(e.Count) > b.baseSegments || e.Bytes > b.baseCandidates || e.Growth > b.baseGrowth {
-			return ErrPipelineCapacity
+			return 0, ErrPipelineCapacity
 		}
 		b.baseSegments -= int64(e.Count)
 		b.baseCandidates -= e.Bytes
 		b.baseGrowth -= e.Growth
+		transferred = int64(e.Count)
 	}
 	b.entries[key] = e
 	if e.Progress {
 		b.progressID = key
 	}
 	a.notifyLocked()
-	return nil
+	return transferred, nil
 }
 
 // BeginPromotion reserves actual candidate bytes while the member still belongs
@@ -640,8 +707,13 @@ func (a *RequestAdmission) ReleaseBudgetEntry(id string) {
 		return
 	}
 	if e, ok := a.budget.entries[id]; ok && e.Reservation && !e.Durable {
-		for _, old := range e.Replaced {
-			a.budget.entries[old] = PipelineBudgetEntry{ResourceID: e.ResourceID, RoundID: e.RoundID, Count: 1, Reservation: true, Durable: true}
+		for i, old := range e.Replaced {
+			// Preparation retains its original entries until the joint grant.
+			// Do not overwrite an entry that was never removed or was already
+			// restored. After a grant, restore the exact original bounded record.
+			if _, exists := a.budget.entries[old]; !exists {
+				a.budget.entries[old] = e.replacedEntries[i].budgetEntry()
+			}
 		}
 	}
 	delete(a.budget.entries, id)

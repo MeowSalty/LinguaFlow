@@ -75,6 +75,7 @@ type rubyPipelineFixture struct {
 	resourceIDs  []int
 	jobResources []int
 	roundIDs     []int
+	dbDriver     string
 
 	mu       sync.Mutex
 	requests []rubyPipelineRequest
@@ -87,12 +88,16 @@ func newRubyPipelineFixture(t *testing.T, segmentCounts ...int) *rubyPipelineFix
 }
 
 func newRubyPipelineFixtureWithClient(t *testing.T, client *ent.Client, upstreamURL string, segmentCounts ...int) *rubyPipelineFixture {
+	return newRubyPipelineFixtureWithDriver(t, client, "sqlite", upstreamURL, segmentCounts...)
+}
+
+func newRubyPipelineFixtureWithDriver(t *testing.T, client *ent.Client, dbDriver, upstreamURL string, segmentCounts ...int) *rubyPipelineFixture {
 	t.Helper()
 	ctx := context.Background()
 	jobID, first, second := registryFixture(t, client)
 	owner := client.User.Query().OnlyX(ctx)
 	f := &rubyPipelineFixture{
-		client: client, jobID: jobID, ownerID: owner.ID,
+		client: client, jobID: jobID, ownerID: owner.ID, dbDriver: dbDriver,
 		jobResources: []int{first, second}, pool: backend.NewLimiterPool(),
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
@@ -172,7 +177,11 @@ func (f *rubyPipelineFixture) initializeServices(t *testing.T) *service.BackendS
 	backends.SetCredentials(credentials)
 	broker := event.NewBroker(nil)
 	f.jobs = service.NewJobService(f.client, service.NewProjectService(f.client, users), nil, backends, nil, nil, nil, nil, broker)
-	f.runner = NewJobRunner(f.logger, f.client, f.jobs, nil, nil, broker, f.pool, NewResourceMutex(), "sqlite",
+	dbDriver := f.dbDriver
+	if dbDriver == "" {
+		dbDriver = "sqlite"
+	}
+	f.runner = NewJobRunner(f.logger, f.client, f.jobs, nil, nil, broker, f.pool, NewResourceMutex(), dbDriver,
 		PipelineConfig{Candidates: pipeline.DefaultCandidateLimits(), MaxInflightResources: 1}, nil)
 	f.runner.SetCredentials(credentials, credentials)
 	f.factory = NewEngineFactoryWithCredentials(f.logger, f.pool, credentials, credentials)

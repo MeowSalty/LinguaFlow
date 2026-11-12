@@ -2,6 +2,7 @@ package workstate
 
 import (
 	"context"
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"errors"
 	"fmt"
@@ -143,8 +144,15 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 			}
 			if changed {
 				if in.IssuesPayload != nil {
-					u := tx.Segment.Update().Where(segment.IDEQ(row.ID), segment.ContentVersionEQ(in.BaselineVersion)).SetTargetText(in.Target).SetStatus(segment.Status(status)).ClearQualityIssues().Modify(func(u *sql.UpdateBuilder) {
-						u.Set(segment.FieldQualityIssues, sql.Expr("CAST(? AS TEXT)", in.IssuesPayload))
+					u := tx.Segment.Update().Where(segment.IDEQ(row.ID), segment.ContentVersionEQ(in.BaselineVersion)).SetTargetText(in.Target).SetStatus(segment.Status(status)).SetQualityIssues(nil).Modify(func(u *sql.UpdateBuilder) {
+						u.Set(segment.FieldQualityIssues, sql.ExprFunc(func(b *sql.Builder) {
+							b.WriteString("CAST(").Arg(in.IssuesPayload)
+							if b.Dialect() == dialect.Postgres {
+								b.WriteString(" AS JSONB)")
+							} else {
+								b.WriteString(" AS TEXT)")
+							}
+						}))
 					})
 					if in.ClearReview {
 						u.ClearReviewComment()

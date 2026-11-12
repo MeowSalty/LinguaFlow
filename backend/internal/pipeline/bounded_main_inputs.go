@@ -288,8 +288,10 @@ func mainContextWordsScalar(doc *Document, candidate []int, window int) int {
 }
 
 // PlanNextMainBatchBounded scans the authoritative membership without retaining
-// a task-sized eligible array. Only the next public batch and one competing
-// continuous remainder are retained. Capacity never changes its membership.
+// a task-sized eligible array. It selects the same public batch as BuildBatches,
+// retaining only its prefix that fits the static member budget. The canonical
+// membership keeps the remaining members for subsequent planning. Live window
+// occupancy and concurrency do not change this prefix.
 func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Document, visit func(func(int) bool), pool, memberLimit int) ([]int, error) {
 	if memberLimit < 1 {
 		return nil, backend.ErrPipelineCapacity
@@ -356,13 +358,15 @@ func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Docu
 			first = idx
 		}
 		exceeds := count > 0 && (c.exceeds(count, words, next) || span > 0 && idx-first > span)
+		// Context and packed revision batches publish their first prefix in
+		// source order. Continuous translation must instead keep scanning the
+		// public run: split runs precede all leftovers, and leftovers sort by
+		// their full member count, not by the retained prefix length.
+		if !continuous && count == memberLimit {
+			selected = true
+			return false
+		}
 		if count > 0 && window > 0 && c.MaxWords > 0 && !exceeds {
-			// All retained indices are part of this next batch. Refuse an
-			// overlarge batch before allocating another index or context tree.
-			if count > memberLimit {
-				planErr = ErrCandidateCapacity
-				return false
-			}
 			contextIndices := append(current, idx)
 			contextWords := mainContextWordsScalar(doc, contextIndices, window)
 			exceeds = contextWords > c.MaxWords || words > c.MaxWords-contextWords || next > c.MaxWords-contextWords-words
@@ -372,7 +376,7 @@ func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Docu
 			return false
 		}
 		count++
-		if count <= memberLimit+1 {
+		if count <= memberLimit {
 			current = append(current, idx)
 		}
 		if next > math.MaxInt-words {
@@ -381,10 +385,6 @@ func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Docu
 			words += next
 		}
 		previous = idx
-		if !continuous && count > memberLimit {
-			planErr = ErrCandidateCapacity
-			return false
-		}
 		return true
 	})
 	if planErr != nil {
@@ -393,9 +393,6 @@ func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Docu
 	if continuous && !selected {
 		finishRun()
 		current, count = best, bestCount
-	}
-	if count > memberLimit {
-		return nil, ErrCandidateCapacity
 	}
 	return current, nil
 }

@@ -258,6 +258,61 @@ func TestOrganizationTransactionRetriesRespectContext(t *testing.T) {
 	}
 }
 
+// Hold cancellation delivery back after a fixed deadline has expired. This
+// models a delayed context timer without scheduler sleeps or repeated retries.
+type organizationDelayedDeadlineContext struct {
+	context.Context
+	deadline time.Time
+}
+
+func (ctx *organizationDelayedDeadlineContext) Deadline() (time.Time, bool) {
+	return ctx.deadline, true
+}
+
+func TestOrganizationTransactionDeadlineBeforeCancellationDelivery(t *testing.T) {
+	f := newOrganizationFixture(t)
+	conflict := &pgconn.PgError{Code: "40001"}
+	for _, expired := range []bool{true, false} {
+		name := "before-attempt"
+		if !expired {
+			name = "during-attempt"
+		}
+		t.Run(name, func(t *testing.T) {
+			deadline := time.Now().Add(-time.Second)
+			wantAttempts := 0
+			if !expired {
+				deadline = time.Now().Add(time.Second)
+				wantAttempts = 1
+			}
+			ctx := &organizationDelayedDeadlineContext{Context: t.Context(), deadline: deadline}
+			attempts := 0
+			err := withOrganizationMutation(ctx, f.client, f.org.ID, func(*ent.Client) error {
+				attempts++
+				// Deliver the deadline event inside the attempt while withholding
+				// the context cancellation event, reproducing the timer gap.
+				timer := time.NewTimer(time.Until(deadline))
+				defer timer.Stop()
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				return conflict
+			})
+			if !errors.Is(err, context.DeadlineExceeded) || attempts != wantAttempts {
+				t.Fatalf("deadline without cancellation: attempts=%d want=%d err=%v", attempts, wantAttempts, err)
+			}
+			if attempts == 1 && !errors.Is(err, conflict) {
+				t.Fatalf("deadline lost attempt diagnostic: %v", err)
+			}
+			if ctx.Err() != nil {
+				t.Fatalf("test received cancellation instead of controlling deadline delivery: %v", ctx.Err())
+			}
+			t.Logf("deadline observed without cancellation delivery; attempts=%d", attempts)
+		})
+	}
+}
+
 func TestOrganizationTransactionDoesNotReplayCommitErrors(t *testing.T) {
 	ctx := context.Background()
 	f := newOrganizationFixture(t)
