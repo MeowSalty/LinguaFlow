@@ -68,11 +68,18 @@ jobs:
         if: github.event_name == 'pull_request' && github.head_ref == 'frontend'
         run: task frontend:install -- --frozen-lockfile
 
+      - name: 从 go.mod 读取 Go 系列
+        if: github.event_name != 'pull_request' || github.head_ref != 'frontend'
+        id: go-version
+        shell: bash
+        run: awk '$1 == "go" { sub(/\r$/, "", $2); n = split($2, v, "."); if (n < 2 || v[1] !~ /^[0-9]+$/ || v[2] !~ /^[0-9]+$/) exit 1; print "series=" v[1] "." v[2]; found = 1; exit } END { if (!found) exit 1 }' backend/go.mod >> "$GITHUB_OUTPUT"
+
       - name: 安装 Go
         if: github.event_name != 'pull_request' || github.head_ref != 'frontend'
         uses: actions/setup-go@v6
         with:
-          go-version-file: backend/go.mod
+          go-version: ${{ steps.go-version.outputs.series }}
+          check-latest: true
           cache-dependency-path: backend/go.sum
 
       - name: 验证 OpenAPI 规范、bundle 与后端生成物
