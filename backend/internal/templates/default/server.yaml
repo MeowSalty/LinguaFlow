@@ -28,10 +28,10 @@ server:
     max_inflight_weight_mb: 32
     max_inflight_resources: 8
     rss_limit_mb: 0
-  # Required in serve and local. Set all sixteen environment inputs; this
-  # template deliberately supplies no deployment capacities.
-  # Numeric capacities are supplied directly by environment, after strict
-  # document decoding. No active numeric placeholder or default is emitted.
+  # Optional in serve and local, independently for each dimension.
+  # Omitted limits are unlimited; explicit limits must be positive integers.
+  # Set only the environment inputs needed for your deployment capacities.
+  # No active numeric placeholder or default is emitted.
   # LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS
   # LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES
   # LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS

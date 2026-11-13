@@ -1,4 +1,4 @@
-// Command docker-smoke exercises the two checked-in Compose examples against a
+// Command docker-smoke exercises the two local Compose examples against a
 // fresh image built from this checkout. It never uses an existing project or DB.
 package main
 
@@ -43,8 +43,11 @@ func run() (retErr error) {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(filepath.Join(backend, "deploy", "compose.env.yaml")); err != nil {
-		return errors.New("run through task -t backend/Taskfile.yml docker:smoke from the repository root")
+	for _, mode := range []string{"env", "secrets"} {
+		path := filepath.Join(backend, "deploy", "compose."+mode+".yaml")
+		if _, err := os.Stat(path); err != nil {
+			return fmt.Errorf("local Compose example %s is unavailable (examples are Git-ignored and are not distributed with the repository): %w", path, err)
+		}
 	}
 	if _, err := exec.LookPath("docker"); err != nil {
 		return errors.New("Docker CLI is unavailable; install/start Docker with Linux containers to run this check")
@@ -88,16 +91,20 @@ func run() (retErr error) {
 			return fmt.Errorf("%s example: %w", mode, err)
 		}
 	}
-	fmt.Println("PASS: both Compose examples initialized, logged in, stored credentials, restarted, and validated stored keys without generating a keyring file.")
+	fmt.Println("PASS: both local Compose examples verified optional budget sources and errors, initialized, logged in, stored credentials, restarted, and validated stored keys without generating a keyring file.")
 	return nil
 }
 
 func (s *smoke) docker(timeout time.Duration, env []string, args ...string) (string, error) {
+	return s.dockerAt(timeout, s.backend, env, args...)
+}
+
+func (s *smoke) dockerAt(timeout time.Duration, dir string, env []string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Dir = s.backend
-	cmd.Env = append(append([]string(nil), s.env...), env...)
+	cmd.Dir = dir
+	cmd.Env = mergeEnvironment(s.env, env)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Arguments contain paths and variable names, never secret values.
@@ -146,6 +153,10 @@ func (s *smoke) scenario(project, mode string) (retErr error) {
 		"LINGUAFLOW_HTTP_PORT=0",
 		"LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=smoke-admin",
 		"LINGUAFLOW_BOOTSTRAP_ADMIN_EMAIL=smoke-admin@example.invalid",
+		// Storage initialization is a separate serve contract. These explicit
+		// fixture quotas are not execution-budget defaults or deployment policy.
+		"LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES=16777216",
+		"LINGUAFLOW_STORAGE_INITIALIZATION_LOGICAL_LIMIT_BYTES=16777216",
 	}
 	if mode == "env" {
 		env = append(env, "LINGUAFLOW_JWT_SECRET="+jwt, "LINGUAFLOW_CREDENTIALS_MASTER_KEY="+master, "LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="+password)
@@ -255,6 +266,9 @@ func (s *smoke) scenario(project, mode string) (retErr error) {
 	}
 	if _, err := compose("exec", "-T", "linguaflow", "sh", "-c", "test ! -e /app/data/credentials-keyring.json"); err != nil {
 		return fmt.Errorf("master-key mode unexpectedly created a keyring file: %w", err)
+	}
+	if err := s.verifyBudgetCases(project+"-budget", mode, env); err != nil {
+		return err
 	}
 	fmt.Printf("PASS: %s example (initialization, login, encrypted credential, restart, no keyring file).\n", mode)
 	return nil

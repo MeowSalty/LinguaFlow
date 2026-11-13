@@ -238,9 +238,6 @@ func TestMoveNoCreditGapAndNoCrossDimensionBorrow(t *testing.T) {
 }
 
 func TestCheckedArithmeticAndRebuildFailureAtomicity(t *testing.T) {
-	if _, err := New(Policy{}); !errors.Is(err, ErrInvalid) {
-		t.Fatal(err)
-	}
 	b := newBudget(t, math.MaxInt64, math.MaxInt64)
 	s := Scope{ActorID: 1, JobID: 1}
 	if err := b.Claim(s, "negative", Vector{BuildWorkers: -1}); !errors.Is(err, ErrInvalid) {

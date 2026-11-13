@@ -53,7 +53,8 @@ func subtractCleanupVector(a, b resourcebudget.Vector) (resourcebudget.Vector, e
 }
 
 // projectInventory uses fixed-size ID pages and three SQL scalar roots per job.
-// The actor map contains only the already bounded root cache, including zeros.
+// The actor map contains only the root cache, including zeros. A positive
+// instance descriptor limit bounds its size.
 func (c *ExecutionBudgetCleanup) projectInventory(ctx context.Context, client *ent.Client, projectID int, actors []int) (cleanupInventory, error) {
 	stock := cleanupInventory{actors: make(map[int]resourcebudget.Vector, len(actors))}
 	for _, actor := range actors {

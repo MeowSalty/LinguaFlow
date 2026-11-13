@@ -1,12 +1,5 @@
 version: '3'
 
-# 保留依赖本地迁移源码、Compose 示例的辅助命令；CI 检出不需要此文件。
-includes:
-  local:
-    taskfile: ./Taskfile.local.yml
-    optional: true
-    flatten: true
-
 vars:
   BACKEND_BINARY: '{{default "bin/linguaflow" .BACKEND_BINARY}}'
   TARGET_GOOS: '{{default OS .GOOS}}'
@@ -360,6 +353,30 @@ tasks:
       IMAGE: '{{default "linguaflow:development" .IMAGE}}'
     cmds:
       - docker build --pull -f ../Dockerfile -t {{.IMAGE}} ..
+
+  docker:compose:
+    desc: 管理当前工作区的本地 Compose 示例（示例不随仓库交付）
+    dir: '{{.TASKFILE_DIR}}'
+    vars:
+      COMPOSE: '{{default "env" .COMPOSE}}'
+    requires:
+      vars:
+        - name: COMPOSE
+          enum: [env, secrets]
+    preconditions:
+      - sh: test -f deploy/compose.{{.COMPOSE}}.yaml
+        msg: 缺少本地 Compose 示例 backend/deploy/compose.{{.COMPOSE}}.yaml；示例保持 Git 忽略，不随仓库交付。
+    cmds:
+      - docker compose -f deploy/compose.{{.COMPOSE}}.yaml {{.CLI_ARGS}}
+
+  docker:smoke:
+    desc: 验证本地 Compose 的可选预算、首次启动、凭据与重启（需要 Docker）
+    dir: '{{.TASKFILE_DIR}}'
+    preconditions:
+      - sh: test -f deploy/compose.env.yaml && test -f deploy/compose.secrets.yaml
+        msg: 缺少本地 Compose 示例 backend/deploy/compose.env.yaml 或 compose.secrets.yaml；示例保持 Git 忽略，不随仓库交付。
+    cmds:
+      - go run ./internal/tools/docker-smoke {{.CLI_ARGS}}
 
   test:
     desc: 后端测试（可通过 CLI_ARGS 指定包或测试选项）

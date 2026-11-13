@@ -236,11 +236,26 @@ func TestBudgetIntegrationB11B12PreviewEntriesShareRoot(t *testing.T) {
 }
 
 func TestBudgetIntegrationStoredJobACKAndRestart(t *testing.T) {
+	limits := resourcebudget.Limits{MaxUnconfirmedMembers: 4096, MaxPayloadBytes: 1 << 30, MaxPrepareOwners: 16, MaxMainResponseOwners: 1, MaxAuxResponseOwners: 16, MaxBuildWorkers: 16, MaxQueuedDescriptors: 256, MaxLogicalStorageBytes: 1 << 30}
+	testBudgetIntegrationStoredJobACKAndRestart(t, resourcebudget.Policy{Actor: limits, Instance: limits}, false)
+}
+
+func TestBudgetIntegrationOptionalBudgetStoredJobACKAndRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		policy resourcebudget.Policy
+	}{{"unlimited", resourcebudget.Policy{}}, {"mixed", resourcebudget.Policy{Actor: resourcebudget.Limits{MaxPayloadBytes: 1 << 30}, Instance: resourcebudget.Limits{MaxMainResponseOwners: 1}}}} {
+		t.Run(tc.name, func(t *testing.T) {
+			testBudgetIntegrationStoredJobACKAndRestart(t, tc.policy, true)
+		})
+	}
+}
+
+func testBudgetIntegrationStoredJobACKAndRestart(t *testing.T, policy resourcebudget.Policy, lowerOnRestart bool) {
+	t.Helper()
 	f := newRubyPipelineFixture(t, 2)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-	limits := resourcebudget.Limits{MaxUnconfirmedMembers: 4096, MaxPayloadBytes: 1 << 30, MaxPrepareOwners: 16, MaxMainResponseOwners: 1, MaxAuxResponseOwners: 16, MaxBuildWorkers: 16, MaxQueuedDescriptors: 256, MaxLogicalStorageBytes: 1 << 30}
-	policy := resourcebudget.Policy{Actor: limits, Instance: limits}
 	root, err := resourcebudget.New(policy)
 	if err != nil {
 		t.Fatal(err)
@@ -282,10 +297,18 @@ func TestBudgetIntegrationStoredJobACKAndRestart(t *testing.T) {
 	if got := root.Snapshot(0).Instance; got != v {
 		t.Fatalf("joined root differs from ACK facts root=%+v DB=%+v", got, v)
 	}
+	if got := root.Snapshot(0); got.ActiveIdentities != 0 || len(root.CachedActorIDs()) != 0 {
+		t.Fatalf("joined job retained live ownership: %+v", got)
+	}
 	if v.UnconfirmedMembers != 0 || v.PayloadBytes != 0 || storage <= 0 {
 		t.Fatalf("completed job retained transient backing or lost receipts: %+v", v)
 	}
-	restarted, err := resourcebudget.New(policy)
+	restartPolicy := policy
+	if lowerOnRestart {
+		restartPolicy.Actor.MaxLogicalStorageBytes = 1
+		restartPolicy.Instance.MaxLogicalStorageBytes = 1
+	}
+	restarted, err := resourcebudget.New(restartPolicy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,13 +318,83 @@ func TestBudgetIntegrationStoredJobACKAndRestart(t *testing.T) {
 	if got := restarted.Snapshot(0).Instance; got != v {
 		t.Fatalf("restart changed reliable accounting: %+v want %+v", got, v)
 	}
+	actor, err := source.Actor(ctx, f.jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actorSource := source
+	actorSource.ActorID = actor
+	if err = restarted.RebuildActor(ctx, actor, actorSource); err != nil {
+		t.Fatal(err)
+	}
+	scope := resourcebudget.Scope{ActorID: actor, JobID: f.jobID}
+	identity := workstate.StorageIdentity(f.jobID)
+	if err = restarted.Attach(scope, identity, v); err != nil {
+		t.Fatal(err)
+	}
+	if err = restarted.Transfer(scope, identity, v); err != nil {
+		t.Fatal("unchanged restored ownership was refused", err)
+	}
+	if err = restarted.Detach(scope, identity); err != nil {
+		t.Fatal(err)
+	}
+	if err = restarted.ForgetActor(actor); err != nil {
+		t.Fatal(err)
+	}
+	// Replay goes through the recreated root and actor preparation closure.
+	root = restarted
+	f.runner.SetRootBudget(root, prepare)
 	if err = f.runner.processJob(ctx, f.jobID); err != nil {
 		t.Fatal(err)
 	}
 	if nextMain, nextAux, _, _ := f.calls(); nextMain != main || nextAux != aux {
 		t.Fatal("completed replay dispatched duplicate HTTP")
 	}
+	if got := restarted.Snapshot(0); got.Instance != v || got.ActiveIdentities != 0 || len(restarted.CachedActorIDs()) != 0 {
+		t.Fatalf("completed replay changed inventory or retained actors: %+v", got)
+	}
 	t.Logf("stored Job main=%d aux=%d ACK/replay/restart logical=%d, retained P/S=0", main, aux, storage)
+}
+
+func TestBudgetIntegrationOptionalBudgetPreviewEntries(t *testing.T) {
+	for _, kind := range []string{"preview", "quick", "revision_preview"} {
+		for _, mixed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/mixed_%t", kind, mixed), func(t *testing.T) {
+				f := newRubyEntryFixture(t, false)
+				policy := resourcebudget.Policy{}
+				if mixed {
+					policy.Actor.MaxPayloadBytes = 1 << 30
+					policy.Instance.MaxMainResponseOwners = 1
+				}
+				root, err := resourcebudget.New(policy)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f.factory.rootBudget = root
+				ctx, cancel := context.WithTimeout(service.WithExecutionActor(context.Background(), 7), 5*time.Second)
+				defer cancel()
+				ctx = service.WithExecutionInputBudget(ctx, root, service.ExecutionScope(ctx), service.DefaultExecutionInputBytes)
+				defer service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
+				result := f.run(ctx, kind)
+				if result.err != nil || result.status == "failed" {
+					t.Fatalf("optional entry failed: %+v", result)
+				}
+				f.mu.Lock()
+				calls := len(f.requests)
+				f.mu.Unlock()
+				if calls < 1 {
+					t.Fatal("entry did not reach real HTTP")
+				}
+				if got := root.Snapshot(7).Instance; got.PayloadBytes <= 0 || got.BuildWorkers != 0 || got.MainResponseOwners != 0 {
+					t.Fatalf("returned input ownership not retained correctly: %+v", got)
+				}
+				service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
+				if got := root.Snapshot(7); got.Instance != (resourcebudget.Vector{}) || got.ActiveIdentities != 0 || len(root.CachedActorIDs()) != 0 {
+					t.Fatalf("optional entry leaked roots: %+v", got)
+				}
+			})
+		}
+	}
 }
 
 func TestBudgetIntegrationStoredJobRejectsHTTPWithoutSaveCredit(t *testing.T) {

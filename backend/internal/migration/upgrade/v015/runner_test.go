@@ -122,7 +122,6 @@ func TestRunnerReleaseRoundTripAndReadOnlyVerification(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				authorizeTestExecution(&resolved.Config)
 				server, err := api.NewServer(&resolved.Config, resolved.CredentialKeys, slog.New(slog.NewTextHandler(io.Discard, nil)), db, client, config.ModeServer, nil)
 				if err != nil {
 					t.Fatal("runtime API initialization", err)

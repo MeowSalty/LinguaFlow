@@ -26,23 +26,35 @@ func clearDeploymentEnvironment(t *testing.T) {
 
 func TestConfigCommandsDoNotPrepareInstance(t *testing.T) {
 	clearDeploymentEnvironment(t)
-	executionBudgetTestEnvironment(t)
-	for _, action := range []string{"check", "explain"} {
-		t.Run(action, func(t *testing.T) {
-			dir := filepath.Join(t.TempDir(), "not-created")
-			root, _ := newRoot()
-			var out bytes.Buffer
-			root.SetOut(&out)
-			root.SetErr(&out)
-			root.SetArgs([]string{"config", action, "--mode", "local", "--data-dir", dir, "--port", "0"})
-			if err := root.Execute(); err != nil {
-				t.Fatalf("%v: %s", err, out.String())
+	for _, scenario := range []string{"omitted", "partial"} {
+		t.Run(scenario, func(t *testing.T) {
+			if scenario == "partial" {
+				t.Setenv("LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES", "123")
 			}
-			if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("offline command created instance: %v", err)
-			}
-			if action == "explain" && !strings.Contains(out.String(), "generated at startup") {
-				t.Fatalf("missing pending secret status: %s", out.String())
+			for _, action := range []string{"check", "explain"} {
+				t.Run(action, func(t *testing.T) {
+					dir := filepath.Join(t.TempDir(), "not-created")
+					root, _ := newRoot()
+					var out bytes.Buffer
+					root.SetOut(&out)
+					root.SetErr(&out)
+					root.SetArgs([]string{"config", action, "--mode", "local", "--data-dir", dir, "--port", "0"})
+					if err := root.Execute(); err != nil {
+						t.Fatalf("%v: %s", err, out.String())
+					}
+					if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+						t.Fatalf("offline command created instance: %v", err)
+					}
+					if action == "explain" && !strings.Contains(out.String(), "not configured (unlimited)") {
+						t.Fatal("unlimited budget missing from explain")
+					}
+					if action == "explain" && scenario == "partial" && !strings.Contains(out.String(), "env: LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES") {
+						t.Fatal("partial budget source lost")
+					}
+					if action == "explain" && !strings.Contains(out.String(), "generated at startup") {
+						t.Fatalf("missing pending secret status: %s", out.String())
+					}
+				})
 			}
 		})
 	}
@@ -50,7 +62,6 @@ func TestConfigCommandsDoNotPrepareInstance(t *testing.T) {
 
 func TestConfigCommandsRespectExplicitFlags(t *testing.T) {
 	clearDeploymentEnvironment(t)
-	executionBudgetTestEnvironment(t)
 	t.Setenv("LINGUAFLOW_HOST", "0.0.0.0")
 	t.Setenv("LINGUAFLOW_PORT", "18090")
 	dir := filepath.Join(t.TempDir(), "instance")
@@ -137,5 +148,27 @@ func TestInitServerTemplate(t *testing.T) {
 	}
 	if fields := config.DeploymentFields(); len(fields) == 0 {
 		t.Fatal("deployment field contract missing")
+	}
+}
+
+func TestConfigCommandsOptionalBudgetRejectWithoutPreparingInstance(t *testing.T) {
+	clearDeploymentEnvironment(t)
+	for _, value := range []string{"0", "-1", "", "broken"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES", value)
+			for _, action := range []string{"check", "explain"} {
+				path := filepath.Join(t.TempDir(), "not-created")
+				root, _ := newRoot()
+				root.SetOut(new(bytes.Buffer))
+				root.SetErr(new(bytes.Buffer))
+				root.SetArgs([]string{"config", action, "--mode", "local", "--data-dir", path})
+				if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "execution_budget.actor.max_payload_bytes") {
+					t.Fatalf("invalid %q accepted: %v", value, err)
+				}
+				if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+					t.Fatal("invalid config prepared instance")
+				}
+			}
+		})
 	}
 }

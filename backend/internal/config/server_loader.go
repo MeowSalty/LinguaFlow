@@ -63,17 +63,16 @@ type sourcedValue struct {
 }
 
 func ResolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
-	return resolveServerConfig(in, true)
+	return resolveServerConfig(in)
 }
 
 // ResolveMaintenanceServerConfig parses deployment inputs for maintenance and
-// inspection which do not execute models. It does not authorize a Server:
-// bootstrap and NewServer must still validate the complete execution policy.
+// inspection. It retains the same optional budget validation as server inputs.
 func ResolveMaintenanceServerConfig(in ServerInputs) (*ResolvedServer, error) {
-	return resolveServerConfig(in, false)
+	return resolveServerConfig(in)
 }
 
-func resolveServerConfig(in ServerInputs, requireExecution bool) (*ResolvedServer, error) {
+func resolveServerConfig(in ServerInputs) (*ResolvedServer, error) {
 	if _, present := in.Environment["LINGUAFLOW_STORAGE_LIMITS_CAPACITY_BYTES"]; present {
 		return nil, fmt.Errorf("LINGUAFLOW_STORAGE_LIMITS_CAPACITY_BYTES has been removed; use LINGUAFLOW_STORAGE_INITIALIZATION_CAPACITY_BYTES for initialization and the storage quota API for existing spaces")
 	}
@@ -227,7 +226,7 @@ func resolveServerConfig(in ServerInputs, requireExecution bool) (*ResolvedServe
 	resolveStorageDirectories(&r.Config, values)
 	// 在使用派生的依赖路径之前先校验路径与容量。缺失的本地密钥单独解析，
 	// 绝不用占位值顶替。
-	if err := validateServerConfig(&r.Config, false, requireExecution); err != nil {
+	if err := validateServerConfig(&r.Config, false); err != nil {
 		return nil, err
 	}
 	if in.Mode == ModeLocal {
@@ -250,7 +249,7 @@ func resolveServerConfig(in ServerInputs, requireExecution bool) (*ResolvedServe
 			r.Config.Credentials.KeyringFile = filepath.Join(r.Config.DataDir, "credentials-keyring.json")
 		}
 	}
-	if err := validateServerConfig(&r.Config, !r.LocalSecretPending, requireExecution); err != nil {
+	if err := validateServerConfig(&r.Config, !r.LocalSecretPending); err != nil {
 		return nil, err
 	}
 	if r.Log.Level != "debug" && r.Log.Level != "info" && r.Log.Level != "warn" && r.Log.Level != "error" {
@@ -340,7 +339,10 @@ func (r *ResolvedServer) describe(values map[string]sourcedValue, mode string) {
 			}
 		}
 		var value string
-		if strings.HasPrefix(f.Key, "bootstrap.admin.") && r.Bootstrap.Admin == nil {
+		if f.Type == "optional_integer64" && f.read(r) == nil {
+			value = "not configured (unlimited)"
+			source = "not configured"
+		} else if strings.HasPrefix(f.Key, "bootstrap.admin.") && r.Bootstrap.Admin == nil {
 			value = "not supplied"
 		} else {
 			value = fmt.Sprint(f.read(r))
@@ -522,7 +524,7 @@ func parseYAMLField(f serverField, n *yaml.Node, env map[string]string) (any, er
 		return n.Value, nil
 	case "storage_backends":
 		return parseStorageBackends(n, env)
-	case "integer64":
+	case "integer64", "optional_integer64":
 		if n.Kind != yaml.ScalarNode || n.Tag != "!!int" {
 			return nil, fmt.Errorf("must be an integer")
 		}
@@ -608,7 +610,7 @@ func parseEnvironmentValue(f serverField, s string) (any, error) {
 		return parseQuotaInput(s)
 	case "storage_backends":
 		return parseStorageBackendsEnvironment(s)
-	case "integer64":
+	case "integer64", "optional_integer64":
 		v, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("must be an integer")
@@ -664,7 +666,7 @@ func validValueType(kind string, v any) bool {
 	case "storage_backends":
 		_, ok := v.([]StorageBackendConfig)
 		return ok
-	case "integer64":
+	case "integer64", "optional_integer64":
 		_, ok := v.(int64)
 		return ok
 	case "string", "path", "disk_threshold":

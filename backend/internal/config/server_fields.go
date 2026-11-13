@@ -28,6 +28,25 @@ func field[T any](key, env, kind, modes string, sensitive bool, target func(*Res
 	}
 	return serverField{FieldInfo: FieldInfo{key, env, kind, modes, sensitive, effect}, read: func(r *ResolvedServer) any { return *target(r) }, write: func(r *ResolvedServer, v any) { *target(r) = v.(T) }}
 }
+
+// optionalInteger64Field exposes bare integers to the parser and encoder,
+// while keeping absence as a real nil interface and allocating each write.
+func optionalInteger64Field(key, env, modes string, sensitive bool, target func(*ResolvedServer) **int64) serverField {
+	return serverField{
+		FieldInfo: FieldInfo{key, env, "optional_integer64", modes, sensitive, "restart"},
+		read: func(r *ResolvedServer) any {
+			value := *target(r)
+			if value == nil {
+				return nil
+			}
+			return *value
+		},
+		write: func(r *ResolvedServer, v any) {
+			value := v.(int64)
+			*target(r) = &value
+		},
+	}
+}
 func admin(r *ResolvedServer) *BootstrapAdmin {
 	if r.Bootstrap.Admin == nil {
 		r.Bootstrap.Admin = &BootstrapAdmin{}
@@ -36,22 +55,22 @@ func admin(r *ResolvedServer) *BootstrapAdmin {
 }
 
 var serverFields = []serverField{
-	field("server.execution_budget.actor.max_unconfirmed_members", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Actor.MaxUnconfirmedMembers }),
-	field("server.execution_budget.actor.max_payload_bytes", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Actor.MaxPayloadBytes }),
-	field("server.execution_budget.actor.max_prepare_owners", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Actor.MaxPrepareOwners }),
-	field("server.execution_budget.actor.max_main_response_owners", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_MAIN_RESPONSE_OWNERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Actor.MaxMainResponseOwners }),
-	field("server.execution_budget.actor.max_aux_response_owners", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_AUX_RESPONSE_OWNERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Actor.MaxAuxResponseOwners }),
-	field("server.execution_budget.actor.max_build_workers", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_BUILD_WORKERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Actor.MaxBuildWorkers }),
-	field("server.execution_budget.actor.max_queued_descriptors", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_QUEUED_DESCRIPTORS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Actor.MaxQueuedDescriptors }),
-	field("server.execution_budget.actor.max_logical_storage_bytes", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_LOGICAL_STORAGE_BYTES", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Actor.MaxLogicalStorageBytes }),
-	field("server.execution_budget.instance.max_unconfirmed_members", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_UNCONFIRMED_MEMBERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Instance.MaxUnconfirmedMembers }),
-	field("server.execution_budget.instance.max_payload_bytes", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PAYLOAD_BYTES", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Instance.MaxPayloadBytes }),
-	field("server.execution_budget.instance.max_prepare_owners", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PREPARE_OWNERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Instance.MaxPrepareOwners }),
-	field("server.execution_budget.instance.max_main_response_owners", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_MAIN_RESPONSE_OWNERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Instance.MaxMainResponseOwners }),
-	field("server.execution_budget.instance.max_aux_response_owners", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_AUX_RESPONSE_OWNERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Instance.MaxAuxResponseOwners }),
-	field("server.execution_budget.instance.max_build_workers", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_BUILD_WORKERS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Instance.MaxBuildWorkers }),
-	field("server.execution_budget.instance.max_queued_descriptors", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_QUEUED_DESCRIPTORS", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Instance.MaxQueuedDescriptors }),
-	field("server.execution_budget.instance.max_logical_storage_bytes", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES", "integer64", "serve/local", false, func(r *ResolvedServer) *int64 { return &r.Config.ExecutionBudget.Instance.MaxLogicalStorageBytes }),
+	optionalInteger64Field("server.execution_budget.actor.max_unconfirmed_members", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxUnconfirmedMembers }),
+	optionalInteger64Field("server.execution_budget.actor.max_payload_bytes", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxPayloadBytes }),
+	optionalInteger64Field("server.execution_budget.actor.max_prepare_owners", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxPrepareOwners }),
+	optionalInteger64Field("server.execution_budget.actor.max_main_response_owners", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_MAIN_RESPONSE_OWNERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxMainResponseOwners }),
+	optionalInteger64Field("server.execution_budget.actor.max_aux_response_owners", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_AUX_RESPONSE_OWNERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxAuxResponseOwners }),
+	optionalInteger64Field("server.execution_budget.actor.max_build_workers", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_BUILD_WORKERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxBuildWorkers }),
+	optionalInteger64Field("server.execution_budget.actor.max_queued_descriptors", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_QUEUED_DESCRIPTORS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxQueuedDescriptors }),
+	optionalInteger64Field("server.execution_budget.actor.max_logical_storage_bytes", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_LOGICAL_STORAGE_BYTES", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxLogicalStorageBytes }),
+	optionalInteger64Field("server.execution_budget.instance.max_unconfirmed_members", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_UNCONFIRMED_MEMBERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Instance.MaxUnconfirmedMembers }),
+	optionalInteger64Field("server.execution_budget.instance.max_payload_bytes", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PAYLOAD_BYTES", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Instance.MaxPayloadBytes }),
+	optionalInteger64Field("server.execution_budget.instance.max_prepare_owners", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PREPARE_OWNERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Instance.MaxPrepareOwners }),
+	optionalInteger64Field("server.execution_budget.instance.max_main_response_owners", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_MAIN_RESPONSE_OWNERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Instance.MaxMainResponseOwners }),
+	optionalInteger64Field("server.execution_budget.instance.max_aux_response_owners", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_AUX_RESPONSE_OWNERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Instance.MaxAuxResponseOwners }),
+	optionalInteger64Field("server.execution_budget.instance.max_build_workers", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_BUILD_WORKERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Instance.MaxBuildWorkers }),
+	optionalInteger64Field("server.execution_budget.instance.max_queued_descriptors", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_QUEUED_DESCRIPTORS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Instance.MaxQueuedDescriptors }),
+	optionalInteger64Field("server.execution_budget.instance.max_logical_storage_bytes", "LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Instance.MaxLogicalStorageBytes }),
 	field("server.authentication.public_base_url", "LINGUAFLOW_AUTHENTICATION_PUBLIC_BASE_URL", "string", "serve/local", false, func(r *ResolvedServer) *string { return &r.Config.Authentication.PublicBaseURL }),
 	field("server.authentication.completion_urls", "LINGUAFLOW_AUTHENTICATION_COMPLETION_URLS", "strings", "serve/local", false, func(r *ResolvedServer) *[]string { return &r.Config.Authentication.CompletionURLs }),
 	field("server.authentication.allowed_hosts", "LINGUAFLOW_AUTHENTICATION_ALLOWED_HOSTS", "strings", "serve/local", false, func(r *ResolvedServer) *[]string { return &r.Config.Authentication.AllowedHosts }),
