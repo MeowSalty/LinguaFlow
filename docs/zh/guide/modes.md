@@ -92,7 +92,7 @@ export LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD='初次登录用，之后请修改'
 linguaflow serve --config server.yaml
 ```
 
-缺任何一项密钥或初始管理员输入，`serve` 都会**拒绝启动**——这是刻意设计，避免拿弱密钥跑起来。部署文档只通过 `--config`（或 `LINGUAFLOW_SERVER_CONFIG` 环境变量）选择，程序**不会**自动搜索目录或读取 `.env` 文件。
+缺任何一项密钥或初始管理员输入，`serve` 都会**拒绝启动**——这是刻意设计，避免拿弱密钥跑起来。部署文档只通过 `--config`（或 `LINGUAFLOW_SERVER_CONFIG` 环境变量）选择，程序**不会**自动搜索目录或读取 `.env` 文件。执行预算逐维度可选，需要资源限额时见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-可选)。
 
 ::: tip 不想碰配置文件？
 所有部署字段也支持环境变量（见 [配置文件与环境变量](/zh/guide/configuration)），可以完全不写 `server.yaml`，纯用环境变量启动。配置文件适合把监听地址、数据目录等非敏感项固化下来，敏感值仍建议走环境变量。

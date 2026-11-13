@@ -170,6 +170,7 @@ linguaflow local [flags]
 - 启动后自动打开浏览器访问 `http://<host>:<port>`
 - 在 Windows 资源管理器中双击可执行文件时，自动以 `local` 模式启动
 - 首次启动在数据目录自动生成 `instance-secret`（JWT 密钥）与 `credentials-keyring.json`（凭据加密 keyring），无需手工准备；请连同数据库一起备份
+- **执行预算可选**：默认不限制；需要限制资源用量时，通过环境变量或部署文档配置 `server.execution_budget` 的相关维度（见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-可选)）
 
 ## serve 命令
 
@@ -417,16 +418,20 @@ linguaflow-migrate verify --operation-dir /var/linguaflow/upgrade-op
 ### 旧存储导入示例
 
 ```bash
-# 生成导入计划（默认读取 <data_dir>/jobs，可用 --legacy-root 覆盖）
+# 生成导入计划（默认读取 <data_dir>/jobs，可用 --legacy-root 覆盖；只支持 inplace 策略）
 linguaflow-migrate storage plan --mode serve --config server.yaml \
   --operation-dir /var/linguaflow/storage-op
 
-# 停服后执行导入
+# 停服后执行导入；PostgreSQL 时需用 --backup-reference 声明外部备份出处
 linguaflow-migrate storage apply --operation-dir /var/linguaflow/storage-op --offline
 ```
 
 ::: info 配额与清单
-旧存储导入会记录两层配额（见 [配置文件与环境变量 · 对象存储](/zh/guide/configuration#server-storage-—-对象存储)）；serve 模式要求两个配额都已显式配置。若此前已生成过迁移清单文件（ManifestVersion=1），可用 `storage plan --manifest <文件>` 接管继续。
+旧存储导入会记录两层配额（见 [配置文件与环境变量 · 对象存储](/zh/guide/configuration#server-storage-—-对象存储)）；serve 模式要求两个配额都已显式配置。若此前已生成过迁移清单文件（ManifestVersion=1），可用 `storage plan --manifest <文件>` 只读接管继续。
+:::
+
+::: warning 与版本升级相同的纪律
+`storage` 操作与 `upgrade` 一样冻结工具构建摘要、强制 `--offline` 并校验保护收据与基线证据：请固定使用同一个二进制跑完全程，中途不要重新编译替换；SQLite 导入中断可用 `status` / `resume` 续跑。计划冻结后也不要手工改动操作目录里的任何文件。
 :::
 
 ### 从源码运行（Taskfile）

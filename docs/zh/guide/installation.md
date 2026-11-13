@@ -19,7 +19,7 @@ LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（�
 
 | 要求                  | 最低版本 |
 | --------------------- | -------- |
-| Go（从源码构建）      | 1.26.10+  |
+| Go（从源码构建）      | 1.26+     |
 | Node.js(从源码构建) | `^20.19.0` 或 `>=22.12.0` |
 | pnpm（从源码构建）    | 最新版   |
 | Docker（容器部署）    | 20+      |
@@ -33,7 +33,7 @@ LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（�
 2. **凭据加密密钥** — `LINGUAFLOW_CREDENTIALS_MASTER_KEY`（32 字节随机值的 Base64）
 3. **初始管理员** — `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD`（`_EMAIL` 可选；仅首次初始化需要）
 
-三个值都可用 `linguaflow secrets generate --stdout` 生成；JWT secret 与凭据加密密钥必须是两个不同的随机值。服务器模式仍在完善中，适合试用，不建议作为生产唯一依赖。个人本机请优先使用 [预编译二进制](#预编译二进制)。
+三个值都可用 `linguaflow secrets generate --stdout` 生成；JWT secret 与凭据加密密钥必须是两个不同的随机值。执行预算（见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-可选)）逐维度可选，需要资源限额时按同一种方式注入。服务器模式仍在完善中，适合试用，不建议作为生产唯一依赖。个人本机请优先使用 [预编译二进制](#预编译二进制)。
 :::
 
 ### 基本部署
@@ -54,7 +54,7 @@ docker run -d \
 浏览器访问 `http://localhost:8080`，用上面的管理员账号登录后使用。
 
 ::: warning 密钥保存与复用
-JWT secret 与凭据加密密钥请保存到密码管理器或部署平台的秘密配置中，并在**每次重建容器时注入同一份值**——凭据加密密钥一旦更换，数据库里已保存的 AI 密钥将无法解密。首次初始化成功后，`LINGUAFLOW_BOOTSTRAP_ADMIN_*` 变量可以不再注入（账号与注册政策已存入数据库）。
+JWT secret 与凭据加密密钥请保存到密码管理器或部署平台的秘密配置中，并在**每次重建容器时注入同一份值**——凭据加密密钥一旦更换，数据库里已保存的 AI 密钥将无法解密。若配置了执行预算，同样要每次注入同一份值（写进部署文档或部署平台的环境变量配置均可）。首次初始化成功后，`LINGUAFLOW_BOOTSTRAP_ADMIN_*` 变量可以不再注入（账号与注册政策已存入数据库）。
 :::
 
 ::: warning 旧版本数据目录不兼容
@@ -86,6 +86,9 @@ services:
       LINGUAFLOW_CREDENTIALS_MASTER_KEY: ${LINGUAFLOW_CREDENTIALS_MASTER_KEY:?需要 32 字节随机值的 Base64}
       LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME: ${LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME:-admin}
       LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD: ${LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD:?需要初始管理员密码}
+      # 执行预算逐维度可选；示例：限制整个实例的载荷与逻辑存储各 1 GiB
+      LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PAYLOAD_BYTES: 1073741824
+      LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES: 1073741824
 
 volumes:
   linguaflow-data:
@@ -158,12 +161,13 @@ Compose 示例中常用变量：
 | 变量 | 用途 |
 | --- | --- |
 | `LINGUAFLOW_DATA_DIR` | 数据目录（SQLite 文件等） |
-| `LINGUAFLOW_JWT_SECRET` | JWT 签名密钥（必需，≥32 字节；支持 `_FILE`） |
-| `LINGUAFLOW_CREDENTIALS_MASTER_KEY` | 凭据加密密钥（必需；支持 `_FILE`） |
+| `LINGUAFLOW_JWT_SECRET` | JWT 签名密钥（serve 必需，≥32 字节；支持 `_FILE`） |
+| `LINGUAFLOW_CREDENTIALS_MASTER_KEY` | 凭据加密密钥（serve 必需；支持 `_FILE`） |
 | `LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | 首次初始化的管理员（`_EMAIL` 可选；密码支持 `_FILE`） |
 | `LINGUAFLOW_BOOTSTRAP_REGISTRATION_ENABLED` | 是否开放注册（默认 `false`，也可登录后管理员在设置页开启） |
 | `LINGUAFLOW_DATABASE_DRIVER` / `DSN` | 切换 PostgreSQL 时使用（`DSN` 支持 `_FILE`） |
 | `LINGUAFLOW_SERVE_UI` | `false` 时仅 API（也可用 `--no-ui`） |
+| `LINGUAFLOW_EXECUTION_BUDGET_*` | 执行预算（可选，逐维度；见 [执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-可选)） |
 
 **完整环境变量表、部署文档字段与配置优先级** 只维护在一处：
 
@@ -249,6 +253,10 @@ chmod +x linguaflow
 # 或资源管理器中双击；本地模式，端口 18080
 ```
 
+:::
+
+::: tip 限制资源用量（可选）
+执行预算（`server.execution_budget`）逐维度可选，需要限制单用户或整个实例的载荷、并发与存储额度时再配置，见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-可选)。
 :::
 
 ::: tip 校验文件完整性
