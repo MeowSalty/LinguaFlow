@@ -42,14 +42,19 @@ func installCleanup(t *testing.T, ctx context.Context, c *lfent.Client, projects
 	if err != nil {
 		t.Fatal(err)
 	}
+	return installCleanupRoot(t, ctx, c, projects, root, preparedActors...)
+}
+
+func installCleanupRoot(t *testing.T, ctx context.Context, c *lfent.Client, projects *ProjectService, root *resourcebudget.RootBudget, preparedActors ...int) *ExecutionBudgetCleanup {
+	t.Helper()
 	source := workstate.InventorySource{DB: c, Driver: "sqlite", ItemBytes: 1024}
-	if err = root.Rebuild(ctx, source); err != nil {
+	if err := root.Rebuild(ctx, source); err != nil {
 		t.Fatal(err)
 	}
 	for _, actor := range preparedActors {
 		filtered := source
 		filtered.ActorID = actor
-		if err = root.RebuildActor(ctx, actor, filtered); err != nil {
+		if err := root.RebuildActor(ctx, actor, filtered); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -105,6 +110,39 @@ func TestExecutionBudgetCleanupProjectPagedActors(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertCleanupSQL(t, ctx, cleanup)
+}
+
+func TestExecutionBudgetCleanupOptionalBudgetProjectActors(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		policy resourcebudget.Policy
+	}{{"unlimited", resourcebudget.Policy{}}, {"overage", resourcebudget.Policy{Actor: resourcebudget.Limits{MaxPayloadBytes: 1}, Instance: resourcebudget.Limits{MaxLogicalStorageBytes: 1}}}} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, c, s, p, u, _ := storageLifecycleFixture(t)
+			res := storageUpload(t, ctx, s, p, u, "optional-cleanup.txt", "source")
+			other := createTestUser(t, c, "other-optional-owner")
+			for _, actor := range []int{u.ID, other.ID} {
+				seedCleanupStock(t, ctx, c, p.ID, res.ID, actor)
+			}
+			root := optionalInputRoot(t, tc.policy)
+			cleanup := installCleanupRoot(t, ctx, c, s.projects, root, u.ID, other.ID)
+			if len(root.CachedActorIDs()) != 2 || root.Snapshot(u.ID).Instance.LogicalStorageBytes <= 1 {
+				t.Fatal("fixture did not retain both cached actors and stock")
+			}
+			if _, err := s.projects.DeleteProject(ctx, u.ID, p.ID); err != nil {
+				t.Fatal(err)
+			}
+			assertCleanupSQL(t, ctx, cleanup)
+			if got := root.Snapshot(u.ID).Instance; got != (resourcebudget.Vector{}) {
+				t.Fatalf("project deletion retained stock: %+v", got)
+			}
+			for _, actor := range []int{u.ID, other.ID} {
+				if err := root.ForgetActor(actor); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
 }
 
 func TestExecutionBudgetCleanupResourceFailedInventory(t *testing.T) {

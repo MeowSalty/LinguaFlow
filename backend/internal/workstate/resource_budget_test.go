@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
+	"fmt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
@@ -196,8 +197,35 @@ func budgetFixture(t *testing.T) (context.Context, *ent.Client, *Store, Scope, *
 }
 
 func TestBudgetIntegrationB07B08StorageACKPauseRestart(t *testing.T) {
+	testBudgetIntegrationStorageACKPauseRestart(t, integrationBudget(t), integrationBudget(t))
+}
+
+func TestBudgetIntegrationOptionalBudgetStorageACKPauseRestart(t *testing.T) {
+	for _, mixed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("mixed_%t", mixed), func(t *testing.T) {
+			policy := resourcebudget.Policy{}
+			if mixed {
+				policy.Actor.MaxPayloadBytes = 1 << 30
+				policy.Instance.MaxPrepareOwners = 1
+			}
+			root, err := resourcebudget.New(policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			policy.Actor.MaxLogicalStorageBytes = 1
+			policy.Instance.MaxLogicalStorageBytes = 1
+			restarted, err := resourcebudget.New(policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			testBudgetIntegrationStorageACKPauseRestart(t, root, restarted)
+		})
+	}
+}
+
+func testBudgetIntegrationStorageACKPauseRestart(t *testing.T, root, restarted *resourcebudget.RootBudget) {
+	t.Helper()
 	ctx, c, store, scope, seg, source, actor := budgetFixture(t)
-	root := integrationBudget(t)
 	if err := root.Rebuild(ctx, source); err != nil {
 		t.Fatal(err)
 	}
@@ -240,12 +268,27 @@ func TestBudgetIntegrationB07B08StorageACKPauseRestart(t *testing.T) {
 	if root.Snapshot(actor.ActorID).Instance != before {
 		t.Fatal("Pause/unload refunded backing")
 	}
-	restarted := integrationBudget(t)
 	if err := restarted.Rebuild(context.Background(), source); err != nil {
 		t.Fatal(err)
 	}
 	if got := restarted.Snapshot(0).Instance.LogicalStorageBytes; got != actual {
 		t.Fatalf("restart storage=%d want=%d", got, actual)
+	}
+	if err := restarted.RebuildActor(ctx, actor.ActorID, source); err != nil {
+		t.Fatal(err)
+	}
+	stock := resourcebudget.Vector{LogicalStorageBytes: actual}
+	if err := restarted.Attach(actor, StorageIdentity(scope.JobID), stock); err != nil {
+		t.Fatal("paused stored ownership could not be attached", err)
+	}
+	if err := restarted.Transfer(actor, StorageIdentity(scope.JobID), stock); err != nil {
+		t.Fatal("unchanged restored ownership refused", err)
+	}
+	if err := restarted.Detach(actor, StorageIdentity(scope.JobID)); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.ForgetActor(actor.ActorID); err != nil {
+		t.Fatal(err)
 	}
 	t.Logf("B-T07/B-T08 ACK replay stable; paused backing=%d restart backing=%d", actual, actual)
 }

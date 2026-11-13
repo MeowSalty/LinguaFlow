@@ -783,7 +783,6 @@ func assertPostgresOldAccessTokenRejected(ctx context.Context, cfg *config.Serve
 		return err
 	}
 	defer db.Close()
-	authorizeTestExecution(cfg)
 	server, err := api.NewServer(cfg, keys, slog.New(slog.NewTextHandler(io.Discard, nil)), db, client, config.ModeServer, nil)
 	if err != nil {
 		return err

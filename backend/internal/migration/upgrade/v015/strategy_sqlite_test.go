@@ -293,9 +293,7 @@ func TestSQLiteInplaceUpgradeRejectsOldAccessToken(t *testing.T) {
 	if err != nil {
 		t.Fatal("open upgraded service database", err)
 	}
-	// Maintenance parsing does not authorize model execution. This actual
-	// Server fixture supplies its own finite policy explicitly.
-	authorizeTestExecution(&resolved.Config)
+	// The upgraded deployment constructs a Server with omitted budget limits.
 	server, err := api.NewServer(&resolved.Config, resolved.CredentialKeys, slog.New(slog.NewTextHandler(io.Discard, nil)), db, client, config.ModeServer, nil)
 	if err != nil {
 		db.Close()

@@ -1289,10 +1289,17 @@ func runHandoffHTTPCase(t *testing.T, mode string, concurrency, count, batch, ac
 		}
 	}
 	maxFreeze := int64(0)
-	for _, request := range f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID), workrequest.StateNEQ("cancelled_before_dispatch")).Select(workrequest.FieldFreezeBytes, workrequest.FieldBusinessBound).AllX(context.Background()) {
+	for _, request := range f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID), workrequest.StateNEQ("cancelled_before_dispatch")).Select(workrequest.FieldFreezeBytes, workrequest.FieldBusinessBound, workrequest.FieldPromotionCount).AllX(context.Background()) {
 		maxFreeze = max(maxFreeze, request.FreezeBytes)
-		if inline && request.BusinessBound != int64(actualBatch)<<20 {
-			fail("Bmax=%d want nQ=%d", request.BusinessBound, int64(actualBatch)<<20)
+		if inline {
+			// Reservation may reach the shorter tail batch before held HTTP
+			// calls finish. Its business limit follows its own frozen members.
+			if request.PromotionCount < 1 || request.PromotionCount > actualBatch {
+				fail("request members=%d outside 1..%d", request.PromotionCount, actualBatch)
+			}
+			if request.BusinessBound != int64(request.PromotionCount)<<20 {
+				fail("Bmax=%d want nQ=%d for n=%d", request.BusinessBound, int64(request.PromotionCount)<<20, request.PromotionCount)
+			}
 		}
 	}
 	if inline && atBarrier.ProgressLane != (2<<20)+(32<<10)+(int64(actualBatch)<<20) {
