@@ -471,18 +471,18 @@ linguaflow config explain --config server.yaml --mode serve # 逐字段列出最
 
 ### 必需输入（serve / local）
 
-**执行预算**（`server.execution_budget`）在 serve 与 local 两种模式下都**必填且无默认值**，缺失即拒绝启动——这是刻意设计：部署必须显式授权有限的资源额度，服务才允许开始执行。服务器模式**没有开箱即用的默认密钥**，密钥类输入缺一同样拒绝启动：
+**执行预算**（`server.execution_budget`）在 serve 与 local 两种模式下都**逐维度可选**：省略的维度表示不限制，显式配置的值必须为正整数。是否设置、设置多少由部署者按资源规划决定。服务器模式**没有开箱即用的默认密钥**，密钥类输入缺一拒绝启动：
 
 | 输入 | 适用模式 | 提供方式 |
 | --- | --- | --- |
-| 执行预算（16 项上限） | serve + local | 部署文档 `server.execution_budget` 或 16 个 `LINGUAFLOW_EXECUTION_BUDGET_*` 环境变量，见 [server.execution_budget](#server-execution-budget-—-执行预算-serve-local-必填) |
+| 执行预算（可选，逐维度） | serve + local | 部署文档 `server.execution_budget` 或 `LINGUAFLOW_EXECUTION_BUDGET_*` 环境变量，见 [server.execution_budget](#server-execution-budget-—-执行预算-serve-local-可选) |
 | JWT 签名密钥（≥32 字节） | 仅 serve | `LINGUAFLOW_JWT_SECRET` 或 `LINGUAFLOW_JWT_SECRET_FILE` |
 | 凭据加密密钥 | 仅 serve | `LINGUAFLOW_CREDENTIALS_MASTER_KEY`（32 字节随机值的 Base64）**或** `LINGUAFLOW_CREDENTIALS_KEYRING_FILE`（多密钥 JSON 文件），二选一、互斥 |
 | 初始管理员 | 仅 serve | 部署文档 `bootstrap.admin`（username/email）+ `LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD`（或 `_FILE`）；也可用 `linguaflow admin initialize` 命令提供 |
 
 生成密钥材料使用离线命令 `linguaflow secrets generate`（详见 [CLI 命令参考](/zh/guide/cli#secrets-命令)）。**凭据加密密钥是数据库里所有 AI 密钥的解密钥匙**：一旦更换或丢失，已保存的密钥无法解密；数据库备份必须与对应密钥共同保存。
 
-本地模式没有密钥类要求：首次启动自动在数据目录生成 `instance-secret` 与 `credentials-keyring.json` 并复用，也不接受 `bootstrap.admin` 与 `server.database.*` 配置；但**执行预算同样必填**（可用环境变量提供，见上文表格）。维护与只读命令（`config explain`、`admin` 维护等）不要求执行预算，可以照常运行。
+本地模式没有密钥类要求：首次启动自动在数据目录生成 `instance-secret` 与 `credentials-keyring.json` 并复用，也不接受 `bootstrap.admin` 与 `server.database.*` 配置；执行预算同样可选。维护与只读命令（`config explain`、`admin` 维护等）对配置的要求与启动一致。
 
 ### 配置结构
 
@@ -505,25 +505,7 @@ server:
   database:
     driver: sqlite
     # PostgreSQL 需要提供 DSN
-  execution_budget:                 # serve / local 都必填，无默认值（见下文详解）
-    actor:
-      max_unconfirmed_members: 4096
-      max_payload_bytes: 1073741824
-      max_prepare_owners: 64
-      max_main_response_owners: 64
-      max_aux_response_owners: 64
-      max_build_workers: 64
-      max_queued_descriptors: 4096
-      max_logical_storage_bytes: 1073741824
-    instance:
-      max_unconfirmed_members: 65536
-      max_payload_bytes: 1073741824
-      max_prepare_owners: 256
-      max_main_response_owners: 256
-      max_aux_response_owners: 256
-      max_build_workers: 256
-      max_queued_descriptors: 4096
-      max_logical_storage_bytes: 1073741824
+  # execution_budget 逐维度可选：省略 = 不限制，显式配置的值必须为正整数（见下文详解）
   cors:
     allowed_origins: []   # 显式 [] = 禁止跨域；不写此字段默认 ["*"]
     # 配置了 server.authentication.public_base_url 时必须写精确 origin，不能用 ["*"]
@@ -610,25 +592,25 @@ bootstrap:
 | `workers.sync.count` | int | `max(CPU 核数, 2)` | 术语同步执行器数量 |
 | `workers.sync.queue_capacity` | int | 同步执行器数 × 8 | 术语同步任务队列容量 |
 
-##### server.execution_budget — 执行预算（serve / local 必填）
+##### server.execution_budget — 执行预算（serve / local 可选）
 
-控制单个用户（`actor`）与整个实例（`instance`）执行翻译任务时可占用的资源上限。**16 个值全部必填、无默认值**：缺失、`0`、负数都会在配置解析阶段报错并拒绝启动，报错形如 `server.execution_budget: invalid resource budget: actor.max_unconfirmed_members must be explicitly configured and positive`。预算按**逻辑额度**记账（正在处理的对象数与字节数），不是进程内存上限；单维度超限不会挪用其他维度的余量。
+控制单个用户（`actor`）与整个实例（`instance`）执行翻译任务时可占用的资源上限。**逐维度可选**：省略的维度表示不限制；显式配置的值必须为正整数，写 `0`、负数或非法数字会在配置解析阶段报错，形如 `server.execution_budget.actor.max_unconfirmed_members must be positive when configured`。`config explain` 对省略的维度显示 `not configured (unlimited)`。预算按**逻辑额度**记账（正在处理的对象数与字节数），不是进程内存上限；已配置的各维度独立生效，一个维度超限不会挪用其他维度的余量。
 
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `actor.max_unconfirmed_members` / `instance.…` | int64 | 无（必填） | 未确认（未落库提交）的段落数上限 |
-| `actor.max_payload_bytes` / `instance.…` | int64 | 无（必填） | 同时持有的输入/输出载荷字节上限 |
-| `actor.max_prepare_owners` / `instance.…` | int64 | 无（必填） | 准备阶段（切段、提示词构造等前置工作）的所有权数上限 |
-| `actor.max_main_response_owners` / `instance.…` | int64 | 无（必填） | 主翻译响应的在途所有权数上限 |
-| `actor.max_aux_response_owners` / `instance.…` | int64 | 无（必填） | 辅助调用（术语提取、质检、注音等）响应的在途所有权数上限 |
-| `actor.max_build_workers` / `instance.…` | int64 | 无（必填） | 输入构建（解析、保护、对齐）的并发工作数上限 |
-| `actor.max_queued_descriptors` / `instance.…` | int64 | 无（必填） | 排队等待的条目描述符数上限 |
-| `actor.max_logical_storage_bytes` / `instance.…` | int64 | 无（必填） | 任务运行期占用的逻辑存储字节上限 |
+| `actor.max_unconfirmed_members` / `instance.…` | int64（可选） | 省略 = 不限制 | 未确认（未落库提交）的段落数上限 |
+| `actor.max_payload_bytes` / `instance.…` | int64（可选） | 省略 = 不限制 | 同时持有的输入/输出载荷字节上限 |
+| `actor.max_prepare_owners` / `instance.…` | int64（可选） | 省略 = 不限制 | 准备阶段（切段、提示词构造等前置工作）的所有权数上限 |
+| `actor.max_main_response_owners` / `instance.…` | int64（可选） | 省略 = 不限制 | 主翻译响应的在途所有权数上限 |
+| `actor.max_aux_response_owners` / `instance.…` | int64（可选） | 省略 = 不限制 | 辅助调用（术语提取、质检、注音等）响应的在途所有权数上限 |
+| `actor.max_build_workers` / `instance.…` | int64（可选） | 省略 = 不限制 | 输入构建（解析、保护、对齐）的并发工作数上限 |
+| `actor.max_queued_descriptors` / `instance.…` | int64（可选） | 省略 = 不限制 | 排队等待的条目描述符数上限 |
+| `actor.max_logical_storage_bytes` / `instance.…` | int64（可选） | 省略 = 不限制 | 任务运行期占用的逻辑存储字节上限 |
 
-每个字段都有同名环境变量，形如 `LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES` / `LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES`（把字段路径转大写蛇形即可）。优先级与其他部署字段一致：文档 < 环境变量 < 显式 flags。
+每个字段都有同名环境变量，形如 `LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES` / `LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES`（把字段路径转大写蛇形即可）。优先级与其他部署字段一致：文档 < 环境变量 < 显式 flags——环境变量与文档可以只覆盖部分维度，未覆盖的维度保持不限制。
 
 ::: tip 怎么取值
-参考起点：单人本地实例可给 `actor` 每项几十到几百、`instance` 略高于 `actor`（计数类）与单任务字节数的若干倍（字节类）；多用户实例按「单用户额度 × 并发用户数」放大 `instance`。取值只需为正整数，不影响结果质量——太小会让任务排队等待（见下），过大则失去保护意义。内存还受 `server.pipeline` 的准入窗口与 `rss_limit_mb` 保险丝约束。
+参考起点：单人本地实例可给 `actor` 每项几十到几百、`instance` 略高于 `actor`（计数类）与单任务字节数的若干倍（字节类）；多用户实例按「单用户额度 × 并发用户数」放大 `instance`。也可以只配最关心的几个维度（如载荷字节与逻辑存储），其余保持不限制。内存另受 `server.pipeline` 的准入窗口与 `rss_limit_mb` 保险丝约束。
 :::
 
 ::: warning 预算耗尽的行为
@@ -821,7 +803,7 @@ server:
 | `--no-ui` | bool | `false` | 关闭嵌入式 Web UI，仅提供 API |
 
 ::: warning 必需输入不受参数影响
-执行预算、JWT secret 与凭据加密密钥没有命令行参数入口，只能通过环境变量（或部署文档）提供。旧版本的 `--jwt-secret`、`--cors-origins` 参数已移除。
+JWT secret 与凭据加密密钥没有命令行参数入口，只能通过环境变量（或部署文档）提供。旧版本的 `--jwt-secret`、`--cors-origins` 参数已移除。
 :::
 
 ### local 子命令

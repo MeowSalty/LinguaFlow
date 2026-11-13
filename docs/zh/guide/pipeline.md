@@ -331,7 +331,7 @@ EPUB 的译文最终要嵌回原书的 XHTML。为保证导出的电子书能被
 
 ### 执行预算（部署级资源额度）
 
-除模型侧容量外，任务还受部署配置 [server.execution_budget](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填) 的约束：管理员为每个用户（`actor`）与整个实例（`instance`）授权未确认段落、载荷字节、响应所有权等 16 项上限。额度不足时：
+除模型侧容量外，任务还受部署配置 [server.execution_budget](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-可选) 的约束：管理员可按用户（`actor`）与整个实例（`instance`）分别配置未确认段落、载荷字节、响应所有权等上限（逐维度可选，省略 = 不限制）。额度不足时：
 
 - **异步任务**内先让出额度、排队等待（同「容量等待」，不误判失败）；若一整轮调度仍无任何持久化进展，相关资源以 `pipeline capacity conflict` 标记失败并触发任务状态重算
 - **同步接口**（即时翻译、试译/修订预览、任务重试/恢复）拿不到额度立即返回 `503 execution_busy`（不排队），稍后重试即可；执行类 JSON 请求体上限 1 MiB，超限返回 `413 invalid_request`

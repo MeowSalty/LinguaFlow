@@ -170,13 +170,13 @@ linguaflow local [flags]
 - 启动后自动打开浏览器访问 `http://<host>:<port>`
 - 在 Windows 资源管理器中双击可执行文件时，自动以 `local` 模式启动
 - 首次启动在数据目录自动生成 `instance-secret`（JWT 密钥）与 `credentials-keyring.json`（凭据加密 keyring），无需手工准备；请连同数据库一起备份
-- **执行预算不自动生成**：启动前需通过环境变量或部署文档提供 16 项 `server.execution_budget` 上限（见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填)）
+- **执行预算可选**：默认不限制；需要限制资源用量时，通过环境变量或部署文档配置 `server.execution_budget` 的相关维度（见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-可选)）
 
 ## serve 命令
 
 启动服务器模式（**预览**）。多用户与权限等能力仍在完善，不建议用于生产关键业务；个人使用请优先 `local`。
 
-服务器模式**必须**显式提供执行预算（serve / local 通用，见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填)）、JWT 签名密钥、凭据加密密钥，首次启动还需初始管理员输入，缺一即拒绝启动。部署配置通过 `--config` 选择，不会自动读取 `.env`：
+服务器模式**必须**显式提供 JWT 签名密钥、凭据加密密钥，首次启动还需初始管理员输入，缺一即拒绝启动。部署配置通过 `--config` 选择，不会自动读取 `.env`：
 
 ```bash
 linguaflow serve --config server.yaml

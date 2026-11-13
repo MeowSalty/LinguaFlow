@@ -15,30 +15,11 @@ Docker 镜像默认以**服务器模式**监听 `8080`，与双击二进制进�
 
 ### 启动本地模式
 
-先注入执行预算（16 项，参考 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填)；以 shell 为例）：
-
 ```bash
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS=4096
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES=1073741824
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS=64
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_MAIN_RESPONSE_OWNERS=64
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_AUX_RESPONSE_OWNERS=64
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_BUILD_WORKERS=64
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_QUEUED_DESCRIPTORS=4096
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_LOGICAL_STORAGE_BYTES=1073741824
-export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_UNCONFIRMED_MEMBERS=65536
-export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PAYLOAD_BYTES=1073741824
-export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_PREPARE_OWNERS=256
-export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_MAIN_RESPONSE_OWNERS=256
-export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_AUX_RESPONSE_OWNERS=256
-export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_BUILD_WORKERS=256
-export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_QUEUED_DESCRIPTORS=4096
-export LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES=1073741824
-
 linguaflow local
 ```
 
-或者直接双击运行 `linguaflow`（Windows）/ `./linguaflow`（Linux/macOS），程序检测到双击启动后会自动进入本地模式——双击同样需要预算，请先把 16 个变量写进系统环境变量。
+或者直接双击运行 `linguaflow`（Windows）/ `./linguaflow`（Linux/macOS），程序检测到双击启动后会自动进入本地模式。
 
 启动后会自动打开浏览器访问 `http://127.0.0.1:18080`。
 
@@ -77,10 +58,6 @@ linguaflow local
 本地模式首次启动会在数据目录自动生成两个私有密钥文件：`instance-secret`（JWT 签名密钥）与 `credentials-keyring.json`（AI 密钥的加密密钥），后续启动复用。请像对待数据库文件一样对待它们——**丢失后已保存的 AI 密钥将无法解密**，备份时需要一并备份。
 :::
 
-::: warning 执行预算必须显式注入
-本地模式**不会**自动生成执行预算：16 个 `LINGUAFLOW_EXECUTION_BUDGET_*` 环境变量（或部署文档中的 `server.execution_budget`）缺失时启动直接失败。双击启动的用户请先把值写进系统环境变量再双击；字段含义与参考值见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填)。
-:::
-
 ## 服务器模式（预览）
 
 ::: warning 预览状态
@@ -89,7 +66,7 @@ linguaflow local
 想先看看多用户效果？官方在线预览实例 **[meowsalty-linguaflow.hf.space](https://meowsalty-linguaflow.hf.space/)** 注册账号即可登录（演示环境，**数据不做持久化**）。
 :::
 
-服务器模式面向需要登录、多用户或「仅暴露 API」的部署场景。与本地模式最大的不同：**服务器模式不会替你生成任何密钥**，启动前必须自行准备部署配置与两类密钥。两种模式的**执行预算都必须显式配置**（见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-必填)）。
+服务器模式面向需要登录、多用户或「仅暴露 API」的部署场景。与本地模式最大的不同：**服务器模式不会替你生成任何密钥**，启动前必须自行准备部署配置与两类密钥。
 
 ### 启动服务器模式
 
@@ -107,13 +84,7 @@ linguaflow secrets generate --output /private/linguaflow/credentials-master-key
 linguaflow config check --config server.yaml
 linguaflow config explain --config server.yaml   # 查看最终配置与每项来源
 
-# 4. 注入执行预算（16 项；可走环境变量，或已写进 server.yaml 则可省略）
-#    示例（其余 14 项同理，完整清单见配置参考）：
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS=4096
-export LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES=1073741824
-#   ...
-
-# 5. 启动（JWT secret、凭据加密密钥、初始管理员通过环境变量注入）
+# 4. 启动（JWT secret、凭据加密密钥、初始管理员通过环境变量注入）
 export LINGUAFLOW_JWT_SECRET_FILE=/private/linguaflow/jwt-secret
 export LINGUAFLOW_CREDENTIALS_MASTER_KEY_FILE=/private/linguaflow/credentials-master-key
 export LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin
@@ -121,7 +92,7 @@ export LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD='初次登录用，之后请修改'
 linguaflow serve --config server.yaml
 ```
 
-缺任何一项执行预算、密钥或初始管理员输入，`serve` 都会**拒绝启动**——这是刻意设计，避免拿弱密钥或无界额度跑起来。部署文档只通过 `--config`（或 `LINGUAFLOW_SERVER_CONFIG` 环境变量）选择，程序**不会**自动搜索目录或读取 `.env` 文件。
+缺任何一项密钥或初始管理员输入，`serve` 都会**拒绝启动**——这是刻意设计，避免拿弱密钥跑起来。部署文档只通过 `--config`（或 `LINGUAFLOW_SERVER_CONFIG` 环境变量）选择，程序**不会**自动搜索目录或读取 `.env` 文件。执行预算逐维度可选，需要资源限额时见 [配置文件与环境变量 · 执行预算](/zh/guide/configuration#server-execution-budget-—-执行预算-serve-local-可选)。
 
 ::: tip 不想碰配置文件？
 所有部署字段也支持环境变量（见 [配置文件与环境变量](/zh/guide/configuration)），可以完全不写 `server.yaml`，纯用环境变量启动。配置文件适合把监听地址、数据目录等非敏感项固化下来，敏感值仍建议走环境变量。

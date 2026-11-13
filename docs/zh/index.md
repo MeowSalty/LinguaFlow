@@ -4,7 +4,7 @@ layout: home
 hero:
   name: LinguaFlow
   text: AI 驱动的多语言翻译工作台
-  tagline: 把文档、字幕、电子书和配置文件交给 AI，在本地完成批量翻译与审校——开源、单二进制。
+  tagline: 把文档、字幕、电子书和配置文件交给 AI，在本地完成批量翻译与审校——开源、单二进制、开箱即用。
   actions:
     - theme: brand
       text: 5 分钟上手
@@ -37,7 +37,7 @@ features:
     details: OpenAI / Anthropic / Gemini，以及 Azure、Ollama、LM Studio 等兼容接口。密钥加密存储、按版本轮换；可按凭据探测可用模型，统一配置思考强度，自定义提示词与多轮执行计划。
   - icon: 💻
     title: 本地优先，隐私可控
-    details: 单二进制启动本地模式，数据落在本机 SQLite。无需账号、无需把全文交给第三方 SaaS 平台。
+    details: 双击二进制即可启动本地模式，数据落在本机 SQLite。无需账号、无需把全文交给第三方 SaaS 平台。
   - icon: 🌐
     title: 团队协作（服务器模式 · 预览）
     details: 多用户注册与登录、本地密码与 OIDC / OAuth2 外部身份登录、组织与成员角色;任务中心跨项目追踪翻译、术语与文件存储任务，服务重启自动断点续跑;支持任务历史清理与保留策略。
@@ -93,24 +93,21 @@ flowchart LR
 ```bash [预编译二进制（推荐）]
 # 从 Releases 下载后：
 # https://github.com/MeowSalty/LinguaFlow/releases
-# 先注入执行预算（16 个 LINGUAFLOW_EXECUTION_BUDGET_* 变量，见安装文档）
 ./linguaflow          # Linux / macOS，自动打开浏览器
-# 或双击 linguaflow.exe（Windows，预算值需先写进系统环境变量）
+# 或双击 linguaflow.exe（Windows）
 # 默认：本地模式 http://127.0.0.1:18080
 ```
 
 ```bash [Docker]
 docker pull ghcr.io/meowsalty/linguaflow:latest
-# 容器默认服务器模式：启动前需注入执行预算、JWT 密钥、凭据加密密钥与初始管理员
+# 容器默认服务器模式：启动前需注入 JWT 密钥、凭据加密密钥与初始管理员
 docker run -p 8080:8080 \
-  -e LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES=1073741824 \
-  # ... 其余 15 个预算变量与密钥/管理员变量 ...
   -e LINGUAFLOW_JWT_SECRET="<32 字节随机值>" \
   -e LINGUAFLOW_CREDENTIALS_MASTER_KEY="<另一个独立随机值>" \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_USERNAME=admin \
   -e LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>" \
   ghcr.io/meowsalty/linguaflow:latest
-# 完整可复制示例见安装文档
+# 访问 http://localhost:8080；完整示例见安装文档
 ```
 
 ```bash [CLI 直接翻译]
