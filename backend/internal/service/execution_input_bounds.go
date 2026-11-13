@@ -426,7 +426,8 @@ func newExecutionInputLease(ctx context.Context, bytes int64, prepare bool) (*Ex
 		s.mu.Lock()
 		own := s.payload
 		s.mu.Unlock()
-		if bytes > p.Actor.MaxPayloadBytes-own || bytes > p.Instance.MaxPayloadBytes-own {
+		if p.Actor.MaxPayloadBytes > 0 && bytes > p.Actor.MaxPayloadBytes-own ||
+			p.Instance.MaxPayloadBytes > 0 && bytes > p.Instance.MaxPayloadBytes-own {
 			return nil, backend.ErrBuildCapacity
 		}
 	}

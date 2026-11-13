@@ -39,10 +39,14 @@ func inputContext(r *resourcebudget.RootBudget, p *ent.Project) context.Context 
 }
 
 func TestExecutionInputUTF8AndDepthBeforeDocument(t *testing.T) {
+	testExecutionInputUTF8AndDepthBeforeDocument(t, inputTestRoot(t))
+}
+
+func testExecutionInputUTF8AndDepthBeforeDocument(t *testing.T, r *resourcebudget.RootBudget) {
+	t.Helper()
 	c, p, res := inputFixture(t)
 	ctx := context.Background()
 	row := c.Segment.Create().SetResourceID(res.ID).SetSegmentIndex(0).SetSourceText("汉字").SaveX(ctx)
-	r := inputTestRoot(t)
 	bounded := WithExecutionInputBudget(ctx, r, resourcebudget.Scope{ActorID: *p.OwnerUserID, CallID: "bytes"}, 5)
 	if _, _, err := LoadExecutionSegments(bounded, c, res.ID); !errors.Is(err, backend.ErrBuildCapacity) {
 		t.Fatalf("UTF8 bytes must exceed five, got %v", err)
@@ -65,9 +69,13 @@ func TestExecutionInputUTF8AndDepthBeforeDocument(t *testing.T) {
 }
 
 func TestExecutionInputSnapshotLeaseLifecycle(t *testing.T) {
+	testExecutionInputSnapshotLeaseLifecycle(t, inputTestRoot(t))
+}
+
+func testExecutionInputSnapshotLeaseLifecycle(t *testing.T, r *resourcebudget.RootBudget) {
+	t.Helper()
 	c, p, res := inputFixture(t)
 	row := c.Segment.Create().SetResourceID(res.ID).SetSegmentIndex(0).SetSourceText("汉字").SetMeta(`{"nested":{"value":"x"}}`).SaveX(context.Background())
-	r := inputTestRoot(t)
 	ctx := inputContext(r, p)
 	rows, l, err := LoadExecutionSegments(ctx, c, res.ID)
 	if err != nil {
