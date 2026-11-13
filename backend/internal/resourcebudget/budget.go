@@ -57,6 +57,7 @@ type Vector struct {
 	LogicalStorageBytes int64
 }
 
+// Limits applies each positive value independently; zero leaves that root unlimited.
 type Limits struct {
 	MaxUnconfirmedMembers  int64 `yaml:"max_unconfirmed_members"`
 	MaxPayloadBytes        int64 `yaml:"max_payload_bytes"`
@@ -88,8 +89,8 @@ func (p Policy) Validate() error {
 		limits Limits
 	}{{"actor", p.Actor}, {"instance", p.Instance}} {
 		for i, n := range group.limits.vector().values() {
-			if n <= 0 {
-				return fmt.Errorf("%w: %s.max_%s must be explicitly configured and positive", ErrInvalid, group.name, dimensions[i])
+			if n < 0 {
+				return fmt.Errorf("%w: %s.max_%s must be nonnegative", ErrInvalid, group.name, dimensions[i])
 			}
 		}
 	}
@@ -135,7 +136,7 @@ func New(p Policy) (*RootBudget, error) {
 
 // PinActor protects a prepared actor between inventory loading and its first
 // claim. Each token has exactly one idempotent release; callers cannot release
-// another caller's pin. Counts share the explicitly configured descriptor caps.
+// another caller's pin. Positive descriptor caps also limit these counts.
 func (b *RootBudget) PinActor(actorID int) (func(), error) {
 	b.mu.Lock()
 	if actorID <= 0 {
@@ -150,9 +151,17 @@ func (b *RootBudget) PinActor(actorID int) (func(), error) {
 		b.mu.Unlock()
 		return nil, ErrActorMissing
 	}
-	if b.pinCount >= b.policy.Instance.MaxQueuedDescriptors || b.pins[actorID] >= b.policy.Actor.MaxQueuedDescriptors {
+	if cap := b.policy.Instance.MaxQueuedDescriptors; cap > 0 && b.pinCount >= cap {
 		b.mu.Unlock()
 		return nil, ErrCapacity
+	}
+	if cap := b.policy.Actor.MaxQueuedDescriptors; cap > 0 && b.pins[actorID] >= cap {
+		b.mu.Unlock()
+		return nil, ErrCapacity
+	}
+	if b.pinCount == math.MaxInt64 || b.pins[actorID] == math.MaxInt64 {
+		b.mu.Unlock()
+		return nil, fmt.Errorf("%w: actor pin count overflow", ErrInvalid)
 	}
 	b.pinCount++
 	b.pins[actorID]++
@@ -174,7 +183,7 @@ func (b *RootBudget) PinActor(actorID int) (func(), error) {
 
 // CanDrainOutside reports an observed consumer in another execution scope.
 // Cold payload/storage inventory and queued descriptors do not establish a
-// future release. The scan is bounded by the active identity descriptor cap.
+// future release. A positive instance descriptor cap bounds this scan.
 func (r *RootBudget) CanDrainOutside(scope Scope) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -204,7 +213,7 @@ func validateIdentity(s Scope, id string, historical bool) error {
 		return fmt.Errorf("%w: actor and exactly one job/call identity are required", ErrIdentity)
 	}
 	// Stable IDs are descriptors, not a place to retain request bodies. Together
-	// with the descriptor count cap this bounds the active map's key storage.
+	// with a positive descriptor count cap this bounds active map key storage.
 	if len(id) > 4096 || len(s.CallID) > 4096 {
 		return fmt.Errorf("%w: descriptor identity exceeds 4096 bytes", ErrIdentity)
 	}
@@ -212,7 +221,7 @@ func validateIdentity(s Scope, id string, historical bool) error {
 }
 
 // change computes independent signed deltas without allowing negative balances
-// or arithmetic overflow. Limits are enforced only for positive deltas.
+// or arithmetic overflow. Positive limits apply only to positive deltas.
 func change(total, old, next Vector, limit *Limits) (Vector, error) {
 	if err := old.Validate(); err != nil {
 		return Vector{}, err
@@ -232,7 +241,7 @@ func change(total, old, next Vector, limit *Limits) (Vector, error) {
 				return Vector{}, fmt.Errorf("%w: %s overflow", ErrInvalid, dimensions[i])
 			}
 			t[i] += d
-			if limit != nil && d > 0 && t[i] > caps[i] {
+			if limit != nil && caps[i] > 0 && d > 0 && t[i] > caps[i] {
 				return Vector{}, fmt.Errorf("%w: %s", ErrCapacity, dimensions[i])
 			}
 		} else {
@@ -250,7 +259,7 @@ func (b *RootBudget) notifyLocked() { close(b.changed); b.changed = make(chan st
 
 func (b *RootBudget) actorCacheFullLocked() bool {
 	n, limit := int64(len(b.actors)), b.policy.Instance.MaxQueuedDescriptors
-	return n >= limit || int64(len(b.preparing)) >= limit-n
+	return limit > 0 && (n >= limit || int64(len(b.preparing)) >= limit-n)
 }
 
 // Claim funds a new active identity. Repeating the same claim is idempotent;
@@ -279,7 +288,7 @@ func (b *RootBudget) Claim(s Scope, id string, v Vector) error {
 		}
 		return ErrIdentity
 	}
-	if int64(len(b.active)) >= b.policy.Instance.MaxQueuedDescriptors {
+	if cap := b.policy.Instance.MaxQueuedDescriptors; cap > 0 && int64(len(b.active)) >= cap {
 		return b.capacityLocked(s, ErrCapacity)
 	}
 	return b.transferLocked(s, id, Vector{}, v)
@@ -404,7 +413,7 @@ func (b *RootBudget) Attach(s Scope, id string, v Vector) error {
 		}
 		return ErrIdentity
 	}
-	if int64(len(b.active)) >= b.policy.Instance.MaxQueuedDescriptors {
+	if cap := b.policy.Instance.MaxQueuedDescriptors; cap > 0 && int64(len(b.active)) >= cap {
 		return ErrCapacity
 	}
 	a, ready := b.actors[s.ActorID]
@@ -519,7 +528,7 @@ func (b *RootBudget) Move(s Scope, from, to string, amount Vector) error {
 	if err != nil {
 		return err
 	}
-	if !ok && !left.empty() && !amount.empty() && int64(len(b.active)) >= b.policy.Instance.MaxQueuedDescriptors {
+	if cap := b.policy.Instance.MaxQueuedDescriptors; cap > 0 && !ok && !left.empty() && !amount.empty() && int64(len(b.active)) >= cap {
 		return ErrCapacity
 	}
 	right, err := change(t.usage, Vector{}, amount, nil)
@@ -618,9 +627,9 @@ func (b *RootBudget) Rebuild(ctx context.Context, src Source) error {
 }
 
 // RebuildActor prepares one actor outside dispatch locks using an actor-filtered
-// projected source. Already prepared actors are left intact. The cache has a
-// fixed node bound equal to the instance descriptor limit and can be evicted
-// with ForgetActor; historical actor totals are never retained by Rebuild.
+// projected source. Already prepared actors are left intact. A positive instance
+// descriptor limit bounds the cache. ForgetActor evicts inactive entries;
+// historical actor totals are never retained by Rebuild.
 func (b *RootBudget) RebuildActor(ctx context.Context, actorID int, src Source) error {
 	if actorID <= 0 || src == nil {
 		return ErrInvalid
@@ -697,7 +706,8 @@ func (b *RootBudget) ForgetActor(actorID int) error {
 	return nil
 }
 
-// CachedActorIDs includes only the bounded live cache, never historical actors.
+// CachedActorIDs includes only the live cache, never historical actors.
+// A positive instance descriptor limit bounds its size.
 // Inventory callers hold their database barrier while projecting these IDs.
 func (b *RootBudget) CachedActorIDs() []int {
 	b.mu.Lock()
@@ -725,7 +735,7 @@ func (b *RootBudget) ReleaseInventoryTotals(total, orphan Vector, actors map[int
 	if b.rebuilding || len(b.preparing) > 0 {
 		return ErrBusy
 	}
-	if int64(len(actors)) > b.policy.Instance.MaxQueuedDescriptors {
+	if cap := b.policy.Instance.MaxQueuedDescriptors; cap > 0 && int64(len(actors)) > cap {
 		return ErrCapacity
 	}
 	iu, err := change(b.instance.unattached, total, Vector{}, nil)
