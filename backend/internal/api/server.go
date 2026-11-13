@@ -117,7 +117,11 @@ func NewServer(cfg *config.ServerConfig, keys *credential.Keyring, logger *slog.
 	if cfg == nil {
 		return nil, fmt.Errorf("server configuration is required")
 	}
-	root, err := resourcebudget.New(cfg.ExecutionBudget)
+	policy, err := cfg.ExecutionBudget.RuntimePolicy()
+	if err != nil {
+		return nil, err
+	}
+	root, err := resourcebudget.New(policy)
 	if err != nil {
 		return nil, fmt.Errorf("execution budget: %w", err)
 	}

@@ -11,18 +11,19 @@ import (
 // field catalog as the loader. The caller must publish these secret bytes with
 // private permissions. Bootstrap inputs never belong in a recovery deployment.
 func EncodeServerDocument(cfg ServerConfig, log LogConfig) ([]byte, error) {
+	if err := ValidateExecutionBudget(cfg.ExecutionBudget); err != nil {
+		return nil, err
+	}
 	r := &ResolvedServer{Config: cfg, Log: log}
 	root := map[string]any{"kind": "server", "version": 1}
 	for _, f := range serverFields {
-		// An unconfigured maintenance deployment has no execution authority.
-		// Preserve that absence instead of publishing sixteen invalid zero caps.
-		if strings.HasPrefix(f.Key, "server.execution_budget.") && cfg.ExecutionBudget == (ExecutionBudgetConfig{}) {
-			continue
-		}
 		if strings.HasPrefix(f.Key, "bootstrap.") || f.Key == "server.credentials.master_key" || cfg.IsLocal() && f.Modes == "serve" {
 			continue
 		}
 		value := f.read(r)
+		if f.Type == "optional_integer64" && value == nil {
+			continue
+		}
 		if f.Type == "nullable_quota" {
 			quota := value.(QuotaInput)
 			if !quota.Set {

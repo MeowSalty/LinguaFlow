@@ -22,7 +22,7 @@ func deploymentInputs(t *testing.T) ServerInputs {
 	if _, err := credential.PublishPrivateFile(path, []byte(document)); err != nil {
 		t.Fatal(err)
 	}
-	return withExecutionBudget(ServerInputs{Mode: ModeServer, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{"LINGUAFLOW_JWT_SECRET": strings.Repeat("s", 32), "LINGUAFLOW_CREDENTIALS_KEYRING_FILE": path}})
+	return ServerInputs{Mode: ModeServer, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{"LINGUAFLOW_JWT_SECRET": strings.Repeat("s", 32), "LINGUAFLOW_CREDENTIALS_KEYRING_FILE": path}}
 }
 func withDocument(t *testing.T, in *ServerInputs, document string) {
 	t.Helper()
@@ -295,7 +295,6 @@ func TestLocalResolutionIsOfflineAndRespectsInputs(t *testing.T) {
 	in := ServerInputs{Mode: ModeLocal, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{
 		"LINGUAFLOW_DATA_DIR": dataDir, "LINGUAFLOW_PORT": "0", "LINGUAFLOW_DATABASE_DRIVER": "postgres", "LINGUAFLOW_DATABASE_DSN": "broken", "LINGUAFLOW_DATABASE_MAX_OPEN_CONNS": "broken",
 	}}
-	in = withExecutionBudget(in)
 	r, err := ResolveServerConfig(in)
 	if err != nil {
 		t.Fatal(err)
@@ -320,7 +319,7 @@ func TestLocalResolutionIsOfflineAndRespectsInputs(t *testing.T) {
 func TestLocalNetworkPermission(t *testing.T) {
 	for _, host := range []string{"127.0.0.1", "127.1.2.3", "::1", "localhost"} {
 		dir := t.TempDir()
-		_, err := ResolveServerConfig(withExecutionBudget(ServerInputs{Mode: ModeLocal, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{"LINGUAFLOW_HOST": host}}))
+		_, err := ResolveServerConfig(ServerInputs{Mode: ModeLocal, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{"LINGUAFLOW_HOST": host}})
 		if err != nil {
 			t.Fatalf("loopback %s: %v", host, err)
 		}
@@ -328,7 +327,6 @@ func TestLocalNetworkPermission(t *testing.T) {
 	for _, host := range []string{"0.0.0.0", "::", "192.0.2.1", "example.com"} {
 		dir := t.TempDir()
 		in := ServerInputs{Mode: ModeLocal, WorkingDirectory: dir, UserConfigDir: dir, Environment: map[string]string{"LINGUAFLOW_HOST": host}}
-		in = withExecutionBudget(in)
 		if _, err := ResolveServerConfig(in); err == nil {
 			t.Fatalf("host %s accepted without permission", host)
 		}
@@ -338,7 +336,7 @@ func TestLocalNetworkPermission(t *testing.T) {
 		}
 	}
 	dir := t.TempDir()
-	r, err := ResolveServerConfig(withExecutionBudget(ServerInputs{Mode: ModeLocal, WorkingDirectory: dir, UserConfigDir: dir, AllowNetwork: true}))
+	r, err := ResolveServerConfig(ServerInputs{Mode: ModeLocal, WorkingDirectory: dir, UserConfigDir: dir, AllowNetwork: true})
 	if err != nil || r.Config.Host != "127.0.0.1" {
 		t.Fatalf("permission changed host: %v", err)
 	}

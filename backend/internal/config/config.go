@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 )
 
 // ProtectConfig 控制内容保护的行为。
@@ -258,9 +256,8 @@ func DefaultSSEConfig() SSEConfig {
 }
 
 type ServerConfig struct {
-	// ExecutionBudget has no defaults: deployment must authorize finite actor
-	// and process limits before either serve or local execution can start.
-	ExecutionBudget   resourcebudget.Policy `yaml:"execution_budget"`
+	// ExecutionBudget limits are optional per dimension; omitted limits are unlimited.
+	ExecutionBudget   ExecutionBudgetConfig `yaml:"execution_budget"`
 	Host              string                `yaml:"host"`
 	Port              int                   `yaml:"port"`
 	Mode              string                `yaml:"mode"` // "server" (default) | "local"
@@ -436,14 +433,12 @@ func DefaultServerConfig() *ServerConfig {
 
 // ValidateServerConfig 校验完整解析后的配置，且不做任何修改。
 func ValidateServerConfig(c *ServerConfig) error {
-	return validateServerConfig(c, true, true)
+	return validateServerConfig(c, true)
 }
 
-func validateServerConfig(c *ServerConfig, requireSecret, requireExecution bool) error {
-	if requireExecution {
-		if err := ValidateExecutionBudget(c.ExecutionBudget); err != nil {
-			return err
-		}
+func validateServerConfig(c *ServerConfig, requireSecret bool) error {
+	if err := ValidateExecutionBudget(c.ExecutionBudget); err != nil {
+		return err
 	}
 	if c.Mode != ModeServer && c.Mode != ModeLocal {
 		return fmt.Errorf("server.mode must be one of %s|%s", ModeServer, ModeLocal)
