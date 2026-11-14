@@ -1,5 +1,5 @@
 # 构建阶段
-FROM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 RUN apk add --no-cache git
 
@@ -14,8 +14,13 @@ COPY backend/ .
 
 ARG VERSION=dev
 ARG COMMIT=unknown
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=${VERSION} -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=${COMMIT}" -o /linguaflow ./cmd/linguaflow
+# arm/v7 的 variant 映射为 GOARM=7；编译始终在原生 builder 上运行。
+RUN if [ "$TARGETARCH" = "arm" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
+    CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -ldflags="-s -w -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=${VERSION} -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=${COMMIT}" -o /linguaflow ./cmd/linguaflow
 
 # 运行阶段 - 使用精简镜像
 FROM alpine:3.20
