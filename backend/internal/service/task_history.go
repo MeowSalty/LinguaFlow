@@ -343,26 +343,43 @@ func (e *historyUncertainError) Error() string {
 
 // Never classify an uncertain commit or rollback as deferred or replay it.
 func withHistoryTransaction(ctx context.Context, client *ent.Client, mutate func(*ent.Client) error) error {
-	for attempt := 0; attempt < organizationMutationAttempts; attempt++ {
-		if err := ctx.Err(); err != nil {
+	retryDeadline := time.Now().Add(organizationTransactionRetryBudget)
+	for attempt := 0; ; attempt++ {
+		if err := organizationTransactionContextError(ctx); err != nil {
 			return err
 		}
 		err := historyTransactionAttempt(ctx, client, mutate)
 		if err == nil {
 			return nil
 		}
-		if !isOrganizationTransactionConflict(err) || attempt == organizationMutationAttempts-1 {
+		if !isOrganizationTransactionConflict(err) {
 			return err
 		}
-		timer := time.NewTimer(time.Duration(10*(1<<attempt)) * time.Millisecond)
+		remaining := time.Until(retryDeadline)
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < remaining {
+			remaining = time.Until(deadline)
+		}
+		if remaining <= 0 {
+			return errors.Join(organizationTransactionContextError(ctx), err)
+		}
+		delay := organizationTransactionRetryDelay(attempt)
+		if delay > remaining {
+			delay = remaining
+		}
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()
 		case <-timer.C:
 		}
+		if contextErr := organizationTransactionContextError(ctx); contextErr != nil {
+			return contextErr
+		}
+		if !time.Now().Before(retryDeadline) {
+			return err
+		}
 	}
-	return nil
 }
 
 func historyTransactionAttempt(ctx context.Context, client *ent.Client, mutate func(*ent.Client) error) error {

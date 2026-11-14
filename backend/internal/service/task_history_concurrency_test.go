@@ -33,6 +33,14 @@ type historySQLWatch struct {
 	table     string
 	attempted chan struct{}
 	once      sync.Once
+	conflicts atomic.Int64
+	blocked   chan struct{}
+}
+
+func (d *historyObservedDriver) completed(err error) {
+	if watch := d.watch.Load(); watch != nil && watch.blocked != nil && isOrganizationTransactionConflict(err) && watch.conflicts.Add(1) == organizationMutationAttempts {
+		close(watch.blocked)
+	}
 }
 
 type historyObservedDriver struct {
@@ -84,17 +92,50 @@ type historyObservedTx struct {
 
 func (t *historyObservedTx) Exec(ctx context.Context, query string, args, value any) error {
 	t.driver.observe(query)
-	return t.Tx.Exec(ctx, query, args, value)
+	err := t.Tx.Exec(ctx, query, args, value)
+	t.driver.completed(err)
+	return err
 }
 func (t *historyObservedTx) Query(ctx context.Context, query string, args, value any) error {
 	t.driver.observe(query)
-	return t.Tx.Query(ctx, query, args, value)
+	err := t.Tx.Query(ctx, query, args, value)
+	t.driver.completed(err)
+	return err
 }
 func (t *historyObservedTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	t.driver.observe(query)
-	return t.Tx.(interface {
+	result, err := t.Tx.(interface {
 		ExecContext(context.Context, string, ...any) (sql.Result, error)
 	}).ExecContext(ctx, query, args...)
+	t.driver.completed(err)
+	return result, err
+}
+
+func TestTaskHistorySQLiteRevokeAfterRepeatedWriteConflicts(t *testing.T) {
+	f := newHistoryRaceFixture(t, dialect.SQLite)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	entered, release := historyRaceAuditGate(f.left, "organization.member.remove")
+	defer release()
+	revoked, deleted := make(chan error, 1), make(chan error, 1)
+	go func() { revoked <- NewUserService(f.left, nil).RemoveMember(ctx, f.owner, f.org, f.actor) }()
+	historyRaceAwait(t, ctx, entered)
+	watch := &historySQLWatch{table: "organizations", attempted: make(chan struct{}), blocked: make(chan struct{})}
+	f.rightDriver.watch.Store(watch)
+	go func() { deleted <- f.history(f.right).Delete(ctx, f.actor, f.target) }()
+	// Join actual failed SQL attempts, then let revocation commit. A fixed
+	// attempt cap can return BUSY here instead of rechecking authorization.
+	historyRaceAwait(t, ctx, watch.blocked)
+	release()
+	if err := historyRaceResult(t, ctx, revoked); err != nil {
+		t.Fatal(err)
+	}
+	if err := historyRaceResult(t, ctx, deleted); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("delete after %d write conflicts = %v, want forbidden", watch.conflicts.Load(), err)
+	}
+	if f.left.Job.Query().CountX(ctx) != 1 || f.left.SSEEvent.Query().CountX(ctx) != 1 || f.left.ActivityLog.Query().Where(activitylog.ActionEQ("job.history_deleted")).ExistX(ctx) {
+		t.Fatal("revoked cleanup changed history or audit")
+	}
 }
 
 type historyRaceFixture struct {

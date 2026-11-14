@@ -361,10 +361,21 @@ func TestTaskHistoryCleanupDeadlineRollsBack(t *testing.T) {
 	ctx := context.Background()
 	j := f.job(t, "completed", 40)
 	f.c.SSEEvent.Create().SetJobID(j.ID).SetSeq(1).SetType("batch").SetLevel("info").SetMessage("keep").SaveX(ctx)
+	res := createTestResource(t, f.c, f.p, "checkpoint.txt")
+	seg := f.c.Segment.Create().SetResourceID(res.ID).SetSegmentIndex(0).SetSourceText("keep source").SaveX(ctx)
+	jr := f.c.JobResource.Create().SetJobID(j.ID).SetResourceID(res.ID).SetStatus("completed").SaveX(ctx)
+	round := f.c.JobRound.Create().SetJobID(j.ID).SetJobResourceID(jr.ID).SetRoundIndex(0).SetMode("translate").SetStatus("completed").SaveX(ctx)
+	f.c.JobRoundSegment.Create().SetJobRoundID(round.ID).SetSegmentID(seg.ID).SaveX(ctx)
+	other := f.job(t, "completed", 40)
+	f.c.SSEEvent.Create().SetJobID(other.ID).SetSeq(1).SetType("batch").SetLevel("info").SetMessage("other history").SaveX(ctx)
+	otherJR := f.c.JobResource.Create().SetJobID(other.ID).SetResourceID(res.ID).SetStatus("completed").SaveX(ctx)
+	otherRound := f.c.JobRound.Create().SetJobID(other.ID).SetJobResourceID(otherJR.ID).SetRoundIndex(0).SetMode("translate").SetStatus("completed").SaveX(ctx)
+	otherCheckpoint := f.c.JobRoundSegment.Create().SetJobRoundID(otherRound.ID).SetSegmentID(seg.ID).SaveX(ctx)
 	f.s.deleteBudget = 25 * time.Millisecond
+	forceRollback := true
 	f.c.Job.Use(func(next ent.Mutator) ent.Mutator {
 		return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-			if m.Op().Is(ent.OpDeleteOne) {
+			if forceRollback && m.Op().Is(ent.OpDeleteOne) {
 				<-ctx.Done()
 				return nil, ctx.Err()
 			}
@@ -376,8 +387,22 @@ func TestTaskHistoryCleanupDeadlineRollsBack(t *testing.T) {
 		t.Fatalf("deadline=%v", err)
 	}
 	t.Logf("deadline including rollback: %s", time.Since(started))
-	if f.c.Job.Query().CountX(ctx) != 1 || f.c.SSEEvent.Query().CountX(ctx) != 1 || f.c.ActivityLog.Query().CountX(ctx) != 0 {
+	if f.c.Job.Query().CountX(ctx) != 2 || f.c.SSEEvent.Query().CountX(ctx) != 2 || f.c.JobResource.Query().CountX(ctx) != 2 || f.c.JobRound.Query().CountX(ctx) != 2 || f.c.JobRoundSegment.Query().CountX(ctx) != 2 || f.c.Segment.Query().CountX(ctx) != 1 || f.c.ActivityLog.Query().CountX(ctx) != 0 {
 		t.Fatal("timed-out cleanup left partial history")
+	}
+	forceRollback = false
+	f.s.deleteBudget = taskCleanupBudget
+	if err := f.s.Delete(ctx, f.owner, f.target(j)); err != nil {
+		t.Fatal(err)
+	}
+	if remaining := f.c.Job.Query().OnlyX(ctx); remaining.ID != other.ID {
+		t.Fatal("cleanup removed unrelated job")
+	}
+	if remaining := f.c.SSEEvent.Query().OnlyX(ctx); remaining.JobID != other.ID {
+		t.Fatal("cleanup removed unrelated event")
+	}
+	if f.c.JobResource.Query().OnlyX(ctx).ID != otherJR.ID || f.c.JobRound.Query().OnlyX(ctx).ID != otherRound.ID || f.c.JobRoundSegment.Query().OnlyX(ctx).ID != otherCheckpoint.ID || f.c.Segment.Query().OnlyX(ctx).ID != seg.ID || f.c.ActivityLog.Query().CountX(ctx) != 1 {
+		t.Fatal("successful cleanup scope incorrect")
 	}
 }
 
