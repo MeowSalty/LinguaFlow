@@ -17,12 +17,16 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
-func persistenceRoundStore(t *testing.T, f *pa.Fixture) *roundStore {
+func persistenceRoundStore(t *testing.T, f *pa.Fixture, batchSizes ...int) *roundStore {
+	batchSize := 300
+	if len(batchSizes) > 0 {
+		batchSize = batchSizes[0]
+	}
 	indices := make(map[int]int, len(f.IDs))
 	for i, id := range f.IDs {
 		indices[i] = id
 	}
-	snapshot := &service.JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", Rounds: []execution.JobRoundSnapshot{{Mode: "extract", Backend: execution.BackendSnapshot{ID: 1, Name: "isolated-fake"}, Extract: &execution.JobExtractRoundSnapshot{TemplateContent: "Extract terms.", Concurrency: 10, BatchSize: 300, Retry: execution.RetryConfig{MaxAttempts: 2}}}}}
+	snapshot := &service.JobExecutionSnapshot{SourceLang: "en", TargetLang: "zh", Rounds: []execution.JobRoundSnapshot{{Mode: "extract", Backend: execution.BackendSnapshot{ID: 1, Name: "isolated-fake"}, Extract: &execution.JobExtractRoundSnapshot{TemplateContent: "Extract terms.", Concurrency: 10, BatchSize: batchSize, Retry: execution.RetryConfig{MaxAttempts: 2}}}}}
 	snapshot = completeWorkerSnapshot(t, snapshot)
 	f.SetExecutionSnapshot(t, snapshot)
 	return newRoundStore(f.Client, f.Scope, indices, snapshot, 0, nil, false, pa.Driver(), nil, nil)

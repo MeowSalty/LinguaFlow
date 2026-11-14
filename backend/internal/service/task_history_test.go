@@ -466,6 +466,9 @@ func TestTaskHistoryStoppedPreparationCannotReopenDeletion(t *testing.T) {
 // This synthetic upper fixture exercises payload and checkpoint costs together;
 // it is not a measurement of the user's deployment database or physical reclaim.
 func TestTaskHistoryLargeAtomicDelete(t *testing.T) {
+	if os.Getenv("LINGUAFLOW_CAPACITY_TESTS") != "1" {
+		t.Skip("set LINGUAFLOW_CAPACITY_TESTS=1 for full retention capacity acceptance")
+	}
 	if testing.Short() {
 		t.Skip("large retention fixture")
 	}
