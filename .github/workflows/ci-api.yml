@@ -17,6 +17,9 @@ on:
       - 'frontend/pnpm-lock.yaml'
       - 'frontend/src/api/types.d.ts'
       - '.github/workflows/ci-api.yml'
+      - '!api/**/*.md'
+      - '!backend/internal/ent/**/*.md'
+      - '!backend/internal/tools/ent-generate/**/*.md'
   pull_request:
     branches: [main, frontend, backend]
     paths:
@@ -33,6 +36,9 @@ on:
       - 'frontend/pnpm-lock.yaml'
       - 'frontend/src/api/types.d.ts'
       - '.github/workflows/ci-api.yml'
+      - '!api/**/*.md'
+      - '!backend/internal/ent/**/*.md'
+      - '!backend/internal/tools/ent-generate/**/*.md'
 
 concurrency:
   group: ci-api-${{ github.ref }}

@@ -8,6 +8,8 @@ on:
       - 'api/**'
       - 'Taskfile.yml'
       - '.github/workflows/ci-backend.yml'
+      - '!backend/**/*.md'
+      - '!api/**/*.md'
   pull_request:
     branches: [main, backend]
     paths:
@@ -15,6 +17,8 @@ on:
       - 'api/**'
       - 'Taskfile.yml'
       - '.github/workflows/ci-backend.yml'
+      - '!backend/**/*.md'
+      - '!api/**/*.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
