@@ -194,6 +194,19 @@ func (r *JobRunner) TaskStatus(ctx context.Context, taskID int) (string, error) 
 	return row.Status, nil
 }
 
+// isPermanentDefinitionError 判定 loadJobDefinition 返回的错误是否为确定性
+// 永久错误：容量边界（sentinel 与实现 Permanent() 的包装错误均覆盖）以及
+// 确定性的数据条件。DB/IO 瞬时错误不在此列，交由 dispatcher 重试。
+func isPermanentDefinitionError(err error) bool {
+	if errors.Is(err, backend.ErrBuildCapacity) ||
+		errors.Is(err, service.ErrJobActorMissing) ||
+		errors.Is(err, service.ErrJobNotFound) {
+		return true
+	}
+	var permanent interface{ Permanent() bool }
+	return errors.As(err, &permanent) && permanent.Permanent()
+}
+
 // processJob 处理单个翻译任务（流水线模式）：所有 pending 资源并发入线，
 // 每资源一个 goroutine 按序执行自己的轮次；同轮所有在途资源共享该轮
 // 站位并发预算（CPU 工位模型）。准入控制（字节配额 + 资源数上限 + RSS
@@ -219,6 +232,16 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 
 	jobCtx, exec, snapshot, registry, definitionClose, err := r.loadJobDefinition(jobCtx, jobID)
 	if err != nil {
+		// 定义预检等 MarkJobRunning 之前的永久性错误：落终态失败，避免
+		// dispatcher 对 pending 任务无退避无限重试（与 configuration.md
+		// "超限按永久失败处理" 的承诺一致）。jobCtx 在早期失败时为 nil，
+		// 取消检查与状态写入必须使用外层 ctx。
+		if ctx.Err() == nil && isPermanentDefinitionError(err) {
+			r.logger.Error("job definition permanently invalid, marking job failed", "job_id", jobID, "err", err)
+			if failErr := r.jobs.FailPendingJob(ctx, jobID, err); failErr != nil {
+				r.logger.Error("mark failed job", "job_id", jobID, "err", failErr)
+			}
+		}
 		return err
 	}
 	defer definitionClose()
