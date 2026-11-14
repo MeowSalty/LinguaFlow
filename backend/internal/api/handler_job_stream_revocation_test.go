@@ -51,7 +51,7 @@ func TestHandlerJobStreamRevocationDuringReplay(t *testing.T) {
 		}
 	}}
 	req := withAuthUser(httptest.NewRequest("GET", "/jobs/1/stream", nil), u)
-	s.handleJobStreamWithInterval(w, req, j.ID, time.Millisecond)
+	assertStreamAbort(t, func() { s.handleJobStreamWithInterval(w, req, j.ID, time.Millisecond) })
 	if ids := parseIDLines(w.String()); len(ids) != 1 || ids[0] != 1 {
 		t.Fatalf("replayed after revocation: %v", ids)
 	}
