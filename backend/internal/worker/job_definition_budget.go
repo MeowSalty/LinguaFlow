@@ -20,6 +20,7 @@ import (
 // These limits precede every ORM/JSON/map/slice allocation for a Job definition.
 const maxJobDefinitionNodes int64 = 65536
 const maxJobDefinitionRounds int64 = 256
+const maxJobDefinitionSegmentIDs = service.MaxJobDefinitionSegmentIDs
 
 func (r *JobRunner) loadJobDefinition(ctx context.Context, id int) (jobCtx context.Context, exec *service.JobExecution, snapshot *service.JobExecutionSnapshot, registry *roundRegistry, close func(), err error) {
 	close = func() {}
@@ -73,6 +74,10 @@ func (r *JobRunner) loadJobDefinition(ctx context.Context, id int) (jobCtx conte
 	if r.dbDriver == "postgres" {
 		arrayLength = "COALESCE(jsonb_array_length(j.execution_config->'rounds'),0)"
 	}
+	segmentIDsLength := "COALESCE(SUM(json_array_length(jr." + jobresource.FieldSegmentIds + ")),0)"
+	if r.dbDriver == "postgres" {
+		segmentIDsLength = "COALESCE(SUM(jsonb_array_length(jr." + jobresource.FieldSegmentIds + ")),0)"
+	}
 	rows, e := row("SELECT "+length("j", job.Columns)+"+"+length("p", project.Columns)+","+arrayLength+" FROM jobs j JOIN projects p ON p.id=j.project_id WHERE j.id=$1", id)
 	if e != nil {
 		err = e
@@ -88,14 +93,14 @@ func (r *JobRunner) loadJobDefinition(ctx context.Context, id int) (jobCtx conte
 	if err != nil {
 		return
 	}
-	rows, e = row("SELECT COUNT(*),COALESCE(SUM("+length("jr", jobresource.Columns)+"+"+length("r", resource.Columns)+"),0) FROM job_resources jr JOIN resources r ON r.id=jr."+jobresource.ResourceColumn+" WHERE jr."+jobresource.JobColumn+"=$1", id)
+	rows, e = row("SELECT COUNT(*),COALESCE(SUM("+length("jr", jobresource.Columns)+"+"+length("r", resource.Columns)+"),0),"+segmentIDsLength+" FROM job_resources jr JOIN resources r ON r.id=jr."+jobresource.ResourceColumn+" WHERE jr."+jobresource.JobColumn+"=$1", id)
 	if e != nil {
 		err = e
 		return
 	}
-	var resourceBytes int64
+	var resourceBytes, segmentIDs int64
 	rows.Next()
-	err = rows.Scan(&resources, &resourceBytes)
+	err = rows.Scan(&resources, &resourceBytes, &segmentIDs)
 	err = joinReadError(err, rows.Err(), rows.Close())
 	if err != nil {
 		return
@@ -112,6 +117,12 @@ func (r *JobRunner) loadJobDefinition(ctx context.Context, id int) (jobCtx conte
 		return
 	}
 	if rounds < 1 || rounds > maxJobDefinitionRounds || resources < 0 || resources > maxJobDefinitionNodes || roundRows < 0 || roundRows > maxJobDefinitionNodes || bytes < 0 || resourceBytes < 0 || bytes > service.DefaultExecutionInputBytes-resourceBytes {
+		err = backend.ErrBuildCapacity
+		return
+	}
+	// Segment IDs are counted exactly by SQL and never enter the shared node
+	// accounting; they keep their own scalar ceiling.
+	if segmentIDs < 0 || segmentIDs > maxJobDefinitionSegmentIDs {
 		err = backend.ErrBuildCapacity
 		return
 	}
@@ -159,7 +170,11 @@ func (r *JobRunner) loadJobDefinition(ctx context.Context, id int) (jobCtx conte
 		return
 	}
 	// Validate cumulative JSON nodes before ent's generated JSON decoder runs.
-	for _, q := range []string{"SELECT execution_config,pipeline_runtime_state FROM jobs WHERE id=$1", "SELECT p.config FROM projects p JOIN jobs j ON j.project_id=p.id WHERE j.id=$1", "SELECT segment_ids FROM job_resources WHERE " + jobresource.JobColumn + "=$1"} {
+	// segment_ids is excluded: its length was already checked by the exact SQL
+	// count above, so it must not be decoded into the shared node arena. On
+	// SQLite malformed JSON makes that count query itself fail and is retried as
+	// a transient read error; Postgres jsonb rejects it at write time.
+	for _, q := range []string{"SELECT execution_config,pipeline_runtime_state FROM jobs WHERE id=$1", "SELECT p.config FROM projects p JOIN jobs j ON j.project_id=p.id WHERE j.id=$1"} {
 		rows, e = row(q, id)
 		if e != nil {
 			err = e

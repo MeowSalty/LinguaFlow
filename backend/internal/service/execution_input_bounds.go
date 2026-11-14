@@ -23,6 +23,12 @@ import (
 
 const DefaultExecutionInputBytes int64 = 64 << 20
 
+// MaxJobDefinitionSegmentIDs bounds the total decoded segment IDs of one job
+// definition across all of its resources. It is validated by an exact SQL
+// array-length sum before any JSON decode: ~6MB of raw JSON and ~8MB of
+// decoded []int at the cap, roughly 20x headroom over observed large jobs.
+const MaxJobDefinitionSegmentIDs int64 = 1_000_000
+
 type ExecutionInputBudgetProvider interface {
 	ExecutionInputBudget() (*resourcebudget.RootBudget, func(context.Context, int) error, int64)
 }

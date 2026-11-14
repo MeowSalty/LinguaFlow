@@ -142,6 +142,11 @@ func (s *JobService) loadControlDefinition(ctx context.Context, id int, actor in
 		cleanup()
 		return ctx, nil, func() {}, err
 	}
+	segmentIDs, err := controlSegmentIDs(ctx, c, id)
+	if err != nil {
+		cleanup()
+		return ctx, nil, func() {}, err
+	}
 	roundRows, err := c.JobRound.Query().Where(jobround.JobIDEQ(id)).Count(ctx)
 	if err != nil {
 		cleanup()
@@ -155,6 +160,10 @@ func (s *JobService) loadControlDefinition(ctx context.Context, id int, actor in
 		limit = DefaultExecutionInputBytes
 	}
 	if bytes < 0 || bytes > limit || n < 0 || n > 65536 || rounds < 1 || rounds > 256 || roundRows < 0 || roundRows > 65536 {
+		cleanup()
+		return ctx, nil, func() {}, backend.ErrBuildCapacity
+	}
+	if segmentIDs < 0 || segmentIDs > MaxJobDefinitionSegmentIDs {
 		cleanup()
 		return ctx, nil, func() {}, backend.ErrBuildCapacity
 	}
@@ -332,12 +341,38 @@ func controlHistoryBytes(ctx context.Context, c *ent.Client, id int, driver stri
 	return bytes, rows.Err()
 }
 
+// controlSegmentIDs counts the definition's decoded segment IDs by SQL array
+// length, keeping them outside the shared JSON node accounting.
+func controlSegmentIDs(ctx context.Context, c *ent.Client, id int) (int64, error) {
+	var stat []struct {
+		SegmentIDs int64 `json:"segment_ids"`
+	}
+	err := c.JobResource.Query().Where(jobresource.HasJobWith(job.IDEQ(id))).Modify(func(q *sql.Selector) {
+		length := "json_array_length(" + q.C(jobresource.FieldSegmentIds) + ")"
+		if q.Dialect() == dialect.Postgres {
+			length = "jsonb_array_length(" + q.C(jobresource.FieldSegmentIds) + ")"
+		}
+		q.Select(sql.As("COALESCE(SUM("+length+"),0)", "segment_ids"))
+	}).Scan(ctx, &stat)
+	if err != nil {
+		return 0, err
+	}
+	if len(stat) != 1 {
+		return 0, backend.ErrBuildCapacity
+	}
+	return stat[0].SegmentIDs, nil
+}
+
 func validateControlJSON(ctx context.Context, c *ent.Client, id int, bytes, limit int64, build func(func() error) error) error {
 	b, err := executionMetadataBounds(bytes)
 	if err != nil {
 		return err
 	}
-	for _, query := range []string{"SELECT execution_config,pipeline_runtime_state FROM jobs WHERE id=$1", "SELECT p.config FROM projects p JOIN jobs j ON j.project_id=p.id WHERE j.id=$1", "SELECT segment_ids FROM job_resources WHERE " + jobresource.JobColumn + "=$1"} {
+	// segment_ids is excluded: its total length is checked by the exact SQL
+	// array-length sum, so it must not be decoded into the shared node arena.
+	// On SQLite malformed JSON makes that count query itself fail and is retried
+	// as a transient read error; Postgres jsonb rejects it at write time.
+	for _, query := range []string{"SELECT execution_config,pipeline_runtime_state FROM jobs WHERE id=$1", "SELECT p.config FROM projects p JOIN jobs j ON j.project_id=p.id WHERE j.id=$1"} {
 		rows, err := c.QueryContext(ctx, query, id)
 		if err != nil {
 			return err
@@ -429,7 +464,14 @@ func (s *JobService) controlResult(ctx context.Context, actor, id int, release f
 		if err != nil {
 			return err
 		}
+		segmentIDs, err := controlSegmentIDs(ctx, c, id)
+		if err != nil {
+			return err
+		}
 		if n < 0 || n > 65536 || rounds < 0 || rounds > 65536 {
+			return backend.ErrBuildCapacity
+		}
+		if segmentIDs < 0 || segmentIDs > MaxJobDefinitionSegmentIDs {
 			return backend.ErrBuildCapacity
 		}
 		defs := int64(1) + int64(n) + int64(rounds)
@@ -441,7 +483,7 @@ func (s *JobService) controlResult(ctx context.Context, actor, id int, release f
 				return err
 			}
 		}
-		row, err = loadControlResultRows(ctx, c, actor, id, bytes, limit, owner.build)
+		row, err = loadControlResultRows(ctx, c, actor, id, bytes, limit, driver, owner.build)
 		if err != nil {
 			return err
 		}

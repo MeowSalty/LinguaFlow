@@ -146,6 +146,44 @@ func TestExecutionControlRootResultOwnership(t *testing.T) {
 	}
 }
 
+func TestExecutionControlSegmentIDsBound(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		ids      int
+		accepted bool
+	}{
+		{"within_cap", 50000, true},
+		{"over_cap", int(MaxJobDefinitionSegmentIDs) + 1, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newJobRoundTestEnv(t, nil)
+			ctx := context.Background()
+			row, jrs, _ := seedJobWithRounds(t, env, JobStatusFailed, 0, 0, []jobResourceSpec{{status: JobResourceStatusFailed, rounds: []jobRoundSpec{{mode: "translate", status: JobRoundStatusFailed}}}})
+			ids := make([]int, tt.ids)
+			for i := range ids {
+				ids[i] = i + 1
+			}
+			env.client.JobResource.UpdateOneID(jrs[0].ID).SetSegmentIds(ids).ExecX(ctx)
+			result, err := env.svc.RetryJob(ctx, env.user.ID, row.ID)
+			if tt.accepted {
+				if err != nil {
+					t.Fatalf("segment ids within cap rejected: %v", err)
+				}
+				if n := len(result.Edges.JobResources[0].SegmentIds); n != tt.ids {
+					t.Fatalf("decoded segment ids %d", n)
+				}
+				return
+			}
+			if !errors.Is(err, backend.ErrBuildCapacity) {
+				t.Fatalf("segment ids over cap accepted: %v", err)
+			}
+			if after := env.client.Job.Query().Where(job.IDEQ(row.ID)).Select(job.FieldStatus).OnlyX(ctx); after.Status != JobStatusFailed {
+				t.Fatalf("mutated status: %s", after.Status)
+			}
+		})
+	}
+}
+
 type emptyControlSource struct{}
 
 func (emptyControlSource) Scan(context.Context, func(resourcebudget.Record) error) error { return nil }

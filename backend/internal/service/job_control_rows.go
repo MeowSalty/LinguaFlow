@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	stdjson "encoding/json"
+	"entgo.io/ent/dialect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
@@ -11,7 +14,7 @@ import (
 
 // SQL reads own Prepare and finite backing. Only JSON construction enters a
 // short Build; generated ORM JSON decoders are excluded from this query.
-func loadControlResultRows(ctx context.Context, c *ent.Client, actor, id int, bytes, limit int64, build func(func() error) error) (*ent.Job, error) {
+func loadControlResultRows(ctx context.Context, c *ent.Client, actor, id int, bytes, limit int64, driver string, build func(func() error) error) (*ent.Job, error) {
 	if build == nil {
 		build = func(fn func() error) error { return fn() }
 	}
@@ -80,7 +83,11 @@ func loadControlResultRows(ctx context.Context, c *ent.Client, actor, id int, by
 	}
 	clear(config)
 	clear(projectConfig)
-	rows, err = c.QueryContext(ctx, "SELECT id,segment_ids FROM job_resources WHERE "+jobresource.JobColumn+"=$1 ORDER BY id", id)
+	segmentIDsLength := "json_array_length(segment_ids)"
+	if driver == dialect.Postgres {
+		segmentIDsLength = "jsonb_array_length(segment_ids)"
+	}
+	rows, err = c.QueryContext(ctx, "SELECT id,segment_ids,"+segmentIDsLength+" FROM job_resources WHERE "+jobresource.JobColumn+"=$1 ORDER BY id", id)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +95,8 @@ func loadControlResultRows(ctx context.Context, c *ent.Client, actor, id int, by
 	for rows.Next() {
 		var current int
 		var raw []byte
-		if err = rows.Scan(&current, &raw); err != nil {
+		var count int64
+		if err = rows.Scan(&current, &raw, &count); err != nil {
 			break
 		}
 		if index >= len(row.Edges.JobResources) || current != row.Edges.JobResources[index].ID {
@@ -97,7 +105,16 @@ func loadControlResultRows(ctx context.Context, c *ent.Client, actor, id int, by
 		}
 		item := row.Edges.JobResources[index]
 		if len(raw) > 0 {
-			err = build(func() error { return b.DecodeJSONLimited(raw, &item.SegmentIds, limit) })
+			if count < 0 || count > MaxJobDefinitionSegmentIDs || int64(len(raw)) > limit {
+				err = backend.ErrBuildCapacity
+				break
+			}
+			// The SQL array length sizes the decoded slice exactly; decoding is
+			// not charged against the shared node arena.
+			err = build(func() error {
+				item.SegmentIds = make([]int, 0, int(count))
+				return stdjson.Unmarshal(raw, &item.SegmentIds)
+			})
 			if err != nil {
 				break
 			}
