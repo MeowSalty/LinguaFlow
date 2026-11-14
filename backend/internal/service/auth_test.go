@@ -27,6 +27,17 @@ func newAccountTestAuth(t *testing.T) (*AuthService, *ent.Client) {
 	}, NewSettingsService(client)), client
 }
 
+func TestValidateNewPasswordContract(t *testing.T) {
+	for _, tt := range passwordContractCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateNewPassword(tt.password)
+			if tt.valid && err != nil || !tt.valid && !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("validateNewPassword error = %v, valid = %v", err, tt.valid)
+			}
+		})
+	}
+}
+
 func passwordContractCases() []struct {
 	name     string
 	password string
@@ -56,10 +67,29 @@ func passwordContractCases() []struct {
 	}
 }
 
+// Full length boundaries belong to the pure validator above. These cases
+// exercise service wiring, UTF-8 byte rejection and exact password handling.
+func servicePasswordContractCases() []struct {
+	name     string
+	password string
+	valid    bool
+} {
+	return []struct {
+		name     string
+		password string
+		valid    bool
+	}{
+		{"short rejected", "1234567", false},
+		{"73 mixed bytes rejected", strings.Repeat("汉", 24) + "a", false},
+		{"emoji accepted", strings.Repeat("🙂", 8), true},
+		{"spaces preserved", " 123456 ", true},
+	}
+}
+
 func TestRegisterPasswordContract(t *testing.T) {
 	ctx := context.Background()
 	svc, client := newAccountTestAuth(t)
-	for i, tt := range passwordContractCases() {
+	for i, tt := range servicePasswordContractCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			beforeUsers, err := client.User.Query().Count(ctx)
 			if err != nil {
@@ -112,7 +142,7 @@ func TestChangePasswordContract(t *testing.T) {
 	ctx := context.Background()
 	svc, client := newAccountTestAuth(t)
 	const originalPassword = " old password "
-	for i, tt := range passwordContractCases() {
+	for i, tt := range servicePasswordContractCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			original := createPasswordTestUser(t, client, fmt.Sprintf("password-%d", i), originalPassword)
 			err := svc.ChangePassword(ctx, original.ID, originalPassword, tt.password)

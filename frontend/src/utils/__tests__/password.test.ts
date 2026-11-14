@@ -12,6 +12,7 @@ describe('new password contract', () => {
     expect(validateNewPassword('中'.repeat(24))).toBeNull()
     expect(validateNewPassword('中'.repeat(25))).toBe('tooLong')
     expect(validateNewPassword('😀'.repeat(18))).toBeNull()
+    expect(validateNewPassword('😀'.repeat(18) + 'a')).toBe('tooLong')
     expect(validateNewPassword('😀'.repeat(19))).toBe('tooLong')
   })
   it('preserves whitespace and does not normalize combining characters', () => {

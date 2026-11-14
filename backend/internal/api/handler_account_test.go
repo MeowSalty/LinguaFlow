@@ -12,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -231,13 +232,11 @@ func TestRouter_AccountNewPasswordBoundaries(t *testing.T) {
 		name, password string
 		valid          bool
 	}{
+		// The complete validation matrix lives in the service's pure validator test.
+		// These cases cover HTTP error mapping, UTF-8 decoding and credential use.
 		{"seven ASCII", "1234567", false}, {"eight ASCII", "12345678", true},
-		{"72 bytes", strings.Repeat("a", 72), true}, {"73 bytes", strings.Repeat("a", 73), false},
-		{"seven Chinese", strings.Repeat("中", 7), false}, {"eight Chinese", strings.Repeat("中", 8), true},
-		{"seven emoji", strings.Repeat("😀", 7), false}, {"eight emoji", strings.Repeat("😀", 8), true},
-		{"72 Chinese bytes", strings.Repeat("中", 24), true}, {"73 Chinese bytes", strings.Repeat("中", 24) + "a", false},
 		{"72 emoji bytes", strings.Repeat("😀", 18), true}, {"73 emoji bytes", strings.Repeat("😀", 18) + "a", false},
-		{"surrounding spaces", " 123456 ", true}, {"only spaces", strings.Repeat(" ", 8), true},
+		{"surrounding spaces", " 123456 ", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -254,6 +253,10 @@ func TestRouter_AccountNewPasswordBoundaries(t *testing.T) {
 				accountAssertProblem(t, register, http.StatusBadRequest, "urn:linguaflow:invalid-input")
 				accountAssertProblem(t, change, http.StatusBadRequest, "urn:linguaflow:invalid-input")
 				accountAssertUnchanged(t, client, account)
+				if client.User.Query().Where(user.UsernameEQ("registered")).ExistX(t.Context()) || client.RefreshSession.Query().CountX(t.Context()) != 0 {
+					t.Fatal("rejected password created an account or session")
+				}
+				accountAssertStatus(t, accountRequest(router, http.MethodGet, "/users/me", token, ""), http.StatusOK)
 				return
 			}
 			accountAssertStatus(t, register, http.StatusCreated)
