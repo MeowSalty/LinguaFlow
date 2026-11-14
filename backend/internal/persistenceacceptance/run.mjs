@@ -23,6 +23,9 @@ const reportRoot = process.env.LINGUAFLOW_PERSISTENCE_OUTPUT || await mkdtemp(jo
 await mkdir(reportRoot, { recursive: true });
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('LINGUAFLOW_') && !key.startsWith('PG')));
 env.LINGUAFLOW_PERSISTENCE_DRIVER = postgres ? 'postgres' : 'sqlite3';
+// Explicit persistence acceptance retains the full shared-concurrency sample,
+// including protocol scope, while ordinary Go tests exercise its small contract.
+env.LINGUAFLOW_CAPACITY_TESTS = '1';
 env.LINGUAFLOW_PERSISTENCE_REPORT = join(reportRoot, 'samples.jsonl');
 // Samples are appended by Go fixtures, but acceptance belongs to this run only.
 await initializeSamples(env.LINGUAFLOW_PERSISTENCE_REPORT);
@@ -56,6 +59,7 @@ try {
     for (const delay of [0, 5]) required.push('TestPersistenceTranslationLoadMatrix/delay' + delay);
   }
   if (protocol) required.push('TestPersistenceDelayHonorsContext');
+  if (!bench) required.push('TestPersistenceSharedConcurrencyCapacityObservations');
   if (!bench) required.push('TestPersistenceSharedConcurrencyReachesTen', 'TestPersistenceReservationProtocol', 'TestPersistenceFencesAndPauseHandoff', 'TestPersistenceCandidateCursorAtomicity', 'TestPersistenceUnknownCommit', 'TestPersistenceAtomicChunkFailure','TestPersistenceLegacyCheckpointUnknownCommit','TestPersistenceReservationUnknownBoundaries','TestPersistenceCommitObservations','TestPreparationCancelledHeadDoesNotStarveReadyResource','TestSchedulerReliableBurstStillServicesNormal','TestStagedRecoveryCommitUsesActualResourceAndRequestMetadata','TestRuntimePreservesUpstreamObserverWithoutDoubleCounting','TestRequestAccountingLifetimeRetainsUpstreamObserver','TestRuntimeProductionObserverAndOriginalHandoffBudget','TestRuntimeReporterSavingObservesCheckpointSQLAndLifetime');
   if (postgres && !bench) required.push('TestPersistencePostgresLockAndDisconnect', 'TestIndependentDatabaseCommitArbitration');
   if (!bench) required.push('TestTimeDriverExecutionBudgetRequiresOwner', 'TestTimeTransactionKeepsCallerDeadlineCause');

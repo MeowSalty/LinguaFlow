@@ -390,6 +390,14 @@ tasks:
     cmds:
       - go test -race {{default "./..." .CLI_ARGS}}
 
+  test:capacity:
+    desc: 显式满规模历史清理和持久化容量验收（只运行两个容量场景）
+    dir: '{{.TASKFILE_DIR}}'
+    env:
+      LINGUAFLOW_CAPACITY_TESTS: '1'
+    cmds:
+      - go test -count=1 -timeout=20m {{default "-run '^(TestTaskHistoryLargeAtomicDelete|TestPersistenceSharedConcurrencyCapacityObservations)$' ./internal/service ./internal/worker" .CLI_ARGS}}
+
   test:storage:deployment:
     desc: 显式真实存储部署验收（缺少环境时逐项标记未验收；只清理测试独立命名空间）
     dir: '{{.TASKFILE_DIR}}'

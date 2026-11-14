@@ -151,44 +151,54 @@ func TestJobStreamHTTPWriterSupportsRevocation(t *testing.T) {
 	}
 }
 
-type deadlineBlockingStreamWriter struct {
+type deadlineErrorStreamWriter struct {
 	*safeRecorder
-	deadline   time.Time
 	blockFlush bool
 	blocked    bool
 	revoke     func()
+	deadlines  []streamWriteDeadline
+	afterError int
 }
 
-func (w *deadlineBlockingStreamWriter) SetWriteDeadline(deadline time.Time) error {
-	w.deadline = deadline
+type streamWriteDeadline struct {
+	setAt, deadline time.Time
+}
+
+func (w *deadlineErrorStreamWriter) SetWriteDeadline(deadline time.Time) error {
+	w.deadlines = append(w.deadlines, streamWriteDeadline{time.Now(), deadline})
 	return nil
 }
 
-func (w *deadlineBlockingStreamWriter) block() error {
+func (w *deadlineErrorStreamWriter) fail() error {
 	w.blocked = true
-	w.revoke()
-	timer := time.NewTimer(time.Until(w.deadline))
-	defer timer.Stop()
-	<-timer.C
+	if w.revoke != nil {
+		w.revoke()
+	}
 	return os.ErrDeadlineExceeded
 }
 
-func (w *deadlineBlockingStreamWriter) Write(data []byte) (int, error) {
+func (w *deadlineErrorStreamWriter) Write(data []byte) (int, error) {
+	if w.blocked {
+		w.afterError++
+	}
 	if !w.blockFlush && strings.Contains(string(data), "event:") {
-		return 0, w.block()
+		return 0, w.fail()
 	}
 	return w.safeRecorder.Write(data)
 }
 
-func (w *deadlineBlockingStreamWriter) FlushError() error {
+func (w *deadlineErrorStreamWriter) FlushError() error {
+	if w.blocked {
+		w.afterError++
+	}
 	if w.blockFlush {
-		return w.block()
+		return w.fail()
 	}
 	w.safeRecorder.Flush()
 	return nil
 }
 
-func TestJobStreamBoundsBlockedWriteAndFlush(t *testing.T) {
+func TestJobStreamStopsAfterWriteAndFlushDeadlineErrors(t *testing.T) {
 	for _, flush := range []bool{false, true} {
 		name := "write"
 		if flush {
@@ -196,16 +206,42 @@ func TestJobStreamBoundsBlockedWriteAndFlush(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			s, client, account, job := serverStreamFixture(t, 1)
-			w := &deadlineBlockingStreamWriter{safeRecorder: newSafeRecorder(), blockFlush: flush, revoke: func() {
+			w := &deadlineErrorStreamWriter{safeRecorder: newSafeRecorder(), blockFlush: flush, revoke: func() {
 				client.User.UpdateOneID(account.ID).AddAuthVersion(1).ExecX(t.Context())
 			}}
-			started := time.Now()
 			s.handleJobStream(w, streamBearerRequest(t, account, time.Now().Add(time.Hour)), job.ID)
-			if elapsed := time.Since(started); !w.blocked || elapsed > 7*time.Second {
-				t.Fatalf("write deadline failed: blocked=%t elapsed=%s", w.blocked, elapsed)
+			if !w.blocked || w.afterError != 0 {
+				t.Fatalf("stream did not stop at deadline error: failed=%t later attempts=%d", w.blocked, w.afterError)
 			}
 			if countIDLines(w.String()) != 0 || strings.Contains(w.String(), ": keepalive") {
 				t.Fatalf("stream continued after blocked write: %s", w.String())
+			}
+		})
+	}
+}
+
+func TestJobStreamSetsWriteDeadline(t *testing.T) {
+	for _, lifetime := range []time.Duration{time.Hour, time.Second} {
+		t.Run(lifetime.String(), func(t *testing.T) {
+			s, _, account, job := serverStreamFixture(t, 0)
+			expiresAt := time.Now().Add(lifetime)
+			claims := &service.AccessTokenClaims{UserID: account.ID, AuthVersion: account.AuthVersion,
+				RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: &jwt.NumericDate{Time: expiresAt}}}
+			r := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(context.WithValue(t.Context(), authContextKey{}, authenticatedUser{User: account, Claims: claims}))
+			w := &deadlineErrorStreamWriter{safeRecorder: newSafeRecorder(), blockFlush: true}
+			started := time.Now()
+			s.handleJobStream(w, r, job.ID)
+			if len(w.deadlines) == 0 {
+				t.Fatal("stream did not set a write deadline")
+			}
+			for _, recorded := range w.deadlines {
+				if lifetime < 5*time.Second {
+					if !recorded.deadline.Equal(expiresAt) {
+						t.Fatalf("write deadline %s does not match session expiry %s", recorded.deadline, expiresAt)
+					}
+				} else if recorded.deadline.Before(started.Add(5*time.Second)) || recorded.deadline.After(recorded.setAt.Add(5*time.Second)) {
+					t.Fatalf("write deadline %s outside five-second bounds [%s, %s]", recorded.deadline, started.Add(5*time.Second), recorded.setAt.Add(5*time.Second))
+				}
 			}
 		})
 	}

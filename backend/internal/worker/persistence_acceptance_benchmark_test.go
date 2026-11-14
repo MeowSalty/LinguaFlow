@@ -163,8 +163,12 @@ func persistenceResourceFixtures(t *testing.T, resources, batches int, sizes ...
 	}
 	return fixtures
 }
-func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persistenceFastModel) (*pipeline.ExecutionRuntime, *persistenceTimings, <-chan error) {
+func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persistenceFastModel, batchSizes ...int) (*pipeline.ExecutionRuntime, *persistenceTimings, <-chan error) {
 	t.Helper()
+	batchSize := 300
+	if len(batchSizes) > 0 {
+		batchSize = batchSizes[0]
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	if deadline, ok := t.Deadline(); ok {
 		cancel()
@@ -181,9 +185,9 @@ func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persis
 	persistenceWireReporter(r, &progress.DBReporterOptions{}, observer)
 	observer.sampleRuntime(r)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	done := make(chan error, 7)
+	done := make(chan error, len(fixtures))
 	for _, f := range fixtures {
-		store := persistenceRoundStore(t, f)
+		store := persistenceRoundStore(t, f, batchSize)
 		opts := progress.DBReporterOptions{Client: f.Client, JobID: f.Scope.JobID, JobResourceID: f.Scope.JobResourceID, ResourceID: f.Scope.ResourceID, Logger: logger, Ticker: time.Hour}
 		persistenceWireReporter(r, &opts, observer)
 		reporter := progress.NewDBReporter(opts)
@@ -197,7 +201,7 @@ func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persis
 		if err != nil {
 			t.Fatal(err)
 		}
-		handler := &pipeline.ExtractHandler{Backends: []backend.Backend{pipeline.BindRequestBackend(model, 1, 0, r)}, Renderer: renderer, Glossary: glossary.NewMemory(), BatchSize: 300, MinSourceLen: 1, Logger: logger, Reporter: reporter}
+		handler := &pipeline.ExtractHandler{Backends: []backend.Backend{pipeline.BindRequestBackend(model, 1, 0, r)}, Renderer: renderer, Glossary: glossary.NewMemory(), BatchSize: batchSize, MinSourceLen: 1, Logger: logger, Reporter: reporter}
 		doc := &pipeline.Document{SourceLang: "en", TargetLang: "zh"}
 		for i, id := range f.IDs {
 			doc.Segments = append(doc.Segments, pipeline.Segment{ID: fmt.Sprint(id), DBID: id, Source: fmt.Sprintf("synthetic source %d", i), Translate: true})
@@ -324,11 +328,26 @@ func TestPersistenceCommitObservations(t *testing.T) {
 }
 
 func TestPersistenceSharedConcurrencyReachesTen(t *testing.T) {
-	fixtures := persistenceResources(t, 2)
+	// Fourteen real requests across seven resources cross the shared limit
+	// without needing 4,200 segments to exercise admission and durable progress.
+	persistenceSharedConcurrency(t, 1, false)
+}
+
+func TestPersistenceSharedConcurrencyCapacityObservations(t *testing.T) {
+	if os.Getenv("LINGUAFLOW_CAPACITY_TESTS") != "1" {
+		t.Skip("full capacity and observer acceptance: run task backend:test:capacity")
+	}
+	persistenceSharedConcurrency(t, 300, true)
+}
+
+func persistenceSharedConcurrency(t *testing.T, batchSize int, capacityObservations bool) {
+	t.Helper()
+	fixtures := persistenceResourceFixtures(t, 7, 2, batchSize)
 	release := make(chan struct{})
 	entered := make(chan struct{}, 14)
 	model := &persistenceFastModel{barrier: release, entered: entered}
-	r, observer, done := persistenceRunResources(t, fixtures, model)
+	r, observer, done := persistenceRunResources(t, fixtures, model, batchSize)
+	defer r.Close()
 	timer := time.NewTimer(20 * time.Second)
 	defer timer.Stop()
 	reached := true
@@ -342,22 +361,53 @@ func TestPersistenceSharedConcurrencyReachesTen(t *testing.T) {
 			break
 		}
 	}
+	// Holding all ten permits must leave at least the eleventh real request
+	// queued. Releasing the barrier then permits every request to finish.
+	queued := false
+	ticker := time.NewTicker(time.Millisecond)
+	if reached {
+	queueWait:
+		for {
+			// Staged dispatch may wait in preparation before it reaches the
+			// admission queue; both are real requests blocked by shared capacity.
+			_, preparing := r.Preparation.Snapshot()
+			if r.Admission.Snapshot().QueuedRequests > 0 || preparing > 0 {
+				queued = true
+				break
+			}
+			select {
+			case <-ticker.C:
+			case <-timer.C:
+				break queueWait
+			}
+		}
+	}
+	ticker.Stop()
 	close(release)
 	failures := persistenceJoin(done, len(fixtures))
 	observer.stopSampling()
-	r.Close()
-	if !reached || model.peak.Load() != 10 || len(failures) > 0 {
-		t.Fatalf("full call path failed to reach shared capacity 10: peak=%d failures=%v", model.peak.Load(), failures)
+	if !reached || !queued || model.peak.Load() != 10 || len(failures) > 0 {
+		t.Fatalf("full call path failed shared capacity contract: peak=%d queued=%t failures=%v", model.peak.Load(), queued, failures)
+	}
+	admission := r.Admission.Snapshot()
+	pending, intents := r.Preparation.Snapshot()
+	saver := r.Saver.Snapshot()
+	if admission.MainInflight[0] != 0 || admission.AlignmentInflight != 0 || admission.PendingResults != 0 || admission.QueuedRequests != 0 || pending != 0 || intents != 0 || saver.NormalQueued != 0 || saver.ReliableQueued != 0 || saver.Executing {
+		t.Fatalf("runtime credits not returned: admission=%+v preparation=%d/%d saver=%+v", admission, pending, intents, saver)
 	}
 	job := fixtures[0].Client.Job.GetX(t.Context(), fixtures[0].Scope.JobID)
 	usage := fixtures[0].Client.UsageRecord.Query().CountX(t.Context())
-	if model.calls.Load() != 14 || usage != 14 || job.ProgressCompleted != 4200 || job.ProgressTotal != 4200 {
+	segments := int64(14 * batchSize)
+	if model.calls.Load() != 14 || usage != 14 || job.ProgressCompleted != segments || job.ProgressTotal != segments {
 		t.Fatalf("representative extraction calls=%d usage=%d progress=%d/%d", model.calls.Load(), usage, job.ProgressCompleted, job.ProgressTotal)
 	}
 	for _, fixture := range fixtures {
-		if got := fixture.Client.JobRound.GetX(t.Context(), fixture.Scope.RoundID).SegmentCompleted; got != 600 {
-			t.Fatalf("representative extraction resource completed=%d, want 600", got)
+		if got := fixture.Client.JobRound.GetX(t.Context(), fixture.Scope.RoundID).SegmentCompleted; got != 2*batchSize {
+			t.Fatalf("representative extraction resource completed=%d, want %d", got, 2*batchSize)
 		}
+	}
+	if !capacityObservations {
+		return
 	}
 	timings := observer.summary()
 	for _, operation := range []string{"reserve", "sent", "received", "completed", "checkpoint", "stage_initialize"} {

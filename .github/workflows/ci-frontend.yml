@@ -7,12 +7,14 @@ on:
       - 'frontend/**'
       - 'Taskfile.yml'
       - '.github/workflows/ci-frontend.yml'
+      - '!frontend/**/*.md'
   pull_request:
     branches: [main, frontend]
     paths:
       - 'frontend/**'
       - 'Taskfile.yml'
       - '.github/workflows/ci-frontend.yml'
+      - '!frontend/**/*.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
