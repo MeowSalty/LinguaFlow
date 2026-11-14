@@ -205,42 +205,61 @@ func TestOperationsQueriesAreBoundedAndIndexed(t *testing.T) {
 	actor := createTestUser(t, c, "op-cost")
 	p := createTestProject(t, c, "bounded", actor.ID)
 	now := time.Now().UTC()
-	for range 12 {
-		seedQueryJob(t, c, p.ID, "pending", "manual", now)
-		seedOperationSync(t, c, p.ID, actor.ID, "pending", now)
-	}
 	svc := NewOperationQueryService(c)
-	recorder.queries = nil
-	if _, err := svc.List(context.Background(), actor.ID, OperationListOptions{AccessibleJobListOptions: AccessibleJobListOptions{Limit: 3}}); err != nil {
-		t.Fatal(err)
-	}
-	// 1 jobs + 2 sync_tasks + 3 storage_tasks + 4 storage_retirements 父任务 + 5 项目名回填。
-	if len(recorder.queries) != 5 {
-		t.Fatalf("list queries: %v", recorder.queries)
-	}
-	retirementSeen := false
-	for _, q := range recorder.queries {
-		if strings.Contains(q, "storage_retirements") {
-			retirementSeen = true
+	retirement := seedOperationRetirement(t, c, "space", ScopeUser, actor.ID, 11, "pending", "draining", now.Add(time.Second))
+	var smallListQueries, smallSummaryQueries int
+	previousSize := 0
+	for _, size := range []int{2, 12} {
+		for range size - previousSize {
+			seedQueryJob(t, c, p.ID, "pending", "manual", now)
+			seedOperationSync(t, c, p.ID, actor.ID, "pending", now)
 		}
-	}
-	if !retirementSeen {
-		t.Fatal("list queries: missing storage_retirements parent-task select")
-	}
-	for _, q := range recorder.queries {
-		for _, sensitive := range []string{"old_target", "new_target", "segment_ids", "resource_ids", "execution_config", "access_key", "secret", "bucket"} {
-			if strings.Contains(q, sensitive) {
-				t.Fatalf("heavy projection: %s", q)
+		previousSize = size
+		recorder.queries = nil
+		page, err := svc.List(context.Background(), actor.ID, OperationListOptions{AccessibleJobListOptions: AccessibleJobListOptions{Limit: 2*size + 1}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		listQueries := len(recorder.queries)
+		// Populated retirement results also resolve their owner's visibility.
+		if listQueries > 6 || size > 2 && listQueries > smallListQueries {
+			t.Fatalf("size %d list query count = %d, small = %d, budget = 6", size, listQueries, smallListQueries)
+		}
+		if len(page.Items) != 2*size+1 || len(operationRetirementKeys(page.Items)) != 1 || operationRetirementKeys(page.Items)[0] != fmt.Sprintf("storage_retirement:%d", retirement.ID) {
+			t.Fatalf("size %d returned operations = %v", size, operationKeys(page.Items))
+		}
+		for _, row := range page.Items {
+			if row.TaskType != OperationStorageRetirement && row.ProjectName != "bounded" {
+				t.Fatalf("project name = %q", row.ProjectName)
 			}
 		}
-	}
-	recorder.queries = nil
-	if _, err := svc.Summary(context.Background(), actor.ID, OperationSummaryOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	// 1 jobs + 2 sync_tasks + 3 storage_tasks + 4 storage_retirements 计数。
-	if len(recorder.queries) != 4 {
-		t.Fatalf("summary queries: %v", recorder.queries)
+		assertLightProjection := func(queries []string) {
+			t.Helper()
+			for _, q := range queries {
+				for _, sensitive := range []string{"old_target", "new_target", "segment_ids", "resource_ids", "execution_config", "access_key", "secret", "bucket"} {
+					if strings.Contains(q, sensitive) {
+						t.Fatalf("heavy projection: %s", q)
+					}
+				}
+			}
+		}
+		assertLightProjection(recorder.queries)
+		recorder.queries = nil
+		summary, err := svc.Summary(context.Background(), actor.ID, OperationSummaryOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		summaryQueries := len(recorder.queries)
+		if summaryQueries > 4 || size > 2 && summaryQueries > smallSummaryQueries {
+			t.Fatalf("size %d summary query count = %d, small = %d, budget = 4", size, summaryQueries, smallSummaryQueries)
+		}
+		if summary.Total.Pending != 2*size+1 {
+			t.Fatalf("size %d summary = %+v", size, summary)
+		}
+		assertLightProjection(recorder.queries)
+		if size == 2 {
+			smallListQueries, smallSummaryQueries = listQueries, summaryQueries
+		}
 	}
 	if err := c.Schema.Create(context.Background()); err != nil {
 		t.Fatal(err)
