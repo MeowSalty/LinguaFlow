@@ -43,7 +43,7 @@ func TestJobStreamSessionRevocationDuringReplay(t *testing.T) {
 	w := &revokingStreamWriter{safeRecorder: newSafeRecorder(), trigger: "id: 1", revoke: func() {
 		client.User.UpdateOneID(account.ID).AddAuthVersion(1).ExecX(t.Context())
 	}}
-	s.handleJobStream(w, streamBearerRequest(t, account, time.Now().Add(time.Hour)), job.ID)
+	assertStreamAbort(t, func() { s.handleJobStream(w, streamBearerRequest(t, account, time.Now().Add(time.Hour)), job.ID) })
 	if ids := parseIDLines(w.String()); len(ids) != 1 || ids[0] != 1 {
 		t.Fatalf("stream continued after version revocation: %v", ids)
 	}
@@ -209,7 +209,7 @@ func TestJobStreamStopsAfterWriteAndFlushDeadlineErrors(t *testing.T) {
 			w := &deadlineErrorStreamWriter{safeRecorder: newSafeRecorder(), blockFlush: flush, revoke: func() {
 				client.User.UpdateOneID(account.ID).AddAuthVersion(1).ExecX(t.Context())
 			}}
-			s.handleJobStream(w, streamBearerRequest(t, account, time.Now().Add(time.Hour)), job.ID)
+			assertStreamAbort(t, func() { s.handleJobStream(w, streamBearerRequest(t, account, time.Now().Add(time.Hour)), job.ID) })
 			if !w.blocked || w.afterError != 0 {
 				t.Fatalf("stream did not stop at deadline error: failed=%t later attempts=%d", w.blocked, w.afterError)
 			}
@@ -230,7 +230,7 @@ func TestJobStreamSetsWriteDeadline(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(context.WithValue(t.Context(), authContextKey{}, authenticatedUser{User: account, Claims: claims}))
 			w := &deadlineErrorStreamWriter{safeRecorder: newSafeRecorder(), blockFlush: true}
 			started := time.Now()
-			s.handleJobStream(w, r, job.ID)
+			assertStreamAbort(t, func() { s.handleJobStream(w, r, job.ID) })
 			if len(w.deadlines) == 0 {
 				t.Fatal("stream did not set a write deadline")
 			}

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -40,6 +41,10 @@ func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request, jobID i
 }
 
 func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Request, jobID int, checkInterval time.Duration) {
+	s.handleJobStreamWithTiming(w, r, jobID, checkInterval, defaultJobStreamTiming())
+}
+
+func (s *Server) handleJobStreamWithTiming(w http.ResponseWriter, r *http.Request, jobID int, checkInterval time.Duration, timing jobStreamTiming) {
 	authUser, err := s.resolveAuthUser(r)
 	if err != nil {
 		s.writeAuthProblem(w, r, err)
@@ -59,6 +64,9 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 		}
 		authVersion, expiresAt = claims.AuthVersion, claims.ExpiresAt.Time
 	}
+	stream := &jobStreamWriter{w: w, controller: http.NewResponseController(w), logger: s.logger, now: timing.now, expiresAt: expiresAt}
+	// Register first so panics in ticker/subscription cleanup are covered too.
+	defer stream.finish()
 	checkAccessError := func() error {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
@@ -88,34 +96,15 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 		s.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "streaming not supported")
 		return
 	}
-	controller := http.NewResponseController(w)
-	prepareWrite := func() bool {
-		deadline := time.Now().Add(5 * time.Second)
-		if !local && expiresAt.Before(deadline) {
-			deadline = expiresAt
-		}
-		return controller.SetWriteDeadline(deadline) == nil
-	}
 	if err := checkAccessError(); err != nil {
 		s.writeServiceError(w, r, err)
 		return
 	}
 	// A writer that cannot bound a blocked write cannot uphold stream revocation.
-	if !prepareWrite() {
-		s.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "streaming deadlines not supported")
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-
-	if _, err := fmt.Fprintf(w, ": connected\n\n"); err != nil {
-		return
-	}
-	if err := controller.Flush(); err != nil {
+	if err := stream.writeAndFlush([]byte(": connected\n\n"), true); err != nil {
+		if !stream.started && errors.Is(err, http.ErrNotSupported) {
+			s.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "streaming deadlines not supported")
+		}
 		return
 	}
 
@@ -185,15 +174,12 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 			if err != nil {
 				continue
 			}
-			if !prepareWrite() {
-				return
-			}
-			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", evt.Seq, sseEventTypeReplacer.Replace(evt.Type), string(data)); err != nil {
+			if !stream.writeEvent(fmt.Appendf(nil, "id: %d\nevent: %s\ndata: %s\n\n", evt.Seq, sseEventTypeReplacer.Replace(evt.Type), data)) {
 				return
 			}
 		}
 		replayed += len(batch)
-		if !checkAccess() || controller.Flush() != nil {
+		if !checkAccess() || !stream.flushPage() {
 			return
 		}
 		if len(batch) < thisBatch {
@@ -204,8 +190,8 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 	if checkInterval <= 0 || checkInterval > 5*time.Second {
 		checkInterval = 5 * time.Second
 	}
-	ticker := time.NewTicker(checkInterval)
-	defer ticker.Stop()
+	ticker := timing.newTicker(checkInterval)
+	defer ticker.stop()
 	for {
 		select {
 		case <-r.Context().Done():
@@ -225,26 +211,14 @@ func (s *Server) handleJobStreamWithInterval(w http.ResponseWriter, r *http.Requ
 			if err != nil {
 				continue
 			}
-			if !prepareWrite() {
+			if err := stream.writeAndFlush(fmt.Appendf(nil, "id: %d\nevent: %s\ndata: %s\n\n", lastSeq, sseEventTypeReplacer.Replace(evt.Type), data), false); err != nil {
 				return
 			}
-			if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", lastSeq, sseEventTypeReplacer.Replace(evt.Type), string(data)); err != nil {
-				return
-			}
-			if err := controller.Flush(); err != nil {
-				return
-			}
-		case <-ticker.C:
+		case <-ticker.ch:
 			if !checkAccess() {
 				return
 			}
-			if !prepareWrite() {
-				return
-			}
-			if _, err := fmt.Fprintf(w, ": keepalive %d\n\n", time.Now().Unix()); err != nil {
-				return
-			}
-			if err := controller.Flush(); err != nil {
+			if err := stream.writeAndFlush(fmt.Appendf(nil, ": keepalive %d\n\n", timing.now().Unix()), false); err != nil {
 				return
 			}
 		}

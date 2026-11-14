@@ -46,24 +46,23 @@ func (s *Server) applyMiddleware(r *chi.Mux) {
 func (s *Server) requestLoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		startedAt := time.Now()
-		ww := chimiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
-
+		ww := newLoggingResponseWriter(w, r.ProtoMajor)
+		defer func() {
+			statusCode := ww.Status()
+			if statusCode == 0 {
+				statusCode = http.StatusOK
+			}
+			s.logger.Info("http request",
+				"request_id", chimiddleware.GetReqID(r.Context()),
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", statusCode,
+				"bytes", ww.BytesWritten(),
+				"duration_ms", time.Since(startedAt).Milliseconds(),
+				"remote_addr", r.RemoteAddr,
+			)
+		}()
 		next.ServeHTTP(ww, r)
-
-		statusCode := ww.Status()
-		if statusCode == 0 {
-			statusCode = http.StatusOK
-		}
-
-		s.logger.Info("http request",
-			"request_id", chimiddleware.GetReqID(r.Context()),
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", statusCode,
-			"bytes", ww.BytesWritten(),
-			"duration_ms", time.Since(startedAt).Milliseconds(),
-			"remote_addr", r.RemoteAddr,
-		)
 	})
 }
 

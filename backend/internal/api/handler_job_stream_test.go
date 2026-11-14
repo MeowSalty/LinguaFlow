@@ -144,18 +144,23 @@ func streamSSE(t *testing.T, s *Server, jobID int, u *ent.User, lastEventID stri
 
 	w := newSafeRecorder()
 	done := make(chan struct{})
+	ready := make(chan struct{})
+	timing := defaultJobStreamTiming()
+	timing.newTicker = func(interval time.Duration) jobStreamTicker {
+		close(ready)
+		ticker := time.NewTicker(interval)
+		return jobStreamTicker{ch: ticker.C, stop: ticker.Stop}
+	}
 	go func() {
 		defer close(done)
-		s.handleJobStream(w, req, jobID)
+		s.handleJobStreamWithTiming(w, req, jobID, 5*time.Second, timing)
 	}()
 
-	// 等待回放写入足够事件后取消，避免阻塞在实时循环
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if countIDLines(w.String()) >= expected {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	// Idle starts only after all replay pages have completed their Flush.
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream did not finish replay")
 	}
 	cancel()
 	<-done
