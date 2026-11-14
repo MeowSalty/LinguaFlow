@@ -1555,6 +1555,51 @@ func (s *JobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResour
 	return nil
 }
 
+// FailPendingJob 将尚未开始执行（pending）的任务标记为终态失败，用于作业
+// 定义预检等发生在 MarkJobRunning 之前的永久性错误判定。pending/running
+// 资源同步置为 failed 以满足 RetryJob 的资源级前置条件；任务行条件更新
+// 未命中表示已被并发处置（取消/已运行），良性返回。
+func (s *JobService) FailPendingJob(ctx context.Context, jobID int, failure error) error {
+	message := "job definition rejected"
+	if failure != nil {
+		message = failure.Error()
+	}
+	now := timeutil.NowUTC()
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.JobResource.Update().
+		Where(
+			jobresource.HasJobWith(job.IDEQ(jobID)),
+			jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning),
+		).
+		SetStatus(JobResourceStatusFailed).
+		SetErrorMessage(message).
+		Save(ctx); err != nil {
+		return err
+	}
+	n, err := tx.Job.Update().
+		Where(job.IDEQ(jobID), job.StatusIn(JobStatusPending)).
+		SetStatus(JobStatusFailed).
+		SetErrorMessage(message).
+		SetFinishedAt(now).
+		SetRetentionAnchorAt(now).
+		Save(ctx)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// 仅在实际翻转为 failed 时发事件；并发取消/已启动的任务不产生误导性通知。
+	if n > 0 {
+		s.publishEvent(jobID, "job_failed", "error", "", message)
+	}
+	return nil
+}
+
 func (s *JobService) MarkJobResourceCancelled(ctx context.Context, jobID, jobResourceID int) error {
 	// 条件更新（best-effort）：pending/running→cancelled；completed/failed 终态
 	// 不被覆盖，未命中时良性返回 nil。
