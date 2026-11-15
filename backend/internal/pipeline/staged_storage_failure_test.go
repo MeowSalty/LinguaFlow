@@ -15,7 +15,9 @@ import (
 type blockedCommitFailureStore struct {
 	*MemoryRoundStore
 	committed, failing, release chan struct{}
+	thirdBlocked                chan struct{}
 	once                        sync.Once
+	thirdOnce                   sync.Once
 	cause                       error
 }
 
@@ -31,13 +33,10 @@ func (*blockedCommitFailureStore) RoundIdentity() int    { return 1 }
 func (s *blockedCommitFailureStore) Commit(ctx context.Context, c *Candidate, result TranslatedSegment) (CommitOutcome, error) {
 	if c.Index == 0 {
 		outcome, err := s.MemoryRoundStore.Commit(ctx, c, result)
-		s.once.Do(func() { close(s.committed) })
+		if err == nil && outcome == CommitAccepted {
+			s.once.Do(func() { close(s.committed) })
+		}
 		return outcome, err
-	}
-	select {
-	case <-s.committed:
-	case <-ctx.Done():
-		return "", ctx.Err()
 	}
 	close(s.failing)
 	select {
@@ -48,12 +47,25 @@ func (s *blockedCommitFailureStore) Commit(ctx context.Context, c *Candidate, re
 	}
 }
 
-func (s *blockedCommitFailureStore) PromoteMember(ctx context.Context, id string, cursor int, c *Candidate, next WorkCursor, failure string) error {
-	if cursor >= 2 {
-		<-ctx.Done()
-		return ctx.Err()
+func (s *blockedCommitFailureStore) Response(ctx context.Context, id string, freeze, raw, business int64) (MainResponse, error) {
+	response, err := s.MemoryRoundStore.Response(ctx, id, freeze, raw, business)
+	if err != nil {
+		return MainResponse{}, err
 	}
-	return s.MemoryRoundStore.PromoteMember(ctx, id, cursor, c, next, failure)
+	// Wait before promotion acquires the saver slot or a build worker.
+	switch {
+	case response.Cursor == 1:
+		select {
+		case <-s.committed:
+		case <-ctx.Done():
+			return MainResponse{}, ctx.Err()
+		}
+	case response.Cursor >= 2:
+		s.thirdOnce.Do(func() { close(s.thirdBlocked) })
+		<-ctx.Done()
+		return MainResponse{}, ctx.Err()
+	}
+	return response, nil
 }
 
 func TestStagedStorageFailureStopsSharedProducerAndPreservesPaidFacts(t *testing.T) {
@@ -61,27 +73,47 @@ func TestStagedStorageFailureStopsSharedProducerAndPreservesPaidFacts(t *testing
 	limits.Segments = 16
 	r := stagedTestRuntime(t, limits)
 	cause := permanentCommitFailure{errors.New("terminal candidate commit failure")}
-	store := &blockedCommitFailureStore{MemoryRoundStore: NewMemoryRoundStore(nil), committed: make(chan struct{}), failing: make(chan struct{}), release: make(chan struct{}), cause: cause}
+	store := &blockedCommitFailureStore{
+		MemoryRoundStore: NewMemoryRoundStore(nil),
+		committed:        make(chan struct{}),
+		failing:          make(chan struct{}),
+		release:          make(chan struct{}),
+		thirdBlocked:     make(chan struct{}),
+		cause:            cause,
+	}
 	h := &windowBatchProbe{batchSize: 16}
 	handler := h.handler(t, r)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
+	var runs sync.WaitGroup
+	defer func() {
+		cancel()
+		runs.Wait()
+	}()
 	first, second := make(chan error, 1), make(chan error, 1)
+	runs.Add(1)
 	go func() {
+		defer runs.Done()
 		_, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: handler}, newTestDoc(16), store, r, quietLogger(), nil)
 		first <- err
 	}()
 	select {
 	case <-store.failing:
 	case <-ctx.Done():
-		t.Fatal("first candidate never reached its commit barrier")
+		t.Fatal("second candidate never reached its failing commit barrier")
+	}
+	select {
+	case <-store.thirdBlocked:
+	case <-ctx.Done():
+		t.Fatal("third member never reached its response cancellation barrier")
 	}
 	waiterMemory := NewMemoryRoundStore(nil)
 	if _, err := waiterMemory.Seal(ctx, []int{0}); err != nil {
 		t.Fatal(err)
 	}
 	waiter := &windowResourceStore{RoundStore: waiterMemory, resourceID: 2, roundID: 1}
+	runs.Add(1)
 	go func() {
+		defer runs.Done()
 		_, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: handler}, newTestDoc(1), waiter, r, quietLogger(), nil)
 		second <- err
 	}()
