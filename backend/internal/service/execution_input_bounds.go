@@ -266,13 +266,11 @@ func (o *QuickTranslateResult) ReleaseExecutionInputs() {
 	o.ExecutionInputOwnership.ReleaseExecutionInputs()
 }
 
-// PrepareExecutionRowMetadata validates direct runner fixtures/callers under
-// one cumulative node budget. SQL-loaded rows already have a validated graph.
-func PrepareExecutionRowMetadata(ctx context.Context, rows []*ent.Segment, bytes int64) error {
-	b, err := executionMetadataBounds(bytes)
-	if err != nil {
-		return err
-	}
+// PrepareExecutionRowMetadata validates direct runner fixtures/callers with a
+// per-row budget: each row's meta decodes under its own bounds, so row count
+// never accumulates into one capped node ledger. SQL-loaded rows already have
+// a validated graph.
+func PrepareExecutionRowMetadata(ctx context.Context, rows []*ent.Segment) error {
 	s := executionInputState(ctx)
 	for _, row := range rows {
 		s.mu.Lock()
@@ -283,6 +281,10 @@ func PrepareExecutionRowMetadata(ctx context.Context, rows []*ent.Segment, bytes
 		}
 		var meta map[string]any
 		if row.Meta != nil && *row.Meta != "" {
+			b, err := executionMetadataBounds(int64(len(*row.Meta)))
+			if err != nil {
+				return err
+			}
 			if err := b.DecodeJSONLimited([]byte(*row.Meta), &meta, min(s.limit, DefaultExecutionInputBytes)); err != nil {
 				return err
 			}
@@ -722,10 +724,6 @@ func loadExecutionSegments(ctx context.Context, client *ent.Client, resourceID i
 		return nil, nil, err
 	}
 	rows := make([]*ent.Segment, len(raw))
-	b, err := executionMetadataBounds(st.Bytes)
-	if err != nil {
-		return nil, nil, err
-	}
 	l.clear = func() {
 		l.state.mu.Lock()
 		for _, row := range rows {
@@ -738,13 +736,25 @@ func loadExecutionSegments(ctx context.Context, client *ent.Client, resourceID i
 		for i, r := range raw {
 			var issues []qa.QualityIssue
 			var meta map[string]any
+			// 按段分账：每段用独立 bounds 解码自己的 issues/meta，对齐
+			// ExecutionSegmentMeta 的单段路径。跨段累计节点账在封顶
+			// 65536 时会误拒大资源（EPUB 每段 7 键 meta 约 30-45 节点，
+			// 约 2 千段即超限）；分账后单段预算随该段实际字节自适应。
+			size := int64(len(r.Issues))
+			if r.Meta != nil {
+				size += int64(len(*r.Meta))
+			}
+			b, err := executionMetadataBounds(size)
+			if err != nil {
+				return err
+			}
 			if r.Issues != "" {
-				if err := b.DecodeJSONLimited([]byte(r.Issues), &issues, st.Bytes); err != nil {
+				if err := b.DecodeJSONLimited([]byte(r.Issues), &issues, size); err != nil {
 					return err
 				}
 			}
 			if r.Meta != nil && *r.Meta != "" {
-				if err := b.DecodeJSONLimited([]byte(*r.Meta), &meta, st.Bytes); err != nil {
+				if err := b.DecodeJSONLimited([]byte(*r.Meta), &meta, size); err != nil {
 					return err
 				}
 			}

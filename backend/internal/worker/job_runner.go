@@ -975,10 +975,15 @@ func (r *JobRunner) processJobResource(
 
 	doc := &pipeline.Document{SourceLang: snapshot.SourceLang, TargetLang: snapshot.TargetLang, Format: res.Format, Vars: map[string]any{}}
 	if err = r.loadCanonicalDocument(ctx, res.ID, doc); err != nil {
-		return err
+		// 资源已置 running，加载失败必须落资源终态：否则 ReconcileJob 推导
+		// job 恒为 running（轮次全 pending、进度 0/0），且 RetryJob/dispatcher
+		// 均无法再触达，只能重启恢复。
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+		return nil
 	}
 	if err = loadCanonicalResolved(ctx, r.client, item.ID, doc); err != nil {
-		return err
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+		return nil
 	}
 	docFresh := true
 	// 轮次循环
