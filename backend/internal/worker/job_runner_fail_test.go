@@ -9,6 +9,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
@@ -81,5 +82,67 @@ func TestProcessJobCancelledContextKeepsPendingState(t *testing.T) {
 		if item.Status != service.JobResourceStatusPending {
 			t.Fatalf("job resource %d status = %q, want %q", item.ID, item.Status, service.JobResourceStatusPending)
 		}
+	}
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return "<nil>"
+	}
+	return *s
+}
+
+// TestProcessJobResourceLoadFailureIsTerminal 覆盖资源置 running 之后、
+// loadCanonicalDocument 之前的失败（历史缺陷：直接 return err 导致资源与
+// job 永远卡 running，轮次全 pending、进度 0/0，且 RetryJob 拒绝）。
+// 触发方式：段 meta 嵌套深度 80 超过 MaxBuildDepth(64)，loadExecutionSegments
+// 返回 backend.ErrBuildCapacity——失败点完全落在 loadCanonicalDocument 路径。
+// 第二资源预置 completed 保证 ReconcileJob 能推导出 failed 终态。
+func TestProcessJobResourceLoadFailureIsTerminal(t *testing.T) {
+	f := newRubyPipelineFixture(t, 1, 0)
+	ctx := t.Context()
+	deep := strings.Repeat(`{"a":`, 80) + `0` + strings.Repeat(`}`, 80)
+	f.client.Segment.Update().Where(segment.ResourceIDEQ(f.resourceIDs[0])).SetMeta(deep).ExecX(ctx)
+
+	job, err := f.client.Job.Get(ctx, f.jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := f.client.Project.Get(ctx, job.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := f.client.JobResource.Query().Where(jobresource.IDEQ(f.jobResources[0])).WithResource().Only(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := loadJobRounds(ctx, f.client, f.jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = f.runner.processJobResource(ctx, &service.JobExecution{Job: job, Project: project}, f.snapshot, item, registry, nil, nil)
+	if err != nil {
+		t.Fatalf("load failure must not escape with the resource left running: %v", err)
+	}
+	item = f.client.JobResource.GetX(ctx, f.jobResources[0])
+	if item.Status != service.JobResourceStatusFailed {
+		t.Fatalf("resource status = %q, want %q", item.Status, service.JobResourceStatusFailed)
+	}
+	if item.ErrorMessage == nil || !strings.Contains(*item.ErrorMessage, backend.ErrBuildCapacity.Error()) {
+		t.Fatalf("resource error message = %s, want capacity detail", derefString(item.ErrorMessage))
+	}
+	if err = f.jobs.ReconcileJob(ctx, f.jobID); err != nil {
+		t.Fatal(err)
+	}
+	jobRow := f.client.Job.GetX(ctx, f.jobID)
+	if jobRow.Status != service.JobStatusFailed {
+		t.Fatalf("job status = %q, want %q", jobRow.Status, service.JobStatusFailed)
+	}
+	if jobRow.FinishedAt == nil {
+		t.Fatal("failed job left finished_at nil")
+	}
+	// 终态 failed 恢复 RetryJob 的前置条件（存在 failed 资源）。
+	if _, err = f.jobs.RetryJob(ctx, f.ownerID, f.jobID); err != nil {
+		t.Fatalf("retry after resource load failure: %v", err)
 	}
 }

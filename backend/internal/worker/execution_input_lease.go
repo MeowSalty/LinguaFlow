@@ -87,7 +87,7 @@ func prepareWorkerInputs(ctx context.Context, provider any, rows []*ent.Segment,
 	if err != nil {
 		return nil, nil, err
 	}
-	if err = l.RunBuild(ctx, func() error { return service.PrepareExecutionRowMetadata(ctx, rows, known) }); err != nil {
+	if err = l.RunBuild(ctx, func() error { return service.PrepareExecutionRowMetadata(ctx, rows) }); err != nil {
 		l.Close()
 		return nil, nil, err
 	}

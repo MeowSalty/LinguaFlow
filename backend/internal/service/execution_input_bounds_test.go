@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"sync/atomic"
@@ -332,5 +333,59 @@ func TestExecutionInputHTTPFrameHasLeaseAndNoIOBuildOwner(t *testing.T) {
 	l.Close()
 	if r.Snapshot(1).Instance != (resourcebudget.Vector{}) {
 		t.Fatal("HTTP frame lease leaked")
+	}
+}
+
+// epubSegmentCount 基准取自日常工作量：单资源约 5k 段的 EPUB。3000 段远超
+// 旧共享节点账的 65536 封顶（每段 7 键 meta 约 30-45 节点，约 2 千段即超限），
+// 修复按段分账后必须能完整加载。
+const epubSegmentCount = 3000
+
+// epubSegmentMeta 模拟 EPUB 解析器写入的 7 键 meta（对齐 parser/epub 的字段形态）。
+func epubSegmentMeta(i int) string {
+	return fmt.Sprintf(`{"epub_file":"OEBPS/text/ch%03d.xhtml","element_path":"/html/body/p[%d]","content_hash":"hash-%06d","tag":"p","epub_title":"ゲーム世界転生 01","epub_chapter_title":"第一章 出発","epub_id":"p-%06d"}`, i/200, i%50, i, i)
+}
+
+func seedEpubSegments(t *testing.T, c *ent.Client, resourceID int, count int) []*ent.Segment {
+	t.Helper()
+	ctx := context.Background()
+	var all []*ent.Segment
+	for start := 0; start < count; start += 100 {
+		end := min(start+100, count)
+		builders := make([]*ent.SegmentCreate, 0, end-start)
+		for i := start; i < end; i++ {
+			builders = append(builders, c.Segment.Create().SetResourceID(resourceID).SetSegmentIndex(i).SetSourceText("漢字テキスト").SetMeta(epubSegmentMeta(i)))
+		}
+		all = append(all, c.Segment.CreateBulk(builders...).SaveX(ctx)...)
+	}
+	return all
+}
+
+func TestLoadExecutionSegmentsPerSegmentBudget(t *testing.T) {
+	c, p, res := inputFixture(t)
+	seedEpubSegments(t, c, res.ID, epubSegmentCount)
+	rows, lease, err := LoadExecutionSegments(inputContext(inputTestRoot(t), p), c, res.ID)
+	if err != nil {
+		t.Fatalf("per-segment budgets must not accumulate across %d EPUB segments: %v", epubSegmentCount, err)
+	}
+	defer lease.Close()
+	if len(rows) != epubSegmentCount {
+		t.Fatalf("projection rows: %d", len(rows))
+	}
+	if rows[0].Meta == nil || !strings.Contains(*rows[0].Meta, "epub_file") {
+		t.Fatalf("meta projection lost: %v", rows[0].Meta)
+	}
+	meta, err := ExecutionSegmentMeta(inputContext(inputTestRoot(t), p), rows[0])
+	if err != nil || meta["epub_file"] == nil {
+		t.Fatalf("meta lookup: %v %v", meta, err)
+	}
+}
+
+func TestPrepareExecutionRowMetadataPerRowBudget(t *testing.T) {
+	c, p, res := inputFixture(t)
+	rows := seedEpubSegments(t, c, res.ID, epubSegmentCount)
+	ctx := inputContext(inputTestRoot(t), p)
+	if err := PrepareExecutionRowMetadata(ctx, rows); err != nil {
+		t.Fatalf("per-row budgets must not accumulate across %d rows: %v", epubSegmentCount, err)
 	}
 }
