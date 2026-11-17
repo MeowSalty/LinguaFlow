@@ -84,10 +84,24 @@ func (g *DatabaseGlossary) Lookup(_ context.Context, text, _, _ string) ([]gloss
 	return matches, nil
 }
 
-func (g *DatabaseGlossary) Add(ctx context.Context, entries ...glossary.Entry) (glossary.AddResult, error) {
+func (g *DatabaseGlossary) Add(ctx context.Context, entries ...glossary.Entry) (result glossary.AddResult, addErr error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	var result glossary.AddResult
+	result.Added = make([]glossary.Entry, 0, len(entries))
+	result.Skipped = make([]glossary.SkippedEntry, 0, len(entries))
+	defer func() {
+		next, head, rollback, err := g.prepareCachedEntries(ctx, result.Added)
+		if err != nil {
+			addErr = errors.Join(addErr, err)
+			return
+		}
+		if next != nil {
+			g.entries = next
+			g.entrySnapshot.Store(head)
+			copy(result.Added, next[len(next)-len(result.Added):])
+			_ = rollback // published backing now belongs to the dictionary
+		}
+	}()
 	for _, entry := range entries {
 		input := GlossaryEntryInput{
 			Source:        entry.Source,
@@ -102,7 +116,11 @@ func (g *DatabaseGlossary) Add(ctx context.Context, entries ...glossary.Entry) (
 			result.Skipped = append(result.Skipped, glossary.SkippedEntry{Proposed: entry, Reason: glossary.SkipReasonEmpty})
 			continue
 		}
-		if existing, ok := findCachedGlossaryEntry(g.entries, normalized); ok {
+		existing, ok := findCachedGlossaryEntry(g.entries, normalized)
+		if !ok {
+			existing, ok = findCachedGlossaryEntry(result.Added, normalized)
+		}
+		if ok {
 			if existing.Target != normalized.Target {
 				result.Skipped = append(result.Skipped, glossary.SkippedEntry{Proposed: entry, Existing: existing, Reason: glossary.SkipReasonExists})
 			}
@@ -116,7 +134,6 @@ func (g *DatabaseGlossary) Add(ctx context.Context, entries ...glossary.Entry) (
 			return result, err
 		}
 		added := glossaryEntryFromRow(created)
-		g.addCachedEntryLocked(added)
 		g.revision++
 		clear(g.lookupCache)
 		result.Added = append(result.Added, added)

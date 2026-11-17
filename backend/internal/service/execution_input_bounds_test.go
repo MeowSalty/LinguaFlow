@@ -64,7 +64,7 @@ func testExecutionInputUTF8AndDepthBeforeDocument(t *testing.T, r *resourcebudge
 	if got := r.Snapshot(*p.OwnerUserID).Instance; got != (resourcebudget.Vector{}) {
 		t.Fatalf("decode failed with leaked credit: %+v", got)
 	}
-	if s := executionInputState(bounded); len(s.leases) != 0 || len(s.metadata) != 0 {
+	if s := executionInputState(bounded); len(s.leases) != 0 || s.metadata != nil {
 		t.Fatal("partial graph retained")
 	}
 }
@@ -106,7 +106,7 @@ func testExecutionInputSnapshotLeaseLifecycle(t *testing.T, r *resourcebudget.Ro
 	if got := r.Snapshot(*p.OwnerUserID).Instance; got != (resourcebudget.Vector{}) {
 		t.Fatalf("release leaked: %+v", got)
 	}
-	if rows[0] != nil || len(executionInputState(ctx).metadata) != 0 {
+	if rows[0] != nil || executionInputState(ctx).metadata != nil {
 		t.Fatal("backing still held")
 	}
 	l.Close()
@@ -221,7 +221,7 @@ func TestExecutionInputLeaseOverflowAndRetirement(t *testing.T) {
 	if _, err := ExecutionInputAllocationBound(math.MaxInt64, 1); !errors.Is(err, backend.ErrBuildCapacity) {
 		t.Fatal(err)
 	}
-	if _, err := ExecutionInputAllocationBound(1, 65537); !errors.Is(err, backend.ErrBuildCapacity) {
+	if credit, err := ExecutionInputAllocationBound(1, 65537); err != nil || credit <= 0 {
 		t.Fatal(err)
 	}
 	for i := 0; i < 100; i++ {
@@ -326,7 +326,7 @@ func TestExecutionInputHTTPFrameHasLeaseAndNoIOBuildOwner(t *testing.T) {
 		t.Fatalf("encoded frame changed value: %s %v", raw, err)
 	}
 	u := r.Snapshot(1).Instance
-	if u.PayloadBytes <= int64(len(raw)) || u.BuildWorkers != 0 || u.PrepareOwners != 0 {
+	if u.PayloadBytes != int64(cap(raw)) || u.BuildWorkers != 0 || u.PrepareOwners != 0 {
 		t.Fatalf("frame backing/CPU lifecycle: %+v", u)
 	}
 	raw = nil
@@ -361,12 +361,12 @@ func seedEpubSegments(t *testing.T, c *ent.Client, resourceID int, count int) []
 	return all
 }
 
-func TestLoadExecutionSegmentsPerSegmentBudget(t *testing.T) {
+func TestLoadExecutionSegmentsAllocationSupportsEPUBMetadata(t *testing.T) {
 	c, p, res := inputFixture(t)
 	seedEpubSegments(t, c, res.ID, epubSegmentCount)
 	rows, lease, err := LoadExecutionSegments(inputContext(inputTestRoot(t), p), c, res.ID)
 	if err != nil {
-		t.Fatalf("per-segment budgets must not accumulate across %d EPUB segments: %v", epubSegmentCount, err)
+		t.Fatalf("legal EPUB metadata must fit its measured allocation plan for %d segments: %v", epubSegmentCount, err)
 	}
 	defer lease.Close()
 	if len(rows) != epubSegmentCount {
@@ -381,11 +381,26 @@ func TestLoadExecutionSegmentsPerSegmentBudget(t *testing.T) {
 	}
 }
 
-func TestPrepareExecutionRowMetadataPerRowBudget(t *testing.T) {
+func TestPrepareExecutionRowMetadataFiniteLeaseSupportsEPUB(t *testing.T) {
 	c, p, res := inputFixture(t)
 	rows := seedEpubSegments(t, c, res.ID, epubSegmentCount)
 	ctx := inputContext(inputTestRoot(t), p)
-	if err := PrepareExecutionRowMetadata(ctx, rows); err != nil {
-		t.Fatalf("per-row budgets must not accumulate across %d rows: %v", epubSegmentCount, err)
+	var bytes int64
+	for _, row := range rows {
+		if row.Meta != nil {
+			bytes += int64(len(*row.Meta))
+		}
+	}
+	credit, err := ExecutionInputAllocationBound(bytes, int64(len(rows)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := NewExecutionInputLease(ctx, credit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	if err := lease.RunBuild(ctx, func() error { return PrepareExecutionRowMetadata(ctx, rows, lease) }); err != nil {
+		t.Fatalf("finite allocation plan must cover %d EPUB rows: %v", epubSegmentCount, err)
 	}
 }

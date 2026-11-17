@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -304,9 +305,6 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 			}
 		}
 		if len(in.Glossary) > 0 {
-			if len(in.Glossary) > 65536 {
-				return nil, backend.ErrBuildCapacity
-			}
 			var entryBytes int64
 			for _, g := range in.Glossary {
 				n := int64(len(g.Source) + len(g.Target) + len(g.Notes))
@@ -315,7 +313,11 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 				}
 				entryBytes += n
 			}
-			entryLease, err := NewExecutionInputLease(runCtx, int64(len(in.Glossary))*backend.MaxNodeAllocationBytes)
+			entryCredit, err := backend.AllocationBytes(int64(len(in.Glossary)), int64(unsafe.Sizeof(glossary.Entry{})))
+			if err != nil {
+				return nil, err
+			}
+			entryLease, err := NewExecutionInputLease(runCtx, entryCredit)
 			if err != nil {
 				return nil, err
 			}
@@ -331,6 +333,7 @@ func (s *QuickTranslateService) Translate(ctx context.Context, in QuickTranslate
 				})
 			}
 			addResult, addErr := runtimeGlossary.Add(runCtx, entries...)
+			defer addResult.Release()
 			clear(entries)
 			entries = nil
 			entryLease.Close()

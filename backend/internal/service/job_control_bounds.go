@@ -89,6 +89,7 @@ func (s *JobService) loadControlDefinition(ctx context.Context, id int, actor in
 			return ctx, nil, cleanup, ErrJobActorMissing
 		}
 		ctx = WithExecutionJobActor(ctx, owner, id)
+		ctx = backend.WithBuildAllocation(ctx, root.Snapshot(owner).Policy.MaxBuildAllocationBytes, nil, nil)
 		if s.controlBudget.prepare != nil {
 			if err = s.controlBudget.prepare(ctx, owner); err != nil {
 				ReleaseExecutionActor(ctx)
@@ -159,7 +160,7 @@ func (s *JobService) loadControlDefinition(ctx context.Context, id int, actor in
 	if limit <= 0 || limit > DefaultExecutionInputBytes {
 		limit = DefaultExecutionInputBytes
 	}
-	if bytes < 0 || bytes > limit || n < 0 || n > 65536 || rounds < 1 || rounds > 256 || roundRows < 0 || roundRows > 65536 {
+	if bytes < 0 || bytes > limit || n < 0 || rounds < 1 || rounds > 256 || roundRows < 0 {
 		cleanup()
 		return ctx, nil, func() {}, backend.ErrBuildCapacity
 	}
@@ -167,8 +168,8 @@ func (s *JobService) loadControlDefinition(ctx context.Context, id int, actor in
 		cleanup()
 		return ctx, nil, func() {}, backend.ErrBuildCapacity
 	}
-	definitions := int64(1) + n + max(int64(roundRows), n*rounds) + rounds
-	if definitions > 65536 {
+	definitions, err := ExecutionDefinitionCount(n, int64(roundRows), rounds)
+	if err != nil {
 		cleanup()
 		return ctx, nil, func() {}, backend.ErrBuildCapacity
 	}
@@ -245,7 +246,7 @@ func (s *JobService) loadControlDefinition(ctx context.Context, id int, actor in
 		cleanup()
 		return ctx, nil, func() {}, &executionControlValidationError{err}
 	}
-	row.Edges.JobResources, err = c.JobResource.Query().Where(jobresource.HasJobWith(job.IDEQ(id))).Select(jobresource.FieldID, jobresource.FieldStatus, jobresource.FieldSourceGeneration, jobresource.FieldSourceRevisionID).Order(ent.Asc(jobresource.FieldID)).Limit(65536).All(ctx)
+	row.Edges.JobResources, err = c.JobResource.Query().Where(jobresource.HasJobWith(job.IDEQ(id))).Select(jobresource.FieldID, jobresource.FieldStatus, jobresource.FieldSourceGeneration, jobresource.FieldSourceRevisionID).Order(ent.Asc(jobresource.FieldID)).All(ctx)
 	if err != nil {
 		cleanup()
 		return ctx, nil, func() {}, err
@@ -364,7 +365,7 @@ func controlSegmentIDs(ctx context.Context, c *ent.Client, id int) (int64, error
 }
 
 func validateControlJSON(ctx context.Context, c *ent.Client, id int, bytes, limit int64, build func(func() error) error) error {
-	b, err := executionMetadataBounds(bytes)
+	b, err := executionMetadataBounds(ctx, bytes)
 	if err != nil {
 		return err
 	}
@@ -468,15 +469,15 @@ func (s *JobService) controlResult(ctx context.Context, actor, id int, release f
 		if err != nil {
 			return err
 		}
-		if n < 0 || n > 65536 || rounds < 0 || rounds > 65536 {
+		if n < 0 || rounds < 0 {
 			return backend.ErrBuildCapacity
 		}
 		if segmentIDs < 0 || segmentIDs > MaxJobDefinitionSegmentIDs {
 			return backend.ErrBuildCapacity
 		}
-		defs := int64(1) + int64(n) + int64(rounds)
-		if defs > 65536 {
-			return backend.ErrBuildCapacity
+		defs, err := ExecutionDefinitionCount(int64(n), int64(rounds), 0)
+		if err != nil {
+			return err
 		}
 		if owner.resize != nil {
 			if err = owner.resize(bytes, defs); err != nil {

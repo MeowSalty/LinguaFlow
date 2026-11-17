@@ -55,7 +55,9 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 		round.Gate = round.Runtime.Gate
 		round.Slots = nil
 		if round.Store == nil {
-			round.Store = pipeline.NewMemoryRoundStore(cfg.batchHandler)
+			memory := pipeline.NewMemoryRoundStore(cfg.batchHandler)
+			defer memory.Close()
+			round.Store = memory
 		}
 	}
 	// 退避重试等待中止信号同步到 handler（各 LLM handler 的 backoff select）。

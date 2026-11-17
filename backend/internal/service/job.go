@@ -955,8 +955,8 @@ func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 				return nil, err
 			}
 			if recovered {
-				if len(ids) == 65536 {
-					return nil, fmt.Errorf("legacy recovery ID result exceeds fixed node limit")
+				if len(ids) == math.MaxInt {
+					return nil, fmt.Errorf("legacy recovery ID result exceeds addressable length")
 				}
 				ids = append(ids, current.ID)
 			}
@@ -1534,6 +1534,8 @@ func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobRes
 }
 
 func (s *JobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResourceID int, failure error) error {
+	failure = executionCapacityFailure(failure, "job_resource", fmt.Sprintf("job:%d/resource:%d", jobID, jobResourceID))
+	logExecutionCapacityFailure(ctx, jobID, jobResourceID, failure)
 	message := "job resource failed"
 	if failure != nil {
 		message = failure.Error()
@@ -1551,7 +1553,7 @@ func (s *JobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResour
 	if err != nil {
 		return err
 	}
-	s.publishEvent(jobID, "resource_failed", "error", "", fmt.Sprintf("资源处理失败: %s", message))
+	s.publishExecutionFailureEvent(jobID, "resource_failed", fmt.Sprintf("资源处理失败: %s", message), failure)
 	return nil
 }
 
@@ -1560,6 +1562,8 @@ func (s *JobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResour
 // 资源同步置为 failed 以满足 RetryJob 的资源级前置条件；任务行条件更新
 // 未命中表示已被并发处置（取消/已运行），良性返回。
 func (s *JobService) FailPendingJob(ctx context.Context, jobID int, failure error) error {
+	failure = executionCapacityFailure(failure, "job_definition", fmt.Sprintf("job:%d", jobID))
+	logExecutionCapacityFailure(ctx, jobID, 0, failure)
 	message := "job definition rejected"
 	if failure != nil {
 		message = failure.Error()
@@ -1595,7 +1599,7 @@ func (s *JobService) FailPendingJob(ctx context.Context, jobID int, failure erro
 	}
 	// 仅在实际翻转为 failed 时发事件；并发取消/已启动的任务不产生误导性通知。
 	if n > 0 {
-		s.publishEvent(jobID, "job_failed", "error", "", message)
+		s.publishExecutionFailureEvent(jobID, "job_failed", message, failure)
 	}
 	return nil
 }

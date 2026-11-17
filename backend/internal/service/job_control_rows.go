@@ -44,7 +44,7 @@ func loadControlResultRows(ctx context.Context, c *ent.Client, actor, id int, by
 	if err != nil {
 		return nil, err
 	}
-	b, err := executionMetadataBounds(bytes)
+	b, err := executionMetadataBounds(ctx, bytes)
 	if err != nil {
 		return nil, err
 	}
