@@ -16,11 +16,16 @@ func renderPairBounded(b *backend.BuildBounds, t *template.Template, d any, maxB
 	if e != nil {
 		return "", "", e
 	}
-	bt, e := boundedTemplate(b, t, maxBytes)
-	if e != nil {
-		return "", "", e
+	system := func(o *textOutput) {
+		bt, retire, err := boundedTemplate(b, t, maxBytes)
+		if err != nil {
+			o.err = err
+			return
+		}
+		o.err = bt.Execute(o.w, frozen)
+		bt = nil
+		retire()
 	}
-	system := func(o *textOutput) { o.err = bt.Execute(o.w, frozen) }
 	sc := &textCount{limit: maxBytes}
 	so := &textOutput{w: sc}
 	system(so)
@@ -44,7 +49,8 @@ func renderPairBounded(b *backend.BuildBounds, t *template.Template, d any, maxB
 		if e != nil {
 			return "", e
 		}
-		o := &textOutput{w: w}
+		defer w.Release()
+		o := &textOutput{w: &w}
 		fn(o)
 		if o.err != nil {
 			return "", o.err
@@ -55,16 +61,34 @@ func renderPairBounded(b *backend.BuildBounds, t *template.Template, d any, maxB
 		if e = b.ReserveText(n, n); e != nil {
 			return "", e
 		}
-		return string(w.Bytes()), nil
+		result := string(w.Bytes())
+		w.Release()
+		return result, nil
 	}
 	s, e := encode(sc.n, system)
 	if e != nil {
 		return "", "", e
 	}
+	sOwner, e := b.RetainedAllocation(sc.n)
+	if e != nil {
+		return "", "", e
+	}
+	defer func() {
+		s = ""
+		sOwner.Release()
+	}()
 	u, e := encode(uc.n, user)
 	if e != nil {
 		return "", "", e
 	}
+	uOwner, e := b.RetainedAllocation(uc.n)
+	if e != nil {
+		return "", "", e
+	}
+	defer func() {
+		u = ""
+		uOwner.Release()
+	}()
 	ms, e := backend.MeasureJSONString(s)
 	if e != nil {
 		return "", "", e
@@ -75,6 +99,12 @@ func renderPairBounded(b *backend.BuildBounds, t *template.Template, d any, maxB
 	}
 	if ms != m.SystemJSONBytes || mu != m.UserJSONBytes {
 		return "", "", fmt.Errorf("prompt escaping changed during rendering")
+	}
+	if e = sOwner.ReturnToBuild(); e != nil {
+		return "", "", e
+	}
+	if e = uOwner.ReturnToBuild(); e != nil {
+		return "", "", e
 	}
 	return s, u, nil
 }

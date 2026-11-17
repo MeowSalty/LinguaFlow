@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -113,12 +112,22 @@ func TestBoundedRenderControlEscapesClaimParity(t *testing.T) {
 		return revise.RenderWithCreditsBounded(b, rd, 1<<20, claim)
 	})
 }
-func TestBoundedTemplateRejectsExpansionBeforeFormatting(t *testing.T) {
-	r, _ := NewRenderer(`{{printf "%1000000000s" .Source}}`)
+func TestBoundedTemplateRejectsActualOutputAboveLimit(t *testing.T) {
+	const width = 100000
+	format := "%100000s"
+	r, err := NewRenderer(`{{printf "%100000s" .Source}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf(format, "x")
+	ordinary, _, err := r.Render(Data{Source: "x"})
+	if err != nil || len(want) != width || ordinary != want {
+		t.Fatalf("oversize fixture did not produce actual stdlib output: len=%d ordinary_len=%d err=%v", len(want), len(ordinary), err)
+	}
 	b, _ := backend.NewBuildBounds(1024, 1024)
 	_, _, e := r.RenderBounded(b, Data{Source: "x"}, 1024)
 	if !errors.Is(e, backend.ErrBuildCapacity) {
-		t.Fatalf("huge format: %v", e)
+		t.Fatalf("actual %d-byte formatted output accepted above 1024: %v", len(want), e)
 	}
 	r, _ = NewRenderer(`{{.Source}}`)
 	b, _ = backend.NewBuildBounds(1024, 1024)
@@ -126,6 +135,28 @@ func TestBoundedTemplateRejectsExpansionBeforeFormatting(t *testing.T) {
 	if !errors.Is(e, backend.ErrBuildCapacity) {
 		t.Fatalf("huge source: %v", e)
 	}
+}
+
+func TestBoundedTemplateLargeLiteralWidthPreservesStdlibDiagnostic(t *testing.T) {
+	const format = "%1000000000s"
+	r, err := NewRenderer(`{{printf "%1000000000s" .Source}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := Data{Source: "x", Protocol: ProtocolText}
+	wantSystem, wantUser, err := r.Render(data)
+	want := fmt.Sprintf(format, data.Source)
+	if err != nil || wantSystem != want || len(want) > 1024 {
+		t.Fatalf("stdlib literal-width diagnostic is not a legal small output: len=%d ordinary_len=%d err=%v", len(want), len(wantSystem), err)
+	}
+	// The runtime parser rejects this numeric width. Its small diagnostic is
+	// valid output; a hypothetical billion-byte workspace is not charged.
+	b, _ := backend.NewBuildBounds(1024, 1024, 4096)
+	system, user, err := r.RenderBounded(b, data, 1024)
+	if err != nil || system != wantSystem || user != wantUser || b.Snapshot().MeasuredRequiredBytes > 4096 {
+		t.Fatalf("literal width changed stdlib semantics or charged virtual capacity: snapshot=%+v err=%v", b.Snapshot(), err)
+	}
+	b.CloseRetired()
 }
 func TestBoundedTemplateConstructorChecksDepthBeforeParse(t *testing.T) {
 	b, _ := backend.NewBuildBounds(1<<20, 1<<20)
@@ -147,10 +178,15 @@ func TestBoundedTemplateConstructorChecksDepthBeforeParse(t *testing.T) {
 func TestBoundedTemplateFormatTracksWidthArguments(t *testing.T) {
 	for _, width := range []any{uint(1000000000), uint64(1000000000), int64(-1000000000)} {
 		r, _ := NewRenderer(`{{printf "%*s" .Vars.width .Source}}`)
+		data := Data{Source: "x", Vars: map[string]any{"width": width}}
+		wantSystem, wantUser, err := r.Render(data)
+		if err != nil {
+			t.Fatal(err)
+		}
 		b, _ := backend.NewBuildBounds(1024, 1024)
-		_, _, e := r.RenderBounded(b, Data{Source: "x", Vars: map[string]any{"width": width}}, 1024)
-		if !errors.Is(e, backend.ErrBuildCapacity) {
-			t.Fatalf("width %T: %v", width, e)
+		system, user, e := r.RenderBounded(b, data, 1024)
+		if e != nil || system != wantSystem || user != wantUser {
+			t.Fatalf("fmt's actual bad-width diagnostic %T: %v", width, e)
 		}
 	}
 	for _, source := range []string{
@@ -177,7 +213,7 @@ type boundedIgnoredFormatField struct {
 	Hidden string `json:"-"`
 }
 
-func TestBoundedFormattingUsesReflectiveOutputBound(t *testing.T) {
+func TestBoundedFormattingUsesActualOutputBytes(t *testing.T) {
 	for _, source := range []string{`{{.Vars.value}}`, `{{printf "%v" .Vars.value}}`, `{{print .Vars.value}}`, `{{printf "" .Vars.value}}`} {
 		r, _ := NewRenderer(source)
 		d := Data{Vars: map[string]any{"value": boundedIgnoredFormatField{Hidden: strings.Repeat("x", 2048)}}}
@@ -208,16 +244,32 @@ func TestBoundedFormattingUsesReflectiveOutputBound(t *testing.T) {
 			t.Fatalf("reflective fmt %q: %v", test.source, e)
 		}
 	}
-	b, _ := backend.NewBuildBounds(8192, 8192)
-	n, _, e := measureFmt(b, reflect.ValueOf(boundedIgnoredFormatField{Hidden: strings.Repeat("x", 2048)}), 0)
-	if e != nil || n < 2048 || b.Snapshot().TextBytes != 0 {
-		t.Fatalf("pre-format measurement n=%d err=%v credit=%+v", n, e, b.Snapshot())
-	}
 	r, _ := NewRenderer(`{{printf "%500v" .Vars.value}}`)
+	b, _ := backend.NewBuildBounds(8192, 8192)
+	data := Data{Vars: map[string]any{"value": []int{1, 2}}}
+	wantSystem, wantUser, _ := r.Render(data)
+	system, user, e := r.RenderBounded(b, data, 1500)
+	if e != nil || system != wantSystem || user != wantUser {
+		t.Fatalf("actual composite output fits: %v", e)
+	}
+	r, _ = NewRenderer(`{{printf "%500s" .Source}}`)
 	b, _ = backend.NewBuildBounds(8192, 8192)
-	_, _, e = r.RenderBounded(b, Data{Vars: map[string]any{"value": []int{1, 2}}}, 1500)
+	_, _, e = r.RenderBounded(b, Data{Source: "x"}, 128)
 	if !errors.Is(e, backend.ErrBuildCapacity) {
-		t.Fatalf("composite per-member width: %v", e)
+		t.Fatalf("actual width output exceeds business limit: %v", e)
+	}
+}
+
+func TestBoundedFormattingReleasesWrittenTemporaryStrings(t *testing.T) {
+	b, _ := backend.NewBuildBounds(512, 512, 512)
+	text, err := RenderTemplateBounded(b, `{{range 20}}{{printf "%08d" .}}{{end}}`, nil, 512)
+	if err != nil || len(text) != 160 {
+		t.Fatalf("written formatting temporaries accumulated: len=%d snapshot=%+v err=%v", len(text), b.Snapshot(), err)
+	}
+	b, _ = backend.NewBuildBounds(512, 512, 512)
+	text, err = RenderTemplateBounded(b, `{{$value := printf "%04d" 7}}{{range 20}}{{$value}}{{end}}`, nil, 512)
+	if err != nil || text != strings.Repeat("0007", 20) {
+		t.Fatalf("assigned formatted value retired before its borrowers: %q %v", text, err)
 	}
 }
 

@@ -3,7 +3,9 @@ package prompt
 import (
 	"fmt"
 	"io"
+	"math"
 	"reflect"
+	"slices"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -60,7 +62,8 @@ func buildTextBounded(b *backend.BuildBounds, maxBytes int64, build func(*textOu
 	if e != nil {
 		return "", e
 	}
-	o = &textOutput{w: w}
+	defer w.Release()
+	o = &textOutput{w: &w}
 	build(o)
 	if o.err != nil {
 		return "", o.err
@@ -71,38 +74,45 @@ func buildTextBounded(b *backend.BuildBounds, maxBytes int64, build func(*textOu
 	if e = b.ReserveText(count.n, count.n); e != nil {
 		return "", e
 	}
-	return string(w.Bytes()), nil
+	result := string(w.Bytes())
+	w.Release()
+	return result, nil
 }
 
-// Template callbacks and formatting must be bounded before text/template's
-// own fmt printer allocates. Trees are private per render; frozen data is never
-// allowed to contain callable values. Every range receives credit before the
-// standard executor creates its sorted map workspace.
-func boundedTemplate(b *backend.BuildBounds, t *template.Template, maxBytes int64) (*template.Template, error) {
-	if e := b.ReserveNodes(4, 1024); e != nil {
-		return nil, e
-	}
-	seen := make(map[string]bool)
+// Frozen data has no callbacks. Private copied Text backing is observable;
+// the printer, parser and executor's internal temporaries are unknown.
+func boundedTemplate(b *backend.BuildBounds, t *template.Template, maxBytes int64) (result *template.Template, retire func(), resultErr error) {
+	var seen []string
 	var parts []*template.Template
+	var seenOwner, partsOwner *backend.OwnedAllocation
+	var textOwners templateTextOwners
+	defer func() {
+		clear(seen)
+		seen = nil
+		clear(parts)
+		parts = nil
+		seenOwner.Release()
+		partsOwner.Release()
+		if resultErr != nil {
+			result = nil
+			textOwners.release()
+		}
+	}()
 	addPart := func(part *template.Template) error {
 		if len(part.Name()) > 128 || len(part.Tree.ParseName) > 128 {
 			return &backend.BuildCapacityError{Resource: "template name metadata"}
 		}
-		if seen[part.Name()] {
+		if slices.Contains(seen, part.Name()) {
 			return nil
 		}
-		if e := b.ReserveNodes(1, 1024); e != nil {
+		if e := appendTemplateValue(b, &seen, &seenOwner, part.Name()); e != nil {
 			return e
 		}
-		seen[part.Name()] = true
-		var e error
-		parts, e = backend.AppendNode(b, parts, part)
-		return e
+		return appendTemplateValue(b, &parts, &partsOwner, part)
 	}
 	if e := addPart(t); e != nil {
-		return nil, e
+		return nil, nil, e
 	}
-	var count int64
 	syntaxNames := func(names []string, depth int) error {
 		if len(names) > backend.MaxBuildDepth-depth {
 			return &backend.BuildCapacityError{Resource: "template field path depth"}
@@ -112,8 +122,7 @@ func boundedTemplate(b *backend.BuildBounds, t *template.Template, maxBytes int6
 				return &backend.BuildCapacityError{Resource: "template identifier metadata"}
 			}
 		}
-		// Copied name headers and bounded diagnostic/context expansion.
-		return b.ReserveNodes(int64(2*len(names)+1), 1024)
+		return nil
 	}
 	var scan func(parse.Node, int) error
 	scan = func(n parse.Node, depth int) error {
@@ -123,7 +132,6 @@ func boundedTemplate(b *backend.BuildBounds, t *template.Template, maxBytes int6
 		if depth > backend.MaxBuildDepth {
 			return &backend.BuildCapacityError{Resource: "template depth"}
 		}
-		count++
 		switch x := n.(type) {
 		case *parse.ListNode:
 			for _, c := range x.Nodes {
@@ -197,9 +205,6 @@ func boundedTemplate(b *backend.BuildBounds, t *template.Template, maxBytes int6
 			if int64(len(x.Text)) > maxBytes {
 				return &backend.BuildCapacityError{Resource: "template literal bytes"}
 			}
-			if e := b.ReserveText(int64(len(x.Text)), int64(len(x.Text))); e != nil {
-				return e
-			}
 		case *parse.StringNode:
 			if int64(len(x.Text)) > maxBytes {
 				return &backend.BuildCapacityError{Resource: "template string literal bytes"}
@@ -217,16 +222,22 @@ func boundedTemplate(b *backend.BuildBounds, t *template.Template, maxBytes int6
 		return nil
 	}
 	if e := scan(t.Tree.Root, 0); e != nil {
-		return nil, e
-	}
-	if e := b.ReserveNodes(4*count+16, 1024); e != nil {
-		return nil, e
+		return nil, nil, e
 	}
 	clone := template.New(t.Name()).Funcs(templateFuncs)
 	if t.Name() == "bounded" {
 		clone.Option("missingkey=error")
 	}
 	var e error
+	accountOutput := func(s string) (string, error) {
+		if int64(len(s)) > maxBytes {
+			return "", &backend.BuildCapacityError{Resource: "template output bytes"}
+		}
+		// The template executor can retain intermediate values in variables
+		// and nested scopes. That private lifetime is unavailable here and
+		// does not enter the allocation gate. Our final writer is explicit.
+		return s, nil
+	}
 	emit := func(v any) (string, error) {
 		rv := reflect.ValueOf(v)
 		if rv.IsValid() && rv.Kind() == reflect.String {
@@ -234,220 +245,34 @@ func boundedTemplate(b *backend.BuildBounds, t *template.Template, maxBytes int6
 			if int64(len(s)) > maxBytes {
 				return "", &backend.BuildCapacityError{Resource: "template action bytes"}
 			}
-			// The standard executor still uses fmt.Fprint for the returned
-			// string. Precredit its append backing and the prior backing.
-			if e := b.ReserveFormatWorkspace(); e != nil {
-				return "", e
-			}
-			if e := b.ReserveText(int64(len(s)), 2*int64(len(s))); e != nil {
-				return "", e
-			}
-			if e := b.ReserveText(0, int64(len(s))); e != nil {
-				return "", e
-			}
-			return s, nil
+			return s, nil // The executor borrows this existing string.
 		}
-		n, _, e := measureFmt(b, rv, 0)
-		if e != nil {
-			return "", e
-		}
-		if n > maxBytes-128 {
-			return "", &backend.BuildCapacityError{Resource: "template formatted bytes"}
-		}
-		if e = reserveFmtOutput(b, n+128); e != nil {
-			return "", e
-		}
-		if e = b.ReserveNodes(2, 1024); e != nil {
-			return "", e
-		}
-		return fmt.Sprint(v), nil
+		return accountOutput(fmt.Sprint(v))
 	}
 	format := func(format string, args ...any) (string, error) {
-		// The format itself is frozen, but arbitrary widths can request an
-		// enormous fmt buffer. Check every numeric width/precision first.
-		var largest int64
-		var slots int64
-		for _, a := range args {
-			n, count, e := measureFmt(b, reflect.ValueOf(a), 0)
-			if e != nil {
-				return "", e
-			}
-			largest = max(largest, n)
-			slots = max(slots, count)
-		}
-		upper := int64(len(format)) + 128
-		argIndex := 0
-		reordered := false
-		if upper > maxBytes {
-			return "", &backend.BuildCapacityError{Resource: "template format bytes"}
-		}
-		for i := 0; i < len(format); i++ {
-			if format[i] != '%' {
-				continue
-			}
-			i++
-			if i < len(format) && format[i] == '%' {
-				continue
-			}
-			width := int64(0)
-			for ; i < len(format); i++ {
-				c := format[i]
-				if c >= '0' && c <= '9' {
-					// A width and a precision are separate integer tokens.
-					var digits int64
-					for i < len(format) && format[i] >= '0' && format[i] <= '9' {
-						if digits > (maxBytes-int64(format[i]-'0'))/10 {
-							return "", &backend.BuildCapacityError{Resource: "template format width"}
-						}
-						digits = digits*10 + int64(format[i]-'0')
-						i++
-					}
-					width = max(width, digits)
-					i--
-					continue
-				}
-				if c == '.' || c == '-' || c == '+' || c == '#' || c == ' ' || c == '0' {
-					continue
-				}
-				if c == '[' {
-					reordered = true
-					// fmt's explicit index changes the next argument, including
-					// width/precision stars. Invalid indices cannot allocate output.
-					index, valid := 0, true
-					i++
-					start := i
-					for i < len(format) && format[i] >= '0' && format[i] <= '9' {
-						digit := int(format[i] - '0')
-						if index > len(args) || index > (len(args)-digit)/10 {
-							valid = false
-						} else {
-							index = index*10 + digit
-						}
-						i++
-					}
-					if i >= len(format) || format[i] != ']' || i == start || index < 1 || index > len(args) {
-						valid = false
-					}
-					if valid {
-						argIndex = index - 1
-					} else {
-						argIndex = len(args)
-					}
-					continue
-				}
-				if c == '*' {
-					if argIndex < len(args) {
-						rv := reflect.ValueOf(args[argIndex])
-						if rv.IsValid() && rv.Kind() >= reflect.Int && rv.Kind() <= reflect.Int64 {
-							v := rv.Int()
-							if v < 0 {
-								if v == -1<<63 {
-									return "", &backend.BuildCapacityError{Resource: "template format width"}
-								}
-								v = -v
-							}
-							if v > maxBytes {
-								return "", &backend.BuildCapacityError{Resource: "template format width"}
-							}
-							width = max(width, v)
-						} else if rv.IsValid() && rv.Kind() >= reflect.Uint && rv.Kind() <= reflect.Uintptr {
-							v := rv.Uint()
-							if v > uint64(maxBytes) {
-								return "", &backend.BuildCapacityError{Resource: "template format width"}
-							}
-							width = max(width, int64(v))
-						}
-					}
-					if argIndex < len(args) {
-						argIndex++
-					}
-					continue
-				}
-				if c != '%' && argIndex < len(args) {
-					argIndex++
-				}
-				break
-			}
-			// fmt applies padding/precision to each member of a composite
-			// value. Count all visited records, not just one directive.
-			if largest > maxBytes-upper-128 || (slots > 0 && width > (maxBytes-upper-128-largest)/slots) {
-				return "", &backend.BuildCapacityError{Resource: "template format bytes"}
-			}
-			add := largest + width*slots + 128
-			if add > maxBytes-upper {
-				return "", &backend.BuildCapacityError{Resource: "template format bytes"}
-			}
-			upper += add
-		}
-		// fmt appends every unused operand as an EXTRA diagnostic, unless
-		// an explicit index disabled that check. Even an empty format can
-		// therefore emit a complete large value.
-		if !reordered {
-			for _, a := range args[argIndex:] {
-				n, _, e := measureFmt(b, reflect.ValueOf(a), 0)
-				if e != nil {
-					return "", e
-				}
-				if n > maxBytes-upper-258 {
-					return "", &backend.BuildCapacityError{Resource: "template extra format arguments"}
-				}
-				upper += n + 258 // <=256-byte type spelling, '=' and separator.
-			}
-		}
-		if e := reserveFmtOutput(b, upper); e != nil {
-			return "", e
-		}
-		if e := b.ReserveNodes(2, 1024); e != nil {
-			return "", e
-		}
-		return fmt.Sprintf(format, args...), nil
+		return accountOutput(fmt.Sprintf(format, args...))
 	}
 	sprint := func(newline bool, args ...any) (string, error) {
-		upper := int64(128 + len(args))
-		for _, a := range args {
-			n, _, e := measureFmt(b, reflect.ValueOf(a), 0)
-			if e != nil {
-				return "", e
-			}
-			if n > maxBytes-upper {
-				return "", &backend.BuildCapacityError{Resource: "template print bytes"}
-			}
-			upper += n
-		}
-		if e := reserveFmtOutput(b, upper); e != nil {
-			return "", e
-		}
-		if e := b.ReserveNodes(int64(len(args))+2, 1024); e != nil {
-			return "", e
-		}
 		if newline {
-			return fmt.Sprintln(args...), nil
+			return accountOutput(fmt.Sprintln(args...))
 		}
-		return fmt.Sprint(args...), nil
+		return accountOutput(fmt.Sprint(args...))
 	}
 	escape := func(kind int, args ...any) (string, error) {
-		s, e := sprint(false, args...)
-		if e != nil {
-			return "", e
+		s, err := sprint(false, args...)
+		if err != nil {
+			return "", err
 		}
-		factor := int64(6)
-		if kind == 2 {
-			factor = 3
-		}
-		if int64(len(s)) > maxBytes/factor {
-			return "", &backend.BuildCapacityError{Resource: "template escaped bytes"}
-		}
-		if e = b.ReserveText(0, 3*factor*int64(len(s))); e != nil {
-			return "", e
-		}
+		var escaped string
 		switch kind {
 		case 0:
-			return template.HTMLEscapeString(s), nil
+			escaped = template.HTMLEscapeString(s)
 		case 1:
-			return template.JSEscapeString(s), nil
+			escaped = template.JSEscapeString(s)
 		default:
-			return template.URLQueryEscaper(s), nil
+			escaped = template.URLQueryEscaper(s)
 		}
+		return accountOutput(escaped)
 	}
 	clone.Funcs(template.FuncMap{"eq": templateEqualBounded, "ne": templateNotEqualBounded, "__lf_emit": emit, "__lf_range": func(v any) (any, error) {
 		rv := reflect.ValueOf(v)
@@ -457,30 +282,20 @@ func boundedTemplate(b *backend.BuildBounds, t *template.Template, maxBytes int6
 			}
 			rv = rv.Elem()
 		}
-		var count int64
 		switch rv.Kind() {
 		case reflect.Invalid:
 			return v, nil
 		case reflect.Map, reflect.Array, reflect.Slice:
-			count = int64(rv.Len())
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			count = max(int64(0), rv.Int())
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-			if rv.Uint() > 65536 {
+			if rv.Uint() > math.MaxInt64 {
 				return nil, &backend.BuildCapacityError{Resource: "template range records"}
 			}
-			count = int64(rv.Uint())
 		default:
 			return nil, errTemplateComparison // Avoid range's full-value error.
 		}
-		if count >= 65536 {
-			return nil, &backend.BuildCapacityError{Resource: "template range records"}
-		}
-		if e := b.ReserveNodes(4*count+1, 1024); e != nil {
-			return nil, e
-		}
 		return v, nil
-	}, "__lf_tick": func() (string, error) { return "", b.ReserveNodes(1, 256) }, "printf": format, "print": func(args ...any) (string, error) { return sprint(false, args...) }, "println": func(args ...any) (string, error) { return sprint(true, args...) }, "html": func(args ...any) (string, error) { return escape(0, args...) }, "js": func(args ...any) (string, error) { return escape(1, args...) }, "urlquery": func(args ...any) (string, error) { return escape(2, args...) }})
+	}, "__lf_tick": func() (string, error) { return "", b.CheckContext() }, "printf": format, "print": func(args ...any) (string, error) { return sprint(false, args...) }, "println": func(args ...any) (string, error) { return sprint(true, args...) }, "html": func(args ...any) (string, error) { return escape(0, args...) }, "js": func(args ...any) (string, error) { return escape(1, args...) }, "urlquery": func(args ...any) (string, error) { return escape(2, args...) }})
 	appendCommand := func(p *parse.PipeNode, name string) {
 		p.Cmds = append(p.Cmds, &parse.CommandNode{NodeType: parse.NodeCommand, Args: []parse.Node{parse.NewIdentifier(name)}})
 	}
@@ -547,12 +362,19 @@ func boundedTemplate(b *backend.BuildBounds, t *template.Template, maxBytes int6
 	}
 	for _, part := range parts {
 		tree := part.Tree.Copy()
+		if e = textOwners.hold(b, tree.Root); e != nil {
+			tree = nil
+			clone = nil
+			return nil, nil, e
+		}
 		rewrite(tree.Root)
 		if _, e = clone.AddParseTree(part.Name(), tree); e != nil {
-			return nil, e
+			tree = nil
+			clone = nil
+			return nil, nil, e
 		}
 	}
-	return clone, nil
+	return clone, textOwners.release, nil
 }
 
 func renderSystemBounded(b *backend.BuildBounds, t *template.Template, d any, maxBytes int64) (string, error) {
@@ -564,12 +386,14 @@ func renderSystemBounded(b *backend.BuildBounds, t *template.Template, d any, ma
 		return "", e
 	}
 	return buildTextBounded(b, maxBytes, func(o *textOutput) {
-		bt, e := boundedTemplate(b, t, maxBytes)
+		bt, retire, e := boundedTemplate(b, t, maxBytes)
 		if e != nil {
 			o.err = e
 			return
 		}
 		o.err = bt.Execute(o.w, frozen)
+		bt = nil
+		retire()
 	})
 }
 
@@ -596,9 +420,6 @@ func validateTemplateData(b *backend.BuildBounds, v reflect.Value, depth int) er
 		return fmt.Errorf("prompt callable values are unsupported")
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
-			if e := b.ReserveNodes(1, 256); e != nil {
-				return e
-			}
 			field := t.Field(i)
 			if len(field.Name) > 128 || len(field.Tag) > 128 {
 				return &backend.BuildCapacityError{Resource: "template field metadata"}
@@ -614,14 +435,8 @@ func validateTemplateData(b *backend.BuildBounds, v reflect.Value, depth int) er
 			}
 		}
 	case reflect.Map:
-		if e := b.ReserveNodes(1, 128); e != nil {
-			return e
-		}
 		iter := v.MapRange()
 		for iter.Next() {
-			if e := b.ReserveNodes(1, 1024); e != nil {
-				return e
-			}
 			if e := validateTemplateData(b, iter.Value(), depth+1); e != nil {
 				return e
 			}
@@ -630,120 +445,8 @@ func validateTemplateData(b *backend.BuildBounds, v reflect.Value, depth int) er
 	return nil
 }
 
-// measureFmt bounds fmt's supported reflective value output independently of
-// JSON tags/numeric encoding. Each record allows 512 ASCII bytes for its finite
-// scalar representation, <=256-byte type spelling, field label and diagnostics;
-// string bytes additionally allow six-byte escapes. float64 fixed decimal has
-// at most 309 integer digits plus sign/default six fractional digits. Dynamic
-// precision and width are added per record by the directive parser.
-func reserveFmtOutput(b *backend.BuildBounds, upper int64) error {
-	// Go 1.26 fmt may reuse a <=64KiB pooled buffer. Its writePadding
-	// growth is 2*oldCap+n (<3*newLen); appends/quoted numeric scratch
-	// need <=2*upper, while an old backing has <=upper before growth.
-	// Reserve each possible backing separately, including allocator rounding.
-	if e := b.ReserveFormatWorkspace(); e != nil {
-		return e
-	}
-	for _, factor := range [...]int64{3, 2, 1} {
-		if upper > (1<<63-1)/factor {
-			return &backend.BuildCapacityError{Resource: "formatted backing bytes"}
-		}
-		if e := b.ReserveText(0, factor*upper); e != nil {
-			return e
-		}
-	}
-	return nil
-}
-
-func measureFmt(b *backend.BuildBounds, v reflect.Value, depth int) (int64, int64, error) {
-	if depth > backend.MaxBuildDepth {
-		return 0, 0, &backend.BuildCapacityError{Resource: "formatted value depth"}
-	}
-	if !v.IsValid() {
-		return 512, 1, nil
-	}
-	if e := b.ReserveNodes(1, 1024); e != nil {
-		return 0, 0, e
-	}
-	if v.Kind() == reflect.Float32 || v.Kind() == reflect.Float64 {
-		// internal/strconv.bigFtoa/roundShortest have at most three
-		// 824-byte decimal records, regardless of precision or input size.
-		if e := b.ReserveNodes(3, 1024); e != nil {
-			return 0, 0, e
-		}
-	}
-	if len(v.Type().String()) > 256 {
-		return 0, 0, &backend.BuildCapacityError{Resource: "formatted type spelling"}
-	}
-	upper, slots := int64(512), int64(1)
-	if v.Kind() == reflect.Complex64 || v.Kind() == reflect.Complex128 {
-		// Complex constants can come from template syntax even though
-		// frozen metadata disallows complex values. Both components use
-		// the same finite floating formatter and receive their own padding.
-		if e := b.ReserveNodes(6, 1024); e != nil {
-			return 0, 0, e
-		}
-		upper, slots = 1024, 2
-	}
-	add := func(child reflect.Value) error {
-		n, count, e := measureFmt(b, child, depth+1)
-		if e != nil {
-			return e
-		}
-		if n > (1<<63-1)-upper || count > (1<<63-1)-slots {
-			return &backend.BuildCapacityError{Resource: "formatted value bytes"}
-		}
-		upper += n
-		slots += count
-		return nil
-	}
-	switch v.Kind() {
-	case reflect.Interface, reflect.Pointer:
-		if !v.IsNil() {
-			if e := add(v.Elem()); e != nil {
-				return 0, 0, e
-			}
-		}
-	case reflect.String:
-		n := int64(v.Len())
-		if n > ((1<<63-1)-upper)/6 {
-			return 0, 0, &backend.BuildCapacityError{Resource: "formatted string bytes"}
-		}
-		upper += 6 * n
-	case reflect.Struct:
-		for i := 0; i < v.NumField(); i++ {
-			if e := add(v.Field(i)); e != nil {
-				return 0, 0, e
-			}
-		}
-	case reflect.Array, reflect.Slice:
-		for i := 0; i < v.Len(); i++ {
-			if e := add(v.Index(i)); e != nil {
-				return 0, 0, e
-			}
-		}
-	case reflect.Map:
-		if e := b.ReserveNodes(int64(v.Len())*4+1, 1024); e != nil {
-			return 0, 0, e
-		}
-		iter := v.MapRange()
-		for iter.Next() {
-			if e := b.ReserveNodes(1, 1024); e != nil {
-				return 0, 0, e
-			}
-			if e := add(iter.Key()); e != nil {
-				return 0, 0, e
-			}
-			if e := add(iter.Value()); e != nil {
-				return 0, 0, e
-			}
-		}
-	}
-	return upper, slots, nil
-}
-
-// RenderTemplateBounded is the saved retry-template entry. Parsing its private
-// tree is credited before allocation; functions remain the fixed pure set.
+// RenderTemplateBounded is the saved retry-template entry. Observable copied
+// text is held through each execution; functions remain the fixed pure set.
 func RenderTemplateBounded(b *backend.BuildBounds, content string, data any, maxBytes int64) (string, error) {
 	if int64(len(content)) > maxBytes {
 		return "", &backend.BuildCapacityError{Resource: "template source bytes"}
@@ -778,7 +481,7 @@ func (r *Renderer) RenderWithCreditsBounded(b *backend.BuildBounds, d Data, maxB
 	}
 	segs := d.Segments
 	if len(segs) == 0 {
-		if e := b.ReserveNodes(1, 64); e != nil {
+		if e := backend.ReserveSlice[SegmentInput](b, 1); e != nil {
 			return "", "", e
 		}
 		segs = []SegmentInput{{ID: SingleID, Source: d.Source, Translate: true}}
@@ -790,9 +493,6 @@ func (r *Renderer) RenderWithCreditsBounded(b *backend.BuildBounds, d Data, maxB
 		}
 		return renderPairBounded(b, r.system, d, maxBytes, claim, func(o *textOutput) { writeTranslateText(o, segs, d.RubyAnnotations, mode) })
 	} else {
-		if e := b.ReserveNodes(int64(len(segs))+1, 1024); e != nil {
-			return "", "", e
-		}
 		m := make(map[string]SegmentDetail, len(segs))
 		for _, s := range segs {
 			m[s.ID] = SegmentDetail{Source: s.Source, Translate: s.Translate}

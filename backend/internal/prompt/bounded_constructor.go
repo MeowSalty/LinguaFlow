@@ -13,27 +13,23 @@ func parseTemplateBounded(b *backend.BuildBounds, name, content string, funcs bo
 	if content == "" {
 		return nil, fmt.Errorf("prompt template content is empty")
 	}
-	count := int64(1)
+	if err := b.CheckContext(); err != nil {
+		return nil, err
+	}
 	depth, sp := 0, 0
 	var parents [64]int
 	for pos := 0; pos < len(content); {
 		at := strings.Index(content[pos:], "{{")
 		if at < 0 {
-			count++
 			break
 		}
 		pos += at + 2
-		count++
 		start := pos
 		quote := byte(0)
 		escaped := false
 		parens := 0
 		for pos < len(content) {
 			c := content[pos]
-			count++
-			if count > 16380 {
-				return nil, &backend.BuildCapacityError{Resource: "template syntax nodes"}
-			}
 			if quote != 0 {
 				if escaped {
 					escaped = false
@@ -93,12 +89,6 @@ func parseTemplateBounded(b *backend.BuildBounds, name, content string, funcs bo
 			return nil, &backend.BuildCapacityError{Resource: "template syntax depth"}
 		}
 		pos = min(len(content), pos+2)
-	}
-	if e := b.ReserveText(0, 4*int64(len(content))); e != nil {
-		return nil, e
-	}
-	if e := b.ReserveNodes(4*count+16, 1024); e != nil {
-		return nil, e
 	}
 	t := template.New(name)
 	if funcs {
