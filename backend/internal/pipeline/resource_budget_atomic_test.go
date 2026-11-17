@@ -29,14 +29,15 @@ func (s *releaseOnBudgetAbortStore) AbortRequest(ctx context.Context, id string)
 // owner releases. Processing that event must retry, never reclassify it using a
 // later empty consumer snapshot.
 func TestBudgetReleasedExternalOwnerRetriesStaleDeferredProbe(t *testing.T) {
+	responseBytes := backend.DefaultMaxResponseBytes
 	l := resourcebudget.Limits{MaxUnconfirmedMembers: 256, MaxPayloadBytes: 8 << 20, MaxPrepareOwners: 8, MaxMainResponseOwners: 8, MaxAuxResponseOwners: 8, MaxBuildWorkers: 8, MaxQueuedDescriptors: 32, MaxLogicalStorageBytes: 64 << 20}
 	root, err := resourcebudget.New(resourcebudget.Policy{Actor: l, Instance: l})
 	if err != nil {
 		t.Fatal(err)
 	}
 	other := resourcebudget.Scope{ActorID: 1, CallID: "other"}
-	pressure := resourcebudget.Vector{PayloadBytes: 7 << 20, BuildWorkers: 1}
-	if err = root.Claim(other, "other-runtime", pressure); err != nil {
+	probePressure := resourcebudget.Vector{PayloadBytes: l.MaxPayloadBytes - responseBytes, BuildWorkers: 1}
+	if err = root.Claim(other, "other-runtime", probePressure); err != nil {
 		t.Fatal(err)
 	}
 	scope := resourcebudget.Scope{ActorID: 1, CallID: "request"}
@@ -54,7 +55,7 @@ func TestBudgetReleasedExternalOwnerRetriesStaleDeferredProbe(t *testing.T) {
 	if p != nil || err != nil || wait.Reason != "aggregate_capacity" {
 		t.Fatalf("not a temporary joint failure: %+v %v", wait, err)
 	}
-	if err = root.Release(other, "other-runtime", pressure); err != nil {
+	if err = root.Release(other, "other-runtime", probePressure); err != nil {
 		t.Fatal(err)
 	}
 	if root.CanDrainOutside(scope) {
@@ -66,6 +67,9 @@ func TestBudgetReleasedExternalOwnerRetriesStaleDeferredProbe(t *testing.T) {
 	}
 	p.Release()
 	r.Window.Release("request")
+	// Leave R but no room for this request's measured input at the joint grant.
+	// Only the existing protocol credit is promised before dispatch.
+	pressure := resourcebudget.Vector{PayloadBytes: l.MaxPayloadBytes - responseBytes, BuildWorkers: 1}
 	if err = root.Claim(other, "other-runtime", pressure); err != nil {
 		t.Fatal(err)
 	}

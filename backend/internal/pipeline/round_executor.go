@@ -345,8 +345,25 @@ func runPool(
 	if bufferSize > len(batches) {
 		bufferSize = len(batches)
 	}
+	poolOwner := ""
+	if round.Runtime != nil {
+		poolOwner = "pool-channels:" + NewWorkID()
+		poolCtx := round.Runtime.BuildContext(ctx, poolOwner)
+		b, err := backend.NewBuildBoundsFromContext(poolCtx, 0, 0)
+		if err != nil {
+			return poolResult{}, err
+		}
+		defer round.Runtime.Admission.ReleaseBuild(poolOwner)
+		if err = backend.ReserveSlice[batchJob](b, int64(bufferSize)); err != nil {
+			return poolResult{}, err
+		}
+		if err = backend.ReserveSlice[batchResult](b, int64(bufferSize)); err != nil {
+			return poolResult{}, err
+		}
+	}
 	jobs := make(chan batchJob, bufferSize)
 	results := make(chan batchResult, bufferSize)
+	defer func() { jobs, results = nil, nil }()
 
 	runCtx, runCancel := context.WithCancel(ctx)
 	defer runCancel()
@@ -653,6 +670,20 @@ func runPool(
 	}
 
 	var capacityWaiting []batchResult
+	capacityReady := func(result batchResult) bool {
+		wait := result.waitCapacity.Wait
+		select {
+		case <-wait.CapacityChanged:
+			return true
+		default:
+		}
+		select {
+		case <-wait.PolicyChanged:
+			return true
+		default:
+		}
+		return !wait.AvailableAt.IsZero() && !time.Now().Before(wait.AvailableAt)
+	}
 	capacityWake := false
 	for active > 0 {
 		var preparationChanged, admissionChanged <-chan struct{}
@@ -665,10 +696,19 @@ func runPool(
 			pauseRequested = round.Gate.Done()
 		}
 		if capacityWake {
-			for len(capacityWaiting) > 0 {
+			for i := 0; i < len(capacityWaiting); {
+				// A global notification may come from this invocation's own
+				// snapshot refund. Only the actual wait condition can authorize
+				// retry; unrelated Busy descriptors keep their source credit.
+				if !capacityReady(capacityWaiting[i]) {
+					i++
+					continue
+				}
 				select {
-				case jobs <- *capacityWaiting[0].waitJob:
-					capacityWaiting = capacityWaiting[1:]
+				case jobs <- *capacityWaiting[i].waitJob:
+					copy(capacityWaiting[i:], capacityWaiting[i+1:])
+					capacityWaiting[len(capacityWaiting)-1] = batchResult{}
+					capacityWaiting = capacityWaiting[:len(capacityWaiting)-1]
 				default:
 					goto waitingSubmitted
 				}

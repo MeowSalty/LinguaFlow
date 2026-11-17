@@ -64,7 +64,7 @@ func runStoredHandlerBuild(ctx context.Context, fn func(*backend.BuildBounds) er
 		output = runtime.responseLimit()
 	}
 	build := func() error {
-		b, err := backend.NewBuildBounds(output, storedHandlerInputLimit(ctx))
+		b, err := backend.NewBuildBoundsFromContext(ctx, output, storedHandlerInputLimit(ctx))
 		if err != nil {
 			return err
 		}
@@ -83,9 +83,6 @@ func buildStoredScopeBounded(ctx context.Context, doc *Document, pending []int, 
 	var result [][]int
 	count := 0
 	err := runStoredHandlerBuild(ctx, func(b *backend.BuildBounds) error {
-		if e := b.ReserveNodes(int64(len(codes))+4, 1024); e != nil {
-			return e
-		}
 		codeSet := make(map[string]struct{}, len(codes))
 		for _, code := range codes {
 			codeSet[code] = struct{}{}
@@ -110,10 +107,10 @@ func buildStoredScopeBounded(ctx context.Context, doc *Document, pending []int, 
 		if count == 0 {
 			return nil
 		}
-		if e := b.ReserveNodes(int64(count), 8); e != nil {
+		if e := backend.ReserveSlice[int](b, int64(count)); e != nil {
 			return e
 		}
-		if e := b.ReserveNodes(1, 24); e != nil {
+		if e := backend.ReserveSlice[[]int](b, 1); e != nil {
 			return e
 		}
 		scan := make([]int, count)
@@ -128,7 +125,7 @@ func buildStoredScopeBounded(ctx context.Context, doc *Document, pending []int, 
 				}
 			}
 		}
-		if e := b.ReserveNodes(int64(count)+1, 24); e != nil {
+		if e := backend.ReserveSlice[[]int](b, int64(count)); e != nil {
 			return e
 		}
 		result = make([][]int, 0, count)
@@ -160,7 +157,7 @@ func buildStoredScopeBounded(ctx context.Context, doc *Document, pending []int, 
 			split(0, count, false)
 			return nil
 		}
-		if e := b.ReserveNodes(int64(count)+1, 24); e != nil {
+		if e := backend.ReserveSlice[[]int](b, int64(count)); e != nil {
 			return e
 		}
 		leftovers := make([][]int, 0, count)
@@ -296,7 +293,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 	// 从索引取文本（优先用 OriginalSource）
 	var texts []string
 	inputErr := runStoredHandlerBuild(ctx, func(b *backend.BuildBounds) error {
-		if err := b.ReserveNodes(int64(len(idxs))+1, 1024); err != nil {
+		if err := backend.ReserveSlice[string](b, int64(len(idxs))); err != nil {
 			return err
 		}
 		texts = make([]string, 0, len(idxs))
@@ -455,7 +452,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 				return e
 			}
 			parsedCount = len(parsed)
-			if e = b.ReserveNodes(int64(len(parsed))+1, 1024); e != nil {
+			if e = backend.ReserveSlice[glossary.Entry](b, int64(len(parsed))); e != nil {
 				return e
 			}
 			candidates := make([]glossary.Entry, 0, len(parsed))
@@ -592,14 +589,9 @@ func (h *ExtractHandler) collectExistingBounded(ctx context.Context, texts []str
 		return nil, nil
 	}
 	var budget *backend.BuildBounds
-	var seen map[string]struct{}
 	var out []string
 	err := runStoredHandlerBuild(ctx, func(b *backend.BuildBounds) error {
 		budget = b
-		if e := b.ReserveNodes(1, 1024); e != nil {
-			return e
-		}
-		seen = make(map[string]struct{})
 		return nil
 	})
 	if err != nil {
@@ -623,16 +615,9 @@ func (h *ExtractHandler) collectExistingBounded(ctx context.Context, texts []str
 		}
 		build := func() error {
 			appendSource := func(source string) error {
-				if _, ok := seen[source]; ok {
+				if slices.Contains(out, source) {
 					return nil
 				}
-				if e := budget.ReserveNodes(1, 1024); e != nil {
-					return e
-				}
-				if e := budget.ReserveText(int64(len(source)), int64(len(source))); e != nil {
-					return e
-				}
-				seen[source] = struct{}{}
 				var e error
 				out, e = backend.AppendNode(budget, out, source)
 				if e != nil {

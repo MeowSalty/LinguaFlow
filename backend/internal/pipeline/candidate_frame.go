@@ -6,27 +6,44 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // CandidateFrame contains one owned Q wire payload plus fixed reconciliation
 // metadata. Persistence loading ends before the short decode/build permit.
 type CandidateFrame struct {
 	Payload                                                             []byte
+	ReleaseOwned                                                        func()
 	ID, WorkID                                                          string
 	Version, Epoch                                                      int64
 	Index, SegmentID, Pool, MainAttempt, LogicalAttempt, NetworkAttempt int
 	Next                                                                time.Time
 	Reconcile                                                           bool
 }
+
+// Release follows the last frame borrower and clears references before credit
+// is refunded. The callback may own a canonical representation and SQL buffer.
+func (f *CandidateFrame) Release() {
+	release := f.ReleaseOwned
+	*f = CandidateFrame{}
+	if release != nil {
+		release()
+	}
+}
+
 type CandidateFrameStore interface {
 	CandidateFrame(context.Context, string, int64) (CandidateFrame, error)
 }
 
 func DecodeCandidateFrame(b *backend.BuildBounds, f CandidateFrame) (*Candidate, error) {
+	if err := backend.ReserveSlice[Candidate](b, 1); err != nil {
+		return nil, err
+	}
 	var c Candidate
 	if err := b.DecodeJSON(f.Payload, &c); err != nil {
 		return nil, err
@@ -48,7 +65,12 @@ func DecodeCandidateFrame(b *backend.BuildBounds, f CandidateFrame) (*Candidate,
 		return nil, ErrCandidateStale
 	}
 	if f.WorkID != "" {
-		c.WorkID = f.WorkID
+		if c.WorkID == "" {
+			if err := b.ReserveAllocation(int64(len(f.WorkID)), 1); err != nil {
+				return nil, err
+			}
+			c.WorkID = strings.Clone(f.WorkID)
+		}
 	}
 	c.Index = f.Index
 	c.StoredBytes = int64(len(f.Payload))
@@ -82,21 +104,30 @@ func (c *Candidate) SealAndCompact(b *backend.BuildBounds, limit int64) error {
 	c.StoredBytes = int64(len(payload))
 	digest := sha256.New()
 	_, _ = io.WriteString(digest, c.BaselineTarget)
+	if err := b.ReserveAllocation(64, 1); err != nil {
+		return err
+	}
 	c.BaselineDigest = hex.EncodeToString(digest.Sum(nil))
 	h := HeaderForCandidate(c)
-	header, err := c.EncodeHeader()
+	header, err := b.EncodeJSON(h, CandidateHeaderLimit)
 	if err != nil {
 		return err
 	}
-	summary := h.Candidate()
+	// Reuse the private, already-counted state holder. Header compaction ends
+	// its tree borrowers without creating another state or Candidate holder.
+	summary := h.candidateValue()
+	if h.Protocol > 0 {
+		summary.Alignment = c.Alignment
+		*summary.Alignment = ruby.AlignmentState{ProtocolVersion: h.Protocol, ValidatorVersion: h.Validator}
+	}
 	summary.PreparedPayload = payload
 	summary.PreparedHeader = header
-	summary.BaselineDigest = hex.EncodeToString(digest.Sum(nil))
+	summary.BaselineDigest = c.BaselineDigest
 	summary.BaselineStatus = c.BaselineStatus
 	summary.Segment = Segment{ID: c.Segment.ID, DBID: c.Segment.DBID, ContentVersion: c.Segment.ContentVersion, TargetIsNull: c.Segment.TargetIsNull, Status: c.Segment.Status}
 	summary.LastAlignmentRequestID = c.LastAlignmentRequestID
 	summary.PendingSave = c.PendingSave
-	*c = *summary
+	*c = summary
 	return nil
 }
 func loadCandidateFrame(ctx context.Context, store RoundStore, id string, limit int64) (CandidateFrame, error) {

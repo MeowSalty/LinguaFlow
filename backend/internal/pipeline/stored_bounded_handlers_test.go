@@ -221,7 +221,8 @@ func TestBoundedStoredPlannerPreservesBatchOrder(t *testing.T) {
 
 func TestBoundedStoredPlannerCapacityBeforeBacking(t *testing.T) {
 	r := &ExecutionRuntime{parse: make(chan struct{}, 2), ResponseBytes: 4096, HandoffBytes: 4096}
-	got, _, err := buildStoredScopeBounded(WithExecutionRuntime(context.Background(), r), &Document{}, make([]int, 2000), nil, func(*Segment, map[string]struct{}) bool { return true }, BatchConstraint{}, 0, false)
+	ctx := backend.WithBuildAllocation(WithExecutionRuntime(context.Background(), r), 4096, nil, nil)
+	got, _, err := buildStoredScopeBounded(ctx, &Document{}, make([]int, 2000), nil, func(*Segment, map[string]struct{}) bool { return true }, BatchConstraint{}, 0, false)
 	if !errors.Is(err, backend.ErrBuildCapacity) || got != nil || len(r.parse) != 0 {
 		t.Fatalf("planner=%v err=%v CPU=%d", got, err, len(r.parse))
 	}

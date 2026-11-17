@@ -28,7 +28,9 @@ func preclaimMeasured(ctx context.Context, remote backend.Backend, session *requ
 		return err
 	}
 	intent := session.intent
-	intent.ID = NewWorkID()
+	if intent.ID == "" {
+		intent.ID = NewWorkID()
+	}
 	intent.BackendID = bound.id
 	prepared, keepPrepared := false, false
 	defer func() {
@@ -37,7 +39,7 @@ func preclaimMeasured(ctx context.Context, remote backend.Backend, session *requ
 			bound.forgetPreparation(ctx)
 		}
 	}()
-	wire, err := backend.MeasureRequestPrompt(bound.inner, req, measured)
+	wire, err := backend.MeasureRequestPromptContext(ctx, bound.inner, req, measured)
 	if err != nil {
 		return err
 	}
@@ -48,7 +50,7 @@ func preclaimMeasured(ctx context.Context, remote backend.Backend, session *requ
 	// The canonical member versions and exact measured input are frozen identity.
 	// The actual prompt is rendered again only from those same versions.
 	h := sha256.New()
-	b, e := backend.NewBuildBounds(backend.RequestMetadataBytes, input)
+	b, e := backend.NewBuildBoundsFromContext(ctx, backend.RequestMetadataBytes, input)
 	if e != nil {
 		return e
 	}

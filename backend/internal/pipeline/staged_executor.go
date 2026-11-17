@@ -9,10 +9,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 type stagedHandler interface {
@@ -85,7 +87,9 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		reporter = progress.Nop{}
 	}
 	if store == nil {
-		store = NewMemoryRoundStore(nil)
+		memory := NewMemoryRoundStore(nil)
+		defer memory.Close()
+		store = memory
 	}
 	payloadStore, ok := store.(CandidatePayloadStore)
 	if !ok {
@@ -198,9 +202,25 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			alignmentReadyAt[c.Index] = maxTime(time.Now(), c.NextAttemptAt)
 			if e.outcome == CommitAccepted || e.outcome == CommitExisting || e.outcome == CommitNoop {
 				if e.completed != nil {
-					if e.completed.PreparedPayload != nil {
-						err := runtime.Run(ctx, func() error {
-							b, e2 := backend.NewBuildBounds(runtime.Window.limits.ItemBytes, int64(len(e.completed.PreparedPayload)))
+					previous := doc.Segments[c.Index]
+					var final TranslatedSegment
+					installed := false
+					defer func() {
+						if !installed {
+							doc.Segments[c.Index] = previous
+						}
+						*e.completed = TranslatedSegment{}
+						final = TranslatedSegment{}
+						previous = Segment{}
+						c.PreparedPayload, c.PreparedHeader = nil, nil
+						c.Segment.Target, c.Segment.Issues = "", nil
+						_ = runtime.Admission.ReleaseBuild("candidate:" + c.ID)
+					}()
+					prepared := e.completed.PreparedPayload != nil
+					buildCtx := runtime.BuildContext(ctx, "candidate:"+c.ID)
+					if prepared {
+						err := runtime.Run(buildCtx, func() error {
+							b, e2 := backend.NewBuildBoundsFromContext(buildCtx, runtime.Window.limits.ItemBytes, int64(len(e.completed.PreparedPayload)))
 							if e2 != nil {
 								return e2
 							}
@@ -211,19 +231,12 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 							// Parser positions remain typed in the canonical input. The
 							// compact JSON handoff preserves their values, then this short
 							// confirmation step restores their native representation.
-							if e2 = b.ReserveNodes(int64(len(doc.Segments[c.Index].Meta))+1, 1024); e2 != nil {
-								return e2
-							}
 							meta := Segment{Meta: full.Meta}
 							if e2 = restoreMetadataTypes(&meta, metadataTypes(doc.Segments[c.Index].Meta), b); e2 != nil {
 								return e2
 							}
 							full.Meta = meta.Meta
 							*e.completed = full
-							doc.Segments[c.Index].Target = full.TargetText
-							doc.Segments[c.Index].Issues = full.Issues
-							doc.Segments[c.Index].Meta = full.Meta
-							doc.Segments[c.Index].Protected = full.Protected
 							return nil
 						})
 						if err != nil {
@@ -239,7 +252,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 						ApplyConfirmed(context.Context, *Candidate, TranslatedSegment) (bool, error)
 					}); ok {
 						var err error
-						applied, err = local.ApplyConfirmed(ctx, c, *e.completed)
+						applied, err = local.ApplyConfirmed(buildCtx, c, *e.completed)
 						if err != nil {
 							if firstErr == nil {
 								firstErr = err
@@ -248,12 +261,49 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 							return
 						}
 					}
-					if !applied {
-						doc.Segments[c.Index].Target = e.completed.TargetText
-						doc.Segments[c.Index].Issues = e.completed.Issues
-						doc.Segments[c.Index].Status = c.Segment.Status
-						doc.Segments[c.Index].ContentVersion = c.Segment.ContentVersion
-						doc.Segments[c.Index].TargetIsNull = false
+					final = *e.completed
+					if !prepared {
+						final.Meta = previous.Meta
+						final.Protected = previous.Protected
+					}
+					if applied {
+						final.TargetText = doc.Segments[c.Index].Target
+						final.Issues = doc.Segments[c.Index].Issues
+						c.Segment.Status = doc.Segments[c.Index].Status
+						c.Segment.ContentVersion = doc.Segments[c.Index].ContentVersion
+					}
+					if applied && unsafe.SliceData(final.Issues) != unsafe.SliceData(previous.Issues) {
+						cloneErr := runtime.Run(buildCtx, func() error {
+							cloneBounds, err := backend.NewBuildBoundsFromContext(buildCtx, 0, 0)
+							if err != nil {
+								return err
+							}
+							var private []qa.QualityIssue
+							if err = cloneBounds.CloneInto(final.Issues, &private); err != nil {
+								return err
+							}
+							final.Issues = private
+							return nil
+						})
+						if cloneErr != nil {
+							if firstErr == nil {
+								firstErr = cloneErr
+								cancel()
+							}
+							return
+						}
+					}
+					if err := runtime.Run(buildCtx, func() error {
+						return installConfirmedFields(buildCtx, runtime, doc, c, final, prepared, "candidate:"+c.ID, previous, func() {
+							installed = true
+							previous = Segment{}
+						})
+					}); err != nil {
+						if firstErr == nil {
+							firstErr = err
+							cancel()
+						}
+						return
 					}
 				}
 				doc.Segments[c.Index].RoundWork.Completed = true
@@ -623,7 +673,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				var e error
 				if waitingBatch == nil {
 					e = runtime.Run(runCtx, func() error {
-						b, err := backend.NewBuildBounds(runtime.Window.limits.ItemBytes, runtime.handoffLimit())
+						b, err := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, runtime.handoffLimit())
 						if err != nil {
 							return err
 						}
@@ -707,9 +757,8 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 						result = WindowTooLarge
 						break
 					}
-					// Retain the already selected public prefix and its attempt.
-					// Only proven fixed inventory changes this ceiling; ordinary
-					// in-flight ownership below it is still a Busy wait.
+					// Only authoritative fixed recovery stock can shorten this new
+					// prefix. Ordinary in-flight ownership retains its Busy wait.
 					idxs = idxs[:min(len(idxs), limit)]
 					result, wake = runtime.Window.TryPrepareOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
 				}
@@ -741,10 +790,22 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				}
 				waitingBatch = nil
 				var input *preparedMainDocument
-				snapshotErr := runtime.Run(runCtx, func() error { var err error; input, err = snapshotMainInput(doc, idxs, h, runtime); return err })
+				snapshotCtx := runtime.BuildContext(runCtx, "build:"+reservation)
+				snapshotErr := runtime.Run(snapshotCtx, func() error {
+					var err error
+					input, err = snapshotMainInput(snapshotCtx, doc, idxs, h, runtime)
+					return err
+				})
 				if snapshotErr != nil {
+					input = nil
+					_ = runtime.Admission.ReleaseBuild("build:" + reservation)
 					runtime.Window.Release(reservation)
 					ticket.Release()
+					if d := workDeferred(snapshotErr); d != nil {
+						waitingBatch = &waitingWindowBatch{indices: idxs, pool: pool, attempt: attempt, wake: d.Wait.CapacityChanged, reason: d.Wait.Reason}
+						capacityWaits = append(capacityWaits, d)
+						break
+					}
 					firstErr = snapshotErr
 					cancel()
 					break
@@ -1021,8 +1082,16 @@ func prepareMain(ctx context.Context, round Round, h stagedHandler, doc *Documen
 }
 
 func processCandidate(ctx context.Context, round Round, c *Candidate, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporter progress.Reporter) (e stagedEvent) {
+	parentSession, _ := ctx.Value(requestSessionKey{}).(*requestSession)
+	ctx = runtime.BuildContext(ctx, "candidate:"+c.ID)
 	e = stagedEvent{indices: []int{c.Index}, candidate: c}
 	defer progress.NotifyWorkState(reporter)
+	var contextErr error
+	ctx, contextErr = parentSession.responseBuildContext(ctx)
+	if contextErr != nil {
+		e.err = contextErr
+		return e
+	}
 	if validator, ok := store.(interface {
 		ValidateCandidate(context.Context, *Candidate) (bool, error)
 	}); ok {
@@ -1047,12 +1116,18 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 			e.waitCapacity = update.waitCapacity
 			return e
 		}
-		if worker.session != nil && !worker.session.handoffDeadline.IsZero() {
-			ctx = persistence.WithDeadline(ctx, worker.session.handoffDeadline)
+		ctx, contextErr = worker.session.responseBuildContext(ctx)
+		if contextErr != nil {
+			e.err = contextErr
+			return e
 		}
 		e.inputTokens, e.outputTokens = update.inputTokens, update.outputTokens
 		if update.err != nil || update.paused {
 			e.err = update.err
+			return e
+		}
+		if err := worker.complete(); err != nil {
+			e.err = err
 			return e
 		}
 		if update.stale[c.Index] {
@@ -1064,8 +1139,24 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 	if !c.Ready {
 		return e
 	}
+	finalOwner := "candidate-finalize:" + NewWorkID()
+	defer runtime.Admission.ReleaseBuild(finalOwner)
+	if parentSession, _ = ctx.Value(requestSessionKey{}).(*requestSession); parentSession == nil || len(parentSession.responseBackings) == 0 {
+		ctx = runtime.BuildContext(ctx, finalOwner)
+	}
 	var result TranslatedSegment
 	var accepted bool
+	var finalBounds *backend.BuildBounds
+	var retainedResult int64
+	defer func() {
+		if e.completed == nil {
+			result = TranslatedSegment{}
+			if retainedResult > 0 {
+				_ = runtime.Admission.ReleaseBuildBytes("candidate:"+c.ID, retainedResult)
+			}
+		}
+		finalBounds.CloseRetired()
+	}()
 	frame, loadErr := loadCandidateFrame(ctx, store, c.ID, runtime.Window.limits.ItemBytes)
 	if loadErr == nil {
 		runtime.Admission.ObserveOwned("candidate", c.ID+"/frame", int64(cap(frame.Payload)))
@@ -1075,11 +1166,13 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 		e.err = loadErr
 		return e
 	}
+	defer frame.Release()
 	err := runtime.Run(ctx, func() error {
-		b, err := backend.NewBuildBounds(runtime.Window.limits.ItemBytes, int64(len(frame.Payload)))
+		b, err := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, int64(len(frame.Payload)))
 		if err != nil {
 			return err
 		}
+		finalBounds = b
 		full, decodeErr := DecodeCandidateFrame(b, frame)
 		if decodeErr != nil {
 			return decodeErr
@@ -1103,14 +1196,34 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 				return err
 			}
 		}
-		// Finalization is the last consumer of the decoded private candidate.
-		full.PreparedPayload = nil
-		full.PreparedHeader = nil
-		full.BaselineDigest = c.BaselineDigest
-		*c = *HeaderForCandidate(full).Candidate()
+		// The existing header remains authoritative. Preparation only reads it;
+		// Commit applies final status and content version after its durable save.
+		full = nil
+		if accepted {
+			// IssuesPayload borrows PreparedPayload; PreparedStatus is a literal.
+			// Only these original-build strings and buffer escape finalization.
+			for _, n := range []int64{int64(len(result.ID)), int64(len(result.SourceText)), int64(len(result.TargetText)), int64(cap(result.PreparedPayload))} {
+				retainedResult, err = backend.CheckedAdd(retainedResult, n)
+				if err != nil {
+					retainedResult = 0
+					return err
+				}
+			}
+			credit, creditErr := b.RetainedAllocation(retainedResult)
+			if creditErr != nil {
+				creditErr = fmt.Errorf("final_retained requested=%d live=%d: %w", retainedResult, b.Snapshot().LiveBytes, creditErr)
+				retainedResult = 0
+				return creditErr
+			}
+			if err = backend.TransferBuildAllocationToBuild(ctx, credit, "candidate:"+c.ID); err != nil {
+				credit.Release()
+				retainedResult = 0
+				return err
+			}
+		}
 		return err
 	})
-	frame = CandidateFrame{}
+	frame.Release()
 	runtime.Admission.ObserveOwned("candidate", c.ID+"/frame", 0)
 	if err != nil {
 		e.err = err
@@ -1184,12 +1297,19 @@ func processCandidates(ctx context.Context, round Round, candidates []*Candidate
 		e.waitCapacity = update.waitCapacity
 		return e
 	}
-	if worker.session != nil && !worker.session.handoffDeadline.IsZero() {
-		ctx = persistence.WithDeadline(ctx, worker.session.handoffDeadline)
+	var contextErr error
+	ctx, contextErr = worker.session.responseBuildContext(ctx)
+	if contextErr != nil {
+		e.err = contextErr
+		return e
 	}
 	e.inputTokens, e.outputTokens = update.inputTokens, update.outputTokens
 	if update.err != nil || update.paused {
 		e.err = update.err
+		return e
+	}
+	if err := worker.complete(); err != nil {
+		e.err = err
 		return e
 	}
 	for _, c := range live {

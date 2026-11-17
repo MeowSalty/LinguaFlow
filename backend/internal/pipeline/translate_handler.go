@@ -840,6 +840,7 @@ func (h *TranslateHandler) absorbInlineGlossary(
 		requestID = session.lastID
 	}
 	result, err := glossary.AddForRequest(ctx, h.Glossary, requestID, candidates...)
+	defer result.Release()
 	if err != nil {
 		logger.Warn("inline glossary add failed", "err", err)
 	}

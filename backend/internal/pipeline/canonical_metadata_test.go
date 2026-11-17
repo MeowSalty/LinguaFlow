@@ -53,16 +53,6 @@ type originalSegmentFootprint struct {
 	Status                             string
 }
 
-func TestStoredPageMetadataAllocationCoefficient(t *testing.T) {
-	// Both result-channel and capacityWaiting backings may have allocated 2C
-	// slots even though the source credits permit only C live descriptors.
-	perWorker := 4*unsafe.Sizeof(batchResult{}) + 3*unsafe.Sizeof(batchJob{}) + 4*unsafe.Sizeof([]int{})
-	t.Logf("stored_metadata_credit=512*N+2048*min(C,N); measured_channel_worker_records=%d; cursors remain canonical, no page map", perWorker)
-	if perWorker > 2048 {
-		t.Fatal("stored worker record proof needs a revised coefficient")
-	}
-}
-
 func TestCanonicalStoredResultOutputBackingIsSeparate(t *testing.T) {
 	for _, n := range []int{1, 3, 7, 31, 127, 257, 1025, 8192} {
 		for _, split := range []bool{false, true} {
@@ -90,7 +80,7 @@ func TestCanonicalStoredResultOutputBackingIsSeparate(t *testing.T) {
 }
 
 func TestCanonicalSnapshotEmptyIndicesRejectBeforeConstruction(t *testing.T) {
-	if _, err := snapshotMainInput(nil, nil, nil, nil); err != ErrCandidateCapacity {
+	if _, err := snapshotMainInput(context.Background(), nil, nil, nil, nil); err != ErrCandidateCapacity {
 		t.Fatalf("empty input constructed unclaimed fixed objects: %v", err)
 	}
 }

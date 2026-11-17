@@ -73,10 +73,12 @@ func prepareStoredCanonicalMembership(h RoundHandler, doc *Document) int {
 	return count
 }
 func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, batchHandler func(context.Context, BatchResult) error, logger *slog.Logger, reporter progress.Reporter) (RunRoundResult, error) {
-	activeMetadataID := ""
+	activePlanOwner := ""
+	var plans []storedBatchPlan
 	defer func() {
-		if activeMetadataID != "" {
-			round.Runtime.Admission.ReleasePrepared(activeMetadataID)
+		plans = nil
+		if activePlanOwner != "" {
+			_ = round.Runtime.Admission.ReleaseBuild(activePlanOwner)
 		}
 	}()
 	canonical, ok := round.Store.(CanonicalRoundStore)
@@ -119,32 +121,34 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 			}
 			// At most a finite prepared page is materialized. Cursors and manifest stay
 			// in the document; completed chunks are not retained by the coordinator.
-			limit := min(total, 65536/8, int(round.Runtime.handoffLimit()/4096))
-			limit = max(1, limit)
 			metadataID := NewWorkID()
-			activeMetadataID = metadataID
-			claimed, e := round.Runtime.Admission.PrepareInputAttachment(metadataID, handlerRoundIndex(round.Handler), storeResourceID(round.Store), int64(limit)*512+int64(min(max(1, round.Concurrency), limit))*2048)
+			activePlanOwner = "stored-plan:" + metadataID
+			planCtx := round.Runtime.BuildContext(ctx, activePlanOwner)
+			members := 0
+			e := round.Runtime.Run(planCtx, func() error {
+				b, err := backend.NewBuildBoundsFromContext(planCtx, 0, 0)
+				if err != nil {
+					return err
+				}
+				plans, members, err = planStoredCanonicalPage(b, doc, round.Handler, pool, budget, round.Concurrency)
+				return err
+			})
 			if e != nil {
 				return canonicalStoredResult(doc, failedBatches), e
 			}
-			if !claimed {
-				if err = waitPreparation(ctx, backend.AdmissionWait{Reason: "stored_metadata", CapacityChanged: round.Runtime.Admission.Changed(), PauseRequested: round.Gate.Done()}); err != nil {
-					if err == backend.ErrDispatchPaused {
-						return canonicalStoredResult(doc, failedBatches), nil
-					}
-					return canonicalStoredResult(doc, failedBatches), err
-				}
-				continue
-			}
+			limit := max(1, members)
 			var pending []int
 			var advances []CursorTransition
 
-			err := round.Runtime.Run(ctx, func() error {
-				b, e := backend.NewBuildBounds(round.Runtime.responseLimit(), round.Runtime.handoffLimit())
+			err := round.Runtime.Run(planCtx, func() error {
+				b, e := backend.NewBuildBoundsFromContext(planCtx, round.Runtime.responseLimit(), round.Runtime.handoffLimit())
 				if e != nil {
 					return e
 				}
-				if e = b.ReserveNodes(int64(limit), 1024); e != nil {
+				if e = backend.ReserveSlice[int](b, int64(limit)); e != nil {
+					return e
+				}
+				if e = backend.ReserveSlice[CursorTransition](b, int64(min(16, limit))); e != nil {
 					return e
 				}
 				pending = make([]int, 0, limit)
@@ -166,6 +170,16 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 						advances = append(advances, CursorTransition{Index: i, Cursor: next})
 						continue
 					}
+					selected := false
+					for _, plan := range plans {
+						if w.Cursor.Attempt == plan.attempt && i >= plan.first && i <= plan.last {
+							selected = true
+							break
+						}
+					}
+					if !selected {
+						continue
+					}
 					pending = append(pending, i)
 
 					if len(pending) == limit {
@@ -175,7 +189,6 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 				return nil
 			})
 			if err != nil {
-				round.Runtime.Admission.ReleasePrepared(metadataID)
 				return RunRoundResult{}, err
 			}
 			if len(advances) > 0 {
@@ -187,7 +200,9 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 				}
 			}
 			if len(pending) == 0 {
-				round.Runtime.Admission.ReleasePrepared(metadataID)
+				plans = nil
+				_ = round.Runtime.Admission.ReleaseBuild(activePlanOwner)
+				activePlanOwner = ""
 				if len(advances) > 0 {
 					continue
 				}
@@ -198,12 +213,12 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 			// bounded by this page; the full scope is never grouped into private maps.
 			for attempt := 0; attempt < budget; attempt++ {
 				var group []int
-				err = round.Runtime.Run(ctx, func() error {
-					b, e := backend.NewBuildBounds(round.Runtime.responseLimit(), round.Runtime.handoffLimit())
+				err = round.Runtime.Run(planCtx, func() error {
+					b, e := backend.NewBuildBoundsFromContext(planCtx, round.Runtime.responseLimit(), round.Runtime.handoffLimit())
 					if e != nil {
 						return e
 					}
-					if e = b.ReserveNodes(int64(len(pending)), 8); e != nil {
+					if e = backend.ReserveSlice[int](b, int64(len(pending))); e != nil {
 						return e
 					}
 					group = make([]int, 0, len(pending))
@@ -220,12 +235,12 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 				if len(group) == 0 {
 					continue
 				}
-				built, e := round.Handler.BuildBatches(ctx, doc, group, pool)
+				built, e := round.Handler.BuildBatches(planCtx, doc, group, pool)
 				if e != nil {
 					return RunRoundResult{}, e
 				}
-				err = round.Runtime.Run(ctx, func() error {
-					b, e := backend.NewBuildBounds(round.Runtime.responseLimit(), round.Runtime.handoffLimit())
+				err = round.Runtime.Run(planCtx, func() error {
+					b, e := backend.NewBuildBoundsFromContext(planCtx, round.Runtime.responseLimit(), round.Runtime.handoffLimit())
 					if e != nil {
 						return e
 					}
@@ -243,7 +258,9 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 			}
 			pending = nil
 			result, e := runPool(ctx, round, round.Handler, doc, batches, budget, batchHandler, logger, reporter, pool, nil)
-			round.Runtime.Admission.ReleasePrepared(metadataID)
+			batches, advances, plans = nil, nil, nil
+			_ = round.Runtime.Admission.ReleaseBuild(activePlanOwner)
+			activePlanOwner = ""
 			if e != nil {
 				return canonicalStoredResult(doc, failedBatches), e
 			}

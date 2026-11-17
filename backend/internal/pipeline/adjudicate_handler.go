@@ -131,9 +131,6 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	isTextMode := proto.IsText()
 	requestBase := backend.Request{}
 	renderErr := runStoredHandlerBuild(ctx, func(b *backend.BuildBounds) (err error) {
-		if err = b.ReserveNodes(int64(len(h.AdjudicateCodes))+1, 1024); err != nil {
-			return err
-		}
 		codes = adjudicateCodeSet(h.adjudicateCodes())
 		if isTextMode {
 			requestBase.ResponseFormat = "none"
@@ -145,7 +142,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	var req backend.Request
 	if renderErr == nil {
 		req, renderErr = RenderStoredRequestBounded(ctx, h.Backend, requestBase, func(b *backend.BuildBounds, claim func(backend.PromptMeasure) error) (string, string, error) {
-			if e := b.ReserveNodes(int64(len(idxs))+1, 1024); e != nil {
+			if e := backend.ReserveSlice[prompt.AdjudicationSegment](b, int64(len(idxs))); e != nil {
 				return "", "", e
 			}
 			segments := make([]prompt.AdjudicationSegment, 0, len(idxs))
@@ -355,7 +352,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 }
 
 func (h *AdjudicateHandler) buildAdjudicationResultBounded(b *backend.BuildBounds, doc *Document, idxs []int, codes map[string]struct{}, verdicts []prompt.AdjudicationVerdict) (*BatchResult, int, error) {
-	if e := b.ReserveNodes(int64(len(verdicts)+len(idxs)+3), 1024); e != nil {
+	if e := backend.ReserveSlice[TranslatedSegment](b, int64(len(idxs))); e != nil {
 		return nil, 0, e
 	}
 	verdictMap := make(map[string]prompt.AdjudicationVerdict, len(verdicts))
@@ -384,7 +381,7 @@ func applyVerdictsBounded(b *backend.BuildBounds, issues []qa.QualityIssue, segI
 	if len(issues) == 0 {
 		return nil, 0, nil
 	}
-	if e := b.ReserveNodes(int64(len(codes)+len(issues)+3), 1024); e != nil {
+	if e := backend.ReserveSlice[qa.QualityIssue](b, int64(len(issues))); e != nil {
 		return nil, 0, e
 	}
 	now := timeutil.NowUTC()

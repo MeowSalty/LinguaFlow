@@ -586,7 +586,9 @@ type ExecutionRuntime struct {
 	dispatchMu                  sync.Mutex
 	stopped                     bool
 	ownerMu                     sync.Mutex
-	mainOwners                  map[string][]*backend.RequestPermit
+	mainOwners                  map[string]mainBackingOwner
+	documentOwners              map[documentSlot][4]string
+	documentPendingRefunds      map[documentSlot][]string
 	ResponseBytes, HandoffBytes int64
 	EpisodeStore                RuntimeEpisodeStore
 	episodeMu                   sync.Mutex
@@ -790,6 +792,12 @@ func (e *StorageError) Unwrap() error { return e.Err }
 func (*StorageError) Permanent() bool { return true }
 func storageFailure(err error) bool   { var s *StorageError; return errors.As(err, &s) }
 
+type responseBackingOwner struct {
+	owner    string
+	ctx      context.Context
+	response *backend.Response
+}
+
 type requestSession struct {
 	mode              string
 	deferred          *WorkDeferred
@@ -798,6 +806,7 @@ type requestSession struct {
 	reporter          progress.Reporter
 	intent            RequestIntent
 	permits           []*backend.RequestPermit
+	responseBackings  []responseBackingOwner
 	preWire, preInput int64
 	preTicket         *PreparationTicket
 	lastID            string
@@ -816,7 +825,28 @@ type requestSession struct {
 }
 type requestSessionKey struct{}
 
-func (s *requestSession) finish() error {
+// responseBuildContext is used only while this session still owns its completion
+// permits. Finalization and confirmation consume the same live response credit.
+func (s *requestSession) responseBuildContext(ctx context.Context) (context.Context, error) {
+	if s == nil || len(s.responseBackings) == 0 {
+		return ctx, nil
+	}
+	if len(s.permits) == 0 {
+		return nil, backend.ErrPipelineCapacity
+	}
+	backing := s.responseBackings[len(s.responseBackings)-1]
+	ctx, err := backend.WithProviderResponseAllocation(backing.ctx, s.runtime.responseLimit())
+	if err != nil {
+		return nil, err
+	}
+	ctx = context.WithValue(ctx, requestSessionKey{}, s)
+	if !s.handoffDeadline.IsZero() {
+		ctx = persistence.WithDeadline(ctx, s.handoffDeadline)
+	}
+	return ctx, nil
+}
+
+func (s *requestSession) finish() (err error) {
 	if s.preTicket != nil && s.calls == 0 {
 		if abort, ok := s.store.(RequestAborter); ok {
 			if err := s.runtime.SaveNamed(s.accountingContext(context.Background()), persistence.Metadata{Operation: "abort", Class: persistence.Reliable, RequestID: s.intent.ID, ResourceID: s.intent.ResourceID}, func(ctx context.Context) error { return abort.AbortRequest(ctx, s.intent.ID) }); err != nil {
@@ -835,7 +865,15 @@ func (s *requestSession) finish() error {
 			s.workCancel()
 		}
 	}()
-	defer s.releaseResponse()
+	defer func() {
+		err = errors.Join(err, s.releaseResponse())
+	}()
+	return s.complete()
+}
+
+// complete records reliable processing completion while the original response
+// source remains alive for later consumers. Physical release belongs to finish.
+func (s *requestSession) complete() error {
 	if s.handoffExpired.Load() {
 		return s.fail(&StorageError{Err: context.DeadlineExceeded})
 	}
@@ -853,10 +891,17 @@ func (s *requestSession) finish() error {
 		s.pending = s.pending[1:]
 	}
 	s.completionCtx = nil
+	for _, permit := range s.permits {
+		permit.Complete()
+	}
 	return nil
 }
 func (s *requestSession) Context(ctx context.Context) context.Context {
+	if s.intent.ID == "" {
+		s.intent.ID = NewWorkID()
+	}
 	ctx = backend.WithOwnedObserver(ctx, s.runtime.Admission)
+	ctx = s.runtime.BuildContext(ctx, "build:"+s.intent.ID)
 	workCtx, cancel := context.WithCancel(ctx)
 	s.workCancel = cancel
 	s.callCtx = context.WithValue(workCtx, requestSessionKey{}, s)
@@ -897,15 +942,35 @@ func (s *requestSession) accountingContext(ctx context.Context) context.Context 
 	return persistence.WithDeadline(s.runtime.CompletionContext(ctx), deadline)
 }
 
-func (s *requestSession) releaseResponse() {
+func (s *requestSession) releaseResponse() error {
 	if s.parsing {
 		<-s.runtime.parse
 		s.parsing = false
 	}
+	var releaseErr error
+	remaining := s.responseBackings[:0]
+	for _, backing := range s.responseBackings {
+		backing.response.Text = ""
+		backing.response.Raw = nil
+		backend.ReleaseProviderResponseOutput(backing.ctx)
+		if err := backend.CloseProviderResponseAllocation(backing.ctx); err != nil {
+			releaseErr = errors.Join(releaseErr, err)
+			remaining = append(remaining, backing)
+			continue
+		}
+		_ = s.runtime.Admission.ReleaseBuild(backing.owner)
+	}
+	clear(s.responseBackings[len(remaining):])
+	if releaseErr != nil {
+		s.responseBackings = remaining
+		return releaseErr
+	}
+	s.responseBackings = nil
 	for _, p := range s.permits {
 		p.Release()
 	}
 	s.permits = nil
+	return nil
 }
 
 func (s *requestSession) acquireParse(ctx context.Context) error {
@@ -1004,7 +1069,9 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		}
 		// A subsequent call (prompt upgrade) follows parsing and request-fact
 		// storage of the preceding result. Release its slots before re-admission.
-		session.releaseResponse()
+		if err := session.releaseResponse(); err != nil {
+			return nil, session.fail(err)
+		}
 	}
 	intent := RequestIntent{ID: NewWorkID(), Stage: backend.RequestStageMain, BackendID: b.id, RoundIndex: b.round}
 	if id, _ := ctx.Value(directRequestIDKey{}).(string); session == nil && id != "" {
@@ -1027,7 +1094,15 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 	if session == nil || session.preTicket == nil {
 		intent.InputDigest = hex.EncodeToString(digest.Sum(nil))
 	}
-	wireBytes, wireErr := backend.MeasureRequest(b.inner, req)
+	var wireBytes int64
+	measurementOwner := "wire-measure:" + intent.ID
+	measurementCtx := b.runtime.BuildContext(ctx, measurementOwner)
+	wireErr := b.runtime.Run(measurementCtx, func() error {
+		var err error
+		wireBytes, err = backend.MeasureRequestContext(measurementCtx, b.inner, req)
+		return err
+	})
+	_ = b.runtime.Admission.ReleaseBuild(measurementOwner)
 	if wireErr != nil {
 		return nil, wireErr
 	}
@@ -1077,6 +1152,15 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 	}
 	var permit *backend.RequestPermit
 	var err error
+	// R is the existing response protocol capacity. Actual provider and save
+	// allocations share it; no future workspace is promised before dispatch.
+	responseOwner := "response:" + intent.ID
+	responseTransferred := false
+	defer func() {
+		if !responseTransferred {
+			_ = b.runtime.Admission.ReleaseBuild(responseOwner)
+		}
+	}()
 	ticket := preparationTicket(ctx)
 	if session != nil && session.preTicket != nil {
 		if session.preWire != wireBytes || session.preInput != inputBytes {
@@ -1184,13 +1268,18 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 			sentDone <- err
 		}()
 	}
-	resp, callErr := b.inner.Translate(backend.WithAdmittedRequest(ctx), req)
+	providerOwnerCtx := backend.WithProviderResponseOwnership(b.runtime.BuildContext(ctx, responseOwner), b.runtime.Admission, intent.ID, intent.Stage)
+	providerCtx, providerErr := backend.WithProviderResponseAllocation(providerOwnerCtx, b.runtime.responseLimit())
+	if providerErr != nil {
+		return nil, providerErr
+	}
+	resp, callErr := b.inner.Translate(backend.WithAdmittedRequest(providerCtx), req)
 	duration := time.Since(start)
 	permit.RequestDone()
 	if session != nil && session.store != nil {
 		deadline := time.Now().Add(b.runtime.Policy.HandoffBudget)
 		session.startHandoff(deadline)
-		handoffCtx := persistence.WithDeadline(b.runtime.CompletionContext(ctx), session.handoffDeadline)
+		handoffCtx := persistence.WithDeadline(b.runtime.CompletionContext(providerCtx), session.handoffDeadline)
 		phase := "dispatch_returned"
 		if resp != nil {
 			phase = "response_received"
@@ -1219,21 +1308,62 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 			record.Error = record.Error[:2048]
 		}
 		if callErr == nil && len(intent.FreezePayload) > 0 && resp != nil {
-			response := MainResponse{MainResponseHeader: MainResponseHeader{ID: intent.ID, ResourceID: intent.ResourceID, SnapshotDigest: intent.SnapshotDigest, BusinessBound: intent.BusinessBound, Truncated: resp.Truncated}, FreezePayload: intent.FreezePayload, Raw: []byte(resp.Text), Members: intent.PromotionMembers, Record: record}
+			var raw []byte
+			var rawCredit *backend.OwnedAllocation
+			rawTransferred := false
+			defer func() {
+				if !rawTransferred {
+					raw = nil
+					rawCredit.Release()
+				}
+			}()
+			copyCtx := handoffCtx
+			if err := session.runtime.Run(copyCtx, func() error {
+				var err error
+				rawCredit, err = backend.OwnProviderResponseAllocation(copyCtx, int64(len(resp.Text)), 1)
+				if err != nil {
+					return err
+				}
+				raw = []byte(resp.Text)
+				return nil
+			}); err != nil {
+				return nil, session.fail(err)
+			}
+			response := MainResponse{MainResponseHeader: MainResponseHeader{ID: intent.ID, ResourceID: intent.ResourceID, SnapshotDigest: intent.SnapshotDigest, BusinessBound: intent.BusinessBound, Truncated: resp.Truncated}, FreezePayload: intent.FreezePayload, Raw: raw, Members: intent.PromotionMembers, Record: record}
 			session.runtime.Admission.ObserveOwned("raw", intent.ID, int64(cap(response.Raw)))
 			resp.Text = ""
 			resp.Raw = nil
-			if err := session.runtime.SaveNamed(handoffCtx, persistence.Metadata{Operation: "response_handoff", Class: persistence.Handoff, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error { return session.store.HandoffResponse(saveCtx, response) }); err != nil {
+			backend.ReleaseProviderResponseOutput(providerCtx)
+			saveBuildCtx := handoffCtx
+			if err := session.runtime.SaveNamed(saveBuildCtx, persistence.Metadata{Operation: "response_handoff", Class: persistence.Handoff, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error { return session.store.HandoffResponse(saveCtx, response) }); err != nil {
 				return nil, session.fail(errors.Join(sentErr, err))
 			}
 			response.FreezeBytes, response.ResponseBytes = int64(len(response.FreezePayload)), int64(len(response.Raw))
-			response.FreezeDigest, response.ResponseDigest = responseDigest(response.FreezePayload), responseDigest(response.Raw)
+			response.FreezeDigest = intent.SnapshotDigest
+			digestBounds, err := backend.NewBuildBoundsFromContext(handoffCtx, 0, 0)
+			if err != nil {
+				return nil, session.fail(err)
+			}
+			digestCredit, err := digestBounds.OwnAllocation(64, 1)
+			if err != nil {
+				return nil, session.fail(err)
+			}
+			response.ResponseDigest = responseDigest(response.Raw)
+			if err = backend.TransferProviderResponseToBuild(handoffCtx, digestCredit, "raw:"+intent.ID); err != nil {
+				response.ResponseDigest = ""
+				digestCredit.Release()
+				return nil, session.fail(err)
+			}
 			response.MemberCount, response.Phase = len(response.Members), "response_pending"
-			if err := session.runtime.Admission.ApplyResponseHandoff(intent.ID, response.ResponseBytes); err != nil {
+			if err := backend.ApplyProviderResponseHandoff(handoffCtx, intent.ID, response.ResponseBytes); err != nil {
 				return nil, session.fail(err)
 			}
 			session.rawResponse = &response
-			session.runtime.retainMainOwner(intent.ID, session.permits)
+			// The original R lane now owns the actual immutable raw bytes.
+			// The shared meter holds their explicit allocation until promotion.
+			responseTransferred = true
+			session.runtime.retainMainOwner(intent.ID, session.permits, rawCredit, providerCtx)
+			rawTransferred = true
 			session.permits = nil
 			if err := emitRawBatchEvent(handoffCtx, session, req, response, b.inner.Name()); err != nil {
 				return nil, session.fail(err)
@@ -1252,10 +1382,16 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		}
 	}
 	if session != nil {
-		if callErr != nil {
+		if resp != nil && session.rawResponse == nil {
+			session.responseBackings = append(session.responseBackings, responseBackingOwner{responseOwner, providerCtx, resp})
+			responseTransferred = true
+		}
+		if callErr != nil && resp == nil {
 			// Legacy handlers can sleep before returning a retry. A failed call
 			// has no parse buffer once its terminal accounting is durable.
-			session.releaseResponse()
+			if err := session.releaseResponse(); err != nil {
+				return resp, session.fail(errors.Join(callErr, err))
+			}
 
 		}
 	}

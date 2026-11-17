@@ -90,7 +90,7 @@ func prepareCanonicalMembership(ctx context.Context, h stagedHandler, doc *Docum
 
 func prepareCanonicalTranslateSegment(ctx context.Context, handler *TranslateHandler, seg *Segment, runtime *ExecutionRuntime) error {
 	return runtime.Run(ctx, func() error {
-		b, err := backend.NewBuildBounds(runtime.Window.limits.ItemBytes, runtime.handoffLimit())
+		b, err := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, runtime.handoffLimit())
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func prepareCanonicalTranslateSegment(ctx context.Context, handler *TranslateHan
 			seg.StructuralOnly = false
 			return nil
 		}
-		if err = b.ReserveNodes(1, 512); err != nil {
+		if err = backend.ReserveSlice[Segment](b, 1); err != nil {
 			return err
 		}
 		tmp := Segment{Source: raw}
@@ -118,9 +118,6 @@ func prepareCanonicalTranslateSegment(ctx context.Context, handler *TranslateHan
 			seg.Source = tmp.Source
 			seg.Protected = tmp.Protected
 			if len(tmp.Meta) > 0 {
-				if err = b.ReserveNodes(int64(len(tmp.Meta))+1, 1024); err != nil {
-					return err
-				}
 				if seg.Meta == nil {
 					seg.Meta = map[string]any{}
 				}
