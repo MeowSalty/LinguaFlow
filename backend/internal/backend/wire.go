@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
 const DefaultMaxInputBytes int64 = 16 << 20
@@ -72,9 +73,6 @@ func RunBuild(ctx context.Context, fn func() error) error {
 	}
 	return fn()
 }
-func DecodeWireContext(ctx context.Context, data []byte, responseBytes int64, out any) error {
-	return RunBuild(ctx, func() error { return DecodeWire(data, responseBytes, out) })
-}
 
 type RequestCredits struct{ InputBytes, ResponseBytes int64 }
 
@@ -102,9 +100,18 @@ func ResponseBudget(ctx context.Context, configured int64) int64 {
 }
 
 type WireSizer interface{ MeasureRequest(Request) (int64, error) }
+type ContextWireSizer interface {
+	MeasureRequestContext(context.Context, Request) (int64, error)
+}
 
 func MeasureRequest(b Backend, req Request) (int64, error) {
+	return MeasureRequestContext(context.Background(), b, req)
+}
+func MeasureRequestContext(ctx context.Context, b Backend, req Request) (int64, error) {
 	for hops := 0; hops < 64; hops++ {
+		if s, ok := b.(ContextWireSizer); ok {
+			return s.MeasureRequestContext(ctx, req)
+		}
 		if s, ok := b.(WireSizer); ok {
 			return s.MeasureRequest(req)
 		}
@@ -114,77 +121,74 @@ func MeasureRequest(b Backend, req Request) (int64, error) {
 		}
 		// A local/mock Backend with no wire protocol still receives a bounded
 		// Request. Real adapters implement WireSizer with their full defaults.
-		bounds, err := NewBuildBounds(0, DefaultMaxInputBytes)
+		bounds, err := NewBuildBoundsFromContext(ctx, 0, DefaultMaxInputBytes)
 		if err != nil {
 			return 0, err
 		}
+		defer bounds.CloseRetired()
 		return bounds.MeasureJSON(req)
 	}
 	return 0, fmt.Errorf("backend wrapper nesting exceeds limit")
 }
 
-func EncodeWire(ctx context.Context, v any) ([]byte, error) {
-	c := RequestCreditsFromContext(ctx)
-	if c.InputBytes < 0 || c.ResponseBytes <= 0 {
-		return nil, &BuildCapacityError{"request credit"}
-	}
-	b, err := NewBuildBounds(c.ResponseBytes, c.InputBytes)
-	if err != nil {
-		return nil, err
-	}
-	return b.EncodeJSON(v, c.InputBytes)
-}
-func MeasureWire(v any) (int64, error) {
-	b, err := NewBuildBounds(0, DefaultMaxInputBytes)
-	if err != nil {
-		return 0, err
-	}
-	return b.MeasureJSON(v)
-}
-
-// The fixed provider envelope has at most 64 small records, container slots,
-// map entries and boxed scalar values. Charge it before invoking its builder;
-// arbitrary schema/prompt data remains borrowed and is traversed by the codec.
-const ProviderEnvelopeNodes int64 = 64
-
-func EncodeWireBuild(ctx context.Context, build func() (any, error)) ([]byte, error) {
-	var data []byte
-	err := RunBuild(ctx, func() error {
+// EncodeWireBuild returns one explicitly owned wire buffer. Envelope/cache
+// scratch retires immediately after encoding; release follows the final HTTP
+// borrower of data. The caller clears its data reference before release.
+func EncodeWireBuild(ctx context.Context, build func(*BuildBounds) (any, error)) (data []byte, release func(), err error) {
+	var b *BuildBounds
+	var envelope any
+	var owner *OwnedAllocation
+	err = RunBuild(ctx, func() error {
+		c := RequestCreditsFromContext(ctx)
+		if c.InputBytes < 0 || c.ResponseBytes <= 0 {
+			return &BuildCapacityError{"request credit"}
+		}
 		var e error
-		data, e = encodeWireBuild(ctx, build)
-		return e
+		b, e = NewBuildBoundsFromContext(ctx, c.ResponseBytes, c.InputBytes)
+		if e != nil {
+			return e
+		}
+		envelope, e = build(b)
+		if e != nil {
+			return e
+		}
+		data, e = b.EncodeJSON(envelope, c.InputBytes)
+		if e != nil {
+			return e
+		}
+		owner, e = b.RetainedAllocation(int64(cap(data)))
+		if e != nil {
+			return e
+		}
+		return owner.DetachBuild()
 	})
-	return data, err
+	envelope = nil
+	if b != nil {
+		b.CloseRetired()
+	}
+	if err != nil {
+		data = nil
+		owner.Release()
+		return nil, func() {}, err
+	}
+	return data, owner.Release, nil
 }
 
-func encodeWireBuild(ctx context.Context, build func() (any, error)) ([]byte, error) {
-	c := RequestCreditsFromContext(ctx)
-	if c.InputBytes < 0 || c.ResponseBytes <= 0 {
-		return nil, &BuildCapacityError{"request credit"}
-	}
-	b, err := NewBuildBounds(c.ResponseBytes, c.InputBytes)
-	if err != nil {
-		return nil, err
-	}
-	if err = b.ReserveNodes(ProviderEnvelopeNodes, MaxNodeAllocationBytes); err != nil {
-		return nil, err
-	}
-	v, err := build()
-	if err != nil {
-		return nil, err
-	}
-	return b.EncodeJSON(v, c.InputBytes)
+func MeasureWireBuild(build func(*BuildBounds) (any, error)) (int64, error) {
+	return MeasureWireBuildContext(context.Background(), build)
 }
 
-func MeasureWireBuild(build func() (any, error)) (int64, error) {
-	b, err := NewBuildBounds(0, DefaultMaxInputBytes)
+// MeasureWireBuildContext meters actual envelope/cache/sizing workspace, then
+// ends those local references before retiring their capacity. CPU and any
+// aggregate retry belong to the caller; this helper never waits for capacity.
+func MeasureWireBuildContext(ctx context.Context, build func(*BuildBounds) (any, error)) (int64, error) {
+	b, err := NewBuildBoundsFromContext(ctx, 0, DefaultMaxInputBytes)
 	if err != nil {
 		return 0, err
 	}
-	if err = b.ReserveNodes(ProviderEnvelopeNodes, MaxNodeAllocationBytes); err != nil {
-		return 0, err
-	}
-	v, err := build()
+	var v any
+	defer func() { v = nil; b.CloseRetired() }()
+	v, err = build(b)
 	if err != nil {
 		return 0, err
 	}
@@ -255,11 +259,15 @@ func GuardProviderErrors(req *http.Request, next func(*http.Request) (*http.Resp
 	}
 	if resp.Body != nil {
 		responseCredit := ResponseBudget(req.Context(), 0)
+		if p, ok := req.Context().Value(providerAllocationKey{}).(*providerAllocation); ok {
+			responseCredit = p.bounds.OutputLimit()
+		}
 		trace := NewOwnedTrace(req.Context(), "wire", "provider-error")
 		defer trace.Clear()
-		_, readErr := ReadBoundedObserved(resp.Body, min(MaxProviderErrorBytes, responseCredit), trace)
+		_, release, readErr := ReadProviderBounded(req.Context(), resp.Body, min(MaxProviderErrorBytes, responseCredit), trace)
+		release()
 		_ = resp.Body.Close()
-		if responseCredit <= MaxProviderErrorBytes && errors.Is(readErr, ErrResponseTooLarge) {
+		if errors.Is(readErr, ErrBuildCapacity) || responseCredit <= MaxProviderErrorBytes && errors.Is(readErr, ErrResponseTooLarge) {
 			return resp, WrapHTTPError("provider request", readErr, resp.StatusCode, resp.Header)
 		}
 	}
@@ -294,11 +302,12 @@ func ReadSSEContext(ctx context.Context, r io.Reader, limit int64, consume func(
 	defer trace.Clear()
 	readerBytes := int64(max(16, min(int64(4096), limit)))
 	trace.Set(readerBytes)
-	b, err := NewBuildBounds(limit, 0)
+	b, err := providerBounds(ctx, limit)
 	if err != nil {
 		return err
 	}
 	event := NewBoundedWriter(b, limit)
+	defer event.Release()
 	dispatch := func() error {
 		if len(event.data) == 0 {
 			return nil
@@ -438,7 +447,7 @@ func (r *sseLimitReader) Read(p []byte) (int, error) {
 // wire event metadata. String adds one final copy, charged before allocation.
 type ResponseText struct {
 	bounds *BuildBounds
-	writer *BoundedWriter
+	writer BoundedWriter
 	trace  *OwnedTrace
 }
 
@@ -450,11 +459,11 @@ func NewResponseText(limit int64) (*ResponseText, error) {
 	return &ResponseText{bounds: b, writer: NewBoundedWriter(b, limit)}, nil
 }
 func NewResponseTextObserved(ctx context.Context, limit int64, label string) (*ResponseText, error) {
-	t, e := NewResponseText(limit)
-	if e == nil {
-		t.trace = NewOwnedTrace(ctx, "codec", label)
+	b, e := providerBounds(ctx, limit)
+	if e != nil {
+		return nil, e
 	}
-	return t, e
+	return &ResponseText{bounds: b, writer: NewBoundedWriter(b, limit), trace: NewOwnedTrace(ctx, "codec", label)}, nil
 }
 func (t *ResponseText) Append(s string) error {
 	old := t.writer.data
@@ -478,12 +487,25 @@ func (t *ResponseText) AppendBytes(p []byte) error {
 	}
 	return e
 }
-func (t *ResponseText) ClearObserved() { t.writer.data = nil; t.trace.Clear() }
+func (t *ResponseText) ClearObserved() { t.writer.Release(); t.trace.Clear() }
 func (t *ResponseText) Len() int       { return len(t.writer.data) }
 func (t *ResponseText) String() (string, error) {
 	d := t.writer.Bytes()
-	if e := t.bounds.ReserveText(int64(len(d)), int64(len(d))); e != nil {
+	owner, e := t.bounds.OwnAllocation(int64(len(d)), 1)
+	if e != nil {
 		return "", e
+	}
+	if t.bounds.ctx != nil {
+		if current, ok := t.bounds.ctx.Value(providerAllocationKey{}).(*providerAllocation); ok {
+			current.mu.Lock()
+			if current.output != nil {
+				current.mu.Unlock()
+				owner.Release()
+				return "", &BuildCapacityError{"unfinished provider output"}
+			}
+			current.output = owner
+			current.mu.Unlock()
+		}
 	}
 	out := string(d)
 	t.trace.Set(int64(cap(d) + len(out)))
@@ -494,6 +516,37 @@ func FinishResponseText(ctx context.Context, t *ResponseText) (string, error) {
 	var out string
 	err := RunBuild(ctx, func() error { var e error; out, e = t.String(); return e })
 	return out, err
+}
+
+// ResponseWithPartialText preserves only already parsed model text and known
+// usage on the existing response+error path. The immutable string borrows the
+// writer's credited backing, so handling a capacity failure allocates no copy.
+// Returned text must be cleared before ReleaseProviderResponseOutput.
+func ResponseWithPartialText(t *ResponseText, usage Usage) *Response {
+	resp := &Response{Usage: usage}
+	if t == nil || len(t.writer.data) == 0 {
+		return resp
+	}
+	owner := t.writer.allocation.Transfer()
+	if owner == nil {
+		return resp
+	}
+	data := t.writer.data
+	t.writer.data, t.writer.allocation = nil, nil
+	if t.bounds.ctx != nil {
+		if p, ok := t.bounds.ctx.Value(providerAllocationKey{}).(*providerAllocation); ok {
+			p.mu.Lock()
+			if p.output != nil {
+				p.mu.Unlock()
+				owner.Release()
+				return resp
+			}
+			p.output = owner
+			p.mu.Unlock()
+		}
+	}
+	resp.Text = unsafe.String(unsafe.SliceData(data), len(data))
+	return resp
 }
 
 func ProviderCallContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

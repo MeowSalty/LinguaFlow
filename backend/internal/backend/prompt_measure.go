@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -81,12 +82,21 @@ func PromptValues(req Request, m *PromptMeasure, suffix string) (system, user an
 type PromptWireSizer interface {
 	MeasureRequestPrompt(Request, PromptMeasure) (int64, error)
 }
+type ContextPromptWireSizer interface {
+	MeasureRequestPromptContext(context.Context, Request, PromptMeasure) (int64, error)
+}
 
 func MeasureRequestPrompt(b Backend, req Request, m PromptMeasure) (int64, error) {
+	return MeasureRequestPromptContext(context.Background(), b, req, m)
+}
+func MeasureRequestPromptContext(ctx context.Context, b Backend, req Request, m PromptMeasure) (int64, error) {
 	if e := m.Validate(); e != nil {
 		return 0, e
 	}
 	for hops := 0; hops < 64; hops++ {
+		if s, ok := b.(ContextPromptWireSizer); ok {
+			return s.MeasureRequestPromptContext(ctx, req, m)
+		}
 		if s, ok := b.(PromptWireSizer); ok {
 			return s.MeasureRequestPrompt(req, m)
 		}
@@ -95,7 +105,7 @@ func MeasureRequestPrompt(b Backend, req Request, m PromptMeasure) (int64, error
 			continue
 		}
 		req.System, req.User = "", ""
-		n, e := MeasureRequest(b, req)
+		n, e := MeasureRequestContext(ctx, b, req)
 		if e != nil {
 			return 0, e
 		}

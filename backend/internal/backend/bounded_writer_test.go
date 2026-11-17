@@ -99,32 +99,38 @@ func TestBoundedWriterMethodsGrowAndRejectWithoutMutation(t *testing.T) {
 	}
 	for name, write := range methods {
 		t.Run(name, func(t *testing.T) {
-			b, err := NewBuildBounds(1024, 0)
+			b, err := NewBuildBounds(1024, 0, 8192)
 			if err != nil {
 				t.Fatal(err)
 			}
 			w := NewBoundedWriter(b, 96)
 			for _, s := range []string{strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 16)} {
-				if n, err := write(w, s); err != nil || n != len(s) {
+				if n, err := write(&w, s); err != nil || n != len(s) {
 					t.Fatalf("write n=%d err=%v", n, err)
 				}
 			}
 			want := strings.Repeat("a", 40) + strings.Repeat("b", 40) + strings.Repeat("c", 16)
-			if string(w.Bytes()) != want || cap(w.Bytes()) != 96 || b.Snapshot().TextBytes != 192 {
+			// The first64 and replacement96 byte arrays overlap during growth.
+			if string(w.Bytes()) != want || cap(w.Bytes()) != 96 || b.Snapshot().AllocationBytes != 64+int64(cap(w.Bytes())) || b.Snapshot().LiveBytes != int64(cap(w.Bytes())) || b.Snapshot().MeasuredRequiredBytes != 64+int64(cap(w.Bytes())) {
 				t.Fatalf("growth bytes=%q capacity=%d bounds=%+v", w.Bytes(), cap(w.Bytes()), b.Snapshot())
 			}
 			before := b.Snapshot()
-			if n, err := write(w, "x"); n != 0 || !errors.Is(err, ErrBuildCapacity) || string(w.Bytes()) != want || cap(w.Bytes()) != 96 || b.Snapshot() != before {
+			if n, err := write(&w, "x"); n != 0 || !errors.Is(err, ErrBuildCapacity) || string(w.Bytes()) != want || cap(w.Bytes()) != 96 || b.Snapshot() != before {
 				t.Fatalf("limit rejection n=%d err=%v bounds=%+v", n, err, b.Snapshot())
 			}
 
+			w.Release()
+			if b.Snapshot().LiveBytes != 0 {
+				t.Fatal("last writer backing did not retire", b.Snapshot())
+			}
 			w = NewBoundedWriter(b, 10000)
-			if _, err := write(w, "retained"); err != nil {
+			defer w.Release()
+			if _, err := write(&w, "retained"); err != nil {
 				t.Fatal(err)
 			}
 			before = b.Snapshot()
 			beforeCapacity := cap(w.Bytes())
-			if n, err := write(w, strings.Repeat("z", 8192)); n != 0 || !errors.Is(err, ErrBuildCapacity) || string(w.Bytes()) != "retained" || cap(w.Bytes()) != beforeCapacity || b.Snapshot() != before {
+			if n, err := write(&w, strings.Repeat("z", 8192)); n != 0 || !errors.Is(err, ErrBuildCapacity) || string(w.Bytes()) != "retained" || cap(w.Bytes()) != beforeCapacity || b.Snapshot() != before {
 				t.Fatalf("budget rejection n=%d err=%v bounds=%+v", n, err, b.Snapshot())
 			}
 		})

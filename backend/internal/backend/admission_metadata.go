@@ -3,35 +3,16 @@ package backend
 // Metadata is the fixed typed backing of the original frozen member slots.
 // It is separate from O, candidate headers, and the Job's main K/E ledger.
 type requestMetadataCredit struct {
-	members         int
-	maximum, actual int64
-	dispatched      bool
-	settled         bool
-}
-
-// RequestMemberMetadataBound includes promotion members (4+4096n), request
-// members (32+2048n), debits (4+1024n), segment IDs (4+21n), status n and
-// corrected index 16n. The typed string/identity widths are validated by the
-// persistence adapter. These bounds already cover SQL JSON separators; the
-// fields contain bounded integers, never arbitrary floating-point tokens.
-func RequestMemberMetadataBound(members int) (int64, error) {
-	if members < 0 || members > 65536 {
-		return 0, ErrBuildCapacity
-	}
-	if members == 0 {
-		return 0, nil
-	}
-	n, err := CheckedProduct(int64(members), 7206)
-	if err != nil {
-		return 0, err
-	}
-	return checkedSum(n, 44)
+	members    int
+	actual     int64
+	dispatched bool
+	settled    bool
+	loaned     bool
 }
 
 func (a *RequestAdmission) prepareRootMetadataLocked(id string, members int) (bool, error) {
-	maximum, err := RequestMemberMetadataBound(members)
-	if err != nil {
-		return false, err
+	if members < 0 || id == "" {
+		return false, ErrBuildCapacity
 	}
 	if existing := a.requestMetadata[id]; existing != nil {
 		if existing.members != members {
@@ -39,13 +20,13 @@ func (a *RequestAdmission) prepareRootMetadataLocked(id string, members int) (bo
 		}
 		return false, nil
 	}
-	if maximum == 0 {
+	if members == 0 {
 		return false, nil
 	}
 	if a.requestMetadata == nil {
 		a.requestMetadata = map[string]*requestMetadataCredit{}
 	}
-	a.requestMetadata[id] = &requestMetadataCredit{members: members, maximum: maximum, settled: true}
+	a.requestMetadata[id] = &requestMetadataCredit{members: members, settled: true, loaned: true}
 	return true, nil
 }
 
@@ -66,8 +47,7 @@ func (a *RequestAdmission) RestoreRootMetadata(bytes int64) error {
 func (a *RequestAdmission) RestoreRequestMetadata(id string, members int, actual int64) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	maximum, err := RequestMemberMetadataBound(members)
-	if err != nil || id == "" || actual < 0 || actual > maximum {
+	if members < 0 || id == "" || actual < 0 {
 		return ErrPipelineCapacity
 	}
 	if a.root == nil || a.rootScope.JobID == 0 {
@@ -86,13 +66,13 @@ func (a *RequestAdmission) RestoreRequestMetadata(id string, members int, actual
 		a.requestMetadata = map[string]*requestMetadataCredit{}
 	}
 	a.rootMetadataBase -= actual
-	a.requestMetadata[id] = &requestMetadataCredit{members: members, maximum: actual, actual: actual, dispatched: true, settled: true}
+	a.requestMetadata[id] = &requestMetadataCredit{members: members, actual: actual, dispatched: true, settled: true}
 	return nil
 }
 
 // SetRequestMetadataBytes accepts authoritative post-transaction retained
-// facts inside the already-paid table bound. It does not refund the live
-// maximum while a response can still be saved or promoted.
+// facts. Current working copies use the shared actual meter; no future member
+// width is used to prepay memory. Existing restored stock retains actual bytes.
 func (a *RequestAdmission) SetRequestMetadataBytes(id string, members int, actual int64) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -103,7 +83,7 @@ func (a *RequestAdmission) SetRequestMetadataBytes(id string, members int, actua
 	if credit == nil && actual == 0 {
 		return nil
 	} // Pure terminal audit owns no P.
-	if credit == nil || credit.members != members && !(members == 0 && actual == 0) || actual < 0 || actual > credit.maximum {
+	if credit == nil || credit.members != members && !(members == 0 && actual == 0) || actual < 0 {
 		return ErrPipelineCapacity
 	}
 	credit.actual = actual
@@ -112,7 +92,7 @@ func (a *RequestAdmission) SetRequestMetadataBytes(id string, members int, actua
 }
 
 // MarkRequestMetadataUncertain precedes a SQL write. If its ACK/fact query is
-// lost, cleanup conservatively retains the paid maximum until scalar rebuild.
+// lost, cleanup retains only the most recent authoritative byte fact.
 func (a *RequestAdmission) MarkRequestMetadataUncertain(id string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -123,12 +103,8 @@ func (a *RequestAdmission) MarkRequestMetadataUncertain(id string) {
 
 func (a *RequestAdmission) releaseRootMetadataLocked(id string) {
 	if credit := a.requestMetadata[id]; credit != nil {
-		// Both quantities were already included in the checked root vector;
-		// transferring actual into base cannot increase their sum.
+		// Ended working owners transfer their authoritative retained SQL fact.
 		retained := credit.actual
-		if !credit.settled {
-			retained = credit.maximum
-		}
 		next, err := checkedSum(a.rootMetadataBase, retained)
 		if err != nil {
 			return

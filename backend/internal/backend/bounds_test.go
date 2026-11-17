@@ -9,33 +9,26 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unsafe"
 )
 
 func TestBuildBoundsArithmeticAndAllocationGuards(t *testing.T) {
-	for _, c := range [][2]int64{{-1, 0}, {0, -1}, {math.MaxInt64, 1}, {math.MaxInt64/8 + 1, 0}} {
+	for _, c := range [][2]int64{{-1, 0}, {0, -1}, {math.MaxInt64, 1}} {
 		if _, err := NewBuildBounds(c[0], c[1]); !errors.Is(err, ErrBuildCapacity) {
 			t.Fatalf("budget accepted %v: %v", c, err)
 		}
 	}
-	b, _ := NewBuildBounds(1024, 0)
+	b, _ := NewBuildBounds(1024, 0, 8192)
 	if err := b.ReserveText(1, 8193); !errors.Is(err, ErrBuildCapacity) {
 		t.Fatal("capacity not charged")
 	}
-	if err := b.ReserveNodes(1, MaxNodeAllocationBytes+1); !errors.Is(err, ErrBuildCapacity) {
-		t.Fatal("unbounded node")
+	if err := b.ReserveAllocation(math.MaxInt64, 2); !errors.Is(err, ErrBuildCapacity) {
+		t.Fatal("allocation overflow")
 	}
-	if b.Snapshot().TextBytes != 0 || b.Snapshot().Nodes != 0 {
+	if b.Snapshot().LiveBytes != 0 {
 		t.Fatal("rejected charge mutated budget")
 	}
-	if unsafe.Sizeof(jsonNode{}) > uintptr(MaxNodeAllocationBytes) || unsafe.Sizeof(reflect.Value{}) > uintptr(MaxNodeAllocationBytes) {
-		t.Fatal("arena records exceed E")
-	}
-	// Map values >128 bytes are indirect. The largest inline key/value group
-	// (8 slots, controls/header and allocator rounding) is <1024 per entry.
-	group := int64(8*(128+128) + 8 + 64)
-	if (group+255)/8 > MaxNodeAllocationBytes {
-		t.Fatal("map bucket credit not covered")
+	if err := b.ReserveAllocation(1, 2048); err != nil {
+		t.Fatal("large record rejected", err)
 	}
 }
 
@@ -105,7 +98,7 @@ func TestBoundedJSONControlEscapesMatchCanonicalMarshal(t *testing.T) {
 	}
 }
 
-func TestBoundedJSONRejectsDepthNodesBeforeAllocation(t *testing.T) {
+func TestBoundedJSONRejectsDepthAndExplicitCapacityBeforeAllocation(t *testing.T) {
 	for _, data := range []string{strings.Repeat("[", 65) + "0" + strings.Repeat("]", 65), `{"x":` + strings.Repeat("[", 64) + "0" + strings.Repeat("]", 64) + "}", `[1,]`, `{"x":true,}`, `"\uqqqq"`, `{"x":01}`} {
 		b, _ := NewBuildBounds(4096, 4096)
 		var out any
@@ -116,18 +109,23 @@ func TestBoundedJSONRejectsDepthNodesBeforeAllocation(t *testing.T) {
 			t.Fatal("invalid preflight allocated destination")
 		}
 	}
-	b, _ := NewBuildBounds(8, 0)
+	b, _ := NewBuildBounds(8, 0, 1)
 	var out []int
 	if err := b.DecodeJSON([]byte(`[0,1,2]`), &out); !errors.Is(err, ErrBuildCapacity) || out != nil {
-		t.Fatalf("node preflight %v", err)
+		t.Fatalf("arena preflight %v", err)
 	}
 	type large struct {
 		Data [2048]byte `json:"data"`
 	}
-	b, _ = NewBuildBounds(4096, 4096)
+	b, _ = NewBuildBounds(16384, 16384)
+	in := large{}
+	data, err := b.EncodeJSON(in, 16384)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var dst *large
-	if err := b.DecodeJSON([]byte(`{"data":[]}`), &dst); !errors.Is(err, ErrBuildCapacity) || dst != nil {
-		t.Fatal("large pointer allocated before credit")
+	if err := b.DecodeJSON(data, &dst); err != nil || dst == nil {
+		t.Fatal("large record rejected", err)
 	}
 }
 
@@ -140,20 +138,20 @@ func TestBoundedWriterCannotCopyPromptBeforeCredit(t *testing.T) {
 	if _, err := w.WriteString("1234567890123456"); err != nil {
 		t.Fatal(err)
 	}
-	if b.Snapshot().TextBytes != 16 || cap(w.Bytes()) != 16 {
+	if b.Snapshot().LiveBytes != 16 || cap(w.Bytes()) != 16 {
 		t.Fatal("writer capacity accounting")
 	}
 }
 
-func TestBoundedJSONRawUsesRemainingDepthAndAggregateNodes(t *testing.T) {
+func TestBoundedJSONRawUsesRemainingDepthWithoutGraphQuota(t *testing.T) {
 	raw := json.RawMessage(strings.Repeat("[", 63) + "0" + strings.Repeat("]", 63))
 	b, _ := NewBuildBounds(4096, 4096)
 	if _, err := b.EncodeJSON([]json.RawMessage{raw}, 4096); !errors.Is(err, ErrBuildCapacity) {
 		t.Fatalf("outer plus raw depth accepted: %v", err)
 	}
-	b, _ = NewBuildBounds(32, 0) // Five JSON nodes: root + two three-node raws exceed it.
-	if _, err := b.MeasureJSON([]json.RawMessage{json.RawMessage(`[0,1]`), json.RawMessage(`[2,3]`)}); !errors.Is(err, ErrBuildCapacity) {
-		t.Fatalf("aggregate raw nodes accepted: %v", err)
+	b, _ = NewBuildBounds(32, 0)
+	if _, err := b.MeasureJSON([]json.RawMessage{json.RawMessage(`[0,1]`), json.RawMessage(`[2,3]`)}); err != nil {
+		t.Fatalf("borrowed raw graph rejected: %v", err)
 	}
 	b, _ = NewBuildBounds(4096, 4096)
 	if _, err := b.EncodeJSON(raw, 4096); err != nil {
@@ -162,7 +160,7 @@ func TestBoundedJSONRawUsesRemainingDepthAndAggregateNodes(t *testing.T) {
 }
 
 func TestBoundedJSONNumberPreflightAndTime(t *testing.T) {
-	for _, n := range []string{"true", "null", "{}", `"x"`, "NaN", "Inf", "+1", "01", "1e", strings.Repeat("9", 65)} {
+	for _, n := range []string{"true", "null", "{}", `"x"`, "NaN", "Inf", "+1", "01", "1e"} {
 		b, _ := NewBuildBounds(4096, 4096)
 		if _, err := b.EncodeJSON(json.Number(n), 4096); err == nil {
 			t.Fatalf("invalid Number accepted %q", n)
@@ -171,11 +169,16 @@ func TestBoundedJSONNumberPreflightAndTime(t *testing.T) {
 			t.Fatal("invalid Number copied before rejection")
 		}
 	}
+	longNumber := strings.Repeat("9", 65)
+	numberBounds, _ := NewBuildBounds(4096, 4096)
+	if data, err := numberBounds.EncodeJSON(json.Number(longNumber), 4096); err != nil || string(data) != longNumber {
+		t.Fatalf("legal borrowed Number changed: %s %v", data, err)
+	}
 	b, _ := NewBuildBounds(4096, 4096)
 	if _, err := b.EncodeJSON(time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC), 4096); !errors.Is(err, ErrBuildCapacity) {
 		t.Fatal("unbounded RFC3339 year accepted")
 	}
-	if c, err := textAllocationCredit(32768); err != nil || c <= 32768 {
-		t.Fatal("pointer-array malloc header not covered")
+	if c, err := textAllocationCredit(32768); err != nil || c != 32768 {
+		t.Fatal("explicit payload capacity changed by allocator overhead", c, err)
 	}
 }

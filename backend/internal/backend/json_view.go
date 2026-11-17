@@ -53,18 +53,21 @@ type JSONValue struct {
 }
 
 func NewJSONView(b *BuildBounds, data []byte) (JSONValue, error) {
-	n, e := scanJSON(data, nil, b.nodeLimit)
+	if int64(len(data)) > b.inputBytes+b.outputBytes {
+		return JSONValue{}, &BuildCapacityError{"JSON input bytes"}
+	}
+	n, e := scanJSON(data, nil, int64(len(data)))
 	if e != nil {
 		return JSONValue{}, e
 	}
-	if e = b.ReserveNodes(int64(n), int64(unsafe.Sizeof(jsonNode{}))); e != nil {
+	if e = b.ReserveAllocation(int64(n), int64(unsafe.Sizeof(jsonNode{}))); e != nil {
 		return JSONValue{}, e
 	}
-	if e = b.ReserveNodes(1, 128); e != nil {
+	if e = b.ReserveAllocation(1, int64(unsafe.Sizeof(JSONView{}))); e != nil {
 		return JSONValue{}, e
 	}
 	nodes := make([]jsonNode, n)
-	if _, e = scanJSON(data, nodes, b.nodeLimit); e != nil {
+	if _, e = scanJSON(data, nodes, int64(len(data))); e != nil {
 		return JSONValue{}, e
 	}
 	view := &JSONView{b, data, nodes}
@@ -106,7 +109,11 @@ func (v JSONValue) StringEquals(want string) bool {
 	if v.Kind() != '"' {
 		return false
 	}
-	raw := v.Raw()
+	return jsonStringEquals(v.Raw(), want)
+}
+
+// jsonStringEquals borrows a token that scanJSON has already validated.
+func jsonStringEquals(raw []byte, want string) bool {
 	at := 0
 	for i := 1; i < len(raw)-1; i++ {
 		var r rune
@@ -187,7 +194,7 @@ func (v JSONValue) DecodeInto(dst any, maxStringBytes int64) error {
 	return b.decodeValue(v.view.data, v.view.nodes, v.index, d.Elem())
 }
 func FirstJSONRaw(b *BuildBounds, data []byte) ([]byte, int, error) {
-	s := jsonScan{data: data, limit: b.nodeLimit, maxDepth: MaxBuildDepth}
+	s := jsonScan{data: data, limit: int64(len(data)), maxDepth: MaxBuildDepth}
 	s.space()
 	start := s.pos
 	if _, e := s.value(); e != nil {

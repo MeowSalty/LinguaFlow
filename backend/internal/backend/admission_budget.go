@@ -6,6 +6,8 @@ import (
 	"math"
 )
 
+// RequestMetadataBytes is the original O receipt/usage protocol quota. It is
+// independent of actual member backing and never predicts per-member memory.
 const RequestMetadataBytes int64 = 32 << 10
 
 var ErrPipelineCapacity = errors.New("pipeline capacity conflict")
@@ -63,6 +65,12 @@ type PipelineBudgetLimits struct {
 	Candidates, Item, Responses, Handoff int64
 }
 type PipelineBudgetEntry struct {
+	// PromotionPending records an entered save whose payload may still be owned
+	// by the store. It is runtime state, not a durable-save acknowledgement.
+	PromotionPending bool `json:"-" yaml:"-"`
+	// MemoryOwned is independent of the save ACK. Only the actual in-memory
+	// holder can retire this payload inventory after its last borrower joins.
+	MemoryOwned                    bool `json:"-" yaml:"-"`
 	ResourceID, RoundID, Count     int
 	PlannedCount                   int
 	Bytes, Growth                  int64
@@ -107,17 +115,20 @@ type PipelineBudgetSnapshot struct {
 	Revision                                                                                  uint64
 }
 type requestBudget struct {
-	round, resource                    int
-	known, freeze, wire, raw, business int64
-	granted, progress                  bool
-	pinned                             bool
-	full                               bool
-	direct                             bool
-	responseOwned                      bool
-	businessAttached                   bool
-	restored                           bool
-	corrected                          int64
-	attachment                         int64
+	round, resource                             int
+	known, freeze, wire, raw, business          int64
+	responseCredit                              int64
+	providerWireOriginal, providerWireRemaining int64
+	providerWireBound                           bool
+	granted, progress                           bool
+	pinned                                      bool
+	full                                        bool
+	direct                                      bool
+	responseOwned                               bool
+	businessAttached                            bool
+	restored                                    bool
+	corrected                                   int64
+	attachment                                  int64
 }
 type pipelineBudget struct {
 	baseSegments                            int64
@@ -264,7 +275,7 @@ func (b *pipelineBudget) requestTotal() int64 {
 	for _, r := range b.requests {
 		total += r.known
 		if r.granted {
-			total += r.raw + RequestMetadataBytes
+			total += r.responseCredit + RequestMetadataBytes
 			total += r.corrected
 			if r.full && !r.businessAttached {
 				total += r.business
@@ -596,13 +607,23 @@ func (a *RequestAdmission) RestoreBudgetEntryWithTransfer(key string, e Pipeline
 func (a *RequestAdmission) BeginPromotion(from, to string, size int64, progress bool) (bool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return a.beginPromotionLocked(from, to, size, progress, nil, nil)
+}
+
+func (a *RequestAdmission) beginPromotionLocked(from, to string, size int64, progress bool, move func() error, rollback func()) (bool, error) {
 	b := a.budget
+	if a.closed || b == nil {
+		return false, ErrAdmissionClosed
+	}
 	oldProgress := b.progressID
 	e, ok := b.entries[from]
 	if !ok || !e.Reservation || e.Count < 1 || size < 0 || size > b.limits.Item {
 		return false, ErrPipelineCapacity
 	}
 	if pending, ok := b.entries[to]; ok {
+		if move != nil {
+			return false, ErrPipelineCapacity
+		}
 		return pending.Count == 0 && pending.Bytes == size, nil
 	}
 	_, bytes, growth := b.candidateTotals()
@@ -631,7 +652,17 @@ func (a *RequestAdmission) BeginPromotion(from, to string, size int64, progress 
 		b.progressID = to
 	}
 	b.entries[to] = PipelineBudgetEntry{ResourceID: e.ResourceID, RoundID: e.RoundID, Bytes: size, Progress: progress}
+	if move != nil {
+		if err := move(); err != nil {
+			delete(b.entries, to)
+			b.progressID = oldProgress
+			return false, err
+		}
+	}
 	if rootErr := a.syncRootLocked(0); rootErr != nil {
+		if rollback != nil {
+			rollback()
+		}
 		delete(b.entries, to)
 		b.progressID = oldProgress
 		if aggregateCapacity(rootErr) {
@@ -663,15 +694,68 @@ func (a *RequestAdmission) ApplyPromotion(from, to string, expected ...int64) er
 	}
 	candidate.Count = 1
 	candidate.Durable = true
+	candidate.PromotionPending = false
 	b.entries[to] = candidate
 	a.notifyLocked()
 	return nil
+}
+
+func (a *RequestAdmission) BeginPromotionSave(id string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closed {
+		return ErrAdmissionClosed
+	}
+	if a.budget == nil {
+		return ErrPipelineCapacity
+	}
+	e, ok := a.budget.entries[id]
+	if !ok || e.Count != 0 || e.Bytes <= 0 {
+		return ErrPipelineCapacity
+	}
+	e.PromotionPending = true
+	a.budget.entries[id] = e
+	return nil
+}
+
+func (a *RequestAdmission) RetainMemoryPromotion(id string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closed {
+		return ErrAdmissionClosed
+	}
+	if a.budget == nil {
+		return ErrPipelineCapacity
+	}
+	e, ok := a.budget.entries[id]
+	if !ok || e.Count != 0 || e.Bytes <= 0 {
+		return ErrPipelineCapacity
+	}
+	e.PromotionPending, e.MemoryOwned = true, true
+	a.budget.entries[id] = e
+	return nil
+}
+
+// ReleaseMemoryPromotion follows destruction of the actual store payload.
+// This does not manufacture an acknowledgement for an uncertain save.
+func (a *RequestAdmission) ReleaseMemoryPromotion(id string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.budget == nil {
+		return
+	}
+	e, ok := a.budget.entries[id]
+	if !ok || !e.MemoryOwned {
+		return
+	}
+	e.MemoryOwned, e.PromotionPending = false, false
+	a.budget.entries[id] = e
 }
 func (a *RequestAdmission) AbortPromotion(id string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.budget != nil {
-		if e, ok := a.budget.entries[id]; ok && e.Count == 0 {
+		if e, ok := a.budget.entries[id]; ok && e.Count == 0 && !e.PromotionPending {
 			delete(a.budget.entries, id)
 			if a.budget.progressID == id {
 				a.budget.progressID = ""
@@ -704,6 +788,9 @@ func (a *RequestAdmission) ReleaseBudgetEntry(id string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.budget == nil {
+		return
+	}
+	if a.budget.entries[id].MemoryOwned {
 		return
 	}
 	if e, ok := a.budget.entries[id]; ok && e.Reservation && !e.Durable {
@@ -996,6 +1083,7 @@ func (b *pipelineBudget) applyGrant(intent RequestAdmissionIntent, lane int64) {
 		r.granted = true
 		r.responseOwned = true
 		r.raw = b.limits.Responses
+		r.responseCredit = b.limits.Responses
 		b.requests[intent.RequestID] = r
 		b.mainOwners[intent.RoundIndex]++
 		total := 0
@@ -1054,6 +1142,7 @@ func (a *RequestAdmission) ApplyResponseHandoff(id string, raw int64) error {
 	r.known = r.freeze
 	r.wire = 0
 	r.raw = raw
+	r.responseCredit = min(r.responseCredit, raw)
 	b.requests[id] = r
 	a.notifyLocked()
 	return nil
@@ -1217,7 +1306,7 @@ func (a *RequestAdmission) RestoreResponseOwner(id string, round, resource int, 
 	if err != nil || freeze > b.limits.Handoff {
 		return ErrPipelineCapacity
 	}
-	b.requests[id] = requestBudget{round: round, resource: resource, known: freeze, freeze: freeze, raw: raw, business: business, granted: true, restored: b.inventoryRestored}
+	b.requests[id] = requestBudget{round: round, resource: resource, known: freeze, freeze: freeze, raw: raw, responseCredit: raw, business: business, granted: true, restored: b.inventoryRestored}
 	b.lane = lane
 	a.notifyLocked()
 	return nil
@@ -1276,10 +1365,16 @@ func (a *RequestAdmission) releaseRequestBudgetLocked(intent RequestAdmissionInt
 			b.rootStandby = 0
 		}
 	} else {
+		remaining := b.limits.Responses
+		remainingInput := intent.InputBytes
+		if credit := a.candidateReads[intent.RequestID]; credit != nil {
+			remaining = credit.remaining
+			remainingInput = credit.inputRemaining
+		}
 		delete(a.candidateReads, intent.RequestID)
 		b.auxOwners--
-		b.auxInput -= intent.InputBytes
-		b.auxResponse -= b.limits.Responses
+		b.auxInput -= remainingInput
+		b.auxResponse -= remaining
 	}
 }
 

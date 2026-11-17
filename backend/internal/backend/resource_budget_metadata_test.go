@@ -3,7 +3,6 @@ package backend_test
 import (
 	"context"
 	"errors"
-	"math"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -24,9 +23,8 @@ func TestRequestMetadataOriginalSlotsOutliveRemainingMembers(t *testing.T) {
 	if err := contractPrepare(t, a, "main", 16, 0); err != nil {
 		t.Fatal(err)
 	}
-	maximum, _ := backend.RequestMemberMetadataBound(16)
 	prepared, _ := root.Usage(scope, "job:1:runtime")
-	if prepared.PayloadBytes != 900+maximum+(8<<10) || a.PipelineSnapshot().HandoffBytes != 8<<10 || a.PipelineSnapshot().Segments != 0 {
+	if prepared.PayloadBytes != 900+(8<<10) || a.PipelineSnapshot().HandoffBytes != 8<<10 || a.PipelineSnapshot().Segments != 0 {
 		t.Fatalf("metadata changed Job K/E or took S: %+v %+v", prepared, a.PipelineSnapshot())
 	}
 	if err := a.SetRequestMetadataBytes("main", 16, 1000); err != nil {
@@ -44,15 +42,11 @@ func TestRequestMetadataOriginalSlotsOutliveRemainingMembers(t *testing.T) {
 	if before.PayloadBytes != after.PayloadBytes || after.UnconfirmedMembers != 0 {
 		t.Fatalf("remaining S refunded original metadata: before=%+v after=%+v", before, after)
 	}
-	storage, ok := a.StorageCredit("main")
-	if !ok || storage < maximum-1000 {
-		t.Fatal("dispatch omitted metadata maximum after actual stored bytes")
-	}
 	if err := a.SetRequestMetadataBytes("main", 15, 1000); !errors.Is(err, backend.ErrPipelineCapacity) {
 		t.Fatal("accepted a shorter original table")
 	}
-	if err := a.SetRequestMetadataBytes("main", 16, maximum+1); !errors.Is(err, backend.ErrPipelineCapacity) {
-		t.Fatal("accepted unpromised metadata after dispatch")
+	if err := a.SetRequestMetadataBytes("main", 16, 1000); err != nil {
+		t.Fatal("authoritative facts rejected", err)
 	}
 	permit.Release()
 	joined, _ := root.Usage(scope, "job:1:runtime")
@@ -97,11 +91,7 @@ func TestRequestMetadataRestoreTransfersScalarAndUnsentRefunds(t *testing.T) {
 	if refunded != before {
 		t.Fatalf("unsent metadata leaked: %+v", refunded)
 	}
-	for _, n := range []int{-1, 65537, math.MaxInt} {
-		if _, err := backend.RequestMemberMetadataBound(n); !errors.Is(err, backend.ErrBuildCapacity) {
-			t.Fatalf("count=%d not refused before allocation: %v", n, err)
-		}
-	}
+
 }
 
 func seedMetadataStock(t *testing.T, root *resourcebudget.RootBudget, scope resourcebudget.Scope, bytes int64) {
@@ -117,7 +107,7 @@ func seedMetadataStock(t *testing.T, root *resourcebudget.RootBudget, scope reso
 	}
 }
 
-func TestRequestMetadataUnknownFactsKeepMaximumUntilRebuild(t *testing.T) {
+func TestRequestMetadataUnknownFactsKeepOnlyKnownActual(t *testing.T) {
 	a := contractAdmission(t, 256, 4, 64<<20)
 	root := contractRoot(t, 64<<20)
 	scope := resourcebudget.Scope{ActorID: 1, JobID: 1}
@@ -127,14 +117,13 @@ func TestRequestMetadataUnknownFactsKeepMaximumUntilRebuild(t *testing.T) {
 	if _, err := a.PrepareMembers("unknown", 16, 1, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	maximum, _ := backend.RequestMemberMetadataBound(16)
 	if err := a.SetRequestMetadataBytes("unknown", 16, 1000); err != nil {
 		t.Fatal(err)
 	}
 	a.MarkRequestMetadataUncertain("unknown")
 	a.ReleaseBudgetEntry("unknown")
 	retained, _ := root.Usage(scope, "job:1:runtime")
-	if retained.PayloadBytes != maximum {
+	if retained.PayloadBytes != 1000 {
 		t.Fatalf("unknown ACK guessed a refund: %+v", retained)
 	}
 	if err := a.ResetInventoryAfterJoin(0, 0, 0, 0, 1000); err != nil {

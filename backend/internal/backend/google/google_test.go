@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -12,6 +13,38 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
+
+func TestProviderActualEndpointEscaping(t *testing.T) {
+	var all [256]byte
+	for i := range all {
+		all[i] = byte(i)
+	}
+	model := "models/" + string(all[:])
+	for _, stream := range []bool{false, true} {
+		b := &Backend{baseURL: "https://example.test/", stream: stream}
+		ctx, err := backend.WithProviderResponseAllocation(context.Background(), 4096)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, owner, err := b.endpoint(ctx, model)
+		if err != nil {
+			t.Fatal(err)
+		}
+		suffix := ":generateContent"
+		if stream {
+			suffix = ":streamGenerateContent?alt=sse"
+		}
+		want := "https://example.test/v1beta/models/" + url.PathEscape(string(all[:])) + suffix
+		if got != want || backend.ProviderResponseSnapshot(ctx).LiveBytes != int64(len(got)) {
+			t.Fatal(got, want, backend.ProviderResponseSnapshot(ctx))
+		}
+		got = ""
+		owner.Release()
+		if err = backend.CloseProviderResponseAllocation(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestWireThinkingLevel(t *testing.T) {
 	for _, level := range []backend.ThinkingLevel{"", backend.ThinkingOff, backend.ThinkingMinimal, backend.ThinkingLow, backend.ThinkingMedium, backend.ThinkingHigh} {
