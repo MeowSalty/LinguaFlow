@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
@@ -32,7 +31,7 @@ func (w *digestWriter) WriteString(s string) (int, error) {
 	return n, nil
 }
 func (s *AlignmentState) immutableDigestBounded(b *backend.BuildBounds) (string, error) {
-	if e := b.ReserveNodes(8, 1024); e != nil {
+	if e := backend.ReserveSlice[digestWriter](b, 1); e != nil {
 		return "", e
 	}
 	immutable := *s
@@ -56,14 +55,14 @@ func NewAlignmentStateBounded(b *backend.BuildBounds, translation, format string
 	if e != nil {
 		return nil, e
 	}
-	if e = b.ReserveNodes(int64(len(items))+1, 1024); e != nil {
+	seen, e := backend.MakeMapFor[string, bool](b, items, func(it Item) string { return it.ID })
+	if e != nil {
 		return nil, e
 	}
-	seen := make(map[string]bool, len(items))
-	if e = b.ReserveNodes(int64(len(items)), int64(unsafe.Sizeof(AlignmentItem{}))); e != nil {
+	if e = backend.ReserveSlice[AlignmentItem](b, int64(len(items))); e != nil {
 		return nil, e
 	}
-	if e = b.ReserveNodes(1, int64(unsafe.Sizeof(AlignmentState{}))); e != nil {
+	if e = backend.ReserveSlice[AlignmentState](b, 1); e != nil {
 		return nil, e
 	}
 	s := &AlignmentState{Version: AlignmentStateVersion, ValidatorVersion: AlignmentValidatorVersion, ProtocolVersion: protocolVersion, Translation: translation, Format: format, Regions: regions, Items: make([]AlignmentItem, len(items))}
@@ -128,11 +127,14 @@ func (s *AlignmentState) ValidateBounded(b *backend.BuildBounds) error {
 	if !reflect.DeepEqual(regions, s.Regions) {
 		return errors.New("ruby alignment regions cannot be reproduced")
 	}
-	if e = b.ReserveNodes(int64(len(s.Items)+len(s.Verified))+2, 1024); e != nil {
+	items, e := backend.MakeMapFor[string, AlignmentItem](b, s.Items, func(it AlignmentItem) string { return it.Item.ID })
+	if e != nil {
 		return e
 	}
-	items := make(map[string]AlignmentItem, len(s.Items))
-	seen := make(map[string]bool, len(s.Verified))
+	seen, e := backend.MakeMapFor[string, bool](b, s.Verified, func(v VerifiedAlignment) string { return v.ID })
+	if e != nil {
+		return e
+	}
 	for _, it := range s.Items {
 		if it.Item.ID == "" {
 			return errors.New("ruby alignment item missing ID")
@@ -164,10 +166,10 @@ func (s *AlignmentState) ValidateBounded(b *backend.BuildBounds) error {
 	return nil
 }
 func (s *AlignmentState) MissingBounded(b *backend.BuildBounds) ([]Item, error) {
-	if e := b.ReserveNodes(int64(len(s.Verified))+1, 1024); e != nil {
+	done, e := backend.MakeMapFor[string, bool](b, s.Verified, func(v VerifiedAlignment) string { return v.ID })
+	if e != nil {
 		return nil, e
 	}
-	done := make(map[string]bool, len(s.Verified))
 	for _, v := range s.Verified {
 		done[v.ID] = true
 	}
@@ -185,11 +187,15 @@ func (s *AlignmentState) MissingBounded(b *backend.BuildBounds) ([]Item, error) 
 }
 
 func (s *AlignmentState) ApplyOutputBounded(b *backend.BuildBounds, requestedIDs []string, entries []OutputEntry, requireOccurrence bool) (AlignmentProgress, error) {
-	if e := b.ReserveNodes(int64(len(requestedIDs)+len(s.Items)+3*len(entries))+5, 1024); e != nil {
+	rejected, e := backend.MakeMapFor[string, string](b, entries, func(v OutputEntry) string { return v.ID })
+	if e != nil {
 		return AlignmentProgress{}, e
 	}
-	progress := AlignmentProgress{Rejected: make(map[string]string, len(entries))}
-	requested := make(map[string]bool, len(requestedIDs))
+	progress := AlignmentProgress{Rejected: rejected}
+	requested, e := backend.MakeMap[string, bool](b, requestedIDs)
+	if e != nil {
+		return progress, e
+	}
 	for _, id := range requestedIDs {
 		requested[id] = true
 	}
@@ -197,11 +203,17 @@ func (s *AlignmentState) ApplyOutputBounded(b *backend.BuildBounds, requestedIDs
 	if e != nil {
 		return progress, e
 	}
-	missing := make(map[string]Item, len(miss))
+	missing, e := backend.MakeMapFor[string, Item](b, miss, func(it Item) string { return it.ID })
+	if e != nil {
+		return progress, e
+	}
 	for _, it := range miss {
 		missing[it.ID] = it
 	}
-	counts := make(map[string]int, len(entries))
+	counts, e := backend.MakeMapFor[string, int](b, entries, func(v OutputEntry) string { return v.ID })
+	if e != nil {
+		return progress, e
+	}
 	for _, entry := range entries {
 		counts[entry.ID]++
 	}
@@ -260,7 +272,10 @@ func (s *AlignmentState) ApplyOutputBounded(b *backend.BuildBounds, requestedIDs
 			return progress, e
 		}
 	}
-	conflicts := make(map[string]bool, len(proposed))
+	conflicts, e := backend.MakeMapFor[string, bool](b, proposed, func(v VerifiedAlignment) string { return v.ID })
+	if e != nil {
+		return progress, e
+	}
 	for i, a := range proposed {
 		for _, v := range proposed[i+1:] {
 			if overlaps(a.Start, a.End, v.Start, v.End) {
@@ -348,10 +363,10 @@ func (s *AlignmentState) RenderBounded(b *backend.BuildBounds, maxBytes int64) (
 	if n > maxBytes {
 		return "", result, &backend.BuildCapacityError{Resource: "ruby rendered target bytes"}
 	}
-	if e := b.ReserveNodes(int64(len(s.Verified))+1, int64(unsafe.Sizeof(VerifiedAlignment{}))); e != nil {
+	if e := backend.ReserveSlice[VerifiedAlignment](b, int64(len(s.Verified))); e != nil {
 		return "", result, e
 	}
-	if e := b.ReserveNodes(2, 1024); e != nil {
+	if e := backend.ReserveSlice[reflect.Value](b, 2); e != nil {
 		return "", RestoreResult{}, e
 	}
 	ordered := make([]VerifiedAlignment, len(s.Verified))
@@ -367,7 +382,7 @@ func (s *AlignmentState) RenderBounded(b *backend.BuildBounds, maxBytes int64) (
 		_, _ = w.WriteString("<ruby>")
 		_, _ = w.WriteString(s.Translation[v.Start:v.End])
 		_, _ = w.WriteString("<rt>")
-		if e = writeHTMLText(w, v.Text); e != nil {
+		if e = writeHTMLText(&w, v.Text); e != nil {
 			return "", result, e
 		}
 		_, _ = w.WriteString("</rt></ruby>")

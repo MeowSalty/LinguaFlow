@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
@@ -49,6 +50,12 @@ func (s *roundStore) Candidate(ctx context.Context, id string, maxBytes int64) (
 	if err != nil {
 		return nil, s.classify(err)
 	}
+	defer func() {
+		row.Payload = nil
+		if row.ReleaseOwned != nil {
+			row.ReleaseOwned()
+		}
+	}()
 	if row.SnapshotDigest != s.digest {
 		return nil, permanentStoreError{workstate.ErrManifest}
 	}
@@ -110,6 +117,15 @@ func (s *roundStore) CandidateFrame(ctx context.Context, id string, maxBytes int
 	if err != nil {
 		return pipeline.CandidateFrame{}, s.classify(err)
 	}
+	escaped := false
+	defer func() {
+		if !escaped {
+			row.Payload = nil
+			if row.ReleaseOwned != nil {
+				row.ReleaseOwned()
+			}
+		}
+	}()
 	if row.SnapshotDigest != s.digest {
 		return pipeline.CandidateFrame{}, permanentStoreError{workstate.ErrManifest}
 	}
@@ -125,6 +141,8 @@ func (s *roundStore) CandidateFrame(ctx context.Context, id string, maxBytes int
 	if cur.NextAttemptAt != nil {
 		f.Next = *cur.NextAttemptAt
 	}
+	f.ReleaseOwned = row.ReleaseOwned
+	escaped = true
 	return f, nil
 }
 
@@ -138,8 +156,22 @@ func (s *roundStore) loadCandidatePayload(ctx context.Context, id string, maxByt
 		}
 		if runtime != nil && runtime.Admission != nil {
 			release, owned, err := runtime.Admission.BorrowCandidateRead(id, credit)
-			if err != nil || owned {
-				return release, err
+			if err != nil {
+				return nil, err
+			}
+			if owned {
+				b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
+				if err != nil {
+					release()
+					return nil, err
+				}
+				allocation, err := b.OwnAllocation(credit, 1)
+				if err != nil {
+					b.CloseRetired()
+					release()
+					return nil, err
+				}
+				return func() { allocation.Release(); b.CloseRetired(); release() }, nil
 			}
 		}
 		lease, err = service.NewExecutionInputLease(ctx, credit)

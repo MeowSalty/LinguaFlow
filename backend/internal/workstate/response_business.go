@@ -62,7 +62,7 @@ func validateResponseReceipt(data []byte, requestID string) error {
 		return ErrManifest
 	}
 	outcome, err := hex.DecodeString(compact.OutcomeDigest)
-	if compact.Version != glossary.ResponseReceiptVersion || compact.RequestID != requestID || len(compact.RequestID) == 0 || len(compact.RequestID) > 128 || !utf8.ValidString(compact.RequestID) || len(compact.InputDigest) == 0 || len(compact.InputDigest) > 128 || !utf8.ValidString(compact.InputDigest) || len(compact.OutcomeDigest) != 64 || err != nil || len(outcome) != 32 || compact.Added < 0 || compact.Skipped < 0 || compact.Added > 65536 || compact.Skipped > 65536 {
+	if compact.Version != glossary.ResponseReceiptVersion || compact.RequestID != requestID || len(compact.RequestID) == 0 || len(compact.RequestID) > 128 || !utf8.ValidString(compact.RequestID) || len(compact.InputDigest) == 0 || len(compact.InputDigest) > 128 || !utf8.ValidString(compact.InputDigest) || len(compact.OutcomeDigest) != 64 || err != nil || len(outcome) != 32 || compact.Added < 0 || compact.Skipped < 0 {
 		return ErrManifest
 	}
 	return nil

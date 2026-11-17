@@ -2,17 +2,13 @@ package repair
 
 import (
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
-
-func init() {
-	backend.RegisterFixedRegexp(textLineRe)
-	backend.RegisterFixedRegexp(placeholderVariantRE)
-}
 
 func joinFragmentsBounded(b *backend.BuildBounds, parts []string, separator string, maxBytes int64) (string, error) {
 	n := int64(0)
@@ -45,7 +41,7 @@ func joinFragmentsBounded(b *backend.BuildBounds, parts []string, separator stri
 }
 func tryRepairTextBounded(text string, wantIDs []string, opt Options) Result {
 	b := opt.Bounds
-	if e := b.ReserveNodes(4, 1024); e != nil {
+	if e := backend.ReserveSlice[string](b, 16); e != nil {
 		return Result{Fatal: true, ParseErr: e}
 	}
 	repaired := make([]string, 0, 16)
@@ -83,7 +79,7 @@ func tryRepairTextBounded(text string, wantIDs []string, opt Options) Result {
 			inRuby, inGlossary = true, false
 			continue
 		}
-		if e := b.ReserveNodes(1, 256); e != nil {
+		if e := b.CheckContext(); e != nil {
 			return Result{Fatal: true, ParseErr: e}
 		}
 		loc, findErr := backend.FindRegexpSubmatch(b, textLineRe, line)
@@ -93,9 +89,6 @@ func tryRepairTextBounded(text string, wantIDs []string, opt Options) Result {
 		if loc != nil {
 			inGlossary, inRuby = false, false
 			lastID = line[loc[2]:loc[3]]
-			if e := b.ReserveNodes(1, 1024); e != nil {
-				return Result{Fatal: true, ParseErr: e}
-			}
 			parts, e := backend.AppendNode(b, []string(nil), line[loc[4]:loc[5]])
 			if e != nil {
 				return Result{Fatal: true, ParseErr: e}
@@ -104,7 +97,7 @@ func tryRepairTextBounded(text string, wantIDs []string, opt Options) Result {
 			continue
 		}
 		if inGlossary {
-			if e := b.ReserveNodes(4, 128); e != nil {
+			if e := backend.ReserveSlice[prompt.BootstrapEntry](b, 1); e != nil {
 				return Result{Fatal: true, ParseErr: e}
 			}
 			if entry := parseGlossaryLine(line); entry != nil {
@@ -138,9 +131,6 @@ func tryRepairTextBounded(text string, wantIDs []string, opt Options) Result {
 	if len(fragments) == 0 {
 		return Result{Fatal: true, Repaired: repaired, ParseErr: errors.New("no translations found in text response")}
 	}
-	if e := b.ReserveNodes(int64(len(fragments))+1, 1024); e != nil {
-		return Result{Fatal: true, ParseErr: e}
-	}
 	trans := make(map[string]string, len(fragments))
 	for id, parts := range fragments {
 		value, e := joinFragmentsBounded(b, parts, "\n", limitText(b))
@@ -157,9 +147,6 @@ func tryRepairTextBounded(text string, wantIDs []string, opt Options) Result {
 			return Result{Fatal: true, ParseErr: e}
 		}
 	} else {
-		if e := b.ReserveNodes(int64(len(trans))+1, 1024); e != nil {
-			return Result{Fatal: true, ParseErr: e}
-		}
 		for id, value := range trans {
 			rows, e := ruby.ParseInlineMarkersBounded(b, value)
 			if e != nil {
@@ -173,7 +160,7 @@ func tryRepairTextBounded(text string, wantIDs []string, opt Options) Result {
 			}
 		}
 	}
-	if e := b.ReserveNodes(int64(len(wantIDs)), 16); e != nil {
+	if e := backend.ReserveSlice[string](b, int64(len(wantIDs))); e != nil {
 		return Result{Fatal: true, ParseErr: e}
 	}
 	missing := make([]string, 0, len(wantIDs))
@@ -189,15 +176,11 @@ func NormalizePlaceholdersBounded(b *backend.BuildBounds, text string, knownKeys
 	if len(knownKeys) == 0 {
 		return text, nil, nil
 	}
-	if e := b.ReserveNodes(1, 1024); e != nil {
-		return "", nil, e
-	}
-	seen := make(map[string]bool)
 	var normalized []string
-	w := backend.NewBoundedWriter(b, b.Snapshot().TextLimit)
+	w := backend.NewBoundedWriter(b, b.OutputLimit())
 	from := 0
 	for from < len(text) {
-		if e := b.ReserveNodes(1, 256); e != nil {
+		if e := b.CheckContext(); e != nil {
 			return "", nil, e
 		}
 		loc, findErr := backend.FindRegexpSubmatch(b, placeholderVariantRE, text[from:])
@@ -224,11 +207,7 @@ func NormalizePlaceholdersBounded(b *backend.BuildBounds, text string, knownKeys
 			std := string(key[:])
 			if _, ok := knownKeys[std]; ok {
 				value = std
-				if match != std && !seen[std] {
-					if e := b.ReserveNodes(1, 1024); e != nil {
-						return "", nil, e
-					}
-					seen[std] = true
+				if match != std && !slices.Contains(normalized, std) {
 					var e error
 					normalized, e = backend.AppendNode(b, normalized, std)
 					if e != nil {

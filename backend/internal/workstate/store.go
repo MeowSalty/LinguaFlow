@@ -505,9 +505,11 @@ func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old
 		validSaved := false
 		lastAlignmentMatches := false
 		if len(old.PipelineHeader) > 0 && len(old.PipelineHeader) <= 2048 {
-			b, e := backend.NewBuildBounds(2048, 0)
+			b, e := backend.NewBuildBoundsFromContext(ctx, 2048, 0)
 			validSaved = e == nil && b.DecodeJSON(old.PipelineHeader, &saved) == nil && saved.RetryEpoch == c.Scope.RetryEpoch
 			lastAlignmentMatches = saved.LastAlignmentRequestID == c.LastAlignmentRequestID
+			saved.LastAlignmentRequestID = ""
+			b.CloseRetired()
 		} else {
 			// Legacy lifecycle proof is also scalar: do not read the old Q body
 			// after an already paid request merely to inspect two fields.

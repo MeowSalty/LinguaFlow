@@ -88,6 +88,24 @@ func newFakeOpenAIBackend(t *testing.T, handler http.Handler, stream bool) *Back
 	return &Backend{name: "openai:test", model: "gpt-test", client: client, stream: stream}
 }
 
+func TestUnknownFinishDiagnosticCannotRetainResponseBacking(t *testing.T) {
+	body := `{"choices":[{"message":{"content":""},"finish_reason":"` + strings.Repeat("x", 70000) + `"}]}`
+	b := newFakeOpenAIBackend(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }), false)
+	ctx, err := backend.WithProviderResponseAllocation(context.Background(), int64(len(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx = backend.WithRequestCredits(ctx, backend.DefaultMaxInputBytes, int64(len(body)))
+	_, err = b.Translate(ctx, backend.Request{User: "input"})
+	var empty *backend.EmptyResponseError
+	if !errors.As(err, &empty) || empty.FinishReason != "unknown" {
+		t.Fatal(err)
+	}
+	if s := backend.ProviderResponseSnapshot(ctx); s.LiveBytes != 0 {
+		t.Fatal(s)
+	}
+}
+
 func fakeOpenAIRequest(t *testing.T) backend.Request {
 	t.Helper()
 	return backend.Request{

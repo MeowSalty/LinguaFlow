@@ -3,6 +3,7 @@ package backend
 import (
 	"fmt"
 	"io"
+	"unsafe"
 )
 
 type promptTextCounter struct{ bytes, escaped, limit int64 }
@@ -35,10 +36,12 @@ func BuildUserWithCredits(b *BuildBounds, system string, maxBytes int64, claim f
 	if int64(len(system)) > maxBytes {
 		return "", &BuildCapacityError{"prompt system bytes"}
 	}
-	if e := b.ReserveNodes(4, 1024); e != nil {
+	counter, e := b.OwnAllocation(1, int64(unsafe.Sizeof(promptTextCounter{})))
+	if e != nil {
 		return "", e
 	}
 	c := promptTextCounter{limit: maxBytes - int64(len(system))}
+	defer func() { c = promptTextCounter{}; counter.Release() }()
 	if e := write(&c); e != nil {
 		return "", e
 	}
@@ -52,20 +55,32 @@ func BuildUserWithCredits(b *BuildBounds, system string, maxBytes int64, claim f
 			return "", e
 		}
 	}
-	w, e := NewFixedBoundedWriter(b, c.bytes)
+	c = promptTextCounter{}
+	counter.Release()
+	w, e := NewFixedBoundedWriter(b, m.UserBytes)
 	if e != nil {
 		return "", e
 	}
-	if e = write(w); e != nil {
+	defer w.Release()
+	if e = write(&w); e != nil {
 		return "", e
 	}
-	if int64(len(w.Bytes())) != c.bytes {
+	if int64(len(w.Bytes())) != m.UserBytes {
 		return "", fmt.Errorf("user prompt changed during rendering")
 	}
-	if e = b.ReserveText(c.bytes, c.bytes); e != nil {
+	textCredit, e := b.OwnAllocation(m.UserBytes, 1)
+	if e != nil {
 		return "", e
 	}
 	text := string(w.Bytes())
+	b.text += textCredit.bytes
+	installed := false
+	defer func() {
+		if !installed {
+			text = ""
+			textCredit.Release()
+		}
+	}()
 	n, e := MeasureJSONString(text)
 	if e != nil {
 		return "", e
@@ -73,5 +88,9 @@ func BuildUserWithCredits(b *BuildBounds, system string, maxBytes int64, claim f
 	if n != m.UserJSONBytes {
 		return "", fmt.Errorf("user prompt escaping changed during rendering")
 	}
+	if e = textCredit.ReturnToBuild(); e != nil {
+		return "", e
+	}
+	installed = true
 	return text, nil
 }

@@ -39,9 +39,6 @@ func LookupEntrySnapshotContextBounded(ctx context.Context, b *backend.BuildBoun
 		if source == "" {
 			continue
 		}
-		if err := b.ReserveNodes(1, 0); err != nil {
-			return nil, err
-		}
 		matches, matchErr := sourceContainsBounded(ctx, b, text, source, !n.Entry.CaseSensitive)
 		if matchErr != nil {
 			return nil, matchErr

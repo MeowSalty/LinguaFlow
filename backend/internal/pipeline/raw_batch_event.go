@@ -13,16 +13,20 @@ func emitRawBatchEvent(ctx context.Context, session *requestSession, req backend
 		return nil
 	}
 	var event progress.BatchEvent
+	var bounds *backend.BuildBounds
+	defer func() {
+		event = progress.BatchEvent{}
+		bounds.CloseRetired()
+	}()
 	err := session.runtime.Run(ctx, func() error {
-		b, err := backend.NewBuildBounds(32<<10, response.FreezeBytes+response.ResponseBytes)
+		b, err := backend.NewBuildBoundsFromContext(ctx, 32<<10, response.FreezeBytes+response.ResponseBytes)
 		if err != nil {
 			return err
 		}
+		bounds = b
+		// Observers may retain these fields directly. Their external lifetime is
+		// unknown here, so it cannot participate in this temporary live gate.
 		preview := func(s string) (string, error) {
-			n := min(len(s), progress.MaxSSEBatchContentBytes)
-			if err := b.ReserveText(int64(n), int64(n)); err != nil {
-				return "", err
-			}
 			v, _, _ := progress.TruncateSSEContent(s)
 			return v, nil
 		}
@@ -34,18 +38,15 @@ func emitRawBatchEvent(ctx context.Context, session *requestSession, req backend
 		if err != nil {
 			return err
 		}
-		if err = b.ReserveText(response.ResponseBytes, response.ResponseBytes); err != nil {
+		rawCredit, err := b.OwnAllocation(int64(len(response.Raw)), 1)
+		if err != nil {
 			return err
 		}
 		raw := string(response.Raw)
 		received, err := preview(raw)
+		raw = ""
+		rawCredit.Release()
 		if err != nil {
-			return err
-		}
-		if err = b.ReserveNodes(1, 1024); err != nil {
-			return err
-		}
-		if err = b.ReserveNodes(int64(len(response.Members)), 64); err != nil {
 			return err
 		}
 		ids := make([]string, len(response.Members))
@@ -59,6 +60,12 @@ func emitRawBatchEvent(ctx context.Context, session *requestSession, req backend
 	if err != nil {
 		return err
 	}
-	observer.OnBatchEvent(event)
+	if contextual, ok := observer.(interface {
+		OnBatchEventContext(context.Context, progress.BatchEvent)
+	}); ok {
+		contextual.OnBatchEventContext(ctx, event)
+	} else {
+		observer.OnBatchEvent(event)
+	}
 	return nil
 }

@@ -13,6 +13,16 @@ func (b *Backend) wireParams(req backend.Request) (map[string]any, error) {
 	return b.wireParamsPrompt(req, nil)
 }
 func (b *Backend) wireParamsPrompt(req backend.Request, measure *backend.PromptMeasure) (map[string]any, error) {
+	bounds, e := backend.NewBuildBounds(0, backend.DefaultMaxInputBytes)
+	if e != nil {
+		return nil, e
+	}
+	return b.wireParamsBounded(req, measure, bounds)
+}
+func (b *Backend) wireParamsBounded(req backend.Request, measure *backend.PromptMeasure, bounds *backend.BuildBounds) (map[string]any, error) {
+	if e := backend.ReserveSlice[any](bounds, 2); e != nil {
+		return nil, e
+	}
 	system, user, e := backend.PromptValues(req, measure, "")
 	if e != nil {
 		return nil, e
@@ -66,10 +76,16 @@ func (b *Backend) wireParamsPrompt(req backend.Request, measure *backend.PromptM
 	return p, nil
 }
 func (b *Backend) MeasureRequest(req backend.Request) (int64, error) {
-	return backend.MeasureWireBuild(func() (any, error) { return b.wireParams(req) })
+	return b.MeasureRequestContext(context.Background(), req)
 }
 func (b *Backend) MeasureRequestPrompt(req backend.Request, m backend.PromptMeasure) (int64, error) {
-	return backend.MeasureWireBuild(func() (any, error) { return b.wireParamsPrompt(req, &m) })
+	return b.MeasureRequestPromptContext(context.Background(), req, m)
+}
+func (b *Backend) MeasureRequestContext(ctx context.Context, req backend.Request) (int64, error) {
+	return backend.MeasureWireBuildContext(ctx, func(bounds *backend.BuildBounds) (any, error) { return b.wireParamsBounded(req, nil, bounds) })
+}
+func (b *Backend) MeasureRequestPromptContext(ctx context.Context, req backend.Request, m backend.PromptMeasure) (int64, error) {
+	return backend.MeasureWireBuildContext(ctx, func(bounds *backend.BuildBounds) (any, error) { return b.wireParamsBounded(req, &m, bounds) })
 }
 
 type completionWire struct {
@@ -94,13 +110,19 @@ type completionWire struct {
 }
 
 func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
-	data, err := backend.EncodeWireBuild(ctx, func() (any, error) { return b.wireParams(req) })
+	data, releaseInput, err := backend.EncodeWireBuild(ctx, func(bounds *backend.BuildBounds) (any, error) { return b.wireParamsBounded(req, nil, bounds) })
 	if err != nil {
 		return nil, err
 	}
+	defer func() { data = nil; releaseInput() }()
 	inputTrace := backend.NewOwnedTrace(ctx, "wire", "openai-input")
 	inputTrace.Set(int64(cap(data)))
 	defer inputTrace.Clear()
+	limit := backend.ResponseBudget(ctx, b.responseBytes)
+	ctx, err = backend.WithProviderResponseAllocation(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
 	opts := b.callOpts()
 	opts = append(opts, option.WithMaxRetries(0), option.WithMiddleware(backend.GuardProviderErrors))
 	var resp *http.Response
@@ -108,9 +130,9 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		return nil, wrapOpenAIError(err)
 	}
 	defer resp.Body.Close()
-	limit := backend.ResponseBudget(ctx, b.responseBytes)
 	var usage backend.Usage
-	finish := ""
+	var finish backend.WireStringSlot
+	defer finish.Close()
 	model := req.Model
 	if model == "" {
 		model = b.model
@@ -118,28 +140,59 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	if !b.stream {
 		readTrace := backend.NewOwnedTrace(ctx, "wire", "openai-http")
 		defer readTrace.Clear()
-		raw, e := backend.ReadBoundedObserved(resp.Body, limit, readTrace)
+		raw, release, e := backend.ReadProviderBounded(ctx, resp.Body, limit, readTrace)
+		defer release()
 		if e != nil {
 			return nil, e
 		}
-		var result *backend.Response
+		text, e := backend.NewResponseTextObserved(ctx, limit, "openai-text")
+		if e != nil {
+			return nil, e
+		}
+		defer text.ClearObserved()
 		e = backend.RunBuild(ctx, func() error {
-			var reply completionWire
-			if e := backend.DecodeWire(raw, limit, &reply); e != nil {
+			reply, e := backend.BorrowWireJSONContext(ctx, raw, limit)
+			if e != nil {
 				return e
 			}
-			usage = backend.Usage{PromptTokens: reply.Usage.PromptTokens, CompletionTokens: reply.Usage.CompletionTokens, TotalTokens: reply.Usage.TotalTokens}
-			if len(reply.Choices) == 0 {
+			if usage, e = completionUsage(reply); e != nil {
+				return e
+			}
+			choices, e := reply.Field("choices")
+			if e != nil {
+				return e
+			}
+			choice, e := choices.First()
+			if e != nil {
+				return e
+			}
+			if choice.IsNull() {
 				return emptyChoicesError(b.Name(), model, "", usage.PromptTokens)
 			}
-			choice := reply.Choices[0]
-			if choice.Message.Content == "" {
-				return emptyChoicesError(b.Name(), model, choice.FinishReason, usage.PromptTokens)
+			f, e := choice.Field("finish_reason")
+			if e != nil {
+				return e
 			}
-			result = &backend.Response{Text: choice.Message.Content, Usage: usage, Truncated: choice.FinishReason == finishReasonLength}
-			return nil
+			if e = finish.Set(f); e != nil {
+				return e
+			}
+			content, e := choice.Path("message", "content")
+			if e != nil {
+				return e
+			}
+			return content.AppendString(text)
 		})
-		return result, e
+		if e != nil {
+			return backend.ResponseWithPartialText(text, usage), e
+		}
+		out, e := backend.FinishResponseText(ctx, text)
+		if e != nil {
+			return backend.ResponseWithPartialText(text, usage), e
+		}
+		if out == "" {
+			return nil, emptyChoicesError(b.Name(), model, backend.DiagnosticFinishReason(finish.Value), usage.PromptTokens)
+		}
+		return &backend.Response{Text: out, Usage: usage, Truncated: finish.Value == finishReasonLength}, nil
 	}
 	text, e := backend.NewResponseTextObserved(ctx, limit, "openai-text")
 	if e != nil {
@@ -149,42 +202,90 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	choiceIndex := -1
 	err = backend.ReadSSEContext(ctx, resp.Body, limit, func(event []byte) error {
 		return backend.RunBuild(ctx, func() error {
-			var chunk completionWire
-			if e := backend.DecodeWire(event, limit, &chunk); e != nil {
+			chunk, e := backend.BorrowWireJSONContext(ctx, event, limit)
+			if e != nil {
 				return e
 			}
-			if chunk.Error != nil {
-				return backend.ProviderStreamError("openai", chunk.Error.Type, resp.Header)
+			failure, e := chunk.Field("error")
+			if e != nil {
+				return e
 			}
-			if chunk.Usage.TotalTokens != 0 || chunk.Usage.PromptTokens != 0 || chunk.Usage.CompletionTokens != 0 {
-				usage = backend.Usage{PromptTokens: chunk.Usage.PromptTokens, CompletionTokens: chunk.Usage.CompletionTokens, TotalTokens: chunk.Usage.TotalTokens}
-			}
-			for _, c := range chunk.Choices {
-				if choiceIndex < 0 {
-					choiceIndex = c.Index
-				}
-				if c.Index != choiceIndex {
-					continue
-				}
-				if c.FinishReason != "" {
-					finish = c.FinishReason
-				}
-				if e := text.Append(c.Delta.Content); e != nil {
+			if !failure.IsNull() {
+				kind, e := failure.Field("type")
+				if e != nil {
 					return e
 				}
+				return backend.ProviderStreamError("openai", kind.StringCode("rate_limit_error", "rate_limit_exceeded", "overloaded_error", "authentication_error", "invalid_request_error"), resp.Header)
 			}
-			return nil
+			u, e := completionUsage(chunk)
+			if e != nil {
+				return e
+			}
+			if u.TotalTokens != 0 || u.PromptTokens != 0 || u.CompletionTokens != 0 {
+				usage = u
+			}
+			choices, e := chunk.Field("choices")
+			if e != nil {
+				return e
+			}
+			return choices.EachArray(func(c backend.WireJSONValue) error {
+				index, e := c.Field("index")
+				if e != nil {
+					return e
+				}
+				i, e := index.Int()
+				if e != nil {
+					return e
+				}
+				if choiceIndex < 0 {
+					choiceIndex = i
+				}
+				if i != choiceIndex {
+					return nil
+				}
+				f, e := c.Field("finish_reason")
+				if e != nil {
+					return e
+				}
+				if !f.IsNull() && !f.StringEquals("") {
+					if e = finish.Set(f); e != nil {
+						return e
+					}
+				}
+				content, e := c.Path("delta", "content")
+				if e != nil {
+					return e
+				}
+				return content.AppendString(text)
+			})
 		})
 	})
 	if err != nil {
-		return nil, err
+		return backend.ResponseWithPartialText(text, usage), err
 	}
 	out, e := backend.FinishResponseText(ctx, text)
 	if e != nil {
-		return nil, e
+		return backend.ResponseWithPartialText(text, usage), e
 	}
 	if out == "" {
-		return nil, emptyChoicesError(b.Name(), model, finish, usage.PromptTokens)
+		return nil, emptyChoicesError(b.Name(), model, backend.DiagnosticFinishReason(finish.Value), usage.PromptTokens)
 	}
-	return &backend.Response{Text: out, Usage: usage, Truncated: finish == finishReasonLength}, nil
+	return &backend.Response{Text: out, Usage: usage, Truncated: finish.Value == finishReasonLength}, nil
+}
+
+func completionUsage(reply backend.WireJSONValue) (backend.Usage, error) {
+	var usage backend.Usage
+	for _, field := range []struct {
+		name  string
+		value *int64
+	}{{"prompt_tokens", &usage.PromptTokens}, {"completion_tokens", &usage.CompletionTokens}, {"total_tokens", &usage.TotalTokens}} {
+		v, e := reply.Path("usage", field.name)
+		if e != nil {
+			return usage, e
+		}
+		if e = v.DecodeScalar(field.value); e != nil {
+			return usage, e
+		}
+	}
+	return usage, nil
 }

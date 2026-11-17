@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
@@ -44,6 +46,7 @@ type frozenMainBatch struct {
 // preparedMainDocument stores only selected targets and their actual context.
 // Global indices are kept separately; it never clones the Document segment tree.
 type preparedMainDocument struct {
+	bounds    *backend.BuildBounds
 	doc       *Document
 	global    []int
 	targets   []int
@@ -52,44 +55,64 @@ type preparedMainDocument struct {
 	locals    []int
 }
 
-func snapshotMainInput(doc *Document, indices []int, handler stagedHandler, runtime *ExecutionRuntime) (*preparedMainDocument, error) {
-	if len(indices) == 0 || len(indices) > 65536 {
+func snapshotMainInput(ctx context.Context, doc *Document, indices []int, handler stagedHandler, runtime *ExecutionRuntime) (*preparedMainDocument, error) {
+	if len(indices) == 0 {
 		return nil, ErrCandidateCapacity
 	}
-	b, err := backend.NewBuildBounds(runtime.Window.limits.ItemBytes, runtime.handoffLimit())
+	b, err := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, runtime.handoffLimit())
 	if err != nil {
 		return nil, err
 	}
-	if err = b.ReserveNodes(int64(len(indices)), 8); err != nil {
+	if err = backend.ReserveSlice[int](b, int64(len(indices))); err != nil {
 		return nil, err
 	}
-	expanded := append([]int(nil), indices...)
+	expanded := make([]int, len(indices))
+	copy(expanded, indices)
 	truncated := map[int]string{}
 	if h, ok := handler.(*TranslateHandler); ok && h.Context.Enabled {
-		count, boundErr := boundedSum(int64(max(0, h.Context.Before)), int64(max(0, h.Context.After)), 1)
-		if boundErr != nil || count > 65536/int64(max(1, len(indices))) {
-			return nil, ErrCandidateCapacity
-		}
 		e, err := ExpandMainContextBounded(b, doc, indices, len(doc.Segments), max(h.Context.Before, h.Context.After), h.Context.MaxChars, runtime.handoffLimit())
 		if err != nil {
 			return nil, err
 		}
 		expanded, truncated = e.Idxs, e.TruncatedSrc
 	}
-	if len(expanded) > 65536 {
-		return nil, ErrCandidateCapacity
-	}
-	if err = b.ReserveNodes(int64(len(expanded)), 512); err != nil {
+	if err = backend.ReserveSlice[Segment](b, int64(len(expanded))); err != nil {
 		return nil, err
 	}
-	input := &preparedMainDocument{doc: &Document{SourceLang: doc.SourceLang, TargetLang: doc.TargetLang, Format: doc.Format, Vars: doc.Vars}, global: expanded, context: map[int]struct{}{}, truncated: map[int]string{}}
+	input := &preparedMainDocument{bounds: b, doc: &Document{SourceLang: doc.SourceLang, TargetLang: doc.TargetLang, Format: doc.Format, Vars: doc.Vars}, global: expanded}
 	input.doc.Segments = make([]Segment, len(expanded))
-	if err = b.ReserveNodes(int64(len(expanded))+int64(len(indices))*2+2, 32); err != nil {
+	if err = backend.ReserveSlice[int](b, int64(len(expanded))); err != nil {
+		return nil, err
+	}
+	if err = backend.ReserveSlice[int](b, int64(len(indices))); err != nil {
 		return nil, err
 	}
 	input.locals = make([]int, len(expanded))
 	input.targets = make([]int, 0, len(indices))
-	want := map[int]bool{}
+	for i := range input.locals {
+		input.locals[i] = i
+	}
+	input.context, err = backend.MakeMap[int, struct{}](b, input.locals)
+	if err != nil {
+		return nil, err
+	}
+	if err = backend.ReserveSlice[int](b, int64(len(truncated))); err != nil {
+		return nil, err
+	}
+	truncatedKeys := make([]int, 0, len(truncated))
+	for local, idx := range expanded {
+		if _, ok := truncated[idx]; ok {
+			truncatedKeys = append(truncatedKeys, local)
+		}
+	}
+	input.truncated, err = backend.MakeMap[int, string](b, truncatedKeys)
+	if err != nil {
+		return nil, err
+	}
+	want, err := backend.MakeMap[int, bool](b, indices)
+	if err != nil {
+		return nil, err
+	}
 	for _, idx := range indices {
 		want[idx] = true
 	}
@@ -106,6 +129,15 @@ func snapshotMainInput(doc *Document, indices []int, handler stagedHandler, runt
 		}
 	}
 	return input, nil
+}
+
+func (input *preparedMainDocument) close() {
+	if input == nil {
+		return
+	}
+	b := input.bounds
+	*input = preparedMainDocument{}
+	b.CloseRetired()
 }
 
 func (r *ExecutionRuntime) handoffLimit() int64  { return r.HandoffBytes }
@@ -129,31 +161,69 @@ func (r *ExecutionRuntime) Run(ctx context.Context, fn func() error) error {
 	}
 }
 
-func (r *ExecutionRuntime) retainMainOwner(id string, permits []*backend.RequestPermit) {
+type mainBackingOwner struct {
+	permits   []*backend.RequestPermit
+	rawCredit *backend.OwnedAllocation
+	ctx       context.Context
+}
+
+func (r *ExecutionRuntime) retainMainOwner(id string, permits []*backend.RequestPermit, rawCredit *backend.OwnedAllocation, ctx context.Context) {
 	r.ownerMu.Lock()
 	defer r.ownerMu.Unlock()
 	if r.mainOwners == nil {
-		r.mainOwners = map[string][]*backend.RequestPermit{}
+		r.mainOwners = map[string]mainBackingOwner{}
 	}
-	r.mainOwners[id] = permits
+	r.mainOwners[id] = mainBackingOwner{permits, rawCredit, ctx}
 }
 
-func (r *ExecutionRuntime) releaseMainOwner(id string) {
+// Promotion borrows the original live completion lane. Saved inventory without
+// an in-process owner uses its ordinary build callbacks and gains no new R.
+func (r *ExecutionRuntime) mainResponseBuildContext(ctx context.Context, id string) (context.Context, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.ownerMu.Lock()
+	owner, exists := r.mainOwners[id]
+	r.ownerMu.Unlock()
+	if !exists || owner.ctx == nil {
+		return ctx, nil
+	}
+	ctx = completionContext{Context: ctx, values: owner.ctx}
+	admission, _ := backend.BuildOwnership(ctx)
+	if admission != r.Admission || !backend.HasActiveBuildAllocationSource(ctx) {
+		return nil, backend.ErrPipelineCapacity
+	}
+	ctx = backend.WithProviderResponseOwnership(ctx, r.Admission, id, backend.RequestStageMain)
+	return backend.WithProviderResponseAllocation(ctx, r.responseLimit())
+}
+
+func (r *ExecutionRuntime) releaseMainOwner(id string) error {
+	_ = r.Admission.ReleaseBuild("raw:" + id)
 	r.Admission.ObserveOwned("freeze", id, 0)
 	r.Admission.ObserveOwned("raw", id, 0)
 	r.ownerMu.Lock()
-	permits := r.mainOwners[id]
+	owner := r.mainOwners[id]
+	r.ownerMu.Unlock()
+	owner.rawCredit.Release()
+	if owner.ctx != nil {
+		if err := backend.CloseProviderResponseAllocation(owner.ctx); err != nil {
+			return err
+		}
+	}
+	r.ownerMu.Lock()
 	delete(r.mainOwners, id)
 	r.ownerMu.Unlock()
-	for _, permit := range permits {
+	_ = r.Admission.ReleaseBuild("build:" + id)
+	for _, permit := range owner.permits {
 		permit.Release()
 	}
-	if len(permits) == 0 {
+	if len(owner.permits) == 0 {
 		r.Admission.ReleaseDurableResponse(id)
 	}
+	return nil
 }
 
-func prepareMainInvocation(ctx context.Context, h stagedHandler, input *preparedMainDocument, session *requestSession, attempt int, logger *slog.Logger) batchResult {
+func prepareMainInvocation(ctx context.Context, h stagedHandler, input *preparedMainDocument, session *requestSession, attempt int, logger *slog.Logger) (result batchResult) {
 	doc := input.doc
 	var hintPayload MainHintPayload
 	hintCredit := int64(0)
@@ -192,15 +262,50 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 	}
 	var req backend.Request
 	var remote backend.Backend
+	var requestBounds *backend.BuildBounds
+	defer func() {
+		req = backend.Request{}
+		doc = nil
+		input.close()
+		if requestBounds == nil {
+			return
+		}
+		// The store/session can still borrow these outputs on failure. Preserve
+		// only their exact original backing before retiring rendering temporaries.
+		retained, retainErr := backend.CheckedAdd(int64(cap(session.intent.FreezePayload)), int64(len(session.intent.SnapshotDigest)))
+		membersBytes, sizeErr := backend.AllocationBytes(int64(cap(session.intent.PromotionMembers)), int64(unsafe.Sizeof(ResponseMember{})))
+		if retainErr == nil {
+			retainErr = sizeErr
+		}
+		if retainErr == nil {
+			retained, retainErr = backend.CheckedAdd(retained, membersBytes)
+		}
+		if retainErr == nil && retained > 0 {
+			var receipt *backend.OwnedAllocation
+			receipt, retainErr = requestBounds.RetainedAllocation(retained)
+			if retainErr == nil {
+				retainErr = receipt.DetachBuild()
+			}
+			if retainErr != nil && receipt != nil {
+				_ = receipt.ReturnToBuild()
+			}
+		}
+		if retainErr != nil {
+			result.err = errors.Join(result.err, retainErr)
+			return
+		}
+		requestBounds.CloseRetired()
+	}()
 	buildErr := session.runtime.Run(ctx, func() error {
-		b, err := backend.NewBuildBounds(session.runtime.Window.limits.ItemBytes, session.runtime.handoffLimit())
+		b, err := backend.NewBuildBoundsFromContext(ctx, session.runtime.Window.limits.ItemBytes, session.runtime.handoffLimit())
 		if err != nil {
 			return err
 		}
+		requestBounds = b
 		frozen := frozenMainBatch{Mode: h.ModeName(), Format: doc.Format, SourceLang: doc.SourceLang, TargetLang: doc.TargetLang, Pool: session.intent.Pool, MainAttempt: attempt + 1}
 		switch handler := h.(type) {
 		case *TranslateHandler:
-			if err = b.ReserveNodes(int64(len(input.targets)), 64); err != nil {
+			if err = backend.ReserveSlice[string](b, int64(len(input.targets))); err != nil {
 				return err
 			}
 			glos, hints, err := DecodeMainHintsBounded(b, hintPayload)
@@ -215,17 +320,17 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 			frozen.TextMode = prompt.ProtocolFromResponseMode(handler.ResponseMode).IsText()
 			ids := make([]string, len(input.targets))
 			for i, local := range input.targets {
-				if err = b.ReserveText(20, 20); err != nil {
-					return err
-				}
 				if frozen.TextMode {
 					ids[i] = strconv.Itoa(i + 1)
 				} else {
 					ids[i] = strconv.Itoa(local + 1)
 				}
+				if err = b.ReserveText(int64(len(ids[i])), int64(len(ids[i]))); err != nil {
+					return err
+				}
 			}
 			copy.buildClaim = func(skeleton backend.Request, m backend.PromptMeasure) error {
-				return freezeMeasuredMain(b, h, input, session, frozen, ids, nil, remote, skeleton, m)
+				return freezeMeasuredMain(ctx, b, h, input, session, frozen, ids, nil, remote, skeleton, m)
 			}
 			_, _, request, _, _, _, err := copy.buildRequestWithHints(doc, input.globalLocal(), input.context, input.truncated, glos, hints)
 			req = request
@@ -252,7 +357,7 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 				}
 			}
 			sys, user, err := handler.Renderer.RenderWithCreditsBounded(b, prompt.ReviseData{SourceLang: doc.SourceLang, TargetLang: doc.TargetLang, Segments: segments, Protocol: prompt.ProtocolFromResponseMode(handler.ResponseMode), RubyAnnotations: anns, RubyMode: handler.RubyMode}, session.runtime.handoffLimit(), func(m backend.PromptMeasure) error {
-				return freezeMeasuredMain(b, h, input, session, frozen, ids, states, remote, req, m)
+				return freezeMeasuredMain(ctx, b, h, input, session, frozen, ids, states, remote, req, m)
 			})
 			req.System, req.User = sys, user
 			return err
@@ -301,21 +406,20 @@ func (input *preparedMainDocument) globalLocal() []int {
 	return input.locals
 }
 
-func freezeMeasuredMain(b *backend.BuildBounds, h stagedHandler, input *preparedMainDocument, session *requestSession, frozen frozenMainBatch, ids []string, states []reviseProtectState, remote backend.Backend, req backend.Request, m backend.PromptMeasure) error {
-	if err := b.ReserveFormatWorkspace(); err != nil {
-		return err
-	}
+func freezeMeasuredMain(ctx context.Context, b *backend.BuildBounds, h stagedHandler, input *preparedMainDocument, session *requestSession, frozen frozenMainBatch, ids []string, states []reviseProtectState, remote backend.Backend, req backend.Request, m backend.PromptMeasure) error {
 	doc := input.doc
-	if err := b.ReserveNodes(int64(len(input.targets)), 768); err != nil {
+	if err := backend.ReserveSlice[frozenMainMember](b, int64(len(input.targets))); err != nil {
 		return err
 	}
+	if err := backend.ReserveSlice[ResponseMember](b, int64(len(input.targets))); err != nil {
+		return err
+	}
+	frozen.Members = make([]frozenMainMember, 0, len(input.targets))
+	session.intent.PromotionMembers = make([]ResponseMember, 0, len(input.targets))
 	for i, local := range input.targets {
 		seg := doc.Segments[local]
 		global := input.global[local]
 		candidateID := NewWorkID()
-		if err := b.ReserveNodes(int64(len(seg.Meta)), 512); err != nil {
-			return err
-		}
 		member := frozenMainMember{Index: global, PromptID: ids[i], CandidateID: candidateID, Segment: seg, RubyItems: extractRubyItemsFromSeg(&seg), MetaTypes: metadataTypes(seg.Meta)}
 		if len(states) > 0 {
 			member.Mapping = states[i].mapping
@@ -351,7 +455,7 @@ func freezeMeasuredMain(b *backend.BuildBounds, h stagedHandler, input *prepared
 	if err != nil {
 		return err
 	}
-	wireBytes, err := backend.MeasureRequestPrompt(remote, req, m)
+	wireBytes, err := backend.MeasureRequestPromptContext(ctx, remote, req, m)
 	if err != nil {
 		return err
 	}
@@ -370,13 +474,16 @@ func freezeMeasuredMain(b *backend.BuildBounds, h stagedHandler, input *prepared
 	if !granted {
 		return &WorkDeferred{Wait: backend.AdmissionWait{Reason: "prepared_bytes", CapacityChanged: session.runtime.Admission.Changed()}}
 	}
-	payload, err := b.EncodeJSON(frozen, session.runtime.handoffLimit())
+	payload, err := b.EncodeJSONMeasured(frozen, freezeBytes, session.runtime.handoffLimit())
 	if err != nil {
 		return err
 	}
 	session.intent.FreezePayload = payload
 	session.runtime.Admission.ObserveOwned("freeze", session.intent.ID, int64(cap(payload)))
 	session.mode = h.ModeName()
+	if err = b.ReserveAllocation(64, 1); err != nil {
+		return err
+	}
 	session.intent.SnapshotDigest = responseDigest(payload)
 	return nil
 }
@@ -399,6 +506,20 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 	defer runtime.Admission.ObserveOwned("freeze", reservation, 0)
 	defer runtime.Admission.ObserveOwned("raw", reservation, 0)
 	result := prepareMainInvocation(ctx, h, input, session, attempt, logger)
+	input = nil
+	defer func() {
+		transferred := session.rawResponse != nil
+		// The retained provider context contains this session. After dispatch
+		// publishes the header, only the store may retain the immutable payload.
+		session.rawResponse = nil
+		session.intent.FreezePayload = nil
+		session.intent.PromotionMembers = nil
+		session.intent.Indices = nil
+		session.intent.Members = nil
+		if !transferred {
+			_ = runtime.Admission.ReleaseBuild("build:" + reservation)
+		}
+	}()
 
 	if result.err != nil {
 		session.fail(result.err)
@@ -431,7 +552,7 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 	}
 	if result.waitCapacity != nil {
 		runtime.Window.Release(reservation)
-		if result.waitCapacity.Wait.Reason != "aggregate_capacity" {
+		if result.waitCapacity.Cause == nil && result.waitCapacity.Wait.Reason != "aggregate_capacity" {
 			result.waitCapacity.Wait.CapacityChanged = runtime.Admission.Changed()
 		}
 		e.waitCapacity = result.waitCapacity
@@ -484,7 +605,16 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 }
 
 func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, header MainResponseHeader, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger) (e stagedEvent) {
+	buildOwner := "promotion:" + header.ID
+	ctx = runtime.BuildContext(ctx, buildOwner)
+	defer runtime.Admission.ReleaseBuild(buildOwner)
 	e = stagedEvent{rawPromotion: true, cursors: map[int]WorkCursor{}}
+	var sourceErr error
+	ctx, sourceErr = runtime.mainResponseBuildContext(ctx, header.ID)
+	if sourceErr != nil {
+		e.err = sourceErr
+		return e
+	}
 	owned, ownerErr := runtime.Admission.ClaimResponseOwner(header.ID)
 	if ownerErr != nil {
 		e.err = ownerErr
@@ -496,6 +626,16 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 		return e
 	}
 	response, err := store.Response(ctx, header.ID, runtime.handoffLimit(), runtime.responseLimit(), runtime.handoffLimit())
+	responseRelease := response.ReleaseOwned
+	releaseResponse := func() {
+		release := responseRelease
+		responseRelease = nil
+		response = MainResponse{}
+		if release != nil {
+			release()
+		}
+	}
+	defer releaseResponse()
 	if err != nil {
 		e.err = err
 		return e
@@ -505,22 +645,43 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 	defer runtime.Admission.ObserveOwned("freeze", header.ID+"/promotion", 0)
 	defer runtime.Admission.ObserveOwned("raw", header.ID+"/promotion", 0)
 	var frozen frozenMainBatch
+	var frozenBounds *backend.BuildBounds
+	var frozenAllocation *backend.OwnedAllocation
+	defer func() { frozen = frozenMainBatch{}; frozenAllocation.Release(); frozenBounds.CloseRetired() }()
 	err = runtime.Run(ctx, func() error {
-		b, e := backend.NewBuildBounds(runtime.Window.limits.ItemBytes, header.FreezeBytes)
+		b, e := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, header.FreezeBytes)
 		if e != nil {
 			return e
 		}
+		frozenBounds = b
+		defer b.CloseRetired()
 		var full frozenMainBatch
+		defer func() { full = frozenMainBatch{} }()
 		if e = b.DecodeJSON(response.FreezePayload, &full); e != nil {
 			return e
 		}
-		if e = b.ReserveNodes(int64(len(full.Members)), 128); e != nil {
+		if e = backend.ReserveSlice[frozenMainMember](b, int64(len(full.Members))); e != nil {
 			return e
 		}
 		frozen = full
 		frozen.Members = make([]frozenMainMember, len(full.Members))
 		for i, m := range full.Members {
 			frozen.Members[i] = frozenMainMember{Index: m.Index, PromptID: m.PromptID, CandidateID: m.CandidateID}
+		}
+		full = frozenMainBatch{}
+		retained, e := backend.ValueAllocationBytes(frozen)
+		if e != nil {
+			frozen = frozenMainBatch{}
+			return e
+		}
+		frozenAllocation, e = b.RetainedAllocation(retained)
+		if e == nil {
+			e = frozenAllocation.DetachBuild()
+		}
+		if e != nil {
+			frozen = frozenMainBatch{}
+			frozenAllocation.Release()
+			return e
 		}
 		return nil
 	})
@@ -552,6 +713,17 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 			return e
 		}
 		response, err = processFrozenGlossary(ctx, handler, frozen, response, store, runtime, logger)
+		if err == nil && response.ReleaseOwned != nil {
+			previous, businessRelease := responseRelease, response.ReleaseOwned
+			responseRelease = func() {
+				if businessRelease != nil {
+					businessRelease()
+				}
+				if previous != nil {
+					previous()
+				}
+			}
+		}
 		if err != nil {
 			e.err = err
 			return e
@@ -563,13 +735,31 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 		header.Phase = response.Phase
 	}
 	var c *Candidate
+	var candidateBounds *backend.BuildBounds
+	var inventoryPayload bool
+	var memoryAllocation bool
+	var promotionMemory *MemoryRoundStore
+	var promotionCandidate *Candidate
+	pendingPromotion := ""
+	defer func() {
+		c = nil
+		candidateBounds.CloseRetired()
+		if pendingPromotion != "" {
+			runtime.Admission.AbortPromotion(pendingPromotion)
+		}
+		if promotionMemory != nil {
+			promotionMemory.finishPromotionAttempt(promotionCandidate)
+		}
+		promotionCandidate = nil
+	}()
 	var parseErr error
 	next := WorkCursor{Pool: round.Retry.MaxAttempts + 1, State: "unresolved"}
 	err = runtime.Run(ctx, func() error {
-		b, e := backend.NewBuildBounds(runtime.Window.limits.ItemBytes, header.FreezeBytes+header.ResponseBytes)
+		b, e := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, header.FreezeBytes+header.ResponseBytes)
 		if e != nil {
 			return e
 		}
+		candidateBounds = b
 		var full frozenMainBatch
 		if e = b.DecodeJSON(response.FreezePayload, &full); e != nil {
 			return e
@@ -583,10 +773,7 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 		}
 		if len(member.RubyItems) > 0 {
 			// A frozen member can keep ruby outside its optional metadata map.
-			// Account for map creation/growth and the boxed slice before insertion.
-			if e = b.ReserveNodes(int64(len(member.Segment.Meta))+4, 256); e != nil {
-				return e
-			}
+			// The metadata map borrows this already-owned slice.
 			if member.Segment.Meta == nil {
 				member.Segment.Meta = make(map[string]any, 1)
 			}
@@ -594,7 +781,34 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 		}
 		c, parseErr = parseFrozenMemberBounded(b, h, full, response, header.Cursor, logger)
 		if c != nil && parseErr == nil {
-			c.WorkID = response.Members[header.Cursor].WorkID
+			workID := response.Members[header.Cursor].WorkID
+			if e = b.ReserveAllocation(int64(len(workID)), 1); e != nil {
+				return e
+			}
+			c.WorkID = strings.Clone(workID)
+			if c.Alignment == nil {
+				// Without alignment, the candidate retains a private segment tree
+				// and distinct original frozen fields. Alignment additionally
+				// aliases segment text/items; its owner must keep the parse stage
+				// until those shared references have an explicit lifetime owner.
+				retained, retainErr := retainedBacking(ctx, b, reflect.ValueOf(c), 0)
+				if retainErr != nil {
+					return retainErr
+				}
+				allocation, retainErr := b.RetainedAllocation(retained)
+				if retainErr != nil {
+					return retainErr
+				}
+				nextBounds, retainErr := allocation.DetachToBuild()
+				if retainErr != nil {
+					_ = allocation.ReturnToBuild()
+					return retainErr
+				}
+				member = nil
+				full = frozenMainBatch{}
+				b.CloseRetired()
+				b, candidateBounds = nextBounds, nextBounds
+			}
 			if e = c.SealAndCompact(b, runtime.Window.limits.ItemBytes); e != nil {
 				parseErr = e
 				c = nil
@@ -614,7 +828,13 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 		size := c.StoredBytes
 		runtime.Admission.ObserveOwned("candidate", c.ID+"/promotion", int64(cap(c.PreparedPayload)))
 		defer runtime.Admission.ObserveOwned("candidate", c.ID+"/promotion", 0)
-		granted, capacityErr := runtime.Admission.BeginPromotion(header.ID, c.ID, size, false)
+		payload, payloadErr := candidateBounds.RetainedAllocation(int64(cap(c.PreparedPayload)))
+		if payloadErr != nil {
+			e.err = payloadErr
+			return e
+		}
+		defer func() { _ = payload.ReturnToBuild() }()
+		granted, capacityErr := runtime.Admission.BeginPromotionWithAllocation(ctx, header.ID, c.ID, size, false, payload)
 		if errors.Is(capacityErr, backend.ErrProgressRequired) {
 			if err := runtime.EnsureProgress(ctx, c.ID, header.ID, storeResourceID(store), prepareIntent(h, store, backend.RequestStageMain).RoundIndex); err != nil {
 				if errors.Is(err, backend.ErrProgressRequired) {
@@ -626,7 +846,7 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 				e.err = err
 				return e
 			}
-			granted, capacityErr = runtime.Admission.BeginPromotion(header.ID, c.ID, size, true)
+			granted, capacityErr = runtime.Admission.BeginPromotionWithAllocation(ctx, header.ID, c.ID, size, true, payload)
 		}
 		if capacityErr != nil {
 			e.err = capacityErr
@@ -637,7 +857,8 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 			e.waitCapacity = &WorkDeferred{Wait: backend.AdmissionWait{Reason: "candidate_bytes", CapacityChanged: runtime.Admission.Changed()}}
 			return e
 		}
-		defer runtime.Admission.AbortPromotion(c.ID)
+		pendingPromotion = c.ID
+		inventoryPayload = true
 	}
 	failure := ""
 	if parseErr != nil {
@@ -647,6 +868,19 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 		}
 	}
 	if err = runtime.SaveNamed(ctx, persistence.Metadata{Operation: "member_promotion", Class: persistence.Reliable, ResourceID: storeResourceID(store), RequestID: header.ID}, func(saveCtx context.Context) error {
+		if c != nil {
+			if memory, ok := store.(interface{ MemoryStore() *MemoryRoundStore }); ok {
+				promotionMemory, promotionCandidate = memory.MemoryStore(), c
+				if err := memory.MemoryStore().retainPromotionAllocation(saveCtx, c, candidateBounds); err != nil {
+					return err
+				}
+				memoryAllocation = true
+			} else {
+				if err := runtime.Admission.BeginPromotionSave(c.ID); err != nil {
+					return err
+				}
+			}
+		}
 		return store.PromoteMember(saveCtx, header.ID, header.Cursor, c, next, failure)
 	}); err != nil {
 		e.err = err
@@ -656,6 +890,31 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 		if err = runtime.Window.Transfer(header.ID, c.ID, c.StoredBytes); err != nil {
 			e.err = err
 			return e
+		}
+		if !memoryAllocation {
+			b := candidateBounds
+			retained, allocationErr := retainedBacking(ctx, b, reflect.ValueOf(c), 0)
+			if allocationErr != nil {
+				e.err = allocationErr
+				return e
+			}
+			if inventoryPayload {
+				payloadBytes := int64(cap(c.PreparedPayload))
+				if retained < payloadBytes {
+					e.err = backend.ErrBuildCapacity
+					return e
+				}
+				retained -= payloadBytes
+			}
+			retainedCredit, allocationErr := b.RetainedAllocation(retained)
+			if allocationErr != nil {
+				e.err = fmt.Errorf("promote_retained requested=%d live=%d: %w", retained, b.Snapshot().LiveBytes, allocationErr)
+				return e
+			}
+			if allocationErr = backend.TransferBuildAllocationToBuild(ctx, retainedCredit, "candidate:"+c.ID); allocationErr != nil {
+				e.err = allocationErr
+				return e
+			}
 		}
 		e.candidates = []*Candidate{c}
 	} else {
@@ -668,7 +927,17 @@ func promoteCapturedMain(ctx context.Context, round Round, h stagedHandler, head
 	header.Cursor++
 	e.responseAdvance = &header
 	if header.Cursor == header.MemberCount {
-		runtime.releaseMainOwner(header.ID)
+		releaseResponse()
+		frozen = frozenMainBatch{}
+		m = frozenMainMember{}
+		frozenAllocation.Release()
+		frozenBounds.CloseRetired()
+		c = nil
+		candidateBounds.CloseRetired()
+		if err := runtime.releaseMainOwner(header.ID); err != nil {
+			e.err = err
+			return e
+		}
 		if err := runtime.RefreshEpisode(ctx); err != nil {
 			e.err = err
 		}
@@ -703,7 +972,7 @@ func restoreMetadataTypes(seg *Segment, kinds map[string]string, b *backend.Buil
 		if !ok {
 			continue
 		}
-		data, err := b.EncodeJSON(value, b.Snapshot().TextLimit)
+		data, err := b.EncodeJSON(value, b.OutputLimit())
 		if err != nil {
 			return err
 		}
@@ -779,6 +1048,9 @@ func parseFrozenMemberBounded(b *backend.BuildBounds, h stagedHandler, frozen fr
 	var candidate *Candidate
 	switch handler := h.(type) {
 	case *TranslateHandler:
+		if err := backend.ReserveSlice[string](b, int64(len(frozen.Members))); err != nil {
+			return nil, err
+		}
 		ids := make([]string, len(frozen.Members))
 		for i, v := range frozen.Members {
 			ids[i] = v.PromptID
@@ -834,7 +1106,10 @@ func parseFrozenMemberBounded(b *backend.BuildBounds, h stagedHandler, frozen fr
 	}
 	candidate.Index = m.Index
 	candidate.ID = m.CandidateID
-	candidate.ParentRequestID = response.ID
+	if err := b.ReserveAllocation(int64(len(response.ID)), 1); err != nil {
+		return nil, err
+	}
+	candidate.ParentRequestID = strings.Clone(response.ID)
 	candidate.PoolIndex = frozen.Pool
 	candidate.MainAttempt = frozen.MainAttempt
 	return candidate, nil

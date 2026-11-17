@@ -44,7 +44,7 @@ func RenderRetryReminderBounded(b *backend.BuildBounds, content string, missingI
 	if content == "" {
 		return "", errors.New("missing frozen retry reminder template")
 	}
-	if e := b.ReserveNodes(8, 1024); e != nil {
+	if e := backend.ReserveSlice[struct{ Reason, MissingIDs, PreviousHead string }](b, 1); e != nil {
 		return "", e
 	}
 	ids, e := joinFragmentsBounded(b, missingIDs, ", ", maxBytes)

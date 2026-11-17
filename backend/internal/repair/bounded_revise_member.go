@@ -11,7 +11,7 @@ import (
 
 func ParseReviseMemberBounded(b *backend.BuildBounds, text string, textMode bool, wantedID string, opt Options) (*prompt.ReviseRevision, map[string][]ruby.OutputEntry, error) {
 	opt.Bounds = b
-	if e := b.ReserveNodes(3, 1024); e != nil {
+	if e := backend.ReserveSlice[prompt.ReviseRevision](b, 1); e != nil {
 		return nil, nil, e
 	}
 	if textMode {
@@ -60,7 +60,7 @@ func ParseReviseMemberBounded(b *backend.BuildBounds, text string, textMode bool
 				if int64(len(target)) > limitText(b) {
 					return nil, nil, &backend.BuildCapacityError{Resource: "revision target bytes"}
 				}
-				if e := b.ReserveNodes(1, 32); e != nil {
+				if e := backend.ReserveSlice[prompt.ReviseRevision](b, 1); e != nil {
 					return nil, nil, e
 				}
 				revision = &prompt.ReviseRevision{ID: id, Target: target}
@@ -146,7 +146,7 @@ func ParseReviseMemberBounded(b *backend.BuildBounds, text string, textMode bool
 		if id.Kind() != '"' {
 			return nil
 		}
-		name, e := id.StringLimited(b.Snapshot().TextLimit)
+		name, e := id.StringLimited(b.OutputLimit())
 		if e != nil {
 			return e
 		}
@@ -169,7 +169,7 @@ func ParseReviseMemberBounded(b *backend.BuildBounds, text string, textMode bool
 		if value == "" {
 			return nil
 		}
-		if e = b.ReserveNodes(1, 32); e != nil {
+		if e = backend.ReserveSlice[prompt.ReviseRevision](b, 1); e != nil {
 			return e
 		}
 		revision = &prompt.ReviseRevision{ID: name, Target: value}

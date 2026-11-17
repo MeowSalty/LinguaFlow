@@ -144,7 +144,7 @@ func (f *EngineFactory) BuildEngineWithConfig(
 				if rs.Translate == nil {
 					return fmt.Errorf("round[%d]: mode=translate but translate config is nil", i)
 				}
-				round, err = buildTranslateRound(rs, snapshot.Strategy, b)
+				round, err = buildTranslateRound(ctx, rs, snapshot.Strategy, b)
 				if !cfg.Glossary.Enabled && rs.Translate.InlineTermExtraction != nil && rs.Translate.InlineTermExtraction.Enabled {
 					f.logger.Info("inline term extraction disabled by glossary setting", "round", i, "reason", "glossary_disabled")
 				}
@@ -152,22 +152,22 @@ func (f *EngineFactory) BuildEngineWithConfig(
 				if rs.Extract == nil {
 					return fmt.Errorf("round[%d]: mode=extract but extract config is nil", i)
 				}
-				round, err = buildExtractRound(rs, b)
+				round, err = buildExtractRound(ctx, rs, b)
 			case "adjudicate":
 				if rs.Adjudicate == nil {
 					return fmt.Errorf("round[%d]: mode=adjudicate but adjudicate config is nil", i)
 				}
-				round, err = buildAdjudicateRound(rs, b)
+				round, err = buildAdjudicateRound(ctx, rs, b)
 			case "semantic_qa":
 				if rs.SemanticQA == nil {
 					return fmt.Errorf("round[%d]: mode=semantic_qa but semantic_qa config is nil", i)
 				}
-				round, err = buildSemanticQARound(rs, b)
+				round, err = buildSemanticQARound(ctx, rs, b)
 			case "revise":
 				if rs.Revise == nil {
 					return fmt.Errorf("round[%d]: mode=revise but revise config is nil", i)
 				}
-				round, err = buildReviseRound(rs, snapshot.Strategy, b)
+				round, err = buildReviseRound(ctx, rs, snapshot.Strategy, b)
 			case "correct":
 				if rs.Correct == nil {
 					return fmt.Errorf("round[%d]: mode=correct but correct config is nil", i)
@@ -384,9 +384,9 @@ func BuildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 
 // buildTranslateRound 构建翻译轮：protect/postprocess/context/ruby 全部取自
 // 计划级策略快照（snapshot.Strategy，由调用方传入），轮次自身不再携带策略。
-func buildTranslateRound(rs service.JobRoundSnapshot, strategy service.StrategySnapshot, b backend.Backend) (engine.Round, error) {
+func buildTranslateRound(ctx context.Context, rs service.JobRoundSnapshot, strategy service.StrategySnapshot, b backend.Backend) (engine.Round, error) {
 	t := rs.Translate
-	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(t.Prompt.Content)))
+	rendererBounds, boundsErr := backend.NewBuildBoundsFromContext(ctx, 32<<10, int64(len(t.Prompt.Content)))
 	if boundsErr != nil {
 		return engine.Round{}, boundsErr
 	}
@@ -432,9 +432,9 @@ func buildTranslateRound(rs service.JobRoundSnapshot, strategy service.StrategyS
 	}, nil
 }
 
-func buildExtractRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+func buildExtractRound(ctx context.Context, rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
 	e := rs.Extract
-	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(e.TemplateContent)))
+	rendererBounds, boundsErr := backend.NewBuildBoundsFromContext(ctx, 32<<10, int64(len(e.TemplateContent)))
 	if boundsErr != nil {
 		return engine.Round{}, boundsErr
 	}
@@ -462,9 +462,9 @@ func buildExtractRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.R
 	}, nil
 }
 
-func buildAdjudicateRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+func buildAdjudicateRound(ctx context.Context, rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
 	a := rs.Adjudicate
-	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(a.TemplateContent)))
+	rendererBounds, boundsErr := backend.NewBuildBoundsFromContext(ctx, 32<<10, int64(len(a.TemplateContent)))
 	if boundsErr != nil {
 		return engine.Round{}, boundsErr
 	}
@@ -490,9 +490,9 @@ func buildAdjudicateRound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 	}, nil
 }
 
-func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+func buildSemanticQARound(ctx context.Context, rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
 	s := rs.SemanticQA
-	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(s.TemplateContent)))
+	rendererBounds, boundsErr := backend.NewBuildBoundsFromContext(ctx, 32<<10, int64(len(s.TemplateContent)))
 	if boundsErr != nil {
 		return engine.Round{}, boundsErr
 	}
@@ -522,9 +522,9 @@ func buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engin
 // buildReviseRound 构建修订轮：protect/ruby 与 translate 轮同源，直接取计划级
 // 策略快照（protect Enabled→Rules，否则 nil）；零值策略 = 无保护规则、不启用注音，
 // ReviseHandler 降级原文直发。
-func buildReviseRound(rs service.JobRoundSnapshot, strategy service.StrategySnapshot, b backend.Backend) (engine.Round, error) {
+func buildReviseRound(ctx context.Context, rs service.JobRoundSnapshot, strategy service.StrategySnapshot, b backend.Backend) (engine.Round, error) {
 	r := rs.Revise
-	rendererBounds, boundsErr := backend.NewBuildBounds(32<<10, int64(len(r.TemplateContent)))
+	rendererBounds, boundsErr := backend.NewBuildBoundsFromContext(ctx, 32<<10, int64(len(r.TemplateContent)))
 	if boundsErr != nil {
 		return engine.Round{}, boundsErr
 	}

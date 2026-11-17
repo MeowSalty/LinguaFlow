@@ -3,13 +3,14 @@ package workstate
 import (
 	"encoding/json"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"math"
 	"strings"
 	"testing"
 )
 
 func TestResponseReceiptOpaqueIdentityAndFiniteShape(t *testing.T) {
 	id := strings.Repeat("\x01", 128)
-	r := glossary.ResponseReceipt{Version: 2, RequestID: id, InputDigest: strings.Repeat("\x02", 128), OutcomeDigest: strings.Repeat("a", 64), Added: 65536, Skipped: 65536}
+	r := glossary.ResponseReceipt{Version: 2, RequestID: id, InputDigest: strings.Repeat("\x02", 128), OutcomeDigest: strings.Repeat("a", 64), Added: math.MaxInt, Skipped: math.MaxInt}
 	data, err := json.Marshal(r)
 	if err != nil {
 		t.Fatal(err)

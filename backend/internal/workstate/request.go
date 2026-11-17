@@ -18,7 +18,7 @@ import (
 // ReserveRequest debits each member once before admission. Repeating the same
 // identity is idempotent; a new batch identity never refreshes member budgets.
 func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
-	if r.ID == "" || len(r.ID) > 128 || len(r.SegmentIDs) == 0 || len(r.SegmentIDs) > 65536 || r.Stage == "" || r.InputDigest == "" || len(r.InputDigest) > 128 || r.BudgetModel == "" {
+	if r.ID == "" || len(r.ID) > 128 || len(r.SegmentIDs) == 0 || r.Stage == "" || r.InputDigest == "" || len(r.InputDigest) > 128 || r.BudgetModel == "" {
 		return fmt.Errorf("invalid request reservation")
 	}
 	ids := append([]int(nil), r.SegmentIDs...)
@@ -36,7 +36,7 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 		if r.Stage != "main" || len(r.FreezePayload) == 0 || r.SnapshotDigest == "" || r.BusinessBound < 0 {
 			return ErrManifest
 		}
-		if err := validatePromotionMembers(r.Scope, ids, r.PromotionMembers); err != nil {
+		if err := validatePromotionMembers(ctx, r.Scope, ids, r.PromotionMembers); err != nil {
 			return err
 		}
 		promotionPayload, err = json.Marshal(r.PromotionMembers)

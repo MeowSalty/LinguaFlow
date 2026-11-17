@@ -159,17 +159,26 @@ func TestBudgetContractPlannerRevisionStaticPrefixes(t *testing.T) {
 func TestBudgetContractPlannerRejectsInvalidBoundsBeforeAllocation(t *testing.T) {
 	doc := newTestDoc(300)
 	h := &TranslateHandler{BatchSize: 300}
-	for _, limit := range []int{0, -1, 256} {
+	for _, limit := range []int{0, -1} {
 		b, _ := backend.NewBuildBounds(1, 1)
 		visited := false
 		got, err := PlanNextMainBatchBounded(b, h, doc, func(func(int) bool) { visited = true }, 0, limit)
-		want := backend.ErrBuildCapacity
-		if limit < 1 {
-			want = backend.ErrPipelineCapacity
-		}
-		if !errors.Is(err, want) || got != nil || visited {
+		if !errors.Is(err, backend.ErrPipelineCapacity) || got != nil || visited {
 			t.Fatalf("limit=%d got=%v visited=%v err=%v", limit, got, visited, err)
 		}
+	}
+	// The allocation cap is independent of the per-string I/O bounds. The
+	// read-only scan may count members, but no index backing may be allocated.
+	b, _ := backend.NewBuildBounds(1, 1, 128)
+	got, err := PlanNextMainBatchBounded(b, h, doc, func(yield func(int) bool) {
+		for i := range doc.Segments {
+			if !yield(i) {
+				return
+			}
+		}
+	}, 0, 256)
+	if !errors.Is(err, backend.ErrBuildCapacity) || got != nil || b.Snapshot().LiveBytes != 0 {
+		t.Fatalf("allocation cap: got=%v err=%v snapshot=%+v", got, err, b.Snapshot())
 	}
 }
 

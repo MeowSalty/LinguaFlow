@@ -36,23 +36,42 @@ func HeaderForCandidate(c *Candidate) CandidateHeader {
 	if c.Alignment != nil {
 		h.Protocol = c.Alignment.ProtocolVersion
 		h.Validator = c.Alignment.ValidatorVersion
-		h.Missing = len(c.Alignment.Missing()) > 0
+		for _, item := range c.Alignment.Items {
+			if !item.Preserve {
+				continue
+			}
+			verified := false
+			for _, result := range c.Alignment.Verified {
+				if result.ID == item.Item.ID {
+					verified = true
+					break
+				}
+			}
+			if !verified {
+				h.Missing = true
+				break
+			}
+		}
 	}
 	if c.HeaderOnly {
 		h.Missing = c.HeaderMissing
 	}
 	return h
 }
-func (h CandidateHeader) Candidate() *Candidate {
-	c := &Candidate{DTOVersion: 2, ID: h.ID, WorkID: h.WorkID, ParentRequestID: h.ParentRequestID, Mode: h.Mode, Format: h.Format, Version: h.Version, RetryEpoch: h.RetryEpoch, StoredBytes: h.Bytes, Index: h.Index, PoolIndex: h.Pool, MainAttempt: h.MainAttempt, LogicalAttempt: h.LogicalAttempt, NetworkAttempt: h.NetworkAttempt, NextAttemptAt: h.Next, Ready: h.Ready, ForceSingleAlignment: h.ForceSingle, HeaderOnly: true, HeaderWords: h.Words, HeaderMissing: h.Missing}
+func (h CandidateHeader) candidateValue() Candidate {
+	c := Candidate{DTOVersion: 2, ID: h.ID, WorkID: h.WorkID, ParentRequestID: h.ParentRequestID, Mode: h.Mode, Format: h.Format, Version: h.Version, RetryEpoch: h.RetryEpoch, StoredBytes: h.Bytes, Index: h.Index, PoolIndex: h.Pool, MainAttempt: h.MainAttempt, LogicalAttempt: h.LogicalAttempt, NetworkAttempt: h.NetworkAttempt, NextAttemptAt: h.Next, Ready: h.Ready, ForceSingleAlignment: h.ForceSingle, HeaderOnly: true, HeaderWords: h.Words, HeaderMissing: h.Missing}
 	c.Segment = Segment{ID: h.SegmentID, DBID: h.SegmentDBID, ContentVersion: h.BaselineVersion, TargetIsNull: h.BaselineNull}
 	c.BaselineStatus = h.BaselineStatus
 	c.BaselineDigest = h.BaselineDigest
 	c.LastAlignmentRequestID = h.LastAlignmentRequestID
+	return c
+}
+func (h CandidateHeader) Candidate() *Candidate {
+	c := h.candidateValue()
 	if h.Protocol > 0 {
 		c.Alignment = &ruby.AlignmentState{ProtocolVersion: h.Protocol, ValidatorVersion: h.Validator}
 	}
-	return c
+	return &c
 }
 func (c *Candidate) EncodeHeader() ([]byte, error) {
 	if c.PreparedHeader != nil {

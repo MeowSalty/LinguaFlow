@@ -8,7 +8,7 @@ import (
 
 func splitPipesBounded(b *backend.BuildBounds, line string) ([]string, error) {
 	count := strings.Count(line, "|") + 1
-	if e := b.ReserveNodes(int64(count), 16); e != nil {
+	if e := backend.ReserveSlice[string](b, int64(count)); e != nil {
 		return nil, e
 	}
 	return strings.Split(line, "|"), nil
@@ -64,9 +64,6 @@ func ParseReviseTextRevisionsBounded(b *backend.BuildBounds, text string) ([]Rev
 		if e != nil {
 			return out, false, e
 		}
-	}
-	if e := b.ReserveNodes(int64(len(out))+1, 1024); e != nil {
-		return out, false, e
 	}
 	return NormalizeReviseRevisions(out), header && (len(out) > 0 || !content), nil
 }

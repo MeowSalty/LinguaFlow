@@ -23,43 +23,35 @@ var timeType = reflect.TypeFor[time.Time]()
 type decoderField struct {
 	name  string
 	index int
+	omit  bool
 }
 type decoderFieldCache struct {
-	types map[reflect.Type][]decoderField
+	typeOf reflect.Type
+	fields []decoderField
+	next   *decoderFieldCache
 }
 
 func (b *BuildBounds) fieldsFor(t reflect.Type) ([]decoderField, error) {
-	if b.fieldCache != nil {
-		if fields, ok := b.fieldCache.types[t]; ok {
-			return fields, nil
+	for cache := b.fieldCache; cache != nil; cache = cache.next {
+		if cache.typeOf == t {
+			return cache.fields, nil
 		}
-	} else {
-		if e := b.ReserveNodes(2, 1024); e != nil {
-			return nil, e
-		}
-		b.fieldCache = &decoderFieldCache{types: make(map[reflect.Type][]decoderField)}
 	}
-	if e := b.ReserveNodes(int64(t.NumField()), int64(unsafe.Sizeof(decoderField{}))); e != nil {
+	if e := b.ReserveAllocation(int64(t.NumField()), int64(unsafe.Sizeof(decoderField{}))); e != nil {
 		return nil, e
 	}
 	fields := make([]decoderField, 0, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
-		if e := b.ReserveNodes(1, 512); e != nil {
-			return nil, e
-		}
 		field := t.Field(i)
-		if len(field.Name) > 128 || len(field.Tag) > 128 {
-			return nil, &BuildCapacityError{"JSON field metadata"}
-		}
-		name, _, ok := jsonField(field)
+		name, omit, ok := jsonField(field)
 		if ok {
-			fields = append(fields, decoderField{name, i})
+			fields = append(fields, decoderField{name, i, omit})
 		}
 	}
-	if e := b.ReserveNodes(1, 1024); e != nil {
+	if e := b.ReserveAllocation(1, int64(unsafe.Sizeof(decoderFieldCache{}))); e != nil {
 		return nil, e
 	}
-	b.fieldCache.types[t] = fields
+	b.fieldCache = &decoderFieldCache{t, fields, b.fieldCache}
 	return fields, nil
 }
 
@@ -87,17 +79,29 @@ func (c *jsonCounter) Write(p []byte) (int, error) {
 }
 
 func (b *BuildBounds) MeasureJSON(v any) (int64, error) {
-	b.encodeNodes = 0
+	return b.MeasureJSONLimited(v, math.MaxInt64)
+}
+
+// MeasureJSONLimited applies the caller's input/output policy while counting a
+// borrowed value. Allocation demand and the eventual output grant are separate.
+func (b *BuildBounds) MeasureJSONLimited(v any, maxBytes int64) (int64, error) {
+	if maxBytes < 0 {
+		return 0, &BuildCapacityError{"JSON measurement byte limit"}
+	}
+	workspace, err := b.OwnAllocation(1, int64(unsafe.Sizeof(jsonCounter{})))
+	if err != nil {
+		return 0, err
+	}
+	defer workspace.Release()
 	// Counting borrowed text does not allocate it. The caller's exact J/I
 	// grant bounds the later output; a standalone default must not silently
 	// become a different maximum for a configured large request.
-	c := &jsonCounter{limit: math.MaxInt64}
-	err := b.encodeValue(c, reflect.ValueOf(v), false)
+	c := &jsonCounter{limit: maxBytes}
+	err = b.encodeValue(c, reflect.ValueOf(v), false)
 	return c.bytes, err
 }
 
 func (b *BuildBounds) WriteJSON(w io.Writer, v any) error {
-	b.encodeNodes = 0
 	return b.encodeValue(w, reflect.ValueOf(v), true)
 }
 
@@ -116,16 +120,26 @@ func (b *BuildBounds) EncodeJSON(v any, maxBytes int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return b.EncodeJSONMeasured(v, n, maxBytes)
+}
+
+// EncodeJSONMeasured encodes an immutable snapshot using its previously
+// measured size. It retains the fixed writer's size-drift check.
+func (b *BuildBounds) EncodeJSONMeasured(v any, n, maxBytes int64) ([]byte, error) {
 	if n > maxBytes || n > int64(math.MaxInt) || n < 0 {
 		return nil, &BuildCapacityError{"encoded JSON bytes"}
 	}
-	if err = b.ReserveText(n, n); err != nil {
+	if err := b.ReserveText(n, n); err != nil {
 		return nil, err
 	}
+	workspace, err := b.OwnAllocation(1, int64(unsafe.Sizeof(fixedJSONWriter{})))
+	if err != nil {
+		return nil, err
+	}
+	defer workspace.Release()
 	data := make([]byte, 0, int(n))
 	w := &fixedJSONWriter{data: data}
-	b.encodeNodes = 0
-	if err = b.encodeValue(w, reflect.ValueOf(v), true); err != nil {
+	if err := b.encodeValue(w, reflect.ValueOf(v), true); err != nil {
 		return nil, err
 	}
 	if int64(len(w.data)) != n {
@@ -274,10 +288,6 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 		return err
 	}
 	defer b.Leave()
-	if b.encodeNodes >= b.nodeLimit {
-		return &BuildCapacityError{"encoded JSON nodes"}
-	}
-	b.encodeNodes++
 	if !v.IsValid() {
 		return writeLiteral(w, "null")
 	}
@@ -310,40 +320,41 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 			return writeLiteral(w, "null")
 		}
 		d := v.Bytes()
-		n, err := scanJSONBudget(d, nil, b.nodeLimit-b.encodeNodes+1, MaxBuildDepth-b.depth+1)
+		_, err := scanJSONBudget(d, nil, int64(len(d)), MaxBuildDepth-b.depth+1)
 		if err != nil {
 			return err
 		}
-		b.encodeNodes += int64(n) - 1
 		_, err = w.Write(d)
 		return err
 	}
 	if v.Type() == numberType {
 		n := v.String()
-		if len(n) == 0 || len(n) > 64 || n[0] != '-' && (n[0] < '0' || n[0] > '9') {
+		if !validJSONNumber(n) {
 			return &BuildCapacityError{"JSON numeric token"}
-		}
-		if err := b.ReserveNodes(1, 64); err != nil {
-			return err
-		}
-		var scratch [64]byte
-		copy(scratch[:], n)
-		if _, err := scanJSON(scratch[:len(n)], nil, 1); err != nil {
-			return err
 		}
 		return writeLiteral(w, n)
 	}
 	if v.Type() == timeType {
-		if err := b.ReserveNodes(1, 128); err != nil {
-			return err
-		}
 		t := v.Interface().(time.Time)
 		_, offset := t.Zone()
 		if t.Year() < 0 || t.Year() > 9999 || offset <= -24*60*60 || offset >= 24*60*60 {
 			return &BuildCapacityError{"RFC3339 time"}
 		}
 		var scratch [64]byte
-		d := t.AppendFormat(scratch[:0], time.RFC3339Nano)
+		workspace, err := b.OwnAllocation(1, int64(unsafe.Sizeof(scratch)))
+		if err != nil {
+			return err
+		}
+		var d []byte
+		defer func() {
+			d = nil
+			scratch = [64]byte{}
+			workspace.Release()
+		}()
+		if err = b.CheckContext(); err != nil {
+			return err
+		}
+		d = t.AppendFormat(scratch[:0], time.RFC3339Nano)
 		if len(d) > 64 {
 			return &BuildCapacityError{"RFC3339 time"}
 		}
@@ -360,9 +371,6 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 			return err
 		}
 		for i := 0; i < v.Len(); i++ {
-			if err := b.ReserveNodes(1, 64); err != nil {
-				return err
-			}
 			if err := writeJSONText(w, v.Index(i).String()); err != nil {
 				return err
 			}
@@ -376,21 +384,12 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 		}
 		return writeLiteral(w, "false")
 	case reflect.String:
-		if err := b.ReserveNodes(1, 64); err != nil {
-			return err
-		}
 		return writeJSONString(w, v.String())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if err := b.ReserveNodes(1, 64); err != nil {
-			return err
-		}
 		var scratch [64]byte
 		_, err := w.Write(strconv.AppendInt(scratch[:0], v.Int(), 10))
 		return err
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if err := b.ReserveNodes(1, 64); err != nil {
-			return err
-		}
 		var scratch [64]byte
 		_, err := w.Write(strconv.AppendUint(scratch[:0], v.Uint(), 10))
 		return err
@@ -398,9 +397,6 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 		f := v.Float()
 		if math.IsNaN(f) || math.IsInf(f, 0) {
 			return errors.New("non-finite JSON number")
-		}
-		if err := b.ReserveNodes(2, MaxNodeAllocationBytes); err != nil {
-			return err
 		}
 		var scratch [64]byte
 		_, err := w.Write(appendCanonicalJSONFloat(scratch[:0], f))
@@ -411,9 +407,6 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 		}
 		if v.Kind() == reflect.Slice && v.Type().Elem().Kind() == reflect.Uint8 {
 			if err := writeLiteral(w, "\""); err != nil {
-				return err
-			}
-			if err := b.ReserveNodes(1, 64); err != nil {
 				return err
 			}
 			var scratch [4]byte
@@ -449,21 +442,11 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 		if v.Type().Key().Kind() != reflect.String {
 			return errors.New("JSON map keys must be strings")
 		}
-		if v.Type().Elem().Size() > uintptr(MaxNodeAllocationBytes) {
-			return &BuildCapacityError{"map value reflection size"}
-		}
 		if err := writeLiteral(w, "{"); err != nil {
 			return err
 		}
 		first := true
 		entry := func(k, child reflect.Value) error {
-			if b.encodeNodes >= b.nodeLimit {
-				return &BuildCapacityError{"encoded JSON key nodes"}
-			}
-			b.encodeNodes++
-			if err := b.ReserveNodes(1, 64); err != nil {
-				return err
-			}
 			if !first {
 				if err := writeLiteral(w, ","); err != nil {
 					return err
@@ -478,50 +461,68 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 			}
 			return b.encodeValue(w, child, materialize)
 		}
+		keyCredit, err := b.OwnAllocation(1, int64(v.Type().Key().Size()))
+		if err != nil {
+			return err
+		}
+		defer keyCredit.Release()
+		valueCredit, err := b.OwnAllocation(1, int64(v.Type().Elem().Size()))
+		if err != nil {
+			return err
+		}
+		defer valueCredit.Release()
+		keySlot := reflect.New(v.Type().Key()).Elem()
+		valueSlot := reflect.New(v.Type().Elem()).Elem()
 		if materialize {
-			if err := b.ReserveNodes(int64(v.Len())+1, 256); err != nil {
+			keysCredit, err := b.OwnAllocation(int64(v.Len()), int64(unsafe.Sizeof("")))
+			if err != nil {
 				return err
 			}
-			keys := v.MapKeys()
-			sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
+			defer keysCredit.Release()
+			keys := make([]string, 0, v.Len())
+			iter := v.MapRange()
+			for iter.Next() {
+				keySlot.SetIterKey(iter)
+				keys = append(keys, keySlot.String())
+			}
+			sort.Strings(keys)
 			for _, k := range keys {
-				if err := b.ReserveNodes(1, int64(v.Type().Elem().Size())); err != nil {
-					return err
+				keySlot.SetString(k)
+				// MapIndex copies into a reflection allocation. Its lifetime is
+				// limited to this entry; reserve before the runtime call.
+				childCredit, e := b.OwnAllocation(1, int64(v.Type().Elem().Size()))
+				if e != nil {
+					return e
 				}
-				if err := entry(k, v.MapIndex(k)); err != nil {
-					return err
+				e = entry(keySlot, v.MapIndex(keySlot))
+				childCredit.Release()
+				if e != nil {
+					return e
 				}
 			}
 		} else {
 			iter := v.MapRange()
 			for iter.Next() {
-				if err := b.ReserveNodes(1, int64(v.Type().Key().Size())+int64(v.Type().Elem().Size())); err != nil {
-					return err
-				}
-				if err := entry(iter.Key(), iter.Value()); err != nil {
+				keySlot.SetIterKey(iter)
+				valueSlot.SetIterValue(iter)
+				if err := entry(keySlot, valueSlot); err != nil {
 					return err
 				}
 			}
 		}
 		return writeLiteral(w, "}")
 	case reflect.Struct:
-		if v.Type().Size() > uintptr(MaxNodeAllocationBytes) {
-			return &BuildCapacityError{"struct node size"}
-		}
 		if err := writeLiteral(w, "{"); err != nil {
 			return err
 		}
 		first := true
-		for i := 0; i < v.NumField(); i++ {
-			if err := b.ReserveNodes(1, 512); err != nil {
-				return err
-			}
-			field := v.Type().Field(i)
-			if len(field.Name) > 128 || len(field.Tag) > 128 {
-				return &BuildCapacityError{"JSON field metadata"}
-			}
-			name, omit, ok := jsonField(field)
-			if !ok || omit && v.Field(i).IsZero() {
+		fields, err := b.fieldsFor(v.Type())
+		if err != nil {
+			return err
+		}
+		for _, field := range fields {
+			i, name := field.index, field.name
+			if field.omit && v.Field(i).IsZero() {
 				continue
 			}
 			if !first {
@@ -530,13 +531,6 @@ func (b *BuildBounds) encodeValue(w io.Writer, v reflect.Value, materialize bool
 				}
 			}
 			first = false
-			if b.encodeNodes >= b.nodeLimit {
-				return &BuildCapacityError{"encoded JSON key nodes"}
-			}
-			b.encodeNodes++
-			if err := b.ReserveNodes(1, 64); err != nil {
-				return err
-			}
 			if err := writeJSONString(w, name); err != nil {
 				return err
 			}
@@ -627,7 +621,7 @@ func (s *jsonScan) value() (int, error) {
 	s.depth++
 	defer func() { s.depth-- }()
 	if int64(s.count) >= s.limit {
-		return 0, &BuildCapacityError{"JSON nodes"}
+		return 0, &BuildCapacityError{"JSON offset capacity"}
 	}
 	idx := s.count
 	s.count++
@@ -824,8 +818,22 @@ func hexRune(d []byte) rune {
 }
 
 func (b *BuildBounds) stringValue(d []byte) (string, error) {
+	s, owner, err := b.ownedJSONString(d)
+	if err != nil {
+		return "", err
+	}
+	if err = owner.ReturnToBuild(); err != nil {
+		return "", err
+	}
+	if b.decodeAllocations != nil {
+		b.decodeAllocations.bytes += int64(len(s))
+	}
+	return s, nil
+}
+
+func (b *BuildBounds) ownedJSONString(d []byte) (string, *OwnedAllocation, error) {
 	if len(d) < 2 || d[0] != '"' || d[len(d)-1] != '"' {
-		return "", errors.New("expected JSON string")
+		return "", nil, errors.New("expected JSON string")
 	}
 	// Count decoded UTF-8 without allocating so a legal large response cannot
 	// allocate a target above Q first. Escaped input does not inflate capacity.
@@ -858,11 +866,13 @@ func (b *BuildBounds) stringValue(d []byte) (string, error) {
 		n += utf8.RuneLen(r)
 	}
 	if int64(n) > b.stringLimit {
-		return "", &BuildCapacityError{"decoded string bytes"}
+		return "", nil, &BuildCapacityError{"decoded string bytes"}
 	}
-	if err := b.ReserveText(int64(n), int64(n)); err != nil {
-		return "", err
+	backing, err := b.OwnAllocation(int64(n), 1)
+	if err != nil {
+		return "", nil, err
 	}
+	defer backing.Release()
 	out := make([]byte, 0, n)
 	for i := 1; i < len(d)-1; i++ {
 		c := d[i]
@@ -904,10 +914,12 @@ func (b *BuildBounds) stringValue(d []byte) (string, error) {
 			out = utf8.AppendRune(out, r)
 		}
 	}
-	if err := b.ReserveText(int64(len(out)), int64(len(out))); err != nil {
-		return "", err
+	owner, err := b.OwnAllocation(int64(len(out)), 1)
+	if err != nil {
+		return "", nil, err
 	}
-	return string(out), nil
+	b.text += owner.bytes
+	return string(out), owner, nil
 }
 
 func (b *BuildBounds) DecodeJSON(data []byte, v any) error {
@@ -915,25 +927,75 @@ func (b *BuildBounds) DecodeJSON(data []byte, v any) error {
 	if !dst.IsValid() || dst.Kind() != reflect.Pointer || dst.IsNil() {
 		return errors.New("bounded JSON destination must be a nonnil pointer")
 	}
-	n, err := scanJSON(data, nil, b.nodeLimit)
+	if int64(len(data)) > b.inputBytes+b.outputBytes {
+		return &BuildCapacityError{"JSON input bytes"}
+	}
+	n, err := scanJSON(data, nil, int64(len(data)))
 	if err != nil {
 		return err
 	}
-	if err = b.ReserveNodes(int64(n), int64(unsafe.Sizeof(jsonNode{}))); err != nil {
+	arena, err := b.OwnAllocation(int64(n), int64(unsafe.Sizeof(jsonNode{})))
+	if err != nil {
 		return err
 	}
+	defer arena.Release()
 	nodes := make([]jsonNode, n)
-	if _, err = scanJSON(data, nodes, b.nodeLimit); err != nil {
+	if _, err = scanJSON(data, nodes, int64(len(data))); err != nil {
 		return err
 	}
 	return b.decodeValue(data, nodes, 0, dst.Elem())
 }
 
+type decodeAllocationScope struct{ bytes int64 }
+
+func (b *BuildBounds) reserveDecodedText(length, capacity int64) error {
+	if err := b.ReserveText(length, capacity); err != nil {
+		return err
+	}
+	b.decodeAllocations.bytes += capacity
+	return nil
+}
+
+func (b *BuildBounds) reserveDecodedAllocation(count, width int64) error {
+	bytes, err := AllocationBytes(count, width)
+	if err != nil {
+		return err
+	}
+	if err = b.ReserveAllocation(count, width); err != nil {
+		return err
+	}
+	b.decodeAllocations.bytes += bytes
+	return nil
+}
+
 func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflect.Value) error {
+	bytes, err := b.decodeValueOwned(data, nodes, i, v)
+	if b.decodeAllocations != nil {
+		b.decodeAllocations.bytes += bytes
+	}
+	return err
+}
+
+// This scope tracks only newly created payload, excluding parser field caches
+// and temporary holders. An unpublished concrete value can be destroyed and
+// refund exactly its own payload while an installed partial value stays owned.
+func (b *BuildBounds) decodeValueOwned(data []byte, nodes []jsonNode, i int, v reflect.Value) (int64, error) {
+	previous := b.decodeAllocations
+	scope := &decodeAllocationScope{}
+	b.decodeAllocations = scope
+	defer func() { b.decodeAllocations = previous }()
+	err := b.decodeValueBody(data, nodes, i, v)
+	return scope.bytes, err
+}
+
+func (b *BuildBounds) decodeValueBody(data []byte, nodes []jsonNode, i int, v reflect.Value) (resultErr error) {
+	if err := b.CheckContext(); err != nil {
+		return err
+	}
 	n := nodes[i]
 	raw := data[n.start:n.end]
 	if v.Type() == rawJSONType {
-		if err := b.ReserveText(int64(len(raw)), int64(len(raw))); err != nil {
+		if err := b.reserveDecodedText(int64(len(raw)), int64(len(raw))); err != nil {
 			return err
 		}
 		out := make([]byte, len(raw))
@@ -946,7 +1008,7 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 		return nil
 	}
 	if v.Kind() == reflect.Pointer {
-		if err := b.ReserveNodes(1, int64(v.Type().Elem().Size())); err != nil {
+		if err := b.reserveDecodedAllocation(1, int64(v.Type().Elem().Size())); err != nil {
 			return err
 		}
 		v.Set(reflect.New(v.Type().Elem()))
@@ -960,7 +1022,13 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 		if err != nil {
 			return err
 		}
-		if err := b.ReserveNodes(2, MaxNodeAllocationBytes); err != nil {
+		textBytes := int64(len(s))
+		defer func() {
+			s = ""
+			b.decodeAllocations.bytes -= textBytes
+			resultErr = errors.Join(resultErr, b.retireUninstalledAllocation(textBytes))
+		}()
+		if err = b.CheckContext(); err != nil {
 			return err
 		}
 		t, err := time.Parse(time.RFC3339Nano, s)
@@ -974,26 +1042,35 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 		if v.NumMethod() != 0 {
 			return errors.New("unsupported bounded JSON interface")
 		}
-		var concrete reflect.Value
-		if err := b.ReserveNodes(1, 64); err != nil {
-			return err
-		}
+		var concreteType reflect.Type
 		switch n.kind {
 		case '{':
-			concrete = reflect.New(reflect.TypeFor[map[string]any]()).Elem()
+			concreteType = reflect.TypeFor[map[string]any]()
 		case '[':
-			concrete = reflect.New(reflect.TypeFor[[]any]()).Elem()
+			concreteType = reflect.TypeFor[[]any]()
 		case '"':
-			concrete = reflect.New(reflect.TypeFor[string]()).Elem()
+			concreteType = reflect.TypeFor[string]()
 		case 't', 'f':
-			concrete = reflect.New(reflect.TypeFor[bool]()).Elem()
+			concreteType = reflect.TypeFor[bool]()
 		default:
-			concrete = reflect.New(numberType).Elem()
+			concreteType = numberType
 		}
-		if err := b.decodeValue(data, nodes, i, concrete); err != nil {
+		concreteCredit, err := b.OwnAllocation(1, int64(concreteType.Size()))
+		if err != nil {
 			return err
 		}
+		concrete := reflect.New(concreteType).Elem()
+		defer func() {
+			concrete = reflect.Value{}
+			concreteCredit.Release()
+		}()
+		bytes, err := b.decodeValueOwned(data, nodes, i, concrete)
+		if err != nil {
+			concrete = reflect.Value{}
+			return errors.Join(err, b.retireUninstalledAllocation(bytes))
+		}
 		v.Set(concrete)
+		b.decodeAllocations.bytes += bytes
 		return nil
 	}
 	switch v.Kind() {
@@ -1001,28 +1078,22 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 		if n.kind != '{' {
 			return errors.New("expected JSON object")
 		}
-		if v.Type().Size() > uintptr(MaxNodeAllocationBytes) {
-			return &BuildCapacityError{"decoded struct node"}
-		}
 		fields, fieldErr := b.fieldsFor(v.Type())
 		if fieldErr != nil {
 			return fieldErr
 		}
 		for c := n.child; c >= 0; {
-			key, err := b.stringValue(data[nodes[c].start:nodes[c].end])
-			if err != nil {
-				return err
-			}
+			key := data[nodes[c].start:nodes[c].end]
 			value := nodes[c].next
 			found := -1
 			for _, field := range fields {
-				if field.name == key {
+				if jsonStringEquals(key, field.name) {
 					found = field.index
 					break
 				}
 			}
 			if found >= 0 {
-				if err = b.decodeValue(data, nodes, value, v.Field(found)); err != nil {
+				if err := b.decodeValue(data, nodes, value, v.Field(found)); err != nil {
 					return err
 				}
 			}
@@ -1034,34 +1105,46 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 			return errors.New("expected string-key JSON object")
 		}
 		count := n.count / 2
-		if err := b.ReserveNodes(int64(count)+1, MaxNodeAllocationBytes); err != nil {
+		keysCredit, err := b.OwnAllocation(int64(count), int64(unsafe.Sizeof("")))
+		if err != nil {
 			return err
 		}
-		v.Set(reflect.MakeMapWithSize(v.Type(), count))
+		defer keysCredit.Release()
+		keys := make([]string, 0, count)
+		installedKeys := 0
+		defer func() {
+			var unused int64
+			for _, key := range keys[installedKeys:] {
+				unused += int64(len(key))
+			}
+			clear(keys)
+			keys = nil
+			b.decodeAllocations.bytes -= unused
+			resultErr = errors.Join(resultErr, b.retireUninstalledAllocation(unused))
+		}()
 		for c := n.child; c >= 0; {
 			key, err := b.stringValue(data[nodes[c].start:nodes[c].end])
 			if err != nil {
 				return err
 			}
+			keys = append(keys, key)
+			c = nodes[nodes[c].next].next
+		}
+		mapped, err := MakeStringMap(b, v.Type(), keys)
+		if err != nil {
+			return err
+		}
+		v.Set(mapped)
+		keyIndex := 0
+		for c := n.child; c >= 0; {
+			key := keys[keyIndex]
+			keyIndex++
 			value := nodes[c].next
-			if err = b.ReserveNodes(1, int64(v.Type().Elem().Size())); err != nil {
+			if err := b.decodeMapEntry(data, nodes, value, key, v); err != nil {
+				key = ""
 				return err
 			}
-			elem := reflect.New(v.Type().Elem()).Elem()
-			if err = b.decodeValue(data, nodes, value, elem); err != nil {
-				return err
-			}
-			if err := b.ReserveNodes(1, int64(v.Type().Key().Size())); err != nil {
-				return err
-			}
-			k := reflect.New(v.Type().Key()).Elem()
-			k.SetString(key)
-			if v.Type().Elem().Size() > 128 {
-				if err := b.ReserveNodes(1, int64(v.Type().Elem().Size())); err != nil {
-					return err
-				}
-			}
-			v.SetMapIndex(k, elem)
+			installedKeys++
 			c = nodes[value].next
 		}
 		return nil
@@ -1071,34 +1154,57 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 			if err != nil {
 				return err
 			}
+			textBytes := int64(len(s))
+			defer func() {
+				s = ""
+				b.decodeAllocations.bytes -= textBytes
+				resultErr = errors.Join(resultErr, b.retireUninstalledAllocation(textBytes))
+			}()
 			length := base64.StdEncoding.DecodedLen(len(s))
-			if err = b.ReserveText(int64(length), int64(length)); err != nil {
+			if err = b.reserveDecodedText(int64(length), int64(length)); err != nil {
 				return err
 			}
 			out := make([]byte, length)
-			if err = b.ReserveText(int64(len(s)), int64(len(s))); err != nil {
+			installed := false
+			defer func() {
+				out = nil
+				if !installed {
+					b.decodeAllocations.bytes -= int64(length)
+					resultErr = errors.Join(resultErr, b.retireUninstalledAllocation(int64(length)))
+				}
+			}()
+			backing, err := b.OwnAllocation(int64(len(s)), 1)
+			if err != nil {
 				return err
 			}
 			input := make([]byte, len(s))
 			copy(input, s)
 			written, err := base64.StdEncoding.Decode(out, input)
+			input = nil
+			backing.Release()
 			if err != nil {
 				return err
 			}
 			v.SetBytes(out[:written])
+			installed = true
 			return nil
 		}
 		if n.kind != '[' {
 			return errors.New("expected JSON array")
 		}
 		if v.Kind() == reflect.Slice {
-			if err := b.ReserveNodes(1, int64(v.Type().Size())); err != nil {
+			headerCredit, err := b.OwnAllocation(1, int64(v.Type().Size()))
+			if err != nil {
 				return err
 			}
-			if err := b.ReserveNodes(int64(n.count), int64(v.Type().Elem().Size())); err != nil {
+			if err := b.reserveDecodedAllocation(int64(n.count), int64(v.Type().Elem().Size())); err != nil {
+				headerCredit.Release()
 				return err
 			}
-			v.Set(reflect.MakeSlice(v.Type(), n.count, n.count))
+			header := reflect.MakeSlice(v.Type(), n.count, n.count)
+			v.Set(header)
+			header = reflect.Value{}
+			headerCredit.Release()
 		} else if v.Len() != n.count {
 			return errors.New("JSON array length mismatch")
 		}
@@ -1115,7 +1221,7 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 			if n.kind == '"' || n.kind == '{' || n.kind == '[' || n.kind == 't' || n.kind == 'f' {
 				return errors.New("expected JSON number")
 			}
-			if err := b.ReserveText(int64(len(raw)), int64(len(raw))); err != nil {
+			if err := b.reserveDecodedText(int64(len(raw)), int64(len(raw))); err != nil {
 				return err
 			}
 			v.SetString(string(raw))
@@ -1137,12 +1243,6 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 		v.SetBool(n.kind == 't')
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if len(raw) > 64 {
-			return &BuildCapacityError{"numeric token"}
-		}
-		if err := b.ReserveNodes(2, MaxNodeAllocationBytes); err != nil {
-			return err
-		}
 		x, err := strconv.ParseInt(string(raw), 10, v.Type().Bits())
 		if err != nil {
 			return errors.New("invalid bounded integer")
@@ -1150,12 +1250,6 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 		v.SetInt(x)
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if len(raw) > 64 {
-			return &BuildCapacityError{"numeric token"}
-		}
-		if err := b.ReserveNodes(2, MaxNodeAllocationBytes); err != nil {
-			return err
-		}
 		x, err := strconv.ParseUint(string(raw), 10, v.Type().Bits())
 		if err != nil {
 			return errors.New("invalid bounded unsigned integer")
@@ -1163,12 +1257,6 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 		v.SetUint(x)
 		return nil
 	case reflect.Float32, reflect.Float64:
-		if len(raw) > 64 {
-			return &BuildCapacityError{"numeric token"}
-		}
-		if err := b.ReserveNodes(2, MaxNodeAllocationBytes); err != nil {
-			return err
-		}
 		x, err := strconv.ParseFloat(string(raw), v.Type().Bits())
 		if err != nil {
 			return errors.New("invalid bounded number")
@@ -1178,4 +1266,78 @@ func (b *BuildBounds) decodeValue(data []byte, nodes []jsonNode, i int, v reflec
 	default:
 		return errors.New("unsupported bounded JSON destination")
 	}
+}
+
+// validJSONNumber validates borrowed json.Number text without materializing a
+// byte slice. Go int/float renderers have their own finite stack representations.
+func validJSONNumber(number string) bool {
+	i := 0
+	if i < len(number) && number[i] == '-' {
+		i++
+	}
+	if i >= len(number) {
+		return false
+	}
+	if number[i] == '0' {
+		i++
+	} else {
+		if number[i] < '1' || number[i] > '9' {
+			return false
+		}
+		for i < len(number) && number[i] >= '0' && number[i] <= '9' {
+			i++
+		}
+	}
+	if i < len(number) && number[i] == '.' {
+		i++
+		start := i
+		for i < len(number) && number[i] >= '0' && number[i] <= '9' {
+			i++
+		}
+		if i == start {
+			return false
+		}
+	}
+	if i < len(number) && (number[i] == 'e' || number[i] == 'E') {
+		i++
+		if i < len(number) && (number[i] == '+' || number[i] == '-') {
+			i++
+		}
+		start := i
+		for i < len(number) && number[i] >= '0' && number[i] <= '9' {
+			i++
+		}
+		if i == start {
+			return false
+		}
+	}
+	return i == len(number)
+}
+
+func (b *BuildBounds) decodeMapEntry(data []byte, nodes []jsonNode, index int, key string, dst reflect.Value) error {
+	elemCredit, err := b.OwnAllocation(1, int64(dst.Type().Elem().Size()))
+	if err != nil {
+		return err
+	}
+	defer elemCredit.Release()
+	keyCredit, err := b.OwnAllocation(1, int64(dst.Type().Key().Size()))
+	if err != nil {
+		return err
+	}
+	defer keyCredit.Release()
+	elem := reflect.New(dst.Type().Elem()).Elem()
+	defer func() { elem = reflect.Value{} }()
+	bytes, err := b.decodeValueOwned(data, nodes, index, elem)
+	if err != nil {
+		elem = reflect.Value{}
+		return errors.Join(err, b.retireUninstalledAllocation(bytes))
+	}
+	k := reflect.New(dst.Type().Key()).Elem()
+	k.SetString(key)
+	dst.SetMapIndex(k, elem)
+	k = reflect.Value{}
+	if b.decodeAllocations != nil {
+		b.decodeAllocations.bytes += bytes
+	}
+	return nil
 }

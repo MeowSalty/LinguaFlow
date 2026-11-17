@@ -7,6 +7,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"sync"
 	"testing"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 )
@@ -88,12 +89,73 @@ func TestMemoryCollectorSnapshotCopyHasGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := reserved - released
-	if len(c.Events()) != 1 || reserved-released-before != backend.MaxNodeAllocationBytes {
+	copyCredit, err := backend.AllocationBytes(1, int64(unsafe.Sizeof(progress.BatchEvent{})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Events()) != 1 || reserved-released-before != copyCredit {
 		t.Fatal("snapshot slice copy was not granted")
 	}
 	c.copyBytes = MaxCollectorBytes
 	if c.Events() != nil || !errors.Is(c.Err(), backend.ErrBuildCapacity) {
 		t.Fatal("copy budget not enforced")
+	}
+}
+
+func TestMemoryCollectorRetainsOnlyActualEventBacking(t *testing.T) {
+	var live int64
+	c := NewBoundedMemoryCollector(context.Background(), CollectorBudget{
+		Reserve: func(n int64) error { live += n; return nil },
+		Release: func(n int64) error { live -= n; return nil },
+	})
+	for range 10 {
+		c.OnBatchEvent(progress.BatchEvent{Stage: "translate", SegmentIDs: []string{"one"}, JSONSchema: map[string]any{"field": "value"}})
+		if err := c.Err(); err != nil {
+			t.Fatal(err)
+		}
+		want, err := backend.ValueAllocationBytes(c.events)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if live != want {
+			t.Fatalf("event live=%d actual backing=%d", live, want)
+		}
+	}
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if live != 0 {
+		t.Fatalf("closed collector retained=%d", live)
+	}
+}
+
+func TestMemoryCollectorContextWithoutSourceClaimsOwnBacking(t *testing.T) {
+	var live int64
+	adopted := false
+	c := NewBoundedMemoryCollector(context.Background(), CollectorBudget{
+		Reserve: func(n int64) error { live += n; return nil },
+		Release: func(n int64) error { live -= n; return nil },
+		AdoptAllocation: func(context.Context, *backend.BuildBounds, int64) error {
+			adopted = true
+			return backend.ErrBuildCapacity
+		},
+	})
+	c.OnBatchEventContext(context.Background(), progress.BatchEvent{Stage: "translate", SegmentIDs: []string{"one"}})
+	if err := c.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want, err := backend.ValueAllocationBytes(c.events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if adopted || live != want {
+		t.Fatalf("invalid source adoption=%t live=%d actual=%d", adopted, live, want)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if live != 0 {
+		t.Fatalf("collector retained=%d", live)
 	}
 }
 

@@ -104,16 +104,8 @@ func (q *boundedQA) check(checker Checker) {
 			p := q.plain(i)
 			hit := irregularBorrowed(p.targetPlain)
 			if hit != "" {
-				if !q.nodes(2) {
-					return
-				}
-				var described string
-				if q.err = q.b.ReserveFormatWorkspace(); q.err == nil {
-					q.err = q.b.ReserveText(64, 64)
-				}
-				if q.err == nil {
-					described = describeWhitespace(hit)
-				}
+				described := describeWhitespace(hit)
+				q.err = q.b.ReserveText(0, int64(len(described)))
 				q.emit(i, c.Name(), SeverityWarning, q.message("存在异常空白字符：", described), hit, p.targetRegions)
 			}
 		case *RepeatedSpaceChecker:
@@ -176,14 +168,15 @@ func (q *boundedQA) check(checker Checker) {
 }
 
 func (q *boundedQA) duplicates() {
-	if !q.nodes(int64(len(q.inputs))) || !q.nodes(1) {
-		return
-	}
 	type entry struct {
 		index  int
 		source string
 	}
-	seen := make(map[string]entry, len(q.inputs))
+	seen, err := backend.MakeMapFor[string, entry](q.b, q.inputs, func(in CheckInput) string { return in.TargetText })
+	if err != nil {
+		q.err = err
+		return
+	}
 	for i, in := range q.inputs {
 		if in.TargetText == "" {
 			continue
@@ -445,7 +438,7 @@ func (q *boundedQA) repeated(i int, cjk bool) {
 	}
 }
 func (q *boundedQA) repeatedIssue(i int, text string, start, end int) {
-	if !q.nodes(4) {
+	if !reserveQASlice[Span](q, 1) || !reserveQASlice[int](q, 2) {
 		return
 	}
 	startOffset, endOffset := start, end
@@ -462,7 +455,7 @@ func ReconcileIssuesBounded(b *backend.BuildBounds, fresh, existing []QualityIss
 		if fresh == nil {
 			return nil, nil
 		}
-		if !q.nodes(int64(len(fresh))) || !q.nodes(1) {
+		if !reserveQASlice[QualityIssue](&q, int64(len(fresh))) {
 			return nil, q.err
 		}
 		out := make([]QualityIssue, len(fresh))
@@ -474,18 +467,24 @@ func ReconcileIssuesBounded(b *backend.BuildBounds, fresh, existing []QualityIss
 		}
 		return out, nil
 	}
-	if !q.nodes(int64(len(existing))) || !q.nodes(1) {
+	if !reserveQASlice[string](&q, int64(len(existing))) {
 		return nil, q.err
 	}
-	previous := make(map[string]QualityIssue, len(existing))
-	for _, issue := range existing {
-		key := q.message(issue.Code, ":", MatchedText(issue))
+	keys := make([]string, len(existing))
+	for i, issue := range existing {
+		keys[i] = q.message(issue.Code, ":", MatchedText(issue))
 		if q.err != nil {
 			return nil, q.err
 		}
-		previous[key] = issue
 	}
-	if !q.nodes(int64(len(fresh))) || !q.nodes(1) {
+	previous, err := backend.MakeMap[string, QualityIssue](b, keys)
+	if err != nil {
+		return nil, err
+	}
+	for i, issue := range existing {
+		previous[keys[i]] = issue
+	}
+	if !reserveQASlice[QualityIssue](&q, int64(len(fresh))) {
 		return nil, q.err
 	}
 	out := make([]QualityIssue, 0, len(fresh))
@@ -512,10 +511,13 @@ func ReviseFinalIssuesBounded(b *backend.BuildBounds, existing, fresh []QualityI
 		return nil, backend.ErrBuildCapacity
 	}
 	q := boundedQA{b: b}
-	if !q.nodes(int64(len(targetedCodes))) || !q.nodes(1) || !q.nodes(int64(len(existing))) || !q.nodes(1) {
+	if !reserveQASlice[QualityIssue](&q, int64(len(existing))) {
 		return nil, q.err
 	}
-	drop := make(map[string]struct{}, len(targetedCodes))
+	drop, err := backend.MakeMap[string, struct{}](b, targetedCodes)
+	if err != nil {
+		return nil, err
+	}
 	for _, code := range targetedCodes {
 		drop[code] = struct{}{}
 	}

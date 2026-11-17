@@ -1,10 +1,11 @@
 package workstate
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"math"
 	"strconv"
+	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
@@ -13,23 +14,36 @@ import (
 // of the canonical DTO's Q. JSONB whitespace and numeric spelling may differ.
 const CandidateReadBytes int64 = 64 << 20
 
-func CanonicalCandidateJSON(data []byte, limit int64) ([]byte, error) {
+func CanonicalCandidateJSON(data []byte, limit int64, contexts ...context.Context) ([]byte, error) {
+	payload, release, err := canonicalCandidateJSONOwned(data, limit, contexts...)
+	if release != nil {
+		release()
+	}
+	return payload, err
+}
+
+func canonicalCandidateJSONOwned(data []byte, limit int64, contexts ...context.Context) ([]byte, func(), error) {
 	if int64(len(data)) > CandidateReadBytes || limit <= 0 {
-		return nil, backend.ErrBuildCapacity
+		return nil, nil, backend.ErrBuildCapacity
 	}
-	b, err := backend.NewBuildBounds(limit, int64(len(data)))
+	ctx := context.Background()
+	if len(contexts) > 0 {
+		ctx = contexts[0]
+	}
+	b, err := backend.NewBuildBoundsFromContext(ctx, limit, int64(len(data)))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var raw json.RawMessage
-	if err = b.DecodeJSONLimited(data, &raw, CandidateReadBytes); err != nil {
-		return nil, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
 	var value any
-	if err = decoder.Decode(&value); err != nil {
-		return nil, err
+	ok := false
+	defer func() {
+		if !ok {
+			value = nil
+			b.CloseRetired()
+		}
+	}()
+	if err = b.DecodeJSONLimited(data, &value, CandidateReadBytes); err != nil {
+		return nil, nil, err
 	}
 	var normalize func(any) (any, error)
 	normalize = func(v any) (any, error) {
@@ -68,7 +82,13 @@ func CanonicalCandidateJSON(data []byte, limit int64) ([]byte, error) {
 	}
 	value, err = normalize(value)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return b.EncodeJSON(value, limit)
+	payload, err := b.EncodeJSON(value, limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	var once sync.Once
+	ok = true
+	return payload, func() { once.Do(func() { value = nil; payload = nil; b.CloseRetired() }) }, nil
 }

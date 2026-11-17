@@ -49,7 +49,15 @@ func (s *blockedCommitFailureStore) Commit(ctx context.Context, c *Candidate, re
 
 func (s *blockedCommitFailureStore) Response(ctx context.Context, id string, freeze, raw, business int64) (MainResponse, error) {
 	response, err := s.MemoryRoundStore.Response(ctx, id, freeze, raw, business)
+	release := func() {
+		done := response.ReleaseOwned
+		response = MainResponse{}
+		if done != nil {
+			done()
+		}
+	}
 	if err != nil {
+		release()
 		return MainResponse{}, err
 	}
 	// Wait before promotion acquires the saver slot or a build worker.
@@ -58,11 +66,13 @@ func (s *blockedCommitFailureStore) Response(ctx context.Context, id string, fre
 		select {
 		case <-s.committed:
 		case <-ctx.Done():
+			release()
 			return MainResponse{}, ctx.Err()
 		}
 	case response.Cursor >= 2:
 		s.thirdOnce.Do(func() { close(s.thirdBlocked) })
 		<-ctx.Done()
+		release()
 		return MainResponse{}, ctx.Err()
 	}
 	return response, nil

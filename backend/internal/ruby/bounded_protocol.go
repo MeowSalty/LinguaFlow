@@ -3,6 +3,7 @@ package ruby
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -22,26 +23,26 @@ func outputStringLimit(b *backend.BuildBounds) int64 {
 	if q := b.OutputLimit(); q > 0 {
 		return q
 	}
-	return b.Snapshot().TextLimit
+	return b.OutputLimit()
 }
 func decodeOutputBounded(b *backend.BuildBounds, v backend.JSONValue, required, strict bool) (OutputEntry, error) {
 	entry := OutputEntry{Invalid: v.Kind() != '{' || !utf8.Valid(v.Raw())}
 	if v.Kind() != '{' {
 		return entry, nil
 	}
-	if e := b.ReserveNodes(int64(v.Count()/2)+1, 1024); e != nil {
+	if e := backend.ReserveSlice[string](b, int64(v.Count()/2)); e != nil {
 		return entry, e
 	}
-	seen := make(map[string]bool, v.Count()/2)
+	seen := make([]string, 0, v.Count()/2)
 	e := v.EachField(func(k, value backend.JSONValue) error {
 		name, e := k.String()
 		if e != nil {
 			return e
 		}
-		if seen[name] {
+		if slices.Contains(seen, name) {
 			entry.Invalid = true
 		}
-		seen[name] = true
+		seen = append(seen, name)
 		switch name {
 		case "id":
 			e = value.DecodeInto(&entry.ID, outputStringLimit(b))
@@ -84,7 +85,7 @@ func outputArrayBounded(b *backend.BuildBounds, v backend.JSONValue, required, s
 	if v.Kind() != '[' {
 		return nil, errors.New("ruby_output must be an array")
 	}
-	if e := b.ReserveNodes(int64(v.Count()), 128); e != nil {
+	if e := backend.ReserveSlice[OutputEntry](b, int64(v.Count())); e != nil {
 		return nil, e
 	}
 	out := make([]OutputEntry, 0, v.Count())
@@ -112,9 +113,6 @@ func ParseOutputMapBounded(b *backend.BuildBounds, data []byte) (map[string][]Ou
 	}
 	if v.Kind() != '{' {
 		return nil, nil
-	}
-	if e = b.ReserveNodes(int64(v.Count())+2, 1024); e != nil {
-		return nil, e
 	}
 	out := make(map[string][]OutputEntry, v.Count()/2)
 	seen := make(map[string]bool, v.Count()/2)
@@ -235,7 +233,7 @@ func parseTextFieldsBounded(b *backend.BuildBounds, fields []string, required bo
 					break
 				}
 			}
-			if e := b.ReserveNodes(1, 128); e != nil {
+			if e := backend.ReserveSlice[OutputEntry](b, 1); e != nil {
 				return entry, e
 			}
 			v, e := strconv.Atoi(number)
@@ -285,7 +283,7 @@ func ParseAlignmentTextLegacyBounded(b *backend.BuildBounds, text string) ([]Out
 		if last >= 0 {
 			field := strings.TrimSpace(line[last+1:])
 			if isValidKind(field) {
-				if e := b.ReserveNodes(4, 128); e != nil {
+				if e := backend.ReserveSlice[OutputEntry](b, 1); e != nil {
 					return out, e
 				}
 				entry.Base, entry.Text, entry.Kind, _, _ = ParseSectionLine(line)
@@ -351,9 +349,6 @@ func (c *jsonCursor) string() (string, error) {
 	return s, e
 }
 func resultErrorBounded(b *backend.BuildBounds, r *AlignmentBatchResult, key *AlignmentBatchKey, message string) error {
-	if e := b.ReserveNodes(2, 1024); e != nil {
-		return e
-	}
 	if key == nil {
 		r.EnvelopeInvalid = true
 	} else {
@@ -367,14 +362,25 @@ func resultErrorBounded(b *backend.BuildBounds, r *AlignmentBatchResult, key *Al
 
 type memberConflict struct{ works, candidates map[string]bool }
 
+func boundedAlignmentBatchResult(b *backend.BuildBounds) (AlignmentBatchResult, error) {
+	return newAlignmentBatchResult(), nil
+}
+func reserveBatchEntry(b *backend.BuildBounds, r *AlignmentBatchResult, key AlignmentBatchKey) error {
+	if _, exists := r.Entries[key]; exists {
+		return nil
+	}
+	r.entryAllocationCount++
+	return nil
+}
+
 func ParseAlignmentBatchJSONBounded(b *backend.BuildBounds, text string) (AlignmentBatchResult, error) {
 	if e := backend.CheckJSONDepth(text); e != nil {
 		return AlignmentBatchResult{}, e
 	}
-	if e := b.ReserveNodes(4, 1024); e != nil {
-		return AlignmentBatchResult{}, e
+	result, resultErr := boundedAlignmentBatchResult(b)
+	if resultErr != nil {
+		return result, resultErr
 	}
-	result := newAlignmentBatchResult()
 	seen := make(map[AlignmentBatchKey]bool)
 	var conflicts []memberConflict
 	data, e := ownedJSONBytes(b, text)
@@ -388,11 +394,15 @@ func ParseAlignmentBatchJSONBounded(b *backend.BuildBounds, text string) (Alignm
 	}
 	seenAlignments := false
 	parseMember := func(raw []byte, partial bool) error {
-		if e := b.ReserveNodes(4, 1024); e != nil {
-			return e
-		}
 		works, candidates := make(map[string]bool), make(map[string]bool)
 		fields := make(map[string]backend.JSONValue)
+		rememberID := func(ids map[string]bool, id string) error {
+			if ids[id] {
+				return nil
+			}
+			ids[id] = true
+			return nil
+		}
 		invalid := partial
 		if partial {
 			c := jsonCursor{b: b, data: raw}
@@ -419,13 +429,14 @@ func ParseAlignmentBatchJSONBounded(b *backend.BuildBounds, text string) (Alignm
 							return decodeErr
 						}
 						if decodeErr == nil && id != "" {
-							if e := b.ReserveNodes(1, 1024); e != nil {
-								return e
-							}
 							if name == "work_id" {
-								works[id] = true
+								if e := rememberID(works, id); e != nil {
+									return e
+								}
 							} else {
-								candidates[id] = true
+								if e := rememberID(candidates, id); e != nil {
+									return e
+								}
 							}
 						}
 					}
@@ -451,9 +462,6 @@ func ParseAlignmentBatchJSONBounded(b *backend.BuildBounds, text string) (Alignm
 				if _, ok := fields[name]; ok {
 					invalid = true
 				}
-				if e = b.ReserveNodes(2, 1024); e != nil {
-					return e
-				}
 				fields[name] = value
 				switch name {
 				case "work_id", "candidate_id":
@@ -464,9 +472,13 @@ func ParseAlignmentBatchJSONBounded(b *backend.BuildBounds, text string) (Alignm
 					if e != nil || id == "" || !utf8.ValidString(id) {
 						invalid = true
 					} else if name == "work_id" {
-						works[id] = true
+						if e = rememberID(works, id); e != nil {
+							return e
+						}
 					} else {
-						candidates[id] = true
+						if e = rememberID(candidates, id); e != nil {
+							return e
+						}
 					}
 				case "ruby_output":
 				default:
@@ -494,9 +506,6 @@ func ParseAlignmentBatchJSONBounded(b *backend.BuildBounds, text string) (Alignm
 		if seen[key] {
 			return resultErrorBounded(b, &result, &key, "batch response contains a duplicate member")
 		}
-		if e := b.ReserveNodes(2, 1024); e != nil {
-			return e
-		}
 		seen[key] = true
 		value, ok := fields["ruby_output"]
 		if !ok || invalid {
@@ -508,6 +517,9 @@ func ParseAlignmentBatchJSONBounded(b *backend.BuildBounds, text string) (Alignm
 				return e
 			}
 			return resultErrorBounded(b, &result, &key, "batch member fields or ruby_output array are invalid")
+		}
+		if e := reserveBatchEntry(b, &result, key); e != nil {
+			return e
 		}
 		result.Entries[key] = rows
 		return nil
@@ -622,10 +634,10 @@ func ParseAlignmentBatchJSONBounded(b *backend.BuildBounds, text string) (Alignm
 }
 
 func ParseAlignmentBatchTextBounded(b *backend.BuildBounds, text string) (AlignmentBatchResult, error) {
-	if e := b.ReserveNodes(3, 1024); e != nil {
-		return AlignmentBatchResult{}, e
+	result, resultErr := boundedAlignmentBatchResult(b)
+	if resultErr != nil {
+		return result, resultErr
 	}
-	result := newAlignmentBatchResult()
 	empty := make(map[AlignmentBatchKey]bool)
 	for text != "" {
 		line, tail, _ := strings.Cut(text, "\n")
@@ -665,10 +677,10 @@ func ParseAlignmentBatchTextBounded(b *backend.BuildBounds, text string) (Alignm
 				}
 				continue
 			}
-			if e = b.ReserveNodes(2, 1024); e != nil {
+			empty[key] = true
+			if e = reserveBatchEntry(b, &result, key); e != nil {
 				return result, e
 			}
-			empty[key] = true
 			result.Entries[key] = []OutputEntry{}
 			continue
 		}
@@ -682,7 +694,7 @@ func ParseAlignmentBatchTextBounded(b *backend.BuildBounds, text string) (Alignm
 		if e != nil {
 			return result, e
 		}
-		if e = b.ReserveNodes(1, 1024); e != nil {
+		if e = reserveBatchEntry(b, &result, key); e != nil {
 			return result, e
 		}
 		rows, e := backend.AppendNode(b, result.Entries[key], entry)

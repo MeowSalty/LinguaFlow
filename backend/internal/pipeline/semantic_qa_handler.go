@@ -137,7 +137,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	var req backend.Request
 	if renderErr == nil {
 		req, renderErr = RenderStoredRequestBounded(ctx, h.Backend, requestBase, func(b *backend.BuildBounds, claim func(backend.PromptMeasure) error) (string, string, error) {
-			if e := b.ReserveNodes(int64(len(idxs))+1, 1024); e != nil {
+			if e := backend.ReserveSlice[prompt.SemanticQASegment](b, int64(len(idxs))); e != nil {
 				return "", "", e
 			}
 			segments := make([]prompt.SemanticQASegment, 0, len(idxs))
@@ -398,16 +398,13 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 }
 
 func (h *SemanticQAHandler) buildSemanticResultBounded(b *backend.BuildBounds, doc *Document, idxs []int, issues []prompt.SemanticQAIssue) (*BatchResult, int, error) {
-	if e := b.ReserveNodes(int64(2*len(idxs)+len(issues)+3), 1024); e != nil {
-		return nil, 0, e
-	}
 	byID := make(map[string][]qa.QualityIssue, len(idxs))
 	segByID := make(map[string]*Segment, len(idxs))
 	for _, idx := range idxs {
 		segByID[doc.Segments[idx].ID] = &doc.Segments[idx]
 	}
 	for _, issue := range issues {
-		if e := b.ReserveNodes(10, 1024); e != nil {
+		if e := backend.ReserveSlice[qa.Span](b, 3); e != nil {
 			return nil, 0, e
 		}
 		var span *qa.Span
@@ -431,7 +428,7 @@ func (h *SemanticQAHandler) buildSemanticResultBounded(b *backend.BuildBounds, d
 			return nil, 0, e
 		}
 	}
-	if e := b.ReserveNodes(int64(len(idxs))+2, 1024); e != nil {
+	if e := backend.ReserveSlice[TranslatedSegment](b, int64(len(idxs))); e != nil {
 		return nil, 0, e
 	}
 	result := &BatchResult{Segments: make([]TranslatedSegment, 0, len(idxs))}
@@ -439,7 +436,7 @@ func (h *SemanticQAHandler) buildSemanticResultBounded(b *backend.BuildBounds, d
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
 		items := byID[seg.ID]
-		if e := b.ReserveNodes(int64(2*len(items)+2), 1024); e != nil {
+		if e := backend.ReserveSlice[qa.QualityIssue](b, int64(len(items))); e != nil {
 			return nil, 0, e
 		}
 		seen := make(map[string]struct{}, len(items))
@@ -486,7 +483,7 @@ func (h *SemanticQAHandler) preserveResult(doc *Document, idxs []int) batchResul
 func (h *SemanticQAHandler) preserveResultBounded(ctx context.Context, doc *Document, idxs []int) batchResult {
 	var result *BatchResult
 	err := runStoredHandlerBuild(context.WithoutCancel(ctx), func(b *backend.BuildBounds) error {
-		if e := b.ReserveNodes(int64(len(idxs))+2, 1024); e != nil {
+		if e := backend.ReserveSlice[TranslatedSegment](b, int64(len(idxs))); e != nil {
 			return e
 		}
 		result = &BatchResult{Segments: make([]TranslatedSegment, 0, len(idxs))}

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"math"
 	"reflect"
@@ -29,7 +30,7 @@ func TestExecutionOutputTypedSmallFrameOwnsMeasurementAndEncode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.PayloadBytes != allocation || v.PayloadBytes <= int64(cap(raw)) || v.BuildWorkers != 0 || v.PrepareOwners != 0 {
+	if v.PayloadBytes != allocation || v.PayloadBytes != int64(cap(raw)) || v.BuildWorkers != 0 || v.PrepareOwners != 0 {
 		t.Fatalf("scratch did not retire at build end: %+v", v)
 	}
 	clear(raw)
@@ -40,7 +41,7 @@ func TestExecutionOutputTypedSmallFrameOwnsMeasurementAndEncode(t *testing.T) {
 	}
 }
 
-func TestExecutionOutputBoundsCheckedAndFixedNodeLimit(t *testing.T) {
+func TestExecutionOutputBoundsCheckedAndFiniteAllocation(t *testing.T) {
 	for _, n := range []int64{-1, math.MaxInt64, 6*DefaultExecutionInputBytes + 1} {
 		if _, _, err := executionOutputBounds(n); err == nil {
 			t.Fatalf("invalid upper %d accepted", n)
@@ -52,7 +53,8 @@ func TestExecutionOutputBoundsCheckedAndFixedNodeLimit(t *testing.T) {
 			t.Fatal(err)
 		}
 		s := b.Snapshot()
-		if s.NodeLimit > 65536 || credit != 2*n+s.TextLimit+s.NodeLimit*1024 {
+		output, e := backend.AllocationBytes(n, 1)
+		if e != nil || s.AllocationLimit != 0 || credit != output {
 			t.Fatalf("unchecked arena n%d %+v credit%d", n, s, credit)
 		}
 	}

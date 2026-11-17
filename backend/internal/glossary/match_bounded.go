@@ -7,16 +7,12 @@ import (
 	"unicode/utf8"
 )
 
-// Every 64 comparisons consumes one zero-allocation visit node. This bounds
-// unmatched dictionary scans too; no hit allocation is required to stop work.
+// Borrowed dictionary comparisons only check cancellation; they allocate no records.
 func sourceContainsBounded(ctx context.Context, b *backend.BuildBounds, text, source string, fold bool) (bool, error) {
 	visits := 0
 	tick := func() error {
 		if visits%64 == 0 {
 			if err := ctx.Err(); err != nil {
-				return err
-			}
-			if err := b.ReserveNodes(1, 0); err != nil {
 				return err
 			}
 		}

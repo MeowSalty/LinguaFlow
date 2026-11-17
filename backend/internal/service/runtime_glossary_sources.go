@@ -12,7 +12,7 @@ func (g *DatabaseGlossary) LookupSourcesBounded(ctx context.Context, text, src, 
 	g.mu.RUnlock() // append-only immutable entries
 	var out []string
 	fn := func() error {
-		b, e := backend.NewBuildBounds(limit, int64(len(text)))
+		b, e := backend.NewBuildBoundsFromContext(ctx, limit, int64(len(text)))
 		if e != nil {
 			return e
 		}

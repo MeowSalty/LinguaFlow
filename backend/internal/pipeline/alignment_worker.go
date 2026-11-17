@@ -3,6 +3,9 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -16,7 +19,7 @@ import (
 // AlignmentWorker performs one remote alignment attempt and saves its verified
 // progress on a private candidate. It never renders or commits accepted content.
 // Each invocation owns one worker; the coordinator must defer finish before Run
-// and retain that completion ownership through finalization and confirmation.
+// and retain actual response backing through finalization and confirmation.
 type AlignmentWorker struct {
 	store    RoundStore
 	runtime  *ExecutionRuntime
@@ -32,8 +35,16 @@ type alignmentUpdate struct {
 	stale                     map[int]bool
 }
 
-// finish propagates any later finalization, retirement or commit failure to the
-// request before marking it completed and releasing response-processing capacity.
+// complete confirms processing after the candidate saves, before Commit. It
+// keeps the original response source and physical capacity alive.
+func (w *AlignmentWorker) complete() error {
+	if w.session == nil {
+		return nil
+	}
+	return w.session.complete()
+}
+
+// finish propagates later failures and releases backing after its last consumer.
 func (w *AlignmentWorker) finish(err error) error {
 	if w.session == nil {
 		return nil
@@ -70,6 +81,19 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 	var envelopeInvalid bool
 	var unknownMembers int
 	var start time.Time
+	inputOwner := ""
+	defer func() {
+		resp = nil
+		req = backend.Request{}
+		system, user = "", ""
+		if w.session != nil {
+			w.session.intent.Indices = nil
+			w.session.intent.Members = nil
+		}
+		if inputOwner != "" {
+			_ = w.runtime.Admission.ReleaseBuild(inputOwner)
+		}
+	}()
 	if len(remote) > 0 {
 		batched := len(remote) > 1
 		first := remote[0]
@@ -85,6 +109,10 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 			}
 		}
 		session := &requestSession{runtime: w.runtime, store: w.store, reporter: w.reporter, intent: RequestIntent{Stage: backend.RequestStageAlignment, CandidateID: first.ID, Pool: first.PoolIndex, LogicalAttempt: first.LogicalAttempt, NetworkAttempt: first.NetworkAttempt, Phase: "alignment", RoundIndex: roundIndex, ResourceID: storeResourceID(w.store)}}
+		callCtx := session.Context(ctx)
+		ctx = callCtx
+		inputOwner = "build:" + session.intent.ID
+		w.session = session
 		for _, c := range remote {
 			session.intent.Indices = append(session.intent.Indices, c.Index)
 			session.intent.Members = append(session.intent.Members, RequestMember{Bytes: c.StoredBytes, Index: c.Index, WorkID: c.WorkID, CandidateID: c.ID, CandidateVersion: c.Version, Pool: c.PoolIndex, LogicalAttempt: c.LogicalAttempt, NetworkAttempt: c.NetworkAttempt})
@@ -92,19 +120,33 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 		if batched {
 			session.intent.CandidateID = ""
 		}
-		w.session = session
+		frameBounds, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
+		if err != nil {
+			update.err = err
+			return update
+		}
+		if err = backend.ReserveSlice[CandidateFrame](frameBounds, int64(len(remote))); err != nil {
+			update.err = err
+			return update
+		}
 		frames := make([]CandidateFrame, len(remote))
+		defer func() {
+			for i := range frames {
+				frames[i].Release()
+			}
+			frames = nil
+		}()
 		for i, c := range remote {
 			f, e := loadCandidateFrame(ctx, w.store, c.ID, w.runtime.Window.limits.ItemBytes)
 			if e != nil {
 				update.err = e
 				return update
 			}
+			frames[i] = f
 			if f.Version != c.Version {
 				update.err = ErrCandidateStale
 				return update
 			}
-			frames[i] = f
 			w.runtime.Admission.ObserveOwned("candidate", c.ID+"/aux-input", int64(cap(f.Payload)))
 			defer w.runtime.Admission.ObserveOwned("candidate", c.ID+"/aux-input", 0)
 		}
@@ -120,11 +162,11 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 						return e
 					}
 				}
-				b, e := backend.NewBuildBounds(w.runtime.Window.limits.ItemBytes, page)
+				b, e := backend.NewBuildBoundsFromContext(ctx, w.runtime.Window.limits.ItemBytes, page)
 				if e != nil {
 					return e
 				}
-				if e = b.ReserveNodes(int64(len(frames)), 64); e != nil {
+				if e = backend.ReserveSlice[ruby.AlignmentBatchMember](b, int64(len(frames))); e != nil {
 					return e
 				}
 				members := make([]ruby.AlignmentBatchMember, 0, len(frames))
@@ -176,7 +218,6 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 			update.err = e
 			return update
 		}
-		callCtx := session.Context(ctx)
 		if e = preclaimAux(callCtx, backends[0], session, req, measured); e != nil {
 			if d := workDeferred(e); d != nil {
 				update.waitCapacity = d
@@ -190,6 +231,9 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 		user, e = render(false)
 		for _, c := range remote {
 			w.runtime.Admission.ObserveOwned("candidate", c.ID+"/aux-input", 0)
+		}
+		for i := range frames {
+			frames[i].Release()
 		}
 		frames = nil
 		if e != nil {
@@ -235,11 +279,29 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 		isRemote[c.ID] = i
 	}
 	for _, original := range candidates {
-		frame, e := loadCandidateFrame(ctx, w.store, original.ID, w.runtime.Window.limits.ItemBytes)
+		// Private updated candidate backing survives this invocation's input
+		// and response scratch. Keep it on the same candidate lifecycle owner
+		// used by its final confirmation rather than the temporary request.
+		candidateOwner := "candidate:" + original.ID
+		oldOwnerBytes := w.runtime.Admission.BuildBytes(candidateOwner)
+		temporaryOwner := "candidate-update:" + NewWorkID()
+		candidateCtx := w.runtime.BuildContext(ctx, temporaryOwner)
+		if w.session != nil && len(w.session.responseBackings) > 0 {
+			candidateCtx = w.session.responseBackings[len(w.session.responseBackings)-1].ctx
+			var err error
+			candidateCtx, err = backend.WithProviderResponseAllocation(candidateCtx, w.runtime.responseLimit())
+			if err != nil {
+				update.err = err
+				return update
+			}
+		}
+		defer w.runtime.Admission.ReleaseBuild(temporaryOwner)
+		frame, e := loadCandidateFrame(candidateCtx, w.store, original.ID, w.runtime.Window.limits.ItemBytes)
 		if e != nil {
 			update.err = e
 			return update
 		}
+		defer frame.Release()
 		w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-output", int64(cap(frame.Payload)))
 		defer w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-output", 0)
 		if frame.Version != original.Version {
@@ -247,7 +309,15 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 			return update
 		}
 		var c *Candidate
-		e = w.runtime.Run(ctx, func() error {
+		var candidateBounds *backend.BuildBounds
+		var retained, oldRetained int64
+		defer func() {
+			c = nil
+			diagnostics = nil
+			requestedMembers = nil
+			candidateBounds.CloseRetired()
+		}()
+		e = w.runtime.Run(candidateCtx, func() error {
 			input := int64(len(frame.Payload))
 			if resp != nil {
 				var e error
@@ -256,10 +326,11 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 					return e
 				}
 			}
-			b, e := backend.NewBuildBounds(w.runtime.Window.limits.ItemBytes, input)
+			b, e := backend.NewBuildBoundsFromContext(candidateCtx, w.runtime.Window.limits.ItemBytes, input)
 			if e != nil {
 				return e
 			}
+			candidateBounds = b
 			c, e = DecodeCandidateFrame(b, frame)
 			if e != nil {
 				return e
@@ -273,7 +344,10 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 				// do not add the same network attempt to the persisted counter again.
 				c.NetworkAttempt = max(c.NetworkAttempt, w.session.intent.Members[remoteIndex].NetworkAttempt+w.session.calls)
 				if w.session.lastID != "" {
-					c.LastAlignmentRequestID = w.session.lastID
+					if e = b.ReserveAllocation(int64(len(w.session.lastID)), 1); e != nil {
+						return e
+					}
+					c.LastAlignmentRequestID = strings.Clone(w.session.lastID)
 				}
 				if callErr != nil {
 					if backend.IsRetryable(callErr) && c.NetworkAttempt < max(1, round.Retry.MaxAttempts) {
@@ -359,21 +433,42 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 			}
 			c.Version++
 			c.PendingSave = true
-			return c.SealAndCompact(b, w.runtime.Window.limits.ItemBytes)
+			if e = c.SealAndCompact(b, w.runtime.Window.limits.ItemBytes); e != nil {
+				return e
+			}
+			oldRetained, e = retainedBacking(candidateCtx, b, reflect.ValueOf(*original), 0)
+			if e != nil {
+				return e
+			}
+			retained, e = retainedBacking(candidateCtx, b, reflect.ValueOf(*c), 0)
+			return e
 		})
-		frame = CandidateFrame{}
+		frame.Release()
 		w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-output", 0)
 		if e != nil {
 			update.err = e
 			return update
 		}
+		credit, e := candidateBounds.RetainedAllocation(retained)
+		if e != nil {
+			update.err = fmt.Errorf("aux_retained requested=%d live=%d: %w", retained, candidateBounds.Snapshot().LiveBytes, e)
+			return update
+		}
+		if e = backend.TransferBuildAllocationToBuild(candidateCtx, credit, candidateOwner); e != nil {
+			update.err = e
+			return update
+		}
 		*original = *c
+		if e = w.runtime.Admission.ReleaseBuildBytes(candidateOwner, min(oldOwnerBytes, oldRetained)); e != nil {
+			update.err = e
+			return update
+		}
 		w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-saved", int64(cap(original.PreparedPayload)))
 		defer w.runtime.Admission.ObserveOwned("candidate", original.ID+"/aux-saved", 0)
 		if validator, ok := w.store.(interface {
 			ValidateCandidate(context.Context, *Candidate) (bool, error)
 		}); ok {
-			valid, e := validator.ValidateCandidate(ctx, original)
+			valid, e := validator.ValidateCandidate(candidateCtx, original)
 			if e != nil {
 				update.err = e
 				return update
@@ -387,7 +482,7 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 				continue
 			}
 		}
-		if e = w.saveCandidate(ctx, original); e != nil {
+		if e = w.saveCandidate(candidateCtx, original); e != nil {
 			if errors.Is(e, ErrCandidateStale) {
 				original.Version--
 				if update.stale == nil {
@@ -434,9 +529,8 @@ func (w *AlignmentWorker) RunBatch(ctx context.Context, round Round, candidates 
 			observer.OnBatchEvent(evt)
 		}
 	}
-	if err := w.finish(nil); err != nil {
-		update.err = err
-	}
+	// The coordinator confirms processing before Commit and defers physical
+	// finish through finalization. Local inputs are cleared before retirement.
 	return update
 }
 

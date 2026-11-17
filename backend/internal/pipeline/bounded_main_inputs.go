@@ -26,10 +26,10 @@ func ExpandMainContextBounded(b *backend.BuildBounds, doc *Document, idxs []int,
 			return expandedContext{}, backend.ErrBuildCapacity
 		}
 	}
-	if e := b.ReserveNodes(int64(len(idxs))+3, 1024); e != nil {
+	batch, e := backend.MakeMap[int, struct{}](b, idxs)
+	if e != nil {
 		return expandedContext{}, e
 	}
-	batch := make(map[int]struct{}, len(idxs))
 	for _, idx := range idxs {
 		batch[idx] = struct{}{}
 	}
@@ -81,16 +81,34 @@ func ExpandMainContextBounded(b *backend.BuildBounds, doc *Document, idxs []int,
 	if window <= 0 {
 		count = len(idxs)
 	}
-	if e := b.ReserveNodes(int64(count), 8); e != nil {
+	if e := backend.ReserveSlice[int](b, int64(count)); e != nil {
 		return expandedContext{}, e
 	}
-	if e := b.ReserveNodes(1, 24); e != nil {
+	if e := backend.ReserveSlice[[]int](b, 1); e != nil {
 		return expandedContext{}, e
 	}
-	if e := b.ReserveNodes(int64(truncatedCount)+1, 1024); e != nil {
+	if e := backend.ReserveSlice[int](b, int64(truncatedCount)); e != nil {
 		return expandedContext{}, e
 	}
-	result := expandedContext{Idxs: make([]int, 0, count), TruncatedSrc: make(map[int]string, truncatedCount)}
+	keys := make([]int, 0, truncatedCount)
+	if window > 0 && maxChars > 0 {
+		for i := lo; i <= hi; i++ {
+			if !eligible(i) {
+				continue
+			}
+			if _, own := batch[i]; own {
+				continue
+			}
+			if _, cut := measureRunePrefix(rawSource(&doc.Segments[i]), maxChars); cut {
+				keys = append(keys, i)
+			}
+		}
+	}
+	truncated, e := backend.MakeMap[int, string](b, keys)
+	if e != nil {
+		return expandedContext{}, e
+	}
+	result := expandedContext{Idxs: make([]int, 0, count), TruncatedSrc: truncated}
 	if window <= 0 {
 		result.Idxs = append(result.Idxs, idxs...)
 		return result, nil
@@ -153,7 +171,7 @@ func PlanFirstMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Doc
 	if len(eligible) == 0 {
 		return nil, nil
 	}
-	if e := b.ReserveNodes(4, 1024); e != nil {
+	if e := backend.ReserveSlice[BatchConstraint](b, 1); e != nil {
 		return nil, e
 	}
 	for i, idx := range eligible {
@@ -247,10 +265,10 @@ func PlanFirstMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Doc
 		}
 		lo, hi = bestLo, bestHi
 	}
-	if e := b.ReserveNodes(int64(hi-lo), 8); e != nil {
+	if e := backend.ReserveSlice[int](b, int64(hi-lo)); e != nil {
 		return nil, e
 	}
-	if e := b.ReserveNodes(1, 24); e != nil {
+	if e := backend.ReserveSlice[[]int](b, 1); e != nil {
 		return nil, e
 	}
 	result := make([]int, hi-lo)
@@ -289,15 +307,34 @@ func mainContextWordsScalar(doc *Document, candidate []int, window int) int {
 
 // PlanNextMainBatchBounded scans the authoritative membership without retaining
 // a task-sized eligible array. It selects the same public batch as BuildBatches,
-// retaining only its prefix that fits the static member budget. The canonical
-// membership keeps the remaining members for subsequent planning. Live window
-// occupancy and concurrency do not change this prefix.
+// retaining the prefix that fits the static member budget. The authoritative
+// membership retains the rest for subsequent planning. Live window occupancy
+// and concurrency do not change this prefix.
 func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Document, visit func(func(int) bool), pool, memberLimit int) ([]int, error) {
 	if memberLimit < 1 {
 		return nil, backend.ErrPipelineCapacity
 	}
-	memberLimit = min(memberLimit, 65536)
-	if err := b.ReserveNodes(int64(memberLimit+1)*2, 8); err != nil {
+	// S is a scheduling policy, not the size of a backing array. Borrow the
+	// authoritative inventory first; a large S with one eligible member needs
+	// only that member and the context lookahead slot.
+	available := 0
+	visit(func(idx int) bool {
+		if available < memberLimit {
+			available++
+		}
+		return available < memberLimit
+	})
+	if available == 0 {
+		return nil, nil
+	}
+	capacity, err := backend.CheckedAdd(int64(available), 1)
+	if err != nil {
+		return nil, err
+	}
+	if err := b.ReserveAllocation(capacity, 8); err != nil {
+		return nil, err
+	}
+	if err := b.ReserveAllocation(capacity, 8); err != nil {
 		return nil, err
 	}
 	c := BatchConstraint{}
@@ -319,8 +356,8 @@ func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Docu
 	default:
 		return nil, errors.New("unsupported bounded main planner")
 	}
-	current := make([]int, 0, memberLimit+1)
-	best := make([]int, 0, memberLimit+1)
+	current := make([]int, 0, int(capacity))
+	best := make([]int, 0, int(capacity))
 	count, words, previous, first, bestCount := 0, 0, -1, 0, 0
 	var planErr error
 	selected := false
@@ -439,7 +476,7 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 	if ctx.Err() != nil {
 		return MainHintPayload{}, ctx.Err()
 	}
-	b, e := backend.NewBuildBounds(maxBytes, maxBytes)
+	b, e := backend.NewBuildBoundsFromContext(ctx, maxBytes, maxBytes)
 	if e != nil {
 		return MainHintPayload{}, e
 	}
@@ -449,18 +486,19 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 	var hints mainHintRecords
 	var notesBytes []int64
 	var scores []float32
-	var gi, ti map[hintPair]int
+	var gi, ti []hintPair
+	indexPair := func(keys []hintPair, key hintPair) (int, bool) {
+		for i, candidate := range keys {
+			if candidate == key {
+				return i, true
+			}
+		}
+		return 0, false
+	}
 	bytes := int64(0)
 	fragmentBytes, lastClaimed := int64(0), int64(0)
 	var claimErr error
 	e = run(ctx, func() error {
-		if e := b.ReserveNodes(6, 1024); e != nil {
-			return e
-		}
-		gi = make(map[hintPair]int)
-		ti = make(map[hintPair]int)
-		hints.Glossary = make([]json.RawMessage, 0)
-		hints.TM = make([]json.RawMessage, 0)
 		return nil
 	})
 	if e != nil {
@@ -476,12 +514,19 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 			return 0, backend.ErrBuildCapacity
 		}
 		encoded := future + int64(len("{\"glossary\":[],\"tm\":[]}")) + int64(max(0, gCount-1)) + int64(max(0, tCount-1))
-		// Concrete array/map records fit one E per row, plus one E fixed state.
-		metadata := int64(gCount+tCount+1) * 1024
-		if encoded > maxBytes-metadata {
+		if encoded > maxBytes {
 			return 0, backend.ErrBuildCapacity
 		}
-		attachment := encoded + metadata
+		// Attachment capacity includes the still-live records and the next
+		// encoded fragment. It is independent of the output byte envelope.
+		next, e := backend.AllocationBytes(1, n)
+		if e != nil {
+			return 0, e
+		}
+		attachment, e := boundedSum(b.Snapshot().LiveBytes, next, encoded)
+		if e != nil {
+			return 0, e
+		}
 		if attachment > lastClaimed {
 			if claim != nil {
 				if e = claim(attachment); e != nil {
@@ -500,7 +545,7 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 			return nil
 		}
 		key := hintPair{entry.Source, entry.Target}
-		old, exists := gi[key]
+		old, exists := indexPair(gi, key)
 		n := int64(len(entry.Source)) + int64(len(entry.Target)) + int64(len(entry.Notes))
 		if exists {
 			n = int64(len(entry.Notes)) - notesBytes[old]
@@ -511,7 +556,7 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 		bytes += n
 		value := prompt.GlossaryEntry{Source: entry.Source, Target: entry.Target, Notes: entry.Notes}
 		// Passing this value to the reflective codec boxes its concrete record.
-		if e := b.ReserveNodes(1, 1024); e != nil {
+		if e := backend.ReserveSlice[prompt.GlossaryEntry](b, 1); e != nil {
 			return e
 		}
 		oldEncoded := int64(0)
@@ -535,10 +580,10 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 			notesBytes[old] = int64(len(entry.Notes))
 			return nil
 		}
-		if e := b.ReserveNodes(1, 1024); e != nil {
+		gi, e = backend.AppendNode(b, gi, key)
+		if e != nil {
 			return e
 		}
-		gi[key] = len(hints.Glossary)
 		hints.Glossary, e = backend.AppendNode(b, hints.Glossary, json.RawMessage(raw))
 		if e != nil {
 			return e
@@ -556,7 +601,7 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 	addTMBuild := func() error {
 		match := currentMatch
 		key := hintPair{match.Source, match.Target}
-		old, exists := ti[key]
+		old, exists := indexPair(ti, key)
 		if exists {
 			if match.Score <= scores[old] {
 				return nil
@@ -571,7 +616,7 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 		}
 		bytes += n
 		value := prompt.TMHint{Source: match.Source, Target: match.Target, Score: match.Score}
-		if e := b.ReserveNodes(1, 1024); e != nil {
+		if e := backend.ReserveSlice[prompt.TMHint](b, 1); e != nil {
 			return e
 		}
 		oldEncoded := int64(0)
@@ -595,10 +640,10 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 			scores[old] = match.Score
 			return nil
 		}
-		if e := b.ReserveNodes(1, 1024); e != nil {
+		ti, e = backend.AppendNode(b, ti, key)
+		if e != nil {
 			return e
 		}
-		ti[key] = len(hints.TM)
 		hints.TM, e = backend.AppendNode(b, hints.TM, json.RawMessage(raw))
 		if e != nil {
 			return e
@@ -642,14 +687,9 @@ func LookupMainHintsWithCreditsBounded(ctx context.Context, h *TranslateHandler,
 				if n < 0 || n > maxBytes {
 					return backend.ErrBuildCapacity
 				}
-				metadata := int64(len(hints.Glossary)+len(hints.TM)+2) * 1024
-				if fragmentBytes > math.MaxInt64-bytes || fragmentBytes+bytes > math.MaxInt64-n-metadata {
-					return backend.ErrBuildCapacity
-				}
-				owned := fragmentBytes + bytes + n + metadata
-				desired := owned/2 + owned%2
-				if desired > maxBytes {
-					return backend.ErrBuildCapacity
+				desired, err := boundedSum(b.Snapshot().LiveBytes, n)
+				if err != nil {
+					return err
 				}
 				if desired > lastClaimed {
 					if claim != nil {

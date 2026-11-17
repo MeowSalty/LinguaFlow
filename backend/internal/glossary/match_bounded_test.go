@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-func TestSnapshotNoHitComparisonWorkIsBounded(t *testing.T) {
-	b, _ := backend.NewBuildBounds(64, 0)
+func TestSnapshotNoHitComparisonBorrowsWithoutAllocation(t *testing.T) {
+	b, _ := backend.NewBuildBounds(64, 0, 1)
 	head := &EntrySnapshot{Entry: Entry{Source: strings.Repeat("a", 64) + "b"}}
 	_, err := LookupEntrySnapshotContextBounded(context.Background(), b, head, strings.Repeat("a", 4096), false)
-	if !errors.Is(err, backend.ErrBuildCapacity) || b.Snapshot().TextBytes != 0 {
-		t.Fatalf("unmatched scan escaped visit credit: snapshot%+v err%v", b.Snapshot(), err)
+	if err != nil || b.Snapshot().AllocationBytes != 0 {
+		t.Fatalf("borrowed unmatched scan allocated: snapshot%+v err%v", b.Snapshot(), err)
 	}
 }
 func TestSnapshotMatchHonorsContextAndByteSensitiveText(t *testing.T) {

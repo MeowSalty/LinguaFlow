@@ -37,7 +37,10 @@ func TestProcessJobPermanentDefinitionErrorIsTerminal(t *testing.T) {
 		t.Fatalf("job status = %q, want %q", jobRow.Status, service.JobStatusFailed)
 	}
 	if jobRow.ErrorMessage == nil || !strings.Contains(*jobRow.ErrorMessage, backend.ErrBuildCapacity.Error()) {
-		t.Fatalf("job error message = %v, want capacity detail", jobRow.ErrorMessage)
+		t.Fatalf("job error message = %s, want capacity detail", derefString(jobRow.ErrorMessage))
+	}
+	if !strings.Contains(*jobRow.ErrorMessage, "stage=job_definition dimension=build_bounds") || !strings.Contains(*jobRow.ErrorMessage, "drain=false") {
+		t.Fatalf("job error message lost capacity coordinates: %s", *jobRow.ErrorMessage)
 	}
 	if jobRow.FinishedAt == nil || jobRow.RetentionAnchorAt == nil {
 		t.Fatalf("terminal failure left finished_at=%v retention_anchor_at=%v", jobRow.FinishedAt, jobRow.RetentionAnchorAt)
@@ -130,6 +133,9 @@ func TestProcessJobResourceLoadFailureIsTerminal(t *testing.T) {
 	}
 	if item.ErrorMessage == nil || !strings.Contains(*item.ErrorMessage, backend.ErrBuildCapacity.Error()) {
 		t.Fatalf("resource error message = %s, want capacity detail", derefString(item.ErrorMessage))
+	}
+	if !strings.Contains(*item.ErrorMessage, "stage=input_build dimension=build_bounds") || !strings.Contains(*item.ErrorMessage, "drain=false") {
+		t.Fatalf("resource error message lost capacity coordinates: %s", *item.ErrorMessage)
 	}
 	if err = f.jobs.ReconcileJob(ctx, f.jobID); err != nil {
 		t.Fatal(err)

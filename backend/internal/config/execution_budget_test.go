@@ -22,6 +22,9 @@ func budgetFields() []serverField {
 
 func budgetDocument(field serverField, value string) string {
 	parts := strings.Split(field.Key, ".")
+	if len(parts) == 3 {
+		return fmt.Sprintf("kind: server\nversion: 1\nserver:\n  execution_budget:\n    %s: %s\n", parts[2], value)
+	}
 	return fmt.Sprintf("kind: server\nversion: 1\nserver:\n  execution_budget:\n    %s:\n      %s: %s\n", parts[2], parts[3], value)
 }
 
@@ -88,7 +91,7 @@ func TestOptionalBudgetGroupsAndEarlyTypeErrors(t *testing.T) {
 			t.Fatalf("invalid object accepted: %s", body)
 		}
 	}
-	field := budgetFields()[0]
+	field := budgetFields()[1]
 	for _, value := range []string{"broken", "null", "", "9223372036854775808", "&cap 1\n      max_payload_bytes: *cap"} {
 		in := deploymentInputs(t)
 		withDocument(t, &in, budgetDocument(field, value))
@@ -143,8 +146,8 @@ func TestOptionalBudgetPolicyCopiesAndFieldPointers(t *testing.T) {
 	}
 	first, second := &ResolvedServer{}, &ResolvedServer{}
 	fields := budgetFields()
-	if len(fields) != 16 {
-		t.Fatalf("expected sixteen independently registered limits, got %d", len(fields))
+	if len(fields) != 17 {
+		t.Fatalf("expected seventeen independently registered limits, got %d", len(fields))
 	}
 	for _, field := range fields {
 		if field.Type != "optional_integer64" || field.read(first) != nil {

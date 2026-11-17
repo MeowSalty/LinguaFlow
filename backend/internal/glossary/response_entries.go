@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
@@ -44,15 +45,18 @@ func VisitResponseEntries(ctx context.Context, in ResponseProcess, visit func(in
 			}
 			return nil
 		}
-		if ordinal >= 65536 {
+		if ordinal == math.MaxInt {
 			return backend.ErrBuildCapacity
 		}
 		var entry Entry
 		var n int
 		decode := func() error {
-			b, err := backend.NewBuildBounds(max(int64(2048), in.ItemLimit), int64(len(payload)))
+			b, err := backend.NewBuildBoundsFromContext(ctx, in.ItemLimit, int64(len(payload)))
 			if err != nil {
 				return err
+			}
+			if in.TrackBounds != nil {
+				in.TrackBounds(b)
 			}
 			raw, consumed, err := backend.FirstJSONRaw(b, payload[pos:])
 			if err != nil {
@@ -99,9 +103,12 @@ func ApplyResponseConflict(ctx context.Context, in ResponseProcess, from, to str
 			if in.Targets[i].Failure != "" {
 				continue
 			}
-			b, err := backend.NewBuildBounds(in.ItemLimit, int64(len(in.Targets[i].Text))+int64(len(from))+int64(len(to)))
+			b, err := backend.NewBuildBoundsFromContext(ctx, in.ItemLimit, int64(len(in.Targets[i].Text))+int64(len(from))+int64(len(to)))
 			if err != nil {
 				return err
+			}
+			if in.TrackBounds != nil {
+				in.TrackBounds(b)
 			}
 			text, _, err := SafeReplaceBounded(b, in.Targets[i].Text, from, to, in.TargetLang, in.ItemLimit)
 			if err != nil {
@@ -125,23 +132,42 @@ func BuildResponseBusinessCounts(ctx context.Context, in ResponseProcess, added,
 		return out, err
 	}
 	build := func() error {
-		b, err := backend.NewBuildBounds(32<<10, 0)
+		b, err := backend.NewBuildBoundsFromContext(ctx, 32<<10, 0)
 		if err != nil {
 			return err
 		}
+		defer b.CloseRetired()
 		var receipt ResponseReceipt
 		if err = b.DecodeJSON(out.Receipt, &receipt); err != nil {
 			return err
 		}
 		receipt.Added = added
 		receipt.Skipped = skipped
-		out.Receipt, err = b.EncodeJSON(receipt, 32<<10)
+		data, encodeErr := b.EncodeJSON(receipt, 32<<10)
+		receipt = ResponseReceipt{}
+		if encodeErr != nil {
+			return encodeErr
+		}
+		allocation, encodeErr := b.RetainedAllocation(int64(cap(data)))
+		if encodeErr != nil {
+			return encodeErr
+		}
+		if encodeErr = allocation.DetachBuild(); encodeErr != nil {
+			allocation.Release()
+			return encodeErr
+		}
+		old := out.ReceiptAllocation
+		out.Receipt, out.ReceiptAllocation = data, allocation
+		old.Release()
 		return err
 	}
 	if in.Build != nil {
 		err = in.Build(ctx, build)
 	} else {
 		err = build()
+	}
+	if err != nil {
+		out.Release()
 	}
 	return out, err
 }

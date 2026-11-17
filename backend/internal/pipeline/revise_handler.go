@@ -124,10 +124,10 @@ func (h *ReviseHandler) buildProtectedInputs(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err = b.ReserveNodes(int64(len(idxs)), 128); err != nil {
+	if err = backend.ReserveSlice[prompt.ReviseSegment](b, int64(len(idxs))); err != nil {
 		return nil, nil, nil, err
 	}
-	if err = b.ReserveNodes(int64(len(idxs)), 64); err != nil {
+	if err = backend.ReserveSlice[reviseProtectState](b, int64(len(idxs))); err != nil {
 		return nil, nil, nil, err
 	}
 	segments := make([]prompt.ReviseSegment, 0, len(idxs))
@@ -147,7 +147,7 @@ func (h *ReviseHandler) buildProtectedInputs(
 			}
 			if len(items) > 0 {
 				st.rubyItems = items
-				if err := b.ReserveNodes(int64(len(items)), 64); err != nil {
+				if err := backend.ReserveSlice[prompt.RubyAnnotation](b, int64(len(items))); err != nil {
 					return nil, nil, nil, err
 				}
 				anns := make([]prompt.RubyAnnotation, len(items))
@@ -155,9 +155,6 @@ func (h *ReviseHandler) buildProtectedInputs(
 					anns[i] = prompt.RubyAnnotation{ID: it.ID, Base: it.SourceBase, Text: it.SourceText}
 				}
 				if rubyAnns == nil {
-					if err := b.ReserveNodes(int64(len(idxs))+1, 128); err != nil {
-						return nil, nil, nil, err
-					}
 					rubyAnns = make(map[string][]prompt.RubyAnnotation)
 				}
 				rubyAnns[seg.ID] = anns
@@ -196,10 +193,10 @@ func (h *ReviseHandler) buildProtectedInputs(
 					return nil, nil, nil, snippetErr
 				}
 			}
-			if err := b.ReserveNodes(2, 128); err != nil {
+			issues, err = backend.AppendNode(b, issues, prompt.ReviseIssue{Code: issue.Code, Message: issue.Message, Snippet: snippet})
+			if err != nil {
 				return nil, nil, nil, err
 			}
-			issues = append(issues, prompt.ReviseIssue{Code: issue.Code, Message: issue.Message, Snippet: snippet})
 		}
 		segments = append(segments, prompt.ReviseSegment{ID: seg.ID, Source: source, Target: protectedTarget, Issues: issues})
 	}

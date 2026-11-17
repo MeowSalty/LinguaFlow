@@ -15,6 +15,16 @@ func (b *Backend) wireParams(req backend.Request) (map[string]any, bool, error) 
 	return b.wireParamsPrompt(req, nil)
 }
 func (b *Backend) wireParamsPrompt(req backend.Request, measure *backend.PromptMeasure) (map[string]any, bool, error) {
+	bounds, e := backend.NewBuildBounds(0, backend.DefaultMaxInputBytes)
+	if e != nil {
+		return nil, false, e
+	}
+	return b.wireParamsBounded(req, measure, bounds)
+}
+func (b *Backend) wireParamsBounded(req backend.Request, measure *backend.PromptMeasure, bounds *backend.BuildBounds) (map[string]any, bool, error) {
+	if e := backend.ReserveSlice[any](bounds, 3); e != nil {
+		return nil, false, e
+	}
 	model := req.Model
 	if model == "" {
 		model = b.model
@@ -80,6 +90,9 @@ func (b *Backend) wireParamsPrompt(req backend.Request, measure *backend.PromptM
 	}
 	tools := rf == respFmtJSONSchema && req.JSONSchema != nil
 	if tools {
+		if err := backend.ReserveSlice[any](bounds, 1); err != nil {
+			return nil, false, err
+		}
 		p["tools"] = []any{map[string]any{"name": toolName, "description": toolDescription, "input_schema": req.JSONSchema}}
 		p["tool_choice"] = map[string]any{"type": "tool", "name": toolName}
 	}
@@ -89,10 +102,22 @@ func (b *Backend) wireParamsPrompt(req backend.Request, measure *backend.PromptM
 	return p, tools, nil
 }
 func (b *Backend) MeasureRequest(req backend.Request) (int64, error) {
-	return backend.MeasureWireBuild(func() (any, error) { p, _, e := b.wireParams(req); return p, e })
+	return b.MeasureRequestContext(context.Background(), req)
+}
+func (b *Backend) MeasureRequestContext(ctx context.Context, req backend.Request) (int64, error) {
+	return backend.MeasureWireBuildContext(ctx, func(bounds *backend.BuildBounds) (any, error) {
+		p, _, e := b.wireParamsBounded(req, nil, bounds)
+		return p, e
+	})
 }
 func (b *Backend) MeasureRequestPrompt(req backend.Request, m backend.PromptMeasure) (int64, error) {
-	return backend.MeasureWireBuild(func() (any, error) { p, _, e := b.wireParamsPrompt(req, &m); return p, e })
+	return b.MeasureRequestPromptContext(context.Background(), req, m)
+}
+func (b *Backend) MeasureRequestPromptContext(ctx context.Context, req backend.Request, m backend.PromptMeasure) (int64, error) {
+	return backend.MeasureWireBuildContext(ctx, func(bounds *backend.BuildBounds) (any, error) {
+		p, _, e := b.wireParamsBounded(req, &m, bounds)
+		return p, e
+	})
 }
 
 type messageBlock struct {
@@ -132,13 +157,23 @@ type messageEvent struct {
 
 func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
 	var tools bool
-	data, err := backend.EncodeWireBuild(ctx, func() (any, error) { p, t, e := b.wireParams(req); tools = t; return p, e })
+	data, releaseInput, err := backend.EncodeWireBuild(ctx, func(bounds *backend.BuildBounds) (any, error) {
+		p, t, e := b.wireParamsBounded(req, nil, bounds)
+		tools = t
+		return p, e
+	})
 	if err != nil {
 		return nil, err
 	}
+	defer func() { data = nil; releaseInput() }()
 	inputTrace := backend.NewOwnedTrace(ctx, "wire", "anthropic-input")
 	inputTrace.Set(int64(cap(data)))
 	defer inputTrace.Clear()
+	limit := backend.ResponseBudget(ctx, b.responseBytes)
+	ctx, err = backend.WithProviderResponseAllocation(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
 	opts := b.callOpts()
 	opts = append(opts, option.WithMaxRetries(0), option.WithMiddleware(backend.GuardProviderErrors))
 	var resp *http.Response
@@ -146,9 +181,9 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		return nil, wrapAnthropicError(err)
 	}
 	defer resp.Body.Close()
-	limit := backend.ResponseBudget(ctx, b.responseBytes)
 	var usage backend.Usage
-	finish := ""
+	var finish backend.WireStringSlot
+	defer finish.Close()
 	model := req.Model
 	if model == "" {
 		model = b.model
@@ -164,111 +199,234 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	}
 	defer tool.ClearObserved()
 	toolFound := false
-	if !b.stream {
-		readTrace := backend.NewOwnedTrace(ctx, "wire", "anthropic-http")
-		defer readTrace.Clear()
-		raw, e := backend.ReadBoundedObserved(resp.Body, limit, readTrace)
-		if e != nil {
-			return nil, e
+	partial := func() *backend.Response {
+		selected := plain
+		if tools && toolFound {
+			selected = tool
 		}
-		e = backend.RunBuild(ctx, func() error {
-			var reply messageWire
-			if e := backend.DecodeWire(raw, limit, &reply); e != nil {
+		return backend.ResponseWithPartialText(selected, usage)
+	}
+	startTool := func(block backend.WireJSONValue) error {
+		toolFound = true
+		plain.ClearObserved()
+		input, e := block.Field("input")
+		if e != nil {
+			return e
+		}
+		if !input.IsNull() {
+			return tool.AppendBytes(input.Raw())
+		}
+		return nil
+	}
+	consumeBlock := func(block backend.WireJSONValue) error {
+		kind, e := block.Field("type")
+		if e != nil {
+			return e
+		}
+		name, e := block.Field("name")
+		if e != nil {
+			return e
+		}
+		if tools && kind.StringEquals("tool_use") && name.StringEquals(toolName) && !toolFound {
+			return startTool(block)
+		}
+		if kind.StringEquals("text") && !toolFound {
+			text, e := block.Field("text")
+			if e != nil {
 				return e
 			}
-			finish = reply.StopReason
-			usage = backend.Usage{PromptTokens: reply.Usage.InputTokens, CompletionTokens: reply.Usage.OutputTokens, TotalTokens: reply.Usage.InputTokens + reply.Usage.OutputTokens}
-			for _, block := range reply.Content {
-				if tools && block.Type == "tool_use" && block.Name == toolName && !toolFound {
-					toolFound = true
-					plain.ClearObserved()
-					plain = nil
-					if len(block.Input) > 0 && string(block.Input) != "null" {
-						if e = tool.AppendBytes(block.Input); e != nil {
-							return e
-						}
-					}
-				}
-				if block.Type == "text" && !toolFound {
-					if e = plain.Append(block.Text); e != nil {
-						return e
-					}
-				}
+			return text.AppendString(plain)
+		}
+		return nil
+	}
+	if !b.stream {
+		trace := backend.NewOwnedTrace(ctx, "wire", "anthropic-http")
+		defer trace.Clear()
+		raw, release, e := backend.ReadProviderBounded(ctx, resp.Body, limit, trace)
+		defer release()
+		if e != nil {
+			return partial(), e
+		}
+		e = backend.RunBuild(ctx, func() error {
+			reply, e := backend.BorrowWireJSONContext(ctx, raw, limit)
+			if e != nil {
+				return e
 			}
-			return nil
+			if e = anthropicUsage(reply, &usage); e != nil {
+				return e
+			}
+			reason, e := reply.Field("stop_reason")
+			if e != nil {
+				return e
+			}
+			if e = finish.Set(reason); e != nil {
+				return e
+			}
+			blocks, e := reply.Field("content")
+			if e != nil {
+				return e
+			}
+			return blocks.EachArray(consumeBlock)
 		})
 		if e != nil {
-			return nil, e
+			return partial(), e
 		}
 	} else {
-		toolIndex := -1
-		activeTextIndex := -1
+		toolIndex, activeTextIndex := -1, -1
 		toolStartedEmptyObject := false
 		err = backend.ReadSSEContext(ctx, resp.Body, limit, func(event []byte) error {
 			return backend.RunBuild(ctx, func() error {
-				var item messageEvent
-				if e := backend.DecodeWire(event, limit, &item); e != nil {
+				item, e := backend.BorrowWireJSONContext(ctx, event, limit)
+				if e != nil {
 					return e
 				}
-				switch item.Type {
+				kind, e := item.Field("type")
+				if e != nil {
+					return e
+				}
+				switch kind.StringCode("message_start", "content_block_start", "content_block_delta", "content_block_stop", "message_delta", "error") {
 				case "message_start":
-					if item.Message != nil {
-						usage.PromptTokens = item.Message.Usage.InputTokens
-						usage.CompletionTokens = item.Message.Usage.OutputTokens
-						finish = item.Message.StopReason
+					message, e := item.Field("message")
+					if e != nil {
+						return e
 					}
+					if message.IsNull() {
+						return nil
+					}
+					if e = anthropicUsage(message, &usage); e != nil {
+						return e
+					}
+					reason, e := message.Field("stop_reason")
+					if e != nil {
+						return e
+					}
+					return finish.Set(reason)
 				case "content_block_start":
-					if item.Index < 0 {
+					index, e := item.Field("index")
+					if e != nil {
+						return e
+					}
+					i, e := index.Int()
+					if e != nil {
+						return e
+					}
+					if i < 0 {
 						return &backend.BuildCapacityError{Resource: "anthropic content block index"}
 					}
-					if tools && item.ContentBlock.Type == "tool_use" && item.ContentBlock.Name == toolName && !toolFound {
+					block, e := item.Field("content_block")
+					if e != nil {
+						return e
+					}
+					t, e := block.Field("type")
+					if e != nil {
+						return e
+					}
+					name, e := block.Field("name")
+					if e != nil {
+						return e
+					}
+					if tools && t.StringEquals("tool_use") && name.StringEquals(toolName) && !toolFound {
 						toolFound = true
 						plain.ClearObserved()
-						plain = nil
-						toolIndex = item.Index
-						if string(item.ContentBlock.Input) == "{}" {
+						toolIndex = i
+						input, e := block.Field("input")
+						if e != nil {
+							return e
+						}
+						if string(input.Raw()) == "{}" {
 							toolStartedEmptyObject = true
-						} else if len(item.ContentBlock.Input) > 0 {
-							return tool.AppendBytes(item.ContentBlock.Input)
+						} else if !input.IsNull() {
+							return tool.AppendBytes(input.Raw())
 						}
 					}
-					if item.ContentBlock.Type == "text" && !toolFound {
-						activeTextIndex = item.Index
-						return plain.Append(item.ContentBlock.Text)
+					if t.StringEquals("text") && !toolFound {
+						activeTextIndex = i
+						text, e := block.Field("text")
+						if e != nil {
+							return e
+						}
+						return text.AppendString(plain)
 					}
 				case "content_block_delta":
-					if item.Index == toolIndex && item.Delta.Type == "input_json_delta" {
-						return tool.Append(item.Delta.PartialJSON)
+					index, e := item.Field("index")
+					if e != nil {
+						return e
 					}
-					if activeTextIndex == item.Index && item.Delta.Type == "text_delta" && !toolFound {
-						return plain.Append(item.Delta.Text)
+					i, e := index.Int()
+					if e != nil {
+						return e
+					}
+					delta, e := item.Field("delta")
+					if e != nil {
+						return e
+					}
+					t, e := delta.Field("type")
+					if e != nil {
+						return e
+					}
+					if i == toolIndex && t.StringEquals("input_json_delta") {
+						part, e := delta.Field("partial_json")
+						if e != nil {
+							return e
+						}
+						return part.AppendString(tool)
+					}
+					if i == activeTextIndex && t.StringEquals("text_delta") && !toolFound {
+						text, e := delta.Field("text")
+						if e != nil {
+							return e
+						}
+						return text.AppendString(plain)
 					}
 				case "content_block_stop":
-					if activeTextIndex == item.Index {
+					index, e := item.Field("index")
+					if e != nil {
+						return e
+					}
+					i, e := index.Int()
+					if e != nil {
+						return e
+					}
+					if i == activeTextIndex {
 						activeTextIndex = -1
 					}
 				case "message_delta":
-					if item.Delta.StopReason != "" {
-						finish = item.Delta.StopReason
+					reason, e := item.Path("delta", "stop_reason")
+					if e != nil {
+						return e
 					}
-					usage.CompletionTokens = item.Usage.OutputTokens
+					if !reason.IsNull() && !reason.StringEquals("") {
+						if e = finish.Set(reason); e != nil {
+							return e
+						}
+					}
+					tokens, e := item.Path("usage", "output_tokens")
+					if e != nil {
+						return e
+					}
+					return tokens.DecodeScalar(&usage.CompletionTokens)
 				case "error":
-					return backend.ProviderStreamError("anthropic", item.Error.Type, resp.Header)
+					t, e := item.Path("error", "type")
+					if e != nil {
+						return e
+					}
+					return backend.ProviderStreamError("anthropic", t.StringCode("rate_limit_error", "overloaded_error", "authentication_error", "invalid_request_error"), resp.Header)
 				}
 				return nil
 			})
 		})
 		if err != nil {
-			return nil, err
+			return partial(), err
 		}
-		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
-		if toolFound && toolStartedEmptyObject {
-			if tool.Len() == 0 {
-				if e = tool.Append("{}"); e != nil {
-					return nil, e
-				}
+		if toolFound && toolStartedEmptyObject && tool.Len() == 0 {
+			if e = tool.Append("{}"); e != nil {
+				return partial(), e
 			}
 		}
+	}
+	usage.TotalTokens, e = backend.CheckedAdd(usage.PromptTokens, usage.CompletionTokens)
+	if e != nil {
+		return partial(), e
 	}
 	selected := plain
 	if tools && toolFound {
@@ -276,10 +434,25 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	}
 	out, e := backend.FinishResponseText(ctx, selected)
 	if e != nil {
-		return nil, e
+		return partial(), e
 	}
 	if out == "" {
-		return nil, &backend.EmptyResponseError{BackendName: b.Name(), Model: model, FinishReason: finish, PromptTokens: usage.PromptTokens}
+		return nil, &backend.EmptyResponseError{BackendName: b.Name(), Model: model, FinishReason: backend.DiagnosticFinishReason(finish.Value), PromptTokens: usage.PromptTokens}
 	}
-	return &backend.Response{Text: out, Usage: usage, Truncated: finish == "max_tokens"}, nil
+	return &backend.Response{Text: out, Usage: usage, Truncated: finish.Value == "max_tokens"}, nil
+}
+func anthropicUsage(value backend.WireJSONValue, usage *backend.Usage) error {
+	for _, field := range []struct {
+		name  string
+		value *int64
+	}{{"input_tokens", &usage.PromptTokens}, {"output_tokens", &usage.CompletionTokens}} {
+		token, e := value.Path("usage", field.name)
+		if e != nil {
+			return e
+		}
+		if e = token.DecodeScalar(field.value); e != nil {
+			return e
+		}
+	}
+	return nil
 }

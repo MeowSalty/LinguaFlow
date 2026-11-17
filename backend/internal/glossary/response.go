@@ -34,8 +34,22 @@ type ResponseProcess struct {
 	ItemLimit, BusinessLimit           int64
 	Validate                           func(context.Context, ResponseTarget) error
 	Build                              func(context.Context, func() error) error
+	TrackBounds                        func(*backend.BuildBounds)
 }
-type ResponseBusiness struct{ Body, Index, Receipt []byte }
+type ResponseBusiness struct {
+	Body, Index, Receipt []byte
+	ContentAllocation    *backend.OwnedAllocation `json:"-"`
+	ReceiptAllocation    *backend.OwnedAllocation `json:"-"`
+}
+
+// Release follows the last borrower of the returned immutable buffers.
+func (out *ResponseBusiness) Release() {
+	content, receipt := out.ContentAllocation, out.ReceiptAllocation
+	*out = ResponseBusiness{}
+	content.Release()
+	receipt.Release()
+}
+
 type ResponseProcessor interface {
 	ProcessResponse(context.Context, ResponseProcess) (ResponseBusiness, error)
 }
@@ -73,6 +87,7 @@ func SafeReplaceBounded(b *backend.BuildBounds, s, from, to, lang string, limit 
 		return "", false, backend.ErrBuildCapacity
 	}
 	w := backend.NewBoundedWriter(b, size)
+	defer w.Release()
 	for pos := 0; pos < len(s); {
 		j := strings.Index(s[pos:], from)
 		if j < 0 {
@@ -106,6 +121,9 @@ func EncodeResponseBusiness(targets []ResponseTarget, limit int64) ([]byte, []by
 	if err != nil {
 		return nil, nil, err
 	}
+	return EncodeResponseBusinessBounded(b, targets, limit)
+}
+func EncodeResponseBusinessBounded(b *backend.BuildBounds, targets []ResponseTarget, limit int64) ([]byte, []byte, error) {
 	size := int64(0)
 	for _, target := range targets {
 		if int64(len(target.Text)) > limit-size {
@@ -116,7 +134,7 @@ func EncodeResponseBusiness(targets []ResponseTarget, limit int64) ([]byte, []by
 	if err := b.ReserveText(size, size); err != nil {
 		return nil, nil, err
 	}
-	if err := b.ReserveNodes(int64(len(targets)), 16); err != nil {
+	if err := backend.ReserveSlice[[2]uint64](b, int64(len(targets))); err != nil {
 		return nil, nil, err
 	}
 	body := make([]byte, int(size))
@@ -131,13 +149,35 @@ func EncodeResponseBusiness(targets []ResponseTarget, limit int64) ([]byte, []by
 	return body, index, nil
 }
 
-func RewriteResponse(ctx context.Context, in ResponseProcess, decisions []SkippedEntry) ([]ResponseTarget, error) {
-	targets := append([]ResponseTarget(nil), in.Targets...)
-	for i := range targets {
-		b, err := backend.NewBuildBounds(in.ItemLimit, int64(len(targets[i].Text)))
-		if err != nil {
-			return nil, err
+func rewriteResponse(ctx context.Context, in ResponseProcess, decisions []SkippedEntry) (targets []ResponseTarget, release func(), err error) {
+	var scopes []*backend.BuildBounds
+	release = func() {
+		targets = nil
+		for _, b := range scopes {
+			b.CloseRetired()
 		}
+		scopes = nil
+	}
+	defer func() {
+		if err != nil {
+			release()
+		}
+	}()
+	initial, err := backend.NewBuildBoundsFromContext(ctx, in.ItemLimit, 0)
+	if err != nil {
+		return nil, release, err
+	}
+	scopes = append(scopes, initial)
+	if err = backend.ReserveSlice[ResponseTarget](initial, int64(len(in.Targets))); err != nil {
+		return nil, release, err
+	}
+	targets = append([]ResponseTarget(nil), in.Targets...)
+	for i := range targets {
+		b, err := backend.NewBuildBoundsFromContext(ctx, in.ItemLimit, int64(len(targets[i].Text)))
+		if err != nil {
+			return nil, release, err
+		}
+		scopes = append(scopes, b)
 		for _, sk := range decisions {
 			if !in.Rewrite || sk.Reason != SkipReasonExists {
 				continue
@@ -157,7 +197,7 @@ func RewriteResponse(ctx context.Context, in ResponseProcess, decisions []Skippe
 			}
 		}
 	}
-	return targets, nil
+	return targets, release, nil
 }
 
 func BuildResponseBusiness(ctx context.Context, in ResponseProcess, result AddResult) (out ResponseBusiness, err error) {
@@ -168,25 +208,57 @@ func BuildResponseBusiness(ctx context.Context, in ResponseProcess, result AddRe
 		return out, err
 	}
 
-	targets, err := RewriteResponse(ctx, in, result.Skipped)
+	targets, releaseTargets, err := rewriteResponse(ctx, in, result.Skipped)
 	if err != nil {
 		return ResponseBusiness{}, err
 	}
+	defer func() { targets = nil; releaseTargets() }()
+	b, err := backend.NewBuildBoundsFromContext(ctx, in.BusinessLimit, 0)
+	if err != nil {
+		return out, err
+	}
+	defer b.CloseRetired()
+	defer func() {
+		if err != nil {
+			out.Release()
+		}
+	}()
 	if in.Rewrite {
-		out.Body, out.Index, err = EncodeResponseBusiness(targets, in.BusinessLimit)
+		out.Body, out.Index, err = EncodeResponseBusinessBounded(b, targets, in.BusinessLimit)
 		if err != nil {
 			return out, err
 		}
 	} else {
+		if err = backend.ReserveSlice[[2]uint64](b, int64(len(in.Targets))); err != nil {
+			return out, err
+		}
 		out.Index = make([]byte, len(in.Targets)*16)
 	}
-	h := sha256.Sum256(out.Body)
-	r := ResponseReceipt{Version: 2, RequestID: in.RequestID, InputDigest: in.InputDigest, OutcomeDigest: hex.EncodeToString(h[:]), Added: len(result.Added), Skipped: len(result.Skipped)}
-	b, err := backend.NewBuildBounds(32<<10, 0)
+	out.ContentAllocation, err = b.RetainedAllocation(int64(cap(out.Body)) + int64(cap(out.Index)))
 	if err != nil {
 		return out, err
 	}
-	out.Receipt, err = b.EncodeJSON(r, 32<<10)
+	if err = out.ContentAllocation.DetachBuild(); err != nil {
+		return out, err
+	}
+	receiptBounds, err := backend.NewBuildBoundsFromContext(ctx, 32<<10, 0)
+	if err != nil {
+		return out, err
+	}
+	defer receiptBounds.CloseRetired()
+	h := sha256.Sum256(out.Body)
+	if err = receiptBounds.ReserveText(int64(hex.EncodedLen(len(h))), int64(hex.EncodedLen(len(h)))); err != nil {
+		return out, err
+	}
+	r := ResponseReceipt{Version: 2, RequestID: in.RequestID, InputDigest: in.InputDigest, OutcomeDigest: hex.EncodeToString(h[:]), Added: len(result.Added), Skipped: len(result.Skipped)}
+	out.Receipt, err = receiptBounds.EncodeJSON(r, 32<<10)
+	r = ResponseReceipt{}
+	if err == nil {
+		out.ReceiptAllocation, err = receiptBounds.RetainedAllocation(int64(cap(out.Receipt)))
+	}
+	if err == nil {
+		err = out.ReceiptAllocation.DetachBuild()
+	}
 	return out, err
 }
 
@@ -198,14 +270,12 @@ func (g *FileGlossary) ProcessResponse(ctx context.Context, in ResponseProcess) 
 	if in.EntriesPayload != nil {
 		var out ResponseBusiness
 		build := func() error {
-			b, err := backend.NewBuildBounds(int64(len(in.EntriesPayload))+in.BusinessLimit, int64(len(in.EntriesPayload)))
+			b, err := backend.NewBuildBoundsFromContext(ctx, int64(len(in.EntriesPayload))+in.BusinessLimit, int64(len(in.EntriesPayload)))
 			if err != nil {
 				return err
 			}
+			defer func() { in.Entries = nil; b.CloseRetired() }()
 			if err = b.DecodeJSON(in.EntriesPayload, &in.Entries); err != nil {
-				return err
-			}
-			if err = b.ReserveNodes(int64(len(in.Entries))*6, 256); err != nil {
 				return err
 			}
 			in.Build = nil
@@ -251,11 +321,11 @@ func (g *FileGlossary) processResponseLocked(ctx context.Context, in ResponsePro
 	if err != nil {
 		return out, err
 	}
-	for _, entry := range result.Added {
-		g.addLocked(entry)
+	if err = g.applyOwnedEntriesLocked(ctx, result.Added); err != nil {
+		out.Release()
+		return ResponseBusiness{}, err
 	}
 	if len(result.Added) > 0 {
-		g.sortLocked()
 		g.dirty = true
 	}
 	return out, nil
@@ -263,6 +333,14 @@ func (g *FileGlossary) processResponseLocked(ctx context.Context, in ResponsePro
 
 // RemoveResponseTarget retires one final UTF-8 slice while preserving fixed slot identity.
 func RemoveResponseTarget(body, index []byte, member int) ([]byte, []byte, error) {
+	b, err := backend.NewBuildBounds(int64(len(body))+int64(len(index)), 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	return RemoveResponseTargetBounded(b, body, index, member)
+}
+
+func RemoveResponseTargetBounded(b *backend.BuildBounds, body, index []byte, member int) ([]byte, []byte, error) {
 	if member < 0 || len(index)%16 != 0 || member >= len(index)/16 {
 		return nil, nil, fmt.Errorf("invalid response target index")
 	}
@@ -271,14 +349,10 @@ func RemoveResponseTarget(body, index []byte, member int) ([]byte, []byte, error
 	if start > uint64(len(body)) || n > uint64(len(body))-start {
 		return nil, nil, fmt.Errorf("invalid response target range")
 	}
-	b, err := backend.NewBuildBounds(int64(len(body))+int64(len(index)), 0)
-	if err != nil {
+	if err := b.ReserveText(int64(len(body))-int64(n), int64(len(body))-int64(n)); err != nil {
 		return nil, nil, err
 	}
-	if err = b.ReserveText(int64(len(body))-int64(n), int64(len(body))-int64(n)); err != nil {
-		return nil, nil, err
-	}
-	if err = b.ReserveText(int64(len(index)), int64(len(index))); err != nil {
+	if err := b.ReserveText(int64(len(index)), int64(len(index))); err != nil {
 		return nil, nil, err
 	}
 	out := make([]byte, len(body)-int(n))

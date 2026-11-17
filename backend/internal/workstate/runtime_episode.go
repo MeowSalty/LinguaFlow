@@ -29,11 +29,13 @@ func decodeRuntimeState(payload []byte) (backend.PipelineRuntimeState, error) {
 	return s, nil
 }
 func saveRuntimeState(ctx context.Context, tx *ent.Client, jobID int, s backend.PipelineRuntimeState) error {
-	b, err := backend.NewBuildBounds(RuntimeStateLimit, 0)
+	b, err := backend.NewBuildBoundsFromContext(ctx, RuntimeStateLimit, 0)
 	if err != nil {
 		return err
 	}
-	data, err := b.EncodeJSON(s, RuntimeStateLimit)
+	var data []byte
+	defer func() { data = nil; b.CloseRetired() }()
+	data, err = b.EncodeJSON(s, RuntimeStateLimit)
 	if err != nil {
 		return err
 	}

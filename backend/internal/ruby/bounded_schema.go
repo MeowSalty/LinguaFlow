@@ -5,11 +5,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
+var alignmentSchemaSnapshot = AlignmentJSONSchema()
+var alignmentBatchSchemaSnapshot = AlignmentBatchJSONSchema()
+
 func AlignmentJSONSchemaBounded(b *backend.BuildBounds) (map[string]any, error) {
-	if e := b.ReserveNodes(64, 1024); e != nil {
-		return nil, e
-	}
-	return AlignmentJSONSchema(), nil
+	var out map[string]any
+	err := b.CloneInto(alignmentSchemaSnapshot, &out)
+	return out, err
 }
 func AlignmentJSONSchemaForProtocolBounded(b *backend.BuildBounds, protocol int) (map[string]any, error) {
 	if protocol != ProtocolV2 {
@@ -18,8 +20,7 @@ func AlignmentJSONSchemaForProtocolBounded(b *backend.BuildBounds, protocol int)
 	return AlignmentJSONSchemaBounded(b)
 }
 func AlignmentBatchJSONSchemaBounded(b *backend.BuildBounds) (map[string]any, error) {
-	if e := b.ReserveNodes(128, 1024); e != nil {
-		return nil, e
-	}
-	return AlignmentBatchJSONSchema(), nil
+	var out map[string]any
+	err := b.CloneInto(alignmentBatchSchemaSnapshot, &out)
+	return out, err
 }

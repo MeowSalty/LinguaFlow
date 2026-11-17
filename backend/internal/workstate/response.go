@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"entgo.io/ent/dialect/sql"
+	"errors"
 	"fmt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"io"
@@ -25,6 +26,7 @@ import (
 // PromotionMember freezes identity and acceptance baseline before dispatch.
 // It is different from an alignment member: its candidate does not exist yet.
 type PromotionMember struct {
+	ReleaseOwned         func()  `json:"-"`
 	SegmentID            int     `json:"segment_id"`
 	WorkID               string  `json:"work_id"`
 	CandidateID          string  `json:"candidate_id"`
@@ -69,6 +71,7 @@ type ResponseHeader struct {
 }
 
 type StoredResponse struct {
+	ReleaseOwned func()
 	ResponseHeader
 	FreezePayload    []byte
 	ResponsePayload  []byte
@@ -90,16 +93,23 @@ type MemberPromotion struct {
 
 func payloadDigest(b []byte) string { sum := sha256.Sum256(b); return hex.EncodeToString(sum[:]) }
 
-func validatePromotionMembers(scope Scope, ids []int, members []PromotionMember) error {
+func validatePromotionMembers(ctx context.Context, scope Scope, ids []int, members []PromotionMember) error {
 	if len(ids) == 0 || len(ids) != len(members) {
 		return ErrManifest
 	}
-	if len(members) > 65536 {
-		return ErrManifest
+	b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
+	if err != nil {
+		return err
 	}
+	defer b.CloseRetired()
 	seen := make(map[string]bool, len(members))
+	defer func() { clear(seen); seen = nil }()
 	for i, m := range members {
-		if m.SegmentID != ids[i] || m.WorkID != WorkIdentity(scope, m.SegmentID) || m.CandidateID == "" || seen[m.CandidateID] || m.BaselineVersion < 1 {
+		workID := WorkIdentity(scope, m.SegmentID)
+		if err := b.ReserveAllocation(1, int64(len(workID))); err != nil {
+			return err
+		}
+		if m.SegmentID != ids[i] || m.WorkID != workID || m.CandidateID == "" || seen[m.CandidateID] || m.BaselineVersion < 1 {
 			return ErrManifest
 		}
 		if m.BaselineDigest == "" {
@@ -115,26 +125,42 @@ func validatePromotionMembers(scope Scope, ids []int, members []PromotionMember)
 	return nil
 }
 
-func decodePromotionMembers(row *ent.WorkRequest) ([]PromotionMember, error) {
+func decodePromotionMembers(ctx context.Context, row *ent.WorkRequest) ([]PromotionMember, func(), error) {
 	var members []PromotionMember
-	if row.PromotionCount < 1 || row.PromotionCount > 65536 || len(row.PromotionMembers) > row.PromotionCount*4096 {
-		return nil, ErrManifest
+	limit := int64(len(row.PromotionMembers))
+	if row.PromotionCount < 1 || limit < 1 {
+		return nil, nil, ErrManifest
 	}
-	b, err := backend.NewBuildBounds(int64(row.PromotionCount)*4096, 0)
+	b, err := backend.NewBuildBoundsFromContext(ctx, limit, 0)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	release := func() {
+		clear(members)
+		members = nil
+		b.CloseRetired()
+	}
+	retained := false
+	defer func() {
+		if !retained {
+			release()
+		}
+	}()
 	if err := b.DecodeJSON(row.PromotionMembers, &members); err != nil {
-		return nil, ErrManifest
+		if errors.Is(err, backend.ErrBuildCapacity) {
+			return nil, nil, err
+		}
+		return nil, nil, ErrManifest
 	}
 	scope := Scope{JobID: row.JobID, ResourceID: row.ResourceID, RoundID: row.JobRoundID}
-	if err := validatePromotionMembers(scope, row.SegmentIds, members); err != nil {
-		return nil, err
+	if err := validatePromotionMembers(ctx, scope, row.SegmentIds, members); err != nil {
+		return nil, nil, err
 	}
 	if row.PromotionCount != len(members) || len(row.PromotionStatus) != len(members) || row.PromotionCursor > len(members) {
-		return nil, ErrManifest
+		return nil, nil, ErrManifest
 	}
-	return members, nil
+	retained = true
+	return members, release, nil
 }
 
 func guardExecution(ctx context.Context, tx *ent.Client, jobID int) error {
@@ -149,7 +175,28 @@ func (s *Store) HandoffResponse(ctx context.Context, in ResponseHandoff) error {
 	}
 	freezeDigest, responseDigest := payloadDigest(in.FreezePayload), payloadDigest(in.ResponsePayload)
 	ctx = operationContext(ctx)
-	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
+	b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
+	if err != nil {
+		return err
+	}
+	var encoded []byte
+	var status []byte
+	var encodedOwner, statusOwner *backend.OwnedAllocation
+	retireOutputs := func() {
+		clear(encoded)
+		encoded = nil
+		clear(status)
+		status = nil
+		encodedOwner.Release()
+		encodedOwner = nil
+		statusOwner.Release()
+		statusOwner = nil
+	}
+	defer func() { retireOutputs(); b.CloseRetired() }()
+	err = Transaction(ctx, s.client, func(tx *ent.Client) error {
+		// A proved-not-committed retry no longer borrows the old SQL frames.
+		// Retire just those actual outputs while preserving this build's scratch.
+		retireOutputs()
 		if err := guardScope(ctx, tx, in.Scope, false); err != nil {
 			return err
 		}
@@ -160,14 +207,25 @@ func (s *Store) HandoffResponse(ctx context.Context, in ResponseHandoff) error {
 		if err != nil {
 			return err
 		}
+		defer func() { row = nil }()
 		if row.JobID != in.Scope.JobID || row.ResourceID != in.Scope.ResourceID || row.JobRoundID != in.Scope.RoundID || row.RetryEpoch != in.Scope.RetryEpoch || row.Stage != "main" {
 			return ErrManifest
 		}
-		if err := validatePromotionMembers(in.Scope, row.SegmentIds, in.Members); err != nil {
+		if err := validatePromotionMembers(ctx, in.Scope, row.SegmentIds, in.Members); err != nil {
 			return err
 		}
-		encoded, err := json.Marshal(in.Members)
-		if err != nil {
+		if err := backend.RunBuild(ctx, func() error {
+			n, e := b.MeasureJSON(in.Members)
+			if e != nil {
+				return e
+			}
+			encoded, e = b.EncodeJSONMeasured(in.Members, n, n)
+			if e != nil {
+				return e
+			}
+			encodedOwner, e = b.RetainedAllocation(int64(cap(encoded)))
+			return e
+		}); err != nil {
 			return err
 		}
 		membersEqual := true
@@ -206,7 +264,12 @@ func (s *Store) HandoffResponse(ctx context.Context, in ResponseHandoff) error {
 		if _, err := recordRequestAccountingTx(ctx, tx, row, result); err != nil {
 			return err
 		}
-		return tx.WorkRequest.UpdateOneID(row.ID).SetFreezePayload(in.FreezePayload).SetFreezeBytes(int64(len(in.FreezePayload))).SetFreezeDigest(freezeDigest).SetResponsePayload(in.ResponsePayload).SetResponseBytes(int64(len(in.ResponsePayload))).SetResponseDigest(responseDigest).SetResponseFormatVersion(execution.ResponseFormatVersion).SetSnapshotDigest(in.SnapshotDigest).SetPromotionMembers(encoded).SetPromotionCount(len(in.Members)).SetPromotionCursor(0).SetPromotionStatus(make([]byte, len(in.Members))).SetPromotionState("response_pending").SetBusinessBound(in.BusinessBound).SetResponseTruncated(in.Truncated).SetHandoffAt(time.Now().UTC()).Exec(ctx)
+		statusOwner, err = b.OwnAllocation(int64(len(in.Members)), 1)
+		if err != nil {
+			return err
+		}
+		status = make([]byte, len(in.Members))
+		return tx.WorkRequest.UpdateOneID(row.ID).SetFreezePayload(in.FreezePayload).SetFreezeBytes(int64(len(in.FreezePayload))).SetFreezeDigest(freezeDigest).SetResponsePayload(in.ResponsePayload).SetResponseBytes(int64(len(in.ResponsePayload))).SetResponseDigest(responseDigest).SetResponseFormatVersion(execution.ResponseFormatVersion).SetSnapshotDigest(in.SnapshotDigest).SetPromotionMembers(encoded).SetPromotionCount(len(in.Members)).SetPromotionCursor(0).SetPromotionStatus(status).SetPromotionState("response_pending").SetBusinessBound(in.BusinessBound).SetResponseTruncated(in.Truncated).SetHandoffAt(time.Now().UTC()).Exec(ctx)
 	})
 	return s.finishUnknown(ctx, in.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
 		row, err := projectedRequest(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(in.RequestID))).Only(ctx)
@@ -219,7 +282,10 @@ func (s *Store) HandoffResponse(ctx context.Context, in ResponseHandoff) error {
 		if row.State != "completed" || row.FreezeDigest != freezeDigest || row.ResponseDigest != responseDigest || row.SnapshotDigest != in.SnapshotDigest || row.ResponseFormatVersion != execution.ResponseFormatVersion {
 			return false, errUnverifiable
 		}
-		members, err := decodePromotionMembers(row)
+		members, releaseMembers, err := decodePromotionMembers(ctx, row)
+		if releaseMembers != nil {
+			defer releaseMembers()
+		}
 		if err != nil || len(members) != len(in.Members) {
 			return false, ErrManifest
 		}
@@ -305,7 +371,13 @@ func (s *Store) LoadResponse(ctx context.Context, requestID string, maxFreeze, m
 	if err := validateResponseReceipt(row.GlossaryReceipt, row.Identity); err != nil {
 		return StoredResponse{}, err
 	}
-	members, err := decodePromotionMembers(row)
+	members, releaseMembers, err := decodePromotionMembers(ctx, row)
+	retained := false
+	defer func() {
+		if !retained && releaseMembers != nil {
+			releaseMembers()
+		}
+	}()
 	if err != nil {
 		return StoredResponse{}, err
 	}
@@ -314,7 +386,8 @@ func (s *Store) LoadResponse(ctx context.Context, requestID string, maxFreeze, m
 	if err != nil {
 		return StoredResponse{}, err
 	}
-	return StoredResponse{ResponseHeader: header, FreezePayload: row.FreezePayload, ResponsePayload: row.ResponsePayload, CorrectedTargets: row.CorrectedTargets, CorrectedIndex: row.CorrectedTargetIndex, CorrectedDigest: row.CorrectedTargetDigest, Members: members, Receipt: row.GlossaryReceipt}, nil
+	retained = true
+	return StoredResponse{ReleaseOwned: releaseMembers, ResponseHeader: header, FreezePayload: row.FreezePayload, ResponsePayload: row.ResponsePayload, CorrectedTargets: row.CorrectedTargets, CorrectedIndex: row.CorrectedTargetIndex, CorrectedDigest: row.CorrectedTargetDigest, Members: members, Receipt: row.GlossaryReceipt}, nil
 }
 
 func (s *Store) LoadResponseMember(ctx context.Context, id string, cursor int) (PromotionMember, error) {
@@ -322,11 +395,16 @@ func (s *Store) LoadResponseMember(ctx context.Context, id string, cursor int) (
 	if err != nil {
 		return PromotionMember{}, err
 	}
-	members, err := decodePromotionMembers(r)
+	members, releaseMembers, err := decodePromotionMembers(ctx, r)
 	if err != nil || cursor < 0 || cursor >= len(members) {
+		if releaseMembers != nil {
+			releaseMembers()
+		}
 		return PromotionMember{}, ErrManifest
 	}
-	return members[cursor], nil
+	member := members[cursor]
+	member.ReleaseOwned = releaseMembers
+	return member, nil
 }
 
 // HasPendingResponse is used by Retry while holding the Job lifecycle lock.
@@ -342,7 +420,10 @@ func HasPendingResponse(ctx context.Context, tx *ent.Client, w *ent.WorkItem) (b
 	if r.JobID != w.JobID || r.ResourceID != w.ResourceID || r.JobRoundID != w.JobRoundID || r.State != "completed" || r.ResponseFormatVersion != execution.ResponseFormatVersion || r.PromotionState != "response_pending" && r.PromotionState != "glossary_processed" {
 		return false, ErrManifest
 	}
-	members, err := decodePromotionMembers(r)
+	members, releaseMembers, err := decodePromotionMembers(ctx, r)
+	if releaseMembers != nil {
+		defer releaseMembers()
+	}
 	if err != nil {
 		return false, err
 	}
@@ -428,7 +509,10 @@ func (s *Store) PromoteMember(ctx context.Context, in MemberPromotion) error {
 		if err != nil {
 			return err
 		}
-		members, err := decodePromotionMembers(r)
+		members, releaseMembers, err := decodePromotionMembers(ctx, r)
+		if releaseMembers != nil {
+			defer releaseMembers()
+		}
 		if err != nil {
 			return err
 		}
@@ -488,7 +572,19 @@ func (s *Store) PromoteMember(ctx context.Context, in MemberPromotion) error {
 		states[in.Cursor] = status
 		u := tx.WorkRequest.UpdateOneID(r.ID).SetPromotionCursor(in.Cursor + 1).SetPromotionStatus(states)
 		if len(r.CorrectedTargetIndex) > 0 {
-			body, index, err := removeCorrectedTarget(r.CorrectedTargets, r.CorrectedTargetIndex, in.Cursor)
+			b, err := backend.NewBuildBoundsFromContext(ctx, int64(len(r.CorrectedTargets)+len(r.CorrectedTargetIndex)), 0)
+			if err != nil {
+				return err
+			}
+			body, index, err := glossary.RemoveResponseTargetBounded(b, r.CorrectedTargets, r.CorrectedTargetIndex, in.Cursor)
+			defer func() {
+				u = nil
+				clear(body)
+				clear(index)
+				body = nil
+				index = nil
+				b.CloseRetired()
+			}()
 			if err != nil {
 				return err
 			}
@@ -510,7 +606,10 @@ func (s *Store) PromoteMember(ctx context.Context, in MemberPromotion) error {
 		if err != nil {
 			return false, err
 		}
-		members, err := decodePromotionMembers(r)
+		members, releaseMembers, err := decodePromotionMembers(ctx, r)
+		if releaseMembers != nil {
+			defer releaseMembers()
+		}
 		if err != nil || in.Cursor >= len(members) {
 			return false, ErrManifest
 		}
@@ -572,7 +671,10 @@ func guardPromotedResponse(ctx context.Context, tx *ent.Client, c Candidate) (bo
 	if err != nil {
 		return false, err
 	}
-	members, err := decodePromotionMembers(r)
+	members, releaseMembers, err := decodePromotionMembers(ctx, r)
+	if releaseMembers != nil {
+		defer releaseMembers()
+	}
 	if err != nil {
 		return false, err
 	}
@@ -602,10 +704,6 @@ func CorrectedTarget(body, index []byte, member int) ([]byte, bool, error) {
 		return nil, false, ErrManifest
 	}
 	return body[start : start+n], true, nil
-}
-
-func removeCorrectedTarget(body, index []byte, member int) ([]byte, []byte, error) {
-	return glossary.RemoveResponseTarget(body, index, member)
 }
 
 func stringDigest(value *string) string {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,23 +14,11 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
-func init() {
-	for _, re := range []*regexp.Regexp{fencedBacktickRe, fencedTildeRe, inlineCodeRe, doubleBraceRe, singleBraceRe, printfVerbRe, shellVarRe, xmlTagRe, mdLinkRe, autoLinkRe, refLinkRe, placeholderLikeRE, mergeAdjacentPlaceholderRE, singlePlaceholderRE} {
-		backend.RegisterFixedRegexp(re)
-	}
-}
-
 func nextKeyBounded(b *backend.BuildBounds, seg *model.Segment) (string, error) {
 	if seg.Protected == nil {
-		if e := b.ReserveNodes(1, 1024); e != nil {
-			return "", e
-		}
 		seg.Protected = make(map[string]string)
 	}
 	for i := len(seg.Protected) + 1; i <= 999999; i++ {
-		if e := b.ReserveNodes(1, 64); e != nil {
-			return "", e
-		}
 		var scratch [13]byte
 		digits := strconv.AppendInt(scratch[:0], int64(i), 10)
 		var key [13]byte
@@ -40,9 +29,6 @@ func nextKeyBounded(b *backend.BuildBounds, seg *model.Segment) (string, error) 
 		}
 		k := string(key[:])
 		if _, ok := seg.Protected[k]; !ok && !strings.Contains(seg.Source, k) {
-			if e := b.ReserveNodes(1, 1024); e != nil {
-				return "", e
-			}
 			return k, nil
 		}
 	}
@@ -50,9 +36,6 @@ func nextKeyBounded(b *backend.BuildBounds, seg *model.Segment) (string, error) 
 }
 
 func regexReplaceBounded(b *backend.BuildBounds, s string, re *regexp.Regexp, replace func(string, []int) (string, error), limits ...int64) (string, error) {
-	if e := b.ReserveNodes(1, 256); e != nil {
-		return "", e
-	}
 	first, findErr := backend.FindRegexpSubmatch(b, re, s)
 	if findErr != nil {
 		return "", findErr
@@ -60,7 +43,7 @@ func regexReplaceBounded(b *backend.BuildBounds, s string, re *regexp.Regexp, re
 	if first == nil {
 		return s, nil
 	}
-	limit := b.Snapshot().TextLimit
+	limit := b.OutputLimit()
 	if len(limits) > 0 {
 		limit = limits[0]
 	}
@@ -82,9 +65,6 @@ func regexReplaceBounded(b *backend.BuildBounds, s string, re *regexp.Regexp, re
 		from = end
 		if from == len(s) {
 			break
-		}
-		if e = b.ReserveNodes(1, 256); e != nil {
-			return "", e
 		}
 		loc, e = backend.FindRegexpSubmatch(b, re, s[from:])
 		if e != nil {
@@ -143,7 +123,7 @@ func protectPatternBounded(b *backend.BuildBounds, seg *model.Segment, re *regex
 // ProtectBounded dispatches the production protectors without unrestricted
 // ReplaceAll/FindAll or callbacks. The caller owns the short CPU permit.
 func ProtectBounded(b *backend.BuildBounds, p Protector, seg *model.Segment) error {
-	return protectBoundedLimit(b, p, seg, b.Snapshot().TextLimit)
+	return protectBoundedLimit(b, p, seg, b.OutputLimit())
 }
 func protectBoundedLimit(b *backend.BuildBounds, p Protector, seg *model.Segment, limit int64) error {
 	if p == nil || seg == nil {
@@ -187,9 +167,6 @@ func protectBoundedLimit(b *backend.BuildBounds, p Protector, seg *model.Segment
 		}
 		seg.Source = s
 		if len(items) > 0 {
-			if e = b.ReserveNodes(1, 1024); e != nil {
-				return e
-			}
 			if seg.Meta == nil {
 				seg.Meta = make(map[string]any)
 			}
@@ -209,7 +186,7 @@ func UnprotectBounded(b *backend.BuildBounds, p Protector, seg *model.Segment) e
 	}
 	limit := b.OutputLimit()
 	if limit <= 0 {
-		limit = b.Snapshot().TextLimit
+		limit = b.OutputLimit()
 	}
 	s, e := RestoreTextBounded(b, seg.Target, seg.Protected, limit)
 	if e == nil {
@@ -218,7 +195,7 @@ func UnprotectBounded(b *backend.BuildBounds, p Protector, seg *model.Segment) e
 	return e
 }
 func ProtectTextBounded(b *backend.BuildBounds, p Protector, text string, maxBytes int64) (string, map[string]string, error) {
-	if e := b.ReserveNodes(1, 256); e != nil {
+	if e := backend.ReserveSlice[model.Segment](b, 1); e != nil {
 		return "", nil, e
 	}
 	seg := &model.Segment{Source: text}
@@ -232,7 +209,7 @@ func ProtectTextBounded(b *backend.BuildBounds, p Protector, text string, maxByt
 }
 
 func RestoreTextBounded(b *backend.BuildBounds, text string, mapping map[string]string, maxBytes int64) (string, error) {
-	if e := b.ReserveNodes(int64(len(mapping))+1, 64); e != nil {
+	if e := backend.ReserveSlice[string](b, int64(len(mapping))); e != nil {
 		return "", e
 	}
 	keys := make([]string, 0, len(mapping))
@@ -271,7 +248,7 @@ func PlaceholderViolationsBounded(b *backend.BuildBounds, seg *model.Segment) (m
 	if seg == nil {
 		return
 	}
-	if err = b.ReserveNodes(int64(len(seg.Protected))*2+1, 64); err != nil {
+	if err = backend.ReserveSlice[string](b, int64(len(seg.Protected))*2); err != nil {
 		return
 	}
 	missing = make([]string, 0, len(seg.Protected))
@@ -286,14 +263,7 @@ func PlaceholderViolationsBounded(b *backend.BuildBounds, seg *model.Segment) (m
 	}
 	sort.Strings(missing)
 	sort.Strings(duplicated)
-	if err = b.ReserveNodes(1, 1024); err != nil {
-		return
-	}
-	seen := map[string]bool{}
 	for from := 0; from < len(seg.Target); {
-		if err = b.ReserveNodes(1, 256); err != nil {
-			return
-		}
 		loc, findErr := backend.FindRegexpIndex(b, placeholderLikeRE, seg.Target[from:])
 		if findErr != nil {
 			err = findErr
@@ -304,13 +274,9 @@ func PlaceholderViolationsBounded(b *backend.BuildBounds, seg *model.Segment) (m
 		}
 		tok := seg.Target[from+loc[0] : from+loc[1]]
 		from += loc[1]
-		if _, known := seg.Protected[tok]; known || seen[tok] {
+		if _, known := seg.Protected[tok]; known || slices.Contains(invented, tok) {
 			continue
 		}
-		if err = b.ReserveNodes(2, 1024); err != nil {
-			return
-		}
-		seen[tok] = true
 		invented, err = backend.AppendNode(b, invented, tok)
 		if err != nil {
 			return
@@ -327,12 +293,9 @@ func mergeAdjacentBounded(b *backend.BuildBounds, seg *model.Segment, limit int6
 	s, e := regexReplaceBounded(b, seg.Source, mergeAdjacentPlaceholderRE, func(t string, loc []int) (string, error) {
 		match := t[loc[0]:loc[1]]
 		var keys []string
-		w := backend.NewBoundedWriter(b, b.Snapshot().TextLimit)
+		w := backend.NewBoundedWriter(b, b.OutputLimit())
 		from := 0
 		for from < len(match) {
-			if e := b.ReserveNodes(1, 256); e != nil {
-				return "", e
-			}
 			l, findErr := backend.FindRegexpIndex(b, singlePlaceholderRE, match[from:])
 			if findErr != nil {
 				return "", findErr

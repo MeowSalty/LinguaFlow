@@ -91,7 +91,9 @@ func (r *ExecutionRuntime) ApplyCancelledPayloads(ctx context.Context) error {
 		r.Window.Release(id)
 	}
 	for _, id := range r.Admission.ResponseOwnerIDs() {
-		r.releaseMainOwner(id)
+		if err := r.releaseMainOwner(id); err != nil {
+			return err
+		}
 	}
 	if r.EpisodeStore != nil {
 		state, err := r.EpisodeStore.LoadRuntimeState(ctx, r.JobID)

@@ -65,6 +65,7 @@ type RoundState struct {
 }
 
 type Candidate struct {
+	ReleaseOwned           func() `json:"-"`
 	PipelineHeader         []byte
 	ID                     string
 	WorkID                 string

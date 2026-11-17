@@ -9,8 +9,11 @@ import (
 // ExecutionBudgetConfig keeps omitted deployment limits distinct from invalid
 // explicit zero values. Actor and instance limits are independently optional.
 type ExecutionBudgetConfig struct {
-	Actor    ExecutionBudgetLimits `yaml:"actor"`
-	Instance ExecutionBudgetLimits `yaml:"instance"`
+	// MaxBuildAllocationBytes is an optional per-build capacity policy. It does
+	// not change the shared payload ledger or supply construction credit.
+	MaxBuildAllocationBytes *int64                `yaml:"max_build_allocation_bytes"`
+	Actor                   ExecutionBudgetLimits `yaml:"actor"`
+	Instance                ExecutionBudgetLimits `yaml:"instance"`
 }
 
 type ExecutionBudgetLimits struct {
@@ -28,6 +31,12 @@ type ExecutionBudgetLimits struct {
 // runtime policy. Zero in that policy means unlimited, never explicit zero.
 func (p ExecutionBudgetConfig) RuntimePolicy() (resourcebudget.Policy, error) {
 	var policy resourcebudget.Policy
+	if p.MaxBuildAllocationBytes != nil {
+		if *p.MaxBuildAllocationBytes <= 0 {
+			return policy, fmt.Errorf("server.execution_budget.max_build_allocation_bytes must be positive when configured")
+		}
+		policy.MaxBuildAllocationBytes = *p.MaxBuildAllocationBytes
+	}
 	for _, scope := range []struct {
 		name   string
 		config ExecutionBudgetLimits

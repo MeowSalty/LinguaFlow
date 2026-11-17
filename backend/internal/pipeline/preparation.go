@@ -14,9 +14,11 @@ import (
 type WorkDeferred struct {
 	Wait  backend.AdmissionWait
 	Yield bool
+	Cause error
 }
 
 func (e *WorkDeferred) Error() string      { return "work deferred: " + e.Wait.Reason }
+func (e *WorkDeferred) Unwrap() error      { return e.Cause }
 func (*WorkDeferred) Permanent() bool      { return true }
 func workDeferred(err error) *WorkDeferred { var d *WorkDeferred; errors.As(err, &d); return d }
 func waitPreparation(ctx context.Context, w backend.AdmissionWait) error {

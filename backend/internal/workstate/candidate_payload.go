@@ -52,13 +52,26 @@ func (s *Store) LoadCandidatePayloadReserved(ctx context.Context, scope Scope, i
 	if err != nil {
 		return Candidate{}, err
 	}
+	defer func() { row.Payload = nil; row.PipelineHeader = nil; row = nil }()
 	w := row.Edges.WorkItem
 	trace.Set(int64(cap(row.Payload) + cap(row.PipelineHeader)))
 	if w == nil || header.StoredBytes != int64(len(row.Payload)) {
 		return Candidate{}, ErrManifest
 	}
 	var payload []byte
-	decode := func() error { var err error; payload, err = CanonicalCandidateJSON(row.Payload, maxBytes); return err }
+	var releasePayload func()
+	escaped := false
+	defer func() {
+		if !escaped && releasePayload != nil {
+			payload = nil
+			releasePayload()
+		}
+	}()
+	decode := func() error {
+		var err error
+		payload, releasePayload, err = canonicalCandidateJSONOwned(row.Payload, maxBytes, ctx)
+		return err
+	}
 	if build != nil {
 		err = build(decode)
 	} else {
@@ -71,5 +84,6 @@ func (s *Store) LoadCandidatePayloadReserved(ctx context.Context, scope Scope, i
 		return Candidate{}, fmt.Errorf("%w: canonical candidate bytes mismatch", ErrManifest)
 	}
 	row.Payload = payload
-	return Candidate{PipelineHeader: row.PipelineHeader, ID: row.Identity, ParentRequestID: row.ParentRequestID, Version: row.Version, Scope: scope, SegmentID: w.SegmentID, DTOVersion: row.DtoVersion, Mode: row.Mode, SnapshotDigest: row.SnapshotDigest, BaselineVersion: row.BaselineVersion, BaselineTarget: row.BaselineTarget, BaselineStatus: row.BaselineStatus, State: row.State, Payload: row.Payload}, nil
+	escaped = true
+	return Candidate{ReleaseOwned: releasePayload, PipelineHeader: row.PipelineHeader, ID: row.Identity, ParentRequestID: row.ParentRequestID, Version: row.Version, Scope: scope, SegmentID: w.SegmentID, DTOVersion: row.DtoVersion, Mode: row.Mode, SnapshotDigest: row.SnapshotDigest, BaselineVersion: row.BaselineVersion, BaselineTarget: row.BaselineTarget, BaselineStatus: row.BaselineStatus, State: row.State, Payload: row.Payload}, nil
 }

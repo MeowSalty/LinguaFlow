@@ -53,7 +53,7 @@ func mapSnippetToProtectedFormBounded(b *backend.BuildBounds, text string, mappi
 			return "", err
 		}
 	}
-	if err = b.ReserveNodes(int64(len(mapping)), 16); err != nil {
+	if err = backend.ReserveSlice[string](b, int64(len(mapping))); err != nil {
 		return "", err
 	}
 	keys := make([]string, 0, len(mapping))

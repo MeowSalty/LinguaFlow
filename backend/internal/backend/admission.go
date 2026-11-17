@@ -70,11 +70,10 @@ type RequestAdmission struct {
 	rootScope                                resourcebudget.Scope
 	rootID                                   string
 	storageCredits                           map[string]int64
-	storageRepresentationBound               func(int64) (int64, error)
-	candidateReadAllocationBound             func(int64) (int64, error)
 	candidateReads                           map[string]*candidateReadCredit
 	rootMetadataBase                         int64
 	requestMetadata                          map[string]*requestMetadataCredit
+	buildAllocations                         map[string]int64
 	prepareOwners, buildWorkers, descriptors int64
 	mainPriority                             bool
 	priorityResource, priorityRound          int
@@ -301,6 +300,12 @@ func (a *RequestAdmission) tryAdmit(ctx context.Context, intent RequestAdmission
 		}
 		if a.budget != nil {
 			a.budget.applyGrant(intent, lane)
+			if intent.Stage == RequestStageAlignment && a.candidateReads[intent.RequestID] == nil {
+				if a.candidateReads == nil {
+					a.candidateReads = map[string]*candidateReadCredit{}
+				}
+				a.candidateReads[intent.RequestID] = &candidateReadCredit{remaining: a.budget.limits.Responses, inputRemaining: intent.InputBytes, candidates: append([]string(nil), intent.CandidateIDs...)}
+			}
 		}
 		a.completions++
 		a.version++
@@ -424,6 +429,7 @@ type RequestPermit struct {
 	gate           DispatchGate
 	requestOnce    sync.Once
 	completionOnce sync.Once
+	budgetOnce     sync.Once
 }
 
 var ErrStalePermit = errors.New("request dispatch policy changed before send")
@@ -474,15 +480,30 @@ func (p *RequestPermit) RequestDone() {
 	})
 }
 
+// Complete ends semantic response processing after its durable record succeeds.
+// The response lane and its original capacity remain owned until Release.
+func (p *RequestPermit) Complete() {
+	if p == nil {
+		return
+	}
+	p.completionOnce.Do(func() {
+		a := p.admission
+		a.mu.Lock()
+		a.completions--
+		a.notifyLocked()
+		a.mu.Unlock()
+	})
+}
+
 func (p *RequestPermit) Release() {
 	if p == nil {
 		return
 	}
 	p.RequestDone()
-	p.completionOnce.Do(func() {
+	p.Complete()
+	p.budgetOnce.Do(func() {
 		a := p.admission
 		a.mu.Lock()
-		a.completions--
 		if p.shared {
 			a.mainResults[p.intent.RoundIndex]--
 		} else {

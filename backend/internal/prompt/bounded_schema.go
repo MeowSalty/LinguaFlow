@@ -2,40 +2,62 @@ package prompt
 
 import "github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 
-// Fixed schemas contain <64 maps/groups, boxed scalars and slice headers;
-// each record/group is <=1024 bytes. Ruby's per-ID shape has seven maps,
-// 16 property slots, two boxed slices and one parent-map slot: 32 E credits.
+// Fixed schemas belong to the package. Each builder receives an independently
+// metered clone, preserving callers' ability to edit request-specific fields.
+var bootstrapSchemaSnapshot = BootstrapSchema()
+var semanticSchemaSnapshot = SemanticQAIssueSchema()
+var adjudicationSchemaSnapshot = AdjudicationVerdictSchema()
+var reviseSchemaSnapshot = ReviseRevisionSchema(false, nil)
+var rubyItemSchemaSnapshot = RubyOutputSchema([]string{"item"})["properties"].(map[string]any)["item"].(map[string]any)
+var rubyItemV2SchemaSnapshot = RubyOutputSchema([]string{"item"}, 2)["properties"].(map[string]any)["item"].(map[string]any)
+
+func cloneSchemaBounded(b *backend.BuildBounds, source map[string]any) (map[string]any, error) {
+	var out map[string]any
+	err := b.CloneInto(source, &out)
+	return out, err
+}
 func BootstrapSchemaBounded(b *backend.BuildBounds) (map[string]any, error) {
-	if e := b.ReserveNodes(64, 1024); e != nil {
-		return nil, e
-	}
-	return BootstrapSchema(), nil
+	return cloneSchemaBounded(b, bootstrapSchemaSnapshot)
 }
 func SemanticQAIssueSchemaBounded(b *backend.BuildBounds) (map[string]any, error) {
-	if e := b.ReserveNodes(64, 1024); e != nil {
-		return nil, e
-	}
-	return SemanticQAIssueSchema(), nil
+	return cloneSchemaBounded(b, semanticSchemaSnapshot)
 }
 func AdjudicationVerdictSchemaBounded(b *backend.BuildBounds) (map[string]any, error) {
-	if e := b.ReserveNodes(64, 1024); e != nil {
-		return nil, e
-	}
-	return AdjudicationVerdictSchema(), nil
+	return cloneSchemaBounded(b, adjudicationSchemaSnapshot)
 }
 func RubyOutputSchemaBounded(b *backend.BuildBounds, ids []string, protocol ...int) (map[string]any, error) {
-	if e := b.ReserveNodes(32*int64(len(ids))+16, 1024); e != nil {
-		return nil, e
+	source := rubyItemSchemaSnapshot
+	if len(protocol) > 0 && protocol[0] >= 2 {
+		source = rubyItemV2SchemaSnapshot
 	}
-	return RubyOutputSchema(ids, protocol...), nil
+	props, err := backend.MakeMap[string, any](b, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		item, err := cloneSchemaBounded(b, source)
+		if err != nil {
+			return nil, err
+		}
+		props[id] = item
+	}
+	return map[string]any{"type": "object", "properties": props}, nil
 }
 func ReviseRevisionSchemaBounded(b *backend.BuildBounds, includeRuby bool, ids []string, protocol ...int) (map[string]any, error) {
-	n := int64(64)
-	if includeRuby {
-		n += 32 * int64(len(ids))
+	out, err := cloneSchemaBounded(b, reviseSchemaSnapshot)
+	if err != nil || !includeRuby {
+		return out, err
 	}
-	if e := b.ReserveNodes(n, 1024); e != nil {
-		return nil, e
+	rubySchema, err := RubyOutputSchemaBounded(b, ids, protocol...)
+	if err != nil {
+		return nil, err
 	}
-	return ReviseRevisionSchema(includeRuby, ids, protocol...), nil
+	props := out["properties"].(map[string]any)
+	props["ruby_output"] = rubySchema
+	required, err := backend.AppendNode(b, out["required"].([]string), "ruby_output")
+	if err != nil {
+		return nil, err
+	}
+	out["required"] = required
+	return out, nil
 }

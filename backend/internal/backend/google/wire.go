@@ -5,10 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
-	"net/url"
 	"strings"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
@@ -17,6 +16,16 @@ func (b *Backend) wireParams(req backend.Request) (string, map[string]any, error
 	return b.wireParamsPrompt(req, nil)
 }
 func (b *Backend) wireParamsPrompt(req backend.Request, measure *backend.PromptMeasure) (string, map[string]any, error) {
+	bounds, e := backend.NewBuildBounds(0, backend.DefaultMaxInputBytes)
+	if e != nil {
+		return "", nil, e
+	}
+	return b.wireParamsBounded(req, measure, bounds)
+}
+func (b *Backend) wireParamsBounded(req backend.Request, measure *backend.PromptMeasure, bounds *backend.BuildBounds) (string, map[string]any, error) {
+	if e := backend.ReserveSlice[any](bounds, 3); e != nil {
+		return "", nil, e
+	}
 	model := req.Model
 	if model == "" {
 		model = b.model
@@ -76,10 +85,22 @@ func (b *Backend) wireParamsPrompt(req backend.Request, measure *backend.PromptM
 	return model, p, nil
 }
 func (b *Backend) MeasureRequest(req backend.Request) (int64, error) {
-	return backend.MeasureWireBuild(func() (any, error) { _, p, e := b.wireParams(req); return p, e })
+	return b.MeasureRequestContext(context.Background(), req)
+}
+func (b *Backend) MeasureRequestContext(ctx context.Context, req backend.Request) (int64, error) {
+	return backend.MeasureWireBuildContext(ctx, func(bounds *backend.BuildBounds) (any, error) {
+		_, p, e := b.wireParamsBounded(req, nil, bounds)
+		return p, e
+	})
 }
 func (b *Backend) MeasureRequestPrompt(req backend.Request, m backend.PromptMeasure) (int64, error) {
-	return backend.MeasureWireBuild(func() (any, error) { _, p, e := b.wireParamsPrompt(req, &m); return p, e })
+	return b.MeasureRequestPromptContext(context.Background(), req, m)
+}
+func (b *Backend) MeasureRequestPromptContext(ctx context.Context, req backend.Request, m backend.PromptMeasure) (int64, error) {
+	return backend.MeasureWireBuildContext(ctx, func(bounds *backend.BuildBounds) (any, error) {
+		_, p, e := b.wireParamsBounded(req, &m, bounds)
+		return p, e
+	})
 }
 
 type generateWire struct {
@@ -102,43 +123,92 @@ type generateWire struct {
 	} `json:"usageMetadata"`
 }
 
-func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
-	var model string
-	data, err := backend.EncodeWireBuild(ctx, func() (any, error) { m, p, e := b.wireParams(req); model = m; return p, e })
-	if err != nil {
-		return nil, err
-	}
-	inputTrace := backend.NewOwnedTrace(ctx, "wire", "google-input")
-	inputTrace.Set(int64(cap(data)))
-	defer inputTrace.Clear()
-	ctx, cancel := backend.ProviderCallContext(ctx, b.timeout)
-	defer cancel()
-	base := b.baseURL
+// endpoint builds one explicitly sized, immutable byte backing. The URL
+// parser's private buffers are not observable and are not predicted here.
+func (b *Backend) endpoint(ctx context.Context, model string) (string, *backend.OwnedAllocation, error) {
+	model = strings.TrimPrefix(model, "models/")
+	base := strings.TrimRight(b.baseURL, "/")
 	if base == "" {
-		base = "https://generativelanguage.googleapis.com/"
+		base = "https://generativelanguage.googleapis.com"
 	}
-	base = strings.TrimRight(base, "/")
 	method := "generateContent"
 	query := ""
 	if b.stream {
-		method = "streamGenerateContent"
-		query = "?alt=sse"
+		method, query = "streamGenerateContent", "?alt=sse"
 	}
-	modelPath := strings.TrimPrefix(model, "models/")
-	if int64(len(modelPath)) > (math.MaxInt64-int64(len(base))-64)/3 {
-		return nil, &backend.BuildCapacityError{Resource: "endpoint arithmetic"}
+	allowed := func(c byte) bool {
+		return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("-_.~$&+:=@", rune(c))
 	}
-	pathBudget, e := backend.NewBuildBounds(backend.RequestCreditsFromContext(ctx).InputBytes, int64(len(base)))
+	n := int64(len(base))
+	var err error
+	for _, part := range []string{"/v1beta/models/", ":", method, query} {
+		n, err = backend.CheckedAdd(n, int64(len(part)))
+		if err != nil {
+			return "", nil, err
+		}
+	}
+	for i := range len(model) {
+		unit := int64(3)
+		if allowed(model[i]) {
+			unit = 1
+		}
+		n, err = backend.CheckedAdd(n, unit)
+		if err != nil {
+			return "", nil, err
+		}
+	}
+	owner, err := backend.OwnProviderResponseAllocation(ctx, n, 1)
+	if err != nil {
+		return "", nil, err
+	}
+	data := make([]byte, int(n))
+	pos := copy(data, base)
+	pos += copy(data[pos:], "/v1beta/models/")
+	const hex = "0123456789ABCDEF"
+	for i := range len(model) {
+		c := model[i]
+		if allowed(c) {
+			data[pos] = c
+			pos++
+		} else {
+			data[pos], data[pos+1], data[pos+2] = '%', hex[c>>4], hex[c&15]
+			pos += 3
+		}
+	}
+	data[pos] = ':'
+	pos++
+	pos += copy(data[pos:], method)
+	copy(data[pos:], query)
+	// data is never mutated again; the string borrows precisely this backing.
+	return unsafe.String(unsafe.SliceData(data), len(data)), owner, nil
+}
+
+func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
+	var model string
+	data, releaseInput, err := backend.EncodeWireBuild(ctx, func(bounds *backend.BuildBounds) (any, error) {
+		m, p, e := b.wireParamsBounded(req, nil, bounds)
+		model = m
+		return p, e
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { data = nil; releaseInput() }()
+	inputTrace := backend.NewOwnedTrace(ctx, "wire", "google-input")
+	inputTrace.Set(int64(cap(data)))
+	defer inputTrace.Clear()
+	limit := backend.ResponseBudget(ctx, b.responseBytes)
+	ctx, err = backend.WithProviderResponseAllocation(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := backend.ProviderCallContext(ctx, b.timeout)
+	defer cancel()
+	endpoint, endpointOwner, e := b.endpoint(ctx, model)
 	if e != nil {
 		return nil, e
 	}
-	if e = pathBudget.ReserveText(0, 3*int64(len(modelPath))); e != nil {
-		return nil, e
-	}
-	if e = pathBudget.ReserveText(0, int64(len(base))+3*int64(len(modelPath))+64); e != nil {
-		return nil, e
-	}
-	endpoint := base + "/v1beta/models/" + url.PathEscape(modelPath) + ":" + method + query
+	defer endpointOwner.Release()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -160,62 +230,117 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, backend.WrapHTTPError("google generate", errors.New(http.StatusText(resp.StatusCode)), resp.StatusCode, resp.Header)
 	}
-	limit := backend.ResponseBudget(ctx, b.responseBytes)
 	text, e := backend.NewResponseTextObserved(ctx, limit, "google-text")
 	if e != nil {
 		return nil, e
 	}
 	defer text.ClearObserved()
 	var usage backend.Usage
-	finish := ""
+	var finish backend.WireStringSlot
+	defer finish.Close()
 	consume := func(event []byte) error {
 		return backend.RunBuild(ctx, func() error {
-			var chunk generateWire
-			if e := backend.DecodeWire(event, limit, &chunk); e != nil {
+			chunk, e := backend.BorrowWireJSONContext(ctx, event, limit)
+			if e != nil {
 				return e
 			}
-			if chunk.Error != nil {
-				return backend.WrapHTTPError("google stream", errors.New("provider stream error"), chunk.Error.Code, resp.Header)
+			failure, e := chunk.Field("error")
+			if e != nil {
+				return e
 			}
-			if chunk.Usage.PromptTokens != 0 || chunk.Usage.CompletionTokens != 0 || chunk.Usage.TotalTokens != 0 {
-				usage = backend.Usage{PromptTokens: chunk.Usage.PromptTokens, CompletionTokens: chunk.Usage.CompletionTokens, TotalTokens: chunk.Usage.TotalTokens}
-			}
-			if len(chunk.Candidates) > 0 {
-				c := chunk.Candidates[0]
-				if c.FinishReason != "" {
-					finish = c.FinishReason
+			if !failure.IsNull() {
+				code, e := failure.Field("code")
+				if e != nil {
+					return e
 				}
-				for _, part := range c.Content.Parts {
-					if !part.Thought {
-						if e := text.Append(part.Text); e != nil {
-							return e
-						}
-					}
+				status, e := code.Int()
+				if e != nil {
+					return e
+				}
+				return backend.WrapHTTPError("google stream", errors.New("provider stream error"), status, resp.Header)
+			}
+			var u backend.Usage
+			for _, field := range []struct {
+				name  string
+				value *int64
+			}{{"promptTokenCount", &u.PromptTokens}, {"candidatesTokenCount", &u.CompletionTokens}, {"totalTokenCount", &u.TotalTokens}} {
+				v, e := chunk.Path("usageMetadata", field.name)
+				if e != nil {
+					return e
+				}
+				if e = v.DecodeScalar(field.value); e != nil {
+					return e
 				}
 			}
-			return nil
+			if u.PromptTokens != 0 || u.CompletionTokens != 0 || u.TotalTokens != 0 {
+				usage = u
+			}
+			candidates, e := chunk.Field("candidates")
+			if e != nil {
+				return e
+			}
+			candidate, e := candidates.First()
+			if e != nil {
+				return e
+			}
+			if candidate.IsNull() {
+				return nil
+			}
+			f, e := candidate.Field("finishReason")
+			if e != nil {
+				return e
+			}
+			if !f.IsNull() && !f.StringEquals("") {
+				if e = finish.Set(f); e != nil {
+					return e
+				}
+			}
+			parts, e := candidate.Path("content", "parts")
+			if e != nil {
+				return e
+			}
+			return parts.EachArray(func(part backend.WireJSONValue) error {
+				thought, e := part.Field("thought")
+				if e != nil {
+					return e
+				}
+				skip, e := thought.Bool()
+				if e != nil {
+					return e
+				}
+				if skip {
+					return nil
+				}
+				content, e := part.Field("text")
+				if e != nil {
+					return e
+				}
+				return content.AppendString(text)
+			})
 		})
 	}
 	if b.stream {
 		err = backend.ReadSSEContext(ctx, resp.Body, limit, consume)
 	} else {
-		var raw []byte
 		readTrace := backend.NewOwnedTrace(ctx, "wire", "google-http")
 		defer readTrace.Clear()
-		raw, err = backend.ReadBoundedObserved(resp.Body, limit, readTrace)
+		var release func()
+		var raw []byte
+		raw, release, err = backend.ReadProviderBounded(ctx, resp.Body, limit, readTrace)
+		defer release()
 		if err == nil {
 			err = consume(raw)
 		}
 	}
 	if err != nil {
-		return nil, err
+		return backend.ResponseWithPartialText(text, usage), err
 	}
 	out, e := backend.FinishResponseText(ctx, text)
 	if e != nil {
-		return nil, e
+		return backend.ResponseWithPartialText(text, usage), e
 	}
 	if out == "" {
-		return nil, &backend.EmptyResponseError{BackendName: b.Name(), Model: model, FinishReason: finish, PromptTokens: usage.PromptTokens}
+		return nil, &backend.EmptyResponseError{BackendName: b.Name(), Model: model, FinishReason: backend.DiagnosticFinishReason(finish.Value), PromptTokens: usage.PromptTokens}
 	}
-	return &backend.Response{Text: out, Usage: usage, Truncated: finish == "MAX_TOKENS"}, nil
+	return &backend.Response{Text: out, Usage: usage, Truncated: finish.Value == "MAX_TOKENS"}, nil
 }

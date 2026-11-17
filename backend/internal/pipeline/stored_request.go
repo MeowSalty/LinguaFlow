@@ -18,7 +18,7 @@ func RenderStoredRequestBounded(ctx context.Context, remote backend.Backend, req
 	var measured backend.PromptMeasure
 	pass := func(count bool) error {
 		build := func() error {
-			b, err := backend.NewBuildBounds(output, input)
+			b, err := backend.NewBuildBoundsFromContext(ctx, output, input)
 			if err != nil {
 				return err
 			}

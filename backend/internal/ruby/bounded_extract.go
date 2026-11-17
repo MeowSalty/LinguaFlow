@@ -7,16 +7,10 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
-func init() {
-	for _, re := range []*regexp.Regexp{rubyElementSpanRe, rubyRTSpanRe, htmlTagRe, alignmentTagRE, inlineMarkerRe, sectionRubyLineRe} {
-		backend.RegisterFixedRegexp(re)
-	}
-}
-
 func scanElementsBounded(b *backend.BuildBounds, source string) ([]rubyElement, error) {
 	var out []rubyElement
 	for from := 0; from < len(source); {
-		if e := b.ReserveNodes(1, 256); e != nil {
+		if e := b.CheckContext(); e != nil {
 			return nil, e
 		}
 		el, findErr := backend.FindRegexpSubmatch(b, rubyElementSpanRe, source[from:])
@@ -30,7 +24,7 @@ func scanElementsBounded(b *backend.BuildBounds, source string) ([]rubyElement, 
 		innerStart, innerEnd := from+el[2], from+el[3]
 		var spans []rtSpan
 		for pos := innerStart; pos < innerEnd; {
-			if e := b.ReserveNodes(1, 256); e != nil {
+			if e := b.CheckContext(); e != nil {
 				return nil, e
 			}
 			loc, findErr := backend.FindRegexpSubmatch(b, rubyRTSpanRe, source[pos:innerEnd])
@@ -76,7 +70,7 @@ func ElementSpansBounded(b *backend.BuildBounds, source string) ([][2]int, error
 	return spans, nil
 }
 func stripPatternBounded(b *backend.BuildBounds, s string, re *regexp.Regexp) (string, error) {
-	if e := b.ReserveNodes(1, 256); e != nil {
+	if e := b.CheckContext(); e != nil {
 		return "", e
 	}
 	loc, findErr := backend.FindRegexpIndex(b, re, s)
@@ -96,7 +90,7 @@ func stripPatternBounded(b *backend.BuildBounds, s string, re *regexp.Regexp) (s
 		if from == len(s) {
 			break
 		}
-		if e := b.ReserveNodes(1, 256); e != nil {
+		if e := b.CheckContext(); e != nil {
 			return "", e
 		}
 		var e error
@@ -175,7 +169,7 @@ func ExtractBounded(b *backend.BuildBounds, source string) ([]Item, string, erro
 			}
 			base, text = string(bw.Bytes()), string(tw.Bytes())
 		}
-		if e = b.ReserveNodes(1, 64); e != nil {
+		if e = backend.ReserveSlice[Item](b, 1); e != nil {
 			return nil, "", e
 		}
 		if e = b.ReserveText(16, 16); e != nil {

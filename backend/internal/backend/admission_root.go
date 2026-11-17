@@ -10,42 +10,13 @@ import (
 
 var ErrAggregateCapacity = resourcebudget.ErrCapacity
 
-// SetStorageRepresentationBound lets the persistence adapter supply a proved
-// physical representation bound. It changes only reliable storage promises;
-// per-Job J/Q and aux input I continue to use canonical encoded payloads.
-func (a *RequestAdmission) SetStorageRepresentationBound(bound func(int64) (int64, error)) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.budget == nil || len(a.budget.entries) > 0 || len(a.budget.requests) > 0 {
-		return ErrPipelineCapacity
-	}
-	if bound != nil {
-		n, err := bound(a.budget.limits.Item)
-		if err != nil {
-			return err
-		}
-		if n < a.budget.limits.Item {
-			return ErrPipelineCapacity
-		}
-	}
-	a.storageRepresentationBound = bound
-	return nil
-}
-func (a *RequestAdmission) storageBoundLocked(canonical int64) (int64, error) {
+// storageProtocolBytes preserves the explicit canonical Q/R business quota.
+// It predicts neither JSONB representation size nor an in-memory codec graph.
+func storageProtocolBytes(canonical int64) (int64, error) {
 	if canonical < 0 {
 		return 0, ErrPipelineCapacity
 	}
-	if a.storageRepresentationBound == nil {
-		return canonical, nil
-	}
-	n, err := a.storageRepresentationBound(canonical)
-	if err != nil {
-		return 0, err
-	}
-	if n < canonical {
-		return 0, ErrPipelineCapacity
-	}
-	return n, nil
+	return canonical, nil
 }
 
 // RestoreInventory installs header-only totals. Activity subsequently attaches
@@ -96,9 +67,6 @@ func (a *RequestAdmission) ResetInventoryAfterJoin(segments, candidate, growth, 
 	} else {
 		for _, credit := range oldMetadata {
 			retained := credit.actual
-			if !credit.settled {
-				retained = credit.maximum
-			}
 			var err error
 			metadataBase, err = checkedSum(metadataBase, retained)
 			if err != nil {
@@ -161,6 +129,13 @@ func (a *RequestAdmission) AttachRootBudget(root *resourcebudget.RootBudget, sco
 
 func (a *RequestAdmission) rootVectorLocked() (resourcebudget.Vector, error) {
 	v := resourcebudget.Vector{PrepareOwners: a.prepareOwners, BuildWorkers: a.buildWorkers, QueuedDescriptors: a.descriptors}
+	for _, bytes := range a.buildAllocations {
+		var err error
+		v.PayloadBytes, err = checkedSum(v.PayloadBytes, bytes)
+		if err != nil {
+			return v, err
+		}
+	}
 	if b := a.budget; b != nil {
 		n, bytes, growth := b.candidateTotals()
 		v.UnconfirmedMembers = int64(n)
@@ -168,19 +143,19 @@ func (a *RequestAdmission) rootVectorLocked() (resourcebudget.Vector, error) {
 		if err != nil {
 			return v, err
 		}
-		v.PayloadBytes = payload
+		v.PayloadBytes, err = checkedSum(v.PayloadBytes, payload)
+		if err != nil {
+			return v, err
+		}
 		v.PayloadBytes, err = checkedSum(v.PayloadBytes, a.rootMetadataBase)
 		if err != nil {
 			return v, err
 		}
 		for _, metadata := range a.requestMetadata {
-			v.PayloadBytes, err = checkedSum(v.PayloadBytes, metadata.maximum)
-			if err != nil {
-				return v, err
+			if metadata.loaned {
+				continue
 			}
-		}
-		for _, read := range a.candidateReads {
-			v.PayloadBytes, err = checkedSum(v.PayloadBytes, read.maximum)
+			v.PayloadBytes, err = checkedSum(v.PayloadBytes, metadata.actual)
 			if err != nil {
 				return v, err
 			}
@@ -255,7 +230,7 @@ func (a *RequestAdmission) reserveRootDispatchLocked(intent RequestAdmissionInte
 			if e, ok := oldEntries[intent.RequestID]; ok {
 				members = int64(max(e.Count, e.PlannedCount))
 			}
-			payloadBound, e := a.storageBoundLocked(b.limits.Item)
+			payloadBound, e := storageProtocolBytes(b.limits.Item)
 			if e != nil {
 				return e
 			}
@@ -277,7 +252,7 @@ func (a *RequestAdmission) reserveRootDispatchLocked(intent RequestAdmissionInte
 	} else if a.rootScope.JobID > 0 {
 		for _, id := range intent.CandidateIDs {
 			entry := oldEntries[id]
-			payloadBound, e := a.storageBoundLocked(b.limits.Item)
+			payloadBound, e := storageProtocolBytes(b.limits.Item)
 			if e != nil {
 				return e
 			}
@@ -293,29 +268,9 @@ func (a *RequestAdmission) reserveRootDispatchLocked(intent RequestAdmissionInte
 			return e
 		}
 	}
-	if a.rootScope.JobID > 0 {
-		if metadata := a.requestMetadata[intent.RequestID]; metadata != nil {
-			var e error
-			storage, e = checkedSum(storage, metadata.maximum-metadata.actual)
-			if e != nil {
-				return e
-			}
-		}
-	}
 	var read *candidateReadCredit
-	if intent.Stage == RequestStageAlignment && a.candidateReadAllocationBound != nil {
-		physical, e := a.storageBoundLocked(b.limits.Item)
-		if e != nil {
-			return e
-		}
-		maximum, e := a.candidateReadAllocationBound(physical)
-		if e != nil {
-			return e
-		}
-		if maximum < physical {
-			return ErrBuildCapacity
-		}
-		read = &candidateReadCredit{maximum: maximum, candidates: append([]string(nil), intent.CandidateIDs...)}
+	if intent.Stage == RequestStageAlignment {
+		read = &candidateReadCredit{remaining: b.limits.Responses, inputRemaining: intent.InputBytes, candidates: append([]string(nil), intent.CandidateIDs...)}
 		if a.candidateReads == nil {
 			a.candidateReads = map[string]*candidateReadCredit{}
 		}
@@ -471,6 +426,15 @@ func (a *RequestAdmission) RootChanged() <-chan struct{} {
 }
 func aggregateCapacity(err error) bool { return errors.Is(err, resourcebudget.ErrCapacity) }
 
+type noCapacityDrainError struct{ capacity error }
+
+func (e *noCapacityDrainError) Error() string {
+	return fmt.Sprintf("%s: %v", ErrNoCapacityDrain, e.capacity)
+}
+func (e *noCapacityDrainError) Unwrap() error      { return ErrNoCapacityDrain }
+func (e *noCapacityDrainError) Permanent() bool    { return true }
+func (e *noCapacityDrainError) As(target any) bool { return errors.As(e.capacity, target) }
+
 func (a *RequestAdmission) classifyRootCapacityLocked(err error) error {
 	if !aggregateCapacity(err) || resourcebudget.CapacityHasDrain(err) {
 		return err
@@ -485,7 +449,7 @@ func (a *RequestAdmission) classifyRootCapacityLocked(err error) error {
 			}
 		}
 	}
-	return ErrNoCapacityDrain
+	return &noCapacityDrainError{err}
 }
 
 func (a *RequestAdmission) CanDrainAggregate() bool {
@@ -510,6 +474,16 @@ func (a *RequestAdmission) CanDrainAggregate() bool {
 func (a *RequestAdmission) detachRootLocked() error {
 	if a.root == nil {
 		return nil
+	}
+	if len(a.buildAllocations) > 0 {
+		return &BuildCapacityError{"outstanding build ownership"}
+	}
+	if a.budget != nil {
+		for _, entry := range a.budget.entries {
+			if entry.PromotionPending || entry.MemoryOwned {
+				return &BuildCapacityError{"outstanding promotion ownership"}
+			}
+		}
 	}
 	if b := a.budget; b != nil {
 		if a.rootScope.JobID == 0 {

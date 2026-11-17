@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"sort"
 	"time"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 // runStoredRound keeps the existing non-candidate handlers while giving every
@@ -23,7 +25,9 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 		reporter = progress.Nop{}
 	}
 	if round.Store == nil {
-		round.Store = NewMemoryRoundStore(nil)
+		memory := NewMemoryRoundStore(nil)
+		defer memory.Close()
+		round.Store = memory
 	}
 	round.Gate = round.Runtime.Gate
 	round.Slots = nil
@@ -249,10 +253,22 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 			}
 		}()
 	}
-	session := &requestSession{runtime: round.Runtime, store: round.Store, reporter: reporter, intent: RequestIntent{Stage: backend.RequestStageMain, RoundIndex: handlerRoundIndex(handler), ResourceID: storeResourceID(round.Store), Indices: append([]int(nil), job.idxs...), Pool: pool, Attempt: job.attempt, Phase: "main"}}
+	session := &requestSession{runtime: round.Runtime, store: round.Store, reporter: reporter, intent: RequestIntent{ID: NewWorkID(), Stage: backend.RequestStageMain, RoundIndex: handlerRoundIndex(handler), ResourceID: storeResourceID(round.Store), Indices: job.idxs, Pool: pool, Attempt: job.attempt, Phase: "main"}}
+	buildID := session.intent.ID
+	var previous []Segment
+	installedCount := 0
 	retained := false
 	defer func() {
 		if !retained {
+			if len(previous) == len(job.idxs) {
+				// A handler may stage private fields directly on Document. Failed
+				// or deferred work has no accepted in-memory destination yet.
+				for i, idx := range job.idxs {
+					if i >= installedCount {
+						doc.Segments[idx] = previous[i]
+					}
+				}
+			}
 			if out.err != nil {
 				session.fail(out.err)
 			} else if err := ctx.Err(); err != nil {
@@ -262,9 +278,26 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 				out.err = err
 				out.deferred = true
 			}
+			// No result escaped this invocation. History is separately owned;
+			// failed and deferred attempts cannot retain their temporary buffers.
+			session.intent = RequestIntent{}
+			if err := round.Runtime.Admission.ReleaseBuild("build:" + buildID); out.err == nil {
+				out.err = err
+			}
 		}
 	}()
 	callCtx := session.Context(ctx)
+	previousBounds, previousErr := backend.NewBuildBoundsFromContext(callCtx, 0, 0)
+	if previousErr != nil {
+		return batchResult{err: previousErr}
+	}
+	if previousErr = backend.ReserveSlice[Segment](previousBounds, int64(len(job.idxs))); previousErr != nil {
+		return batchResult{err: previousErr}
+	}
+	previous = make([]Segment, len(job.idxs))
+	for i, idx := range job.idxs {
+		previous[i] = doc.Segments[idx]
+	}
 	result := handler.ProcessBatch(callCtx, doc, job.idxs, job.attempt, logger)
 	if session.deferred != nil {
 		return batchResult{waitCapacity: session.deferred, deferred: true}
@@ -282,6 +315,28 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 	}
 	if batchHandler != nil && result.callbackResult != nil {
 		if err := batchHandler(callCtx, *result.callbackResult); err != nil {
+			deferred.err = err
+			return deferred
+		}
+	}
+	for i, idx := range job.idxs {
+		current := doc.Segments[idx]
+		if unsafe.SliceData(current.Issues) != unsafe.SliceData(previous[i].Issues) {
+			var private []qa.QualityIssue
+			if err := round.Runtime.Run(callCtx, func() error { return previousBounds.CloneInto(current.Issues, &private) }); err != nil {
+				deferred.err = err
+				return deferred
+			}
+			current.Issues = private
+		}
+		confirmed := TranslatedSegment{TargetText: current.Target, Issues: current.Issues, Meta: current.Meta, Protected: current.Protected}
+		candidate := &Candidate{Index: idx, Segment: current}
+		if err := round.Runtime.Run(callCtx, func() error {
+			return installConfirmedFields(callCtx, round.Runtime, doc, candidate, confirmed, false, "build:"+session.intent.ID, previous[i], func() {
+				installedCount++
+				previous[i] = Segment{}
+			})
+		}); err != nil {
 			deferred.err = err
 			return deferred
 		}
@@ -330,7 +385,18 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 		deferred.err = err
 		return deferred
 	}
-	result.finish = session.finish
+	result.finish = func() error {
+		err := session.finish()
+		previous = nil
+		result = batchResult{}
+		session.intent.Indices = nil
+		// Result arrays have been consumed by the serial pool; installed fields
+		// were atomically moved to Document before its old slot was refunded.
+		if releaseErr := round.Runtime.Admission.ReleaseBuild("build:" + buildID); err == nil {
+			err = releaseErr
+		}
+		return err
+	}
 	result.checkpointCtx = persistence.WithDeadline(callCtx, session.handoffDeadline)
 	result.fail = func(err error) { session.fail(err) }
 	retained = true

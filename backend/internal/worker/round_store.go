@@ -63,7 +63,7 @@ func (s *roundStore) classify(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, resourcebudget.ErrCapacity) || errors.Is(err, resourcebudget.ErrIdentity) || errors.Is(err, workstate.ErrStale) || errors.Is(err, workstate.ErrStopped) || errors.Is(err, workstate.ErrManifest) || errors.Is(err, workstate.ErrCandidateVersion) || errors.Is(err, workstate.ErrBudget) || database.Classify(s.driver, err).Category == database.CategoryStructural {
+	if errors.Is(err, resourcebudget.ErrCapacity) && !resourcebudget.CapacityHasDrain(err) || errors.Is(err, resourcebudget.ErrIdentity) || errors.Is(err, workstate.ErrStale) || errors.Is(err, workstate.ErrStopped) || errors.Is(err, workstate.ErrManifest) || errors.Is(err, workstate.ErrCandidateVersion) || errors.Is(err, workstate.ErrBudget) || database.Classify(s.driver, err).Category == database.CategoryStructural {
 		return permanentStoreError{err}
 	}
 	return err
@@ -465,17 +465,23 @@ func (s *roundStore) PrepareCandidateCommit(ctx context.Context, b *backend.Buil
 	clearReview := false
 	if c.Mode == pipeline.RoundModeTranslate {
 		if s.qa != nil {
-			if err := b.ReserveNodes(1, 256); err != nil {
+			if err := backend.ReserveSlice[pipeline.TranslatedSegment](b, 1); err != nil {
 				return result, err
 			}
-			fresh, err := s.qa.RunBounded(ctx, b, buildQACheckInputs(pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{result}}))
+			inputs, err := buildQACheckInputsBounded(b, pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{result}})
 			if err != nil {
 				return result, err
 			}
-			if err = b.ReserveNodes(int64(len(issues)+len(fresh)), 256); err != nil {
+			fresh, err := s.qa.RunBounded(ctx, b, inputs)
+			if err != nil {
 				return result, err
 			}
-			issues = append(issues, fresh...)
+			if err = backend.ReserveSlice[qa.QualityIssue](b, int64(len(issues)+len(fresh))); err != nil {
+				return result, err
+			}
+			merged := make([]qa.QualityIssue, 0, len(issues)+len(fresh))
+			merged = append(merged, issues...)
+			issues = append(merged, fresh...)
 		}
 		if s.snapshot.AutoApprove {
 			status = string(service.SegmentStatusApproved)
@@ -495,11 +501,15 @@ func (s *roundStore) PrepareCandidateCommit(ctx context.Context, b *backend.Buil
 		if !noop {
 			var fresh []qa.QualityIssue
 			if s.qa != nil {
-				if err := b.ReserveNodes(1, 256); err != nil {
+				if err := backend.ReserveSlice[pipeline.TranslatedSegment](b, 1); err != nil {
 					return result, err
 				}
 				var err error
-				fresh, err = s.qa.RunBounded(ctx, b, buildQACheckInputs(pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{result}}))
+				inputs, err := buildQACheckInputsBounded(b, pipeline.BatchResult{Segments: []pipeline.TranslatedSegment{result}})
+				if err != nil {
+					return result, err
+				}
+				fresh, err = s.qa.RunBounded(ctx, b, inputs)
 				if err != nil {
 					return result, err
 				}
@@ -522,7 +532,7 @@ func (s *roundStore) PrepareCandidateCommit(ctx context.Context, b *backend.Buil
 }
 func (s *roundStore) Commit(ctx context.Context, c *pipeline.Candidate, result pipeline.TranslatedSegment) (pipeline.CommitOutcome, error) {
 	if !result.CommitPrepared {
-		b, e := backend.NewBuildBounds(pipeline.DefaultCandidateLimits().ItemBytes, 0)
+		b, e := backend.NewBuildBoundsFromContext(ctx, pipeline.DefaultCandidateLimits().ItemBytes, 0)
 		if e != nil {
 			return "", e
 		}

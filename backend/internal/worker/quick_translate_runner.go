@@ -85,7 +85,7 @@ func (r *QuickTranslateRunner) Run(ctx context.Context, in service.QuickTranslat
 	collectorCtx := ctx
 	ctx, cancelCollector := context.WithCancel(ctx)
 	defer cancelCollector()
-	collector := preview.NewBoundedMemoryCollector(collectorCtx, preview.CollectorBudget{Reserve: documentLease.RetainPayload, Release: documentLease.ReleasePayload, RunBuild: documentLease.RunBuild, Cancel: cancelCollector})
+	collector := preview.NewBoundedMemoryCollector(collectorCtx, preview.CollectorBudget{Reserve: documentLease.RetainPayload, Release: documentLease.ReleasePayload, RunBuild: documentLease.RunBuild, AdoptAllocation: documentLease.AdoptRetainedAllocation, Cancel: cancelCollector})
 	_ = documentLease.RetainBacking(func() { _ = collector.Close() })
 	resources := engine.RuntimeResources{Glossary: in.Glossary, TM: preview.NoopTM{}}
 	eng, err := r.factory.BuildEngine(ctx, in.Snapshot, resources, collector)
@@ -340,35 +340,56 @@ func buildTranslateBatchHandlerCommon(
 	engineCfg *engine.Config,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		var allIssues []qa.QualityIssue
-		if qaEngine != nil {
-			inputs := buildQACheckInputs(batchResult)
-			allIssues = qaEngine.Run(context.Background(), inputs)
-		}
+	return func(ctx context.Context, batchResult pipeline.BatchResult) error {
+		return applyStoredMemoryResult(ctx, batchResult, func(b *backend.BuildBounds, batchResult pipeline.BatchResult) error {
+			var allIssues []qa.QualityIssue
+			if qaEngine != nil {
+				inputs, err := buildQACheckInputsBounded(b, batchResult)
+				if err != nil {
+					return err
+				}
+				allIssues, err = qaEngine.RunBounded(ctx, b, inputs)
+				if err != nil {
+					return err
+				}
+			}
 
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
+			for _, ts := range batchResult.Segments {
+				if ts.Index != targetDocIdx {
+					continue
+				}
+				if ts.TargetText == "" {
+					continue
+				}
+				// 合并 pipeline 产出的守恒 issue（如注音还原不完整）与 QA 扫描结果，
+				// 与 job_runner 的 translate 轮落库口径一致。新建切片避免对 QA
+				// 内部切片的别名依赖；ts.Issues 为 nil 时 append 跳过。
+				count := len(ts.Issues)
+				for _, issue := range allIssues {
+					if issue.SegmentIndex == ts.Index {
+						count++
+					}
+				}
+				if err := backend.ReserveSlice[qa.QualityIssue](b, int64(count)); err != nil {
+					return err
+				}
+				segIssues := make([]qa.QualityIssue, 0, count)
+				segIssues = append(segIssues, ts.Issues...)
+				for _, issue := range allIssues {
+					if issue.SegmentIndex == ts.Index {
+						segIssues = append(segIssues, issue)
+					}
+				}
+				doc.Segments[ts.Index].Target = ts.TargetText
+				doc.Segments[ts.Index].Issues = segIssues
+				segStatus := string(service.SegmentStatusTranslated)
+				if qa.HasErrors(segIssues) && engineCfg.QA.AutoReject {
+					segStatus = string(service.SegmentStatusRejected)
+				}
+				doc.Segments[ts.Index].Status = segStatus
 			}
-			if ts.TargetText == "" {
-				continue
-			}
-			// 合并 pipeline 产出的守恒 issue（如注音还原不完整）与 QA 扫描结果，
-			// 与 job_runner 的 translate 轮落库口径一致。新建切片避免对 QA
-			// 内部切片的别名依赖；ts.Issues 为 nil 时 append 跳过。
-			segIssues := make([]qa.QualityIssue, 0, len(ts.Issues)+4)
-			segIssues = append(segIssues, ts.Issues...)
-			segIssues = append(segIssues, qa.IssuesFor(ts.Index, allIssues)...)
-			doc.Segments[ts.Index].Target = ts.TargetText
-			doc.Segments[ts.Index].Issues = segIssues
-			segStatus := string(service.SegmentStatusTranslated)
-			if qa.HasErrors(segIssues) && engineCfg.QA.AutoReject {
-				segStatus = string(service.SegmentStatusRejected)
-			}
-			doc.Segments[ts.Index].Status = segStatus
-		}
-		return nil
+			return nil
+		})
 	}
 }
 
@@ -444,23 +465,40 @@ func buildReviseBatchHandlerCommon(
 	targetedCodes []string,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
 	return func(ctx context.Context, batchResult pipeline.BatchResult) error {
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
+		return applyStoredMemoryResult(ctx, batchResult, func(b *backend.BuildBounds, batchResult pipeline.BatchResult) error {
+			for _, ts := range batchResult.Segments {
+				if ts.Index != targetDocIdx {
+					continue
+				}
+				// no-op 修订（LLM 判定无需改动，或返回空译文）：跳过写回与任何 issue 变更，完整保留既有 issue。
+				if ts.TargetText == "" || ts.TargetText == doc.Segments[ts.Index].Target {
+					continue
+				}
+				doc.Segments[ts.Index].Target = ts.TargetText
+				var fresh []qa.QualityIssue
+				qaRan := qaEngine != nil
+				if qaRan {
+					inputs, err := buildQACheckInputsBounded(b, batchResult)
+					if err != nil {
+						return err
+					}
+					all, err := qaEngine.RunBounded(ctx, b, inputs)
+					if err != nil {
+						return err
+					}
+					fresh, err = issuesForBounded(b, ts.Index, all)
+					if err != nil {
+						return err
+					}
+				}
+				issues, err := qa.ReviseFinalIssuesBounded(b, doc.Segments[ts.Index].Issues, fresh, targetedCodes, qaRan)
+				if err != nil {
+					return err
+				}
+				doc.Segments[ts.Index].Issues = issues
 			}
-			// no-op 修订（LLM 判定无需改动，或返回空译文）：跳过写回与任何 issue 变更，完整保留既有 issue。
-			if ts.TargetText == "" || ts.TargetText == doc.Segments[ts.Index].Target {
-				continue
-			}
-			doc.Segments[ts.Index].Target = ts.TargetText
-			var fresh []qa.QualityIssue
-			qaRan := qaEngine != nil
-			if qaRan {
-				fresh = qa.IssuesFor(ts.Index, qaEngine.Run(ctx, buildQACheckInputs(batchResult)))
-			}
-			doc.Segments[ts.Index].Issues = qa.ReviseFinalIssues(doc.Segments[ts.Index].Issues, fresh, targetedCodes, qaRan)
-		}
-		return nil
+			return nil
+		})
 	}
 }
 
@@ -470,20 +508,22 @@ func buildCorrectBatchHandlerCommon(
 	doc *pipeline.Document,
 	targetDocIdx int,
 ) func(ctx context.Context, batchResult pipeline.BatchResult) error {
-	return func(_ context.Context, batchResult pipeline.BatchResult) error {
-		for _, ts := range batchResult.Segments {
-			if ts.Index != targetDocIdx {
-				continue
+	return func(ctx context.Context, batchResult pipeline.BatchResult) error {
+		return applyStoredMemoryResult(ctx, batchResult, func(_ *backend.BuildBounds, batchResult pipeline.BatchResult) error {
+			for _, ts := range batchResult.Segments {
+				if ts.Index != targetDocIdx {
+					continue
+				}
+				if ts.TargetText != "" {
+					doc.Segments[ts.Index].Target = ts.TargetText
+				}
+				// correct handler 总是携带最终 issues（改写过滤后的集合；no-op 段为原 issues 拷贝）。
+				// nil = 该段原无 issues 且未改动，跳过；非 nil（含空切片）= 写回以反映已解决。
+				if ts.Issues != nil {
+					doc.Segments[ts.Index].Issues = ts.Issues
+				}
 			}
-			if ts.TargetText != "" {
-				doc.Segments[ts.Index].Target = ts.TargetText
-			}
-			// correct handler 总是携带最终 issues（改写过滤后的集合；no-op 段为原 issues 拷贝）。
-			// nil = 该段原无 issues 且未改动，跳过；非 nil（含空切片）= 写回以反映已解决。
-			if ts.Issues != nil {
-				doc.Segments[ts.Index].Issues = ts.Issues
-			}
-		}
-		return nil
+			return nil
+		})
 	}
 }

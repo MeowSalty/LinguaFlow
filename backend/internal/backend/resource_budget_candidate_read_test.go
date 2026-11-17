@@ -3,7 +3,6 @@ package backend_test
 import (
 	"context"
 	"errors"
-	"math"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -15,9 +14,6 @@ func TestPaidAuxCandidateReadUsesPrepaidPayload(t *testing.T) {
 	root := contractRoot(t, 64<<20)
 	scope := resourcebudget.Scope{ActorID: 1, JobID: 1}
 	const arena = int64(8 << 20)
-	if err := a.SetCandidateReadAllocationBound(func(int64) (int64, error) { return arena, nil }); err != nil {
-		t.Fatal(err)
-	}
 	if err := a.AttachRootBudget(root, scope); err != nil {
 		t.Fatal(err)
 	}
@@ -31,8 +27,8 @@ func TestPaidAuxCandidateReadUsesPrepaidPayload(t *testing.T) {
 	}
 	defer permit.Release()
 	before, _ := root.Usage(scope, "job:1:runtime")
-	if before.PayloadBytes != arena+(1<<20)+(1<<20)+4096+backend.RequestMetadataBytes {
-		t.Fatalf("arena, candidate Q, aux I/R/O not distinct: %+v", before)
+	if before.PayloadBytes != (1<<20)+(1<<20)+4096+backend.RequestMetadataBytes {
+		t.Fatalf("candidate Q and aux I/R/O not distinct: %+v", before)
 	}
 	blocker := resourcebudget.Scope{ActorID: 1, CallID: "full"}
 	if err := root.Claim(blocker, "full", resourcebudget.Vector{PayloadBytes: (1 << 30) - before.PayloadBytes}); err != nil {
@@ -40,9 +36,6 @@ func TestPaidAuxCandidateReadUsesPrepaidPayload(t *testing.T) {
 	}
 	defer root.Transfer(blocker, "full", resourcebudget.Vector{})
 	permit.RequestDone() // Closing the network must retain the read/response owner.
-	if _, owned, err := a.BorrowCandidateRead("candidate", arena+1); !owned || !errors.Is(err, backend.ErrBuildCapacity) {
-		t.Fatalf("over-bound allocation: owned=%v err=%v", owned, err)
-	}
 	release, owned, err := a.BorrowCandidateRead("candidate", arena)
 	if !owned || err != nil {
 		t.Fatalf("paid read under full root: owned=%v err=%v", owned, err)
@@ -78,28 +71,47 @@ func TestPaidAuxCandidateReadUsesPrepaidPayload(t *testing.T) {
 	}
 }
 
-func TestAuxCandidateReadPromiseRefusesBeforeDispatch(t *testing.T) {
-	for _, maximum := range []int64{1 << 30, math.MaxInt64} {
-		a := contractAdmission(t, 256, 4, 64<<20)
-		root := contractRoot(t, 64<<20)
-		if err := a.SetCandidateReadAllocationBound(func(int64) (int64, error) { return maximum, nil }); err != nil {
-			t.Fatal(err)
+func TestPaidCandidateReadAboveRUsesActualRootExcess(t *testing.T) {
+	a := contractAdmission(t, 256, 4, 64<<20)
+	root := contractRoot(t, 64<<20)
+	scope := resourcebudget.Scope{ActorID: 1, JobID: 1}
+	if err := a.AttachRootBudget(root, scope); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.RestoreBudgetEntry("candidate", backend.PipelineBudgetEntry{Count: 1, Bytes: 512, Durable: true}); err != nil {
+		t.Fatal(err)
+	}
+	permit, _, err := a.TryAdmit(context.Background(), backend.RequestAdmissionIntent{RequestID: "aux", CandidateIDs: []string{"candidate"}, Stage: backend.RequestStageAlignment}, nil)
+	if err != nil || permit == nil {
+		t.Fatal(err)
+	}
+	defer permit.Release()
+	ctx := backend.WithBuildOwnership(context.Background(), a, "response:aux")
+	ctx = backend.WithBuildReservation(ctx, func(n int64) error { return a.ClaimBuild("response:aux", n) }, func(n int64) {
+		if e := a.ReleaseBuildBytes("response:aux", n); e != nil {
+			t.Error(e)
 		}
-		scope := resourcebudget.Scope{ActorID: 1, JobID: 1}
-		if err := a.AttachRootBudget(root, scope); err != nil {
-			t.Fatal(err)
-		}
-		if err := a.RestoreBudgetEntry("candidate", backend.PipelineBudgetEntry{Count: 1, Bytes: 512, Durable: true}); err != nil {
-			t.Fatal(err)
-		}
-		before, _ := root.Usage(scope, "job:1:runtime")
-		permit, _, err := a.TryAdmit(context.Background(), backend.RequestAdmissionIntent{RequestID: "aux", CandidateIDs: []string{"candidate"}, Stage: backend.RequestStageAlignment}, nil)
-		if permit != nil || err == nil {
-			t.Fatalf("oversized read arena admitted: maximum=%d err=%v", maximum, err)
-		}
-		after, _ := root.Usage(scope, "job:1:runtime")
-		if before != after || a.PipelineSnapshot().AuxOwners != 0 {
-			t.Fatalf("failed grant leaked arena or candidate growth: before=%+v after=%+v", before, after)
-		}
+	})
+	ctx = backend.WithProviderResponseOwnership(ctx, a, "aux", backend.RequestStageAlignment)
+	ctx, err = backend.WithProviderResponseAllocation(ctx, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := root.Snapshot(1).Actor.PayloadBytes
+	release, owned, err := a.BorrowCandidateRead("candidate", 2<<20)
+	if err != nil || !owned {
+		t.Fatal(owned, err)
+	}
+	owner, err := backend.OwnProviderResponseAllocation(ctx, 2<<20, 1)
+	if err != nil || root.Snapshot(1).Actor.PayloadBytes-before != 1<<20 {
+		t.Fatal(err, root.Snapshot(1))
+	}
+	owner.Release()
+	release()
+	if root.Snapshot(1).Actor.PayloadBytes != before {
+		t.Fatal(root.Snapshot(1))
+	}
+	if err = backend.CloseProviderResponseAllocation(ctx); err != nil {
+		t.Fatal(err)
 	}
 }

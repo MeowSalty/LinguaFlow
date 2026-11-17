@@ -50,7 +50,7 @@ func TestExecutionControlScalarDiscoveryAndOldFormat(t *testing.T) {
 }
 
 func TestExecutionControlDefinitionRejectsBeforeAllocation(t *testing.T) {
-	for _, kind := range []string{"bytes", "depth", "nodes", "rounds", "old_format"} {
+	for _, kind := range []string{"bytes", "depth", "rounds", "old_format"} {
 		t.Run(kind, func(t *testing.T) {
 			env := newJobRoundTestEnv(t, nil)
 			ctx := context.Background()
@@ -67,8 +67,6 @@ func TestExecutionControlDefinitionRejectsBeforeAllocation(t *testing.T) {
 					deep = map[string]any{"child": deep}
 				}
 				config["extension"] = deep
-			case "nodes":
-				config["extension"] = make([]int, 70000)
 			case "rounds":
 				original := config["rounds"].([]any)
 				v := make([]any, 257)
@@ -105,6 +103,35 @@ func TestExecutionControlDefinitionRejectsBeforeAllocation(t *testing.T) {
 				t.Fatalf("mutated status: %s", after.Status)
 			}
 		})
+	}
+}
+
+func TestExecutionControlDefinitionManyValuesUsesByteCredit(t *testing.T) {
+	env := newJobRoundTestEnv(t, nil)
+	ctx := context.Background()
+	row, _, _ := seedJobWithRounds(t, env, JobStatusFailed, 0, 0, []jobResourceSpec{{status: JobResourceStatusFailed}})
+	row = env.client.Job.GetX(ctx, row.ID)
+	row.ExecutionConfig["extension"] = make([]int, 70000)
+	env.client.Job.UpdateOneID(row.ID).SetExecutionConfig(row.ExecutionConfig).ExecX(ctx)
+	root, err := resourcebudget.New(resourcebudget.Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.svc.SetExecutionControlBudget(root, nil, DefaultExecutionInputBytes)
+	result, err := env.svc.RetryJob(ctx, env.user.ID, row.ID)
+	if err != nil {
+		t.Fatalf("legal definition rejected by value count: %v", err)
+	}
+	t.Cleanup(func() { env.svc.ReleaseExecutionControlResult(result) })
+	if values, ok := result.ExecutionConfig["extension"].([]any); !ok || len(values) != 70000 {
+		t.Fatalf("definition values were changed: %T", result.ExecutionConfig["extension"])
+	}
+	if held := root.Snapshot(env.user.ID).Instance; held.PayloadBytes <= 0 || held.BuildWorkers != 0 || held.PrepareOwners != 0 {
+		t.Fatalf("result needs finite retained byte credit: %+v", held)
+	}
+	env.svc.ReleaseExecutionControlResult(result)
+	if left := root.Snapshot(env.user.ID).Instance; left != (resourcebudget.Vector{}) {
+		t.Fatalf("released definition retains credit: %+v", left)
 	}
 }
 

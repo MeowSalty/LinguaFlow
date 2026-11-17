@@ -32,10 +32,11 @@ type AlignmentBatchMember struct {
 // EnvelopeInvalid does not invalidate safely decoded Entries (e.g. on a later
 // truncated member). Callers compare both maps with the actual request set.
 type AlignmentBatchResult struct {
-	Entries         map[AlignmentBatchKey][]OutputEntry
-	Invalid         map[AlignmentBatchKey]bool
-	EnvelopeInvalid bool
-	Diagnostics     []string
+	Entries              map[AlignmentBatchKey][]OutputEntry
+	Invalid              map[AlignmentBatchKey]bool
+	EnvelopeInvalid      bool
+	Diagnostics          []string
+	entryAllocationCount int64
 }
 
 // AlignmentBatchRequest reuses the exact public single-member view. Coordinates

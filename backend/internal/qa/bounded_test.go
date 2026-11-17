@@ -13,9 +13,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 )
 
-func qaTestBounds(t *testing.T, output int64) *backend.BuildBounds {
+func qaTestBounds(t *testing.T, output int64, limits ...int64) *backend.BuildBounds {
 	t.Helper()
-	b, err := backend.NewBuildBounds(output, output)
+	b, err := backend.NewBuildBounds(output, output, limits...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,13 +97,28 @@ func TestRunBoundedCapacityBeforeOutput(t *testing.T) {
 			cfg.Enabled = true
 			cfg.Checks = []string{tc.code}
 			e := NewEngine(cfg, nil)
-			b := qaTestBounds(t, 1024)
+			b := qaTestBounds(t, 1024, 1024)
 			got, err := e.RunBounded(context.Background(), b, []CheckInput{tc.in})
+			if tc.name == "protected_product" {
+				// No protected value occurs and ASCII produces no width issue.
+				// Input length does not create a future output allocation.
+				if err != nil || got != nil {
+					t.Fatalf("unmatched borrowed input was charged as future output: issues=%d error=%v", len(got), err)
+				}
+				short := tc.in
+				short.TargetText = "x"
+				shortBounds := qaTestBounds(t, 1024, 1024)
+				shortGot, shortErr := e.RunBounded(context.Background(), shortBounds, []CheckInput{short})
+				if shortErr != nil || shortGot != nil || shortBounds.Snapshot() != b.Snapshot() {
+					t.Fatalf("borrowed input length changed explicit allocation: long=%+v short=%+v error=%v", b.Snapshot(), shortBounds.Snapshot(), shortErr)
+				}
+				return
+			}
 			if !errors.Is(err, backend.ErrBuildCapacity) || got != nil {
 				t.Fatalf("capacity silently returned partial checks: issues=%d error=%v", len(got), err)
 			}
 			s := b.Snapshot()
-			if s.Nodes > s.NodeLimit || s.TextBytes > s.TextLimit {
+			if s.LiveBytes > s.MeasuredRequiredBytes || s.AllocationBytes < s.LiveBytes {
 				t.Fatalf("overspent before rejection: %+v", s)
 			}
 		})
@@ -143,13 +158,13 @@ func TestRunBoundedGlossaryCapacityBeforeIssues(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Enabled, cfg.SourceLang, cfg.TargetLang, cfg.Glossary = true, "en", "zh", g
 	cfg.Checks = []string{CheckTermInconsistency}
-	b := qaTestBounds(t, 1024)
+	b := qaTestBounds(t, 1024, 1024)
 	got, err := NewEngine(cfg, nil).RunBounded(ctx, b, []CheckInput{{SourceText: source.String(), TargetText: "different"}})
 	if !errors.Is(err, backend.ErrBuildCapacity) || got != nil {
 		t.Fatalf("glossary silently skipped capacity checks: issues%d err%v", len(got), err)
 	}
 	s := b.Snapshot()
-	if s.Nodes > s.NodeLimit || s.TextBytes > s.TextLimit {
+	if s.LiveBytes > s.MeasuredRequiredBytes || s.AllocationBytes < s.LiveBytes {
 		t.Fatalf("glossary overspent: %+v", s)
 	}
 }
@@ -170,7 +185,7 @@ func TestBoundedIssueReconciliationParityAndCapacity(t *testing.T) {
 		}
 	}
 	long := []QualityIssue{{Code: "test", Span: &Span{MatchedText: strings.Repeat("x", 32<<10)}}}
-	if _, err := ReconcileIssuesBounded(qaTestBounds(t, 1024), long, long); !errors.Is(err, backend.ErrBuildCapacity) {
+	if _, err := ReconcileIssuesBounded(qaTestBounds(t, 1024, 1024), long, long); !errors.Is(err, backend.ErrBuildCapacity) {
 		t.Fatal(fmt.Sprint("long fingerprint copied without capacity: ", err))
 	}
 }
@@ -224,12 +239,15 @@ func TestBoundedLocateCoveredMatchesUseFixedOffsetAllocations(t *testing.T) {
 }
 
 func TestBoundedRepeatedSpaceRejectsBeforeOffsetAllocation(t *testing.T) {
-	var b backend.BuildBounds
-	q := boundedQA{b: &b}
+	b, err := backend.NewBuildBounds(1024, 1024, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := boundedQA{b: b}
 	baseline := testing.AllocsPerRun(10, func() {
 		q.err = nil
-		if q.nodes(4) {
-			panic("node capacity rejection failed")
+		if reserveQASlice[Span](&q, 1) {
+			panic("allocation capacity rejection failed")
 		}
 	})
 	allocations := testing.AllocsPerRun(10, func() {
@@ -240,7 +258,7 @@ func TestBoundedRepeatedSpaceRejectsBeforeOffsetAllocation(t *testing.T) {
 		}
 	})
 	if allocations != baseline {
-		t.Fatalf("offsets allocated before node ticket rejection: %.0f vs base rejection%.0f", allocations, baseline)
+		t.Fatalf("offsets allocated before byte capacity rejection: %.0f vs base rejection%.0f", allocations, baseline)
 	}
 	t.Logf("actual repeated-space rejected allocations=%.0f baseline error allocations=%.0f additional offset allocations=%.0f", allocations, baseline, allocations-baseline)
 }

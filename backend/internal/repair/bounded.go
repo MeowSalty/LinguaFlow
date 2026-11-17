@@ -15,7 +15,7 @@ func limitText(b *backend.BuildBounds) int64 {
 	if b.OutputLimit() > 0 {
 		return b.OutputLimit()
 	}
-	return b.Snapshot().TextLimit
+	return b.OutputLimit()
 }
 func copyBytesBounded(b *backend.BuildBounds, s string) ([]byte, error) {
 	if e := b.ReserveText(int64(len(s)), int64(len(s))); e != nil {
@@ -81,18 +81,18 @@ func preserveRubyView(b *backend.BuildBounds, v backend.JSONValue, raw map[strin
 	return nil
 }
 func rawRubyView(b *backend.BuildBounds, v backend.JSONValue) (any, error) {
-	if e := b.ReserveNodes(2, 24); e != nil {
+	if e := backend.ReserveSlice[json.RawMessage](b, 2); e != nil {
 		return nil, e
 	}
 	if v.Kind() != '[' {
 		return json.RawMessage(v.Raw()), nil
 	}
-	if e := b.ReserveNodes(int64(v.Count()), 16); e != nil {
+	if e := backend.ReserveSlice[any](b, int64(v.Count())); e != nil {
 		return nil, e
 	}
 	out := make([]any, 0, v.Count())
 	e := v.EachArray(func(row backend.JSONValue) error {
-		if e := b.ReserveNodes(1, 32); e != nil {
+		if e := backend.ReserveSlice[json.RawMessage](b, 1); e != nil {
 			return e
 		}
 		out = append(out, json.RawMessage(row.Raw()))
@@ -156,7 +156,7 @@ func fixJSONBounded(b *backend.BuildBounds, s string, kind int) (string, error) 
 	if kind != 3 && !jsonFixNeeded(s, kind) {
 		return s, nil
 	}
-	w := backend.NewBoundedWriter(b, b.Snapshot().TextLimit)
+	w := backend.NewBoundedWriter(b, b.OutputLimit())
 	write := func(c byte) error { var one [1]byte; one[0] = c; _, e := w.Write(one[:]); return e }
 	inString, escaped := false, false
 	if kind == 3 {
@@ -315,7 +315,7 @@ func repairEnvelopeBounded(text, key string, opt Options, array bool) (map[strin
 			return nil, nil, &backend.BuildCapacityError{Resource: "unsupported repair callback"}
 		}
 	}
-	if e := b.ReserveNodes(32, 64); e != nil {
+	if e := backend.ReserveSlice[string](b, 16); e != nil {
 		return nil, nil, e
 	}
 	if e := jsonDepthBounded(text); e != nil {
@@ -466,9 +466,6 @@ func repairEnvelopeBounded(text, key string, opt Options, array bool) (map[strin
 			if !allObjectEntries(arr) || (opt.BareArrayAccept != nil && !opt.BareArrayAccept(arr)) {
 				continue
 			}
-			if e = b.ReserveNodes(1, 1024); e != nil {
-				return nil, repaired, e
-			}
 			if key == "ruby_output" {
 				view, e := backend.NewJSONView(b, value)
 				if e != nil {
@@ -505,7 +502,7 @@ func repairEnvelopeBounded(text, key string, opt Options, array bool) (map[strin
 }
 
 func convertBounded(b *backend.BuildBounds, v any, dst any) error {
-	data, e := b.EncodeJSON(v, b.Snapshot().TextLimit)
+	data, e := b.EncodeJSON(v, b.OutputLimit())
 	if e != nil {
 		return e
 	}
@@ -520,9 +517,6 @@ func transMapBounded(b *backend.BuildBounds, v any) (map[string]string, error) {
 		count = len(tv)
 	default:
 		return nil, errors.New("expected translations object or array")
-	}
-	if e := b.ReserveNodes(int64(count)+1, 1024); e != nil {
-		return nil, e
 	}
 	out := make(map[string]string, count)
 	read := func(value any) (string, error) {
@@ -567,12 +561,16 @@ func transMapBounded(b *backend.BuildBounds, v any) (map[string]string, error) {
 func finalizeBounded(raw map[string]any, wantIDs, repaired []string, opt Options) Result {
 	b := opt.Bounds
 	if opt.SchemaAliases {
-		if e := b.ReserveNodes(1, 1024); e != nil {
+		m, did, e := normalizeEnvelopeKeysBounded(b, raw)
+		if e != nil {
 			return Result{Fatal: true, ParseErr: e}
 		}
-		if m, did := normalizeEnvelopeKeys(raw); did {
+		if did {
 			raw = m
-			repaired = append(repaired, "schema.alias")
+			repaired, e = backend.AppendNode(b, repaired, "schema.alias")
+			if e != nil {
+				return Result{Fatal: true, ParseErr: e}
+			}
 		}
 	}
 	v, ok := raw["translations"]
@@ -591,7 +589,7 @@ func finalizeBounded(raw map[string]any, wantIDs, repaired []string, opt Options
 	}
 	var output map[string][]ruby.OutputEntry
 	if value, ok := raw["ruby_output"]; ok {
-		data, e := b.EncodeJSON(value, b.Snapshot().TextLimit)
+		data, e := b.EncodeJSON(value, b.OutputLimit())
 		if e != nil {
 			return Result{Fatal: true, Repaired: repaired, ParseErr: e}
 		}
@@ -602,16 +600,13 @@ func finalizeBounded(raw map[string]any, wantIDs, repaired []string, opt Options
 	}
 	if output == nil {
 		if tv, ok := v.(map[string]any); ok {
-			if e = b.ReserveNodes(int64(len(tv))+1, 1024); e != nil {
-				return Result{Fatal: true, ParseErr: e}
-			}
 			for id, value := range tv {
 				m, ok := value.(map[string]any)
 				if !ok {
 					continue
 				}
 				if rows, ok := m["ruby_output"]; ok {
-					data, e := b.EncodeJSON(rows, b.Snapshot().TextLimit)
+					data, e := b.EncodeJSON(rows, b.OutputLimit())
 					if e != nil {
 						return Result{Fatal: true, ParseErr: e}
 					}
@@ -632,7 +627,7 @@ func finalizeBounded(raw map[string]any, wantIDs, repaired []string, opt Options
 			}
 		}
 	}
-	if e = b.ReserveNodes(int64(len(wantIDs)), 16); e != nil {
+	if e = backend.ReserveSlice[string](b, int64(len(wantIDs))); e != nil {
 		return Result{Fatal: true, ParseErr: e}
 	}
 	missing := make([]string, 0, len(wantIDs))
@@ -644,14 +639,33 @@ func finalizeBounded(raw map[string]any, wantIDs, repaired []string, opt Options
 	return Result{Trans: trans, Glos: glos, RubyOutput: output, Missing: missing, Repaired: repaired}
 }
 
+func normalizeEnvelopeKeysBounded(b *backend.BuildBounds, raw map[string]any) (map[string]any, bool, error) {
+	if _, exists := raw["translations"]; exists {
+		return raw, false, nil
+	}
+	install := func(alias string, value any) (map[string]any, bool, error) {
+		raw["translations"] = value
+		delete(raw, alias)
+		return raw, true, nil
+	}
+	for _, alias := range []string{"translation", "result", "output", "results"} {
+		if value, ok := raw[alias].(map[string]any); ok {
+			return install(alias, value)
+		}
+	}
+	if data, ok := raw["data"].(map[string]any); ok {
+		if value, exists := data["translations"]; exists {
+			return install("data", value)
+		}
+	}
+	return raw, false, nil
+}
+
 func tryRepairBounded(text string, wantIDs []string, opt Options) Result {
 	// The canonical multi-object merge preserves first strings just like the
 	// existing structural repair. All decoded maps are credited independently.
 	if opt.JSONStructural {
 		b := opt.Bounds
-		if e := b.ReserveNodes(2, 1024); e != nil {
-			return Result{Fatal: true, ParseErr: e}
-		}
 		merged := make(map[string]any)
 		var first map[string]any
 		count := 0
@@ -687,9 +701,6 @@ func tryRepairBounded(text string, wantIDs []string, opt Options) Result {
 				}
 				if _, exists := merged[k]; exists {
 					continue
-				}
-				if e = b.ReserveNodes(1, 1024); e != nil {
-					return Result{Fatal: true, ParseErr: e}
 				}
 				merged[k] = v
 			}
@@ -731,9 +742,6 @@ func tryRepairBootstrapBounded(text string, opt Options) ([]prompt.BootstrapEntr
 	if e = convertBounded(opt.Bounds, value, &entries); e != nil {
 		return nil, ops, e
 	}
-	if e = opt.Bounds.ReserveNodes(int64(len(entries))+1, 1024); e != nil {
-		return nil, ops, e
-	}
 	seen := make(map[string]bool, len(entries))
 	out := entries[:0]
 	for _, entry := range entries {
@@ -758,11 +766,7 @@ func decodeKeyedBounded[T any](raw map[string]any, key string, opt Options, norm
 	if e := convertBounded(opt.Bounds, v, &typed); e != nil {
 		return nil, e
 	}
-	var zero T
-	if e := opt.Bounds.ReserveNodes(int64(len(typed))+1, int64(reflect.TypeOf(zero).Size())); e != nil {
-		return nil, e
-	}
-	if e := opt.Bounds.ReserveNodes(int64(len(typed))+1, 1024); e != nil {
+	if e := backend.ReserveSlice[T](opt.Bounds, int64(len(typed))); e != nil {
 		return nil, e
 	}
 	return normalize(typed), nil

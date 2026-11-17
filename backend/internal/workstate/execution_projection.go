@@ -80,7 +80,7 @@ func LoadExecutionConfig(ctx context.Context, client *ent.Client, id int, limit 
 	if len(rows) != 1 {
 		return nil, backend.ErrBuildCapacity
 	}
-	b, err := backend.NewBuildBounds(0, max(int64(4096), 4*int64(len(rows[0].Raw))))
+	b, err := backend.NewBuildBoundsFromContext(ctx, 0, int64(len(rows[0].Raw)))
 	if err != nil {
 		return nil, err
 	}

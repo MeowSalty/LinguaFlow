@@ -77,6 +77,13 @@ func newCandidateChecked(seg Segment, index int, mode, format, id string, provid
 	if id == "" {
 		id = NewWorkID()
 	}
+	if err := b.ReserveText(int64(len(mode)), int64(len(mode))); err != nil {
+		return nil, err
+	}
+	mode = strings.Clone(mode)
+	if err := backend.ReserveSlice[Candidate](b, 1); err != nil {
+		return nil, err
+	}
 	return &Candidate{DTOVersion: CandidateDTOVersion, ID: id, WorkID: fmt.Sprintf("%s:%d", mode, index), Version: 1, Index: index, Mode: mode, Format: format, Segment: owned, BaselineTarget: seg.Target, BaselineStatus: seg.Status}, nil
 }
 
@@ -109,6 +116,9 @@ func DecodeCandidateBounded(data []byte, limit, input int64) (*Candidate, error)
 	var c Candidate
 	b, err := backend.NewBuildBounds(limit, input)
 	if err != nil {
+		return nil, err
+	}
+	if err := backend.ReserveSlice[Candidate](b, 1); err != nil {
 		return nil, err
 	}
 	if err := b.DecodeJSON(data, &c); err != nil {
@@ -338,7 +348,7 @@ func PrepareAlignmentBounded(b *backend.BuildBounds, body, format string, items 
 	if err != nil {
 		return nil, err
 	}
-	if err = b.ReserveNodes(int64(len(missing)), 16); err != nil {
+	if err = backend.ReserveSlice[string](b, int64(len(missing))); err != nil {
 		return nil, err
 	}
 	_, err = s.ApplyOutputBounded(b, itemIDs(missing), initial, false)
