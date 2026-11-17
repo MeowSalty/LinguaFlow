@@ -59,7 +59,7 @@ func requestMetadataBounds(sel *sql.Selector) *sql.Predicate {
 		count = "COALESCE(jsonb_array_length(" + ids + "),0)"
 	}
 	promotionCount := sel.C(workrequest.FieldPromotionCount)
-	checks := []*sql.Predicate{sql.GTE(promotionCount, 0), sql.LTE(promotionCount, 65536), sql.ExprP(count + " BETWEEN 1 AND 65536"), sql.ExprP(promotionCount + " <= " + count)}
+	checks := []*sql.Predicate{sql.GTE(promotionCount, 0), sql.ExprP(count + " >= 1"), sql.ExprP(promotionCount + " <= " + count)}
 	for _, limit := range []struct{ field, expression string }{{workrequest.FieldPromotionMembers, "4+" + promotionCount + "*4096"}, {workrequest.FieldPromotionStatus, promotionCount}, {workrequest.FieldCorrectedTargetIndex, promotionCount + "*16"}, {workrequest.FieldMembers, "32+" + count + "*2048"}, {workrequest.FieldDebits, "4+" + count + "*1024"}, {workrequest.FieldSegmentIds, "4+" + count + "*21"}} {
 		checks = append(checks, sql.ExprP(projectedByteLength(sel, limit.field)+" <= "+limit.expression), projectedLengthPredicate(sel, limit.field, "<=", CandidateReadBytes))
 	}
