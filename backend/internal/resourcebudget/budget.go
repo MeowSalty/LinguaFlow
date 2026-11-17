@@ -22,11 +22,16 @@ var (
 // CapacityError records consumer evidence at the exact failed atomic probe.
 // A later consumer release cannot retroactively turn that failure into no-drain.
 type CapacityError struct {
-	DrainOutside bool
-	cause        error
+	DrainOutside            bool
+	Stage, Dimension, Owner string
+	Used, Requested, Limit  int64
+	cause                   error
 }
 
 func (e *CapacityError) Error() string {
+	if e.Dimension != "" {
+		return fmt.Sprintf("%s: stage=%s dimension=%s used=%d requested=%d limit=%d owner=%s drain=%t", ErrCapacity, e.Stage, e.Dimension, e.Used, e.Requested, e.Limit, e.Owner, e.DrainOutside)
+	}
 	if e.cause != nil {
 		return e.cause.Error()
 	}
@@ -36,6 +41,13 @@ func (e *CapacityError) Unwrap() error { return ErrCapacity }
 func CapacityHasDrain(err error) bool {
 	var e *CapacityError
 	return errors.As(err, &e) && e.DrainOutside
+}
+
+func setCapacityOwner(err error, owner string) {
+	var capacity *CapacityError
+	if errors.As(err, &capacity) {
+		capacity.Owner = owner
+	}
 }
 
 type Scope struct {
@@ -70,8 +82,9 @@ type Limits struct {
 }
 
 type Policy struct {
-	Actor    Limits `yaml:"actor"`
-	Instance Limits `yaml:"instance"`
+	MaxBuildAllocationBytes int64  `yaml:"max_build_allocation_bytes"`
+	Actor                   Limits `yaml:"actor"`
+	Instance                Limits `yaml:"instance"`
 }
 
 var dimensions = [...]string{"unconfirmed_members", "payload_bytes", "prepare_owners", "main_response_owners", "aux_response_owners", "build_workers", "queued_descriptors", "logical_storage_bytes"}
@@ -84,6 +97,9 @@ func (l Limits) vector() Vector {
 	return Vector{l.MaxUnconfirmedMembers, l.MaxPayloadBytes, l.MaxPrepareOwners, l.MaxMainResponseOwners, l.MaxAuxResponseOwners, l.MaxBuildWorkers, l.MaxQueuedDescriptors, l.MaxLogicalStorageBytes}
 }
 func (p Policy) Validate() error {
+	if p.MaxBuildAllocationBytes < 0 {
+		return fmt.Errorf("%w: max_build_allocation_bytes must be nonnegative", ErrInvalid)
+	}
 	for _, group := range []struct {
 		name   string
 		limits Limits
@@ -152,12 +168,14 @@ func (b *RootBudget) PinActor(actorID int) (func(), error) {
 		return nil, ErrActorMissing
 	}
 	if cap := b.policy.Instance.MaxQueuedDescriptors; cap > 0 && b.pinCount >= cap {
+		err := &CapacityError{Stage: "actor_pin", Dimension: "queued_descriptors", Used: b.pinCount, Requested: 1, Limit: cap, Owner: "instance"}
 		b.mu.Unlock()
-		return nil, ErrCapacity
+		return nil, err
 	}
 	if cap := b.policy.Actor.MaxQueuedDescriptors; cap > 0 && b.pins[actorID] >= cap {
+		err := &CapacityError{Stage: "actor_pin", Dimension: "queued_descriptors", Used: b.pins[actorID], Requested: 1, Limit: cap, Owner: fmt.Sprintf("actor:%d", actorID)}
 		b.mu.Unlock()
-		return nil, ErrCapacity
+		return nil, err
 	}
 	if b.pinCount == math.MaxInt64 || b.pins[actorID] == math.MaxInt64 {
 		b.mu.Unlock()
@@ -203,6 +221,12 @@ func (r *RootBudget) canDrainOutsideLocked(scope Scope) bool {
 }
 func (r *RootBudget) capacityLocked(scope Scope, err error) error {
 	if errors.Is(err, ErrCapacity) {
+		var detail *CapacityError
+		if errors.As(err, &detail) {
+			copy := *detail
+			copy.DrainOutside = r.canDrainOutsideLocked(scope)
+			return &copy
+		}
 		return &CapacityError{DrainOutside: r.canDrainOutsideLocked(scope), cause: err}
 	}
 	return err
@@ -242,7 +266,7 @@ func change(total, old, next Vector, limit *Limits) (Vector, error) {
 			}
 			t[i] += d
 			if limit != nil && caps[i] > 0 && d > 0 && t[i] > caps[i] {
-				return Vector{}, fmt.Errorf("%w: %s", ErrCapacity, dimensions[i])
+				return Vector{}, &CapacityError{Stage: "root_admission", Dimension: dimensions[i], Used: t[i] - d, Requested: d, Limit: caps[i]}
 			}
 		} else {
 			d := o[i] - n[i]
@@ -289,7 +313,7 @@ func (b *RootBudget) Claim(s Scope, id string, v Vector) error {
 		return ErrIdentity
 	}
 	if cap := b.policy.Instance.MaxQueuedDescriptors; cap > 0 && int64(len(b.active)) >= cap {
-		return b.capacityLocked(s, ErrCapacity)
+		return b.capacityLocked(s, &CapacityError{Stage: "root_admission", Dimension: "queued_descriptors", Used: int64(len(b.active)), Requested: 1, Limit: cap, Owner: "instance/" + id})
 	}
 	return b.transferLocked(s, id, Vector{}, v)
 }
@@ -300,14 +324,16 @@ func (b *RootBudget) transferLocked(s Scope, id string, old, next Vector) error 
 		return ErrActorMissing
 	}
 	if !ok && b.actorCacheFullLocked() {
-		return b.capacityLocked(s, ErrCapacity)
+		return b.capacityLocked(s, &CapacityError{Stage: "actor_cache", Dimension: "queued_descriptors", Used: int64(len(b.actors)), Requested: 1, Limit: b.policy.Instance.MaxQueuedDescriptors, Owner: "instance/" + id})
 	}
 	at, err := change(a.total, old, next, &b.policy.Actor)
 	if err != nil {
+		setCapacityOwner(err, fmt.Sprintf("actor:%d/%s", s.ActorID, id))
 		return b.capacityLocked(s, fmt.Errorf("actor %d: %w", s.ActorID, err))
 	}
 	it, err := change(b.instance.total, old, next, &b.policy.Instance)
 	if err != nil {
+		setCapacityOwner(err, "instance/"+id)
 		return b.capacityLocked(s, fmt.Errorf("instance: %w", err))
 	}
 	a.total, b.instance.total = at, it
@@ -414,7 +440,7 @@ func (b *RootBudget) Attach(s Scope, id string, v Vector) error {
 		return ErrIdentity
 	}
 	if cap := b.policy.Instance.MaxQueuedDescriptors; cap > 0 && int64(len(b.active)) >= cap {
-		return ErrCapacity
+		return b.capacityLocked(s, &CapacityError{Stage: "root_attach", Dimension: "queued_descriptors", Used: int64(len(b.active)), Requested: 1, Limit: cap, Owner: "instance/" + id})
 	}
 	a, ready := b.actors[s.ActorID]
 	if !ready {
@@ -529,7 +555,7 @@ func (b *RootBudget) Move(s Scope, from, to string, amount Vector) error {
 		return err
 	}
 	if cap := b.policy.Instance.MaxQueuedDescriptors; cap > 0 && !ok && !left.empty() && !amount.empty() && int64(len(b.active)) >= cap {
-		return ErrCapacity
+		return b.capacityLocked(s, &CapacityError{Stage: "root_move", Dimension: "queued_descriptors", Used: int64(len(b.active)), Requested: 1, Limit: cap, Owner: "instance/" + to})
 	}
 	right, err := change(t.usage, Vector{}, amount, nil)
 	if err != nil {

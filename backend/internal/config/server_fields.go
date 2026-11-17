@@ -55,6 +55,7 @@ func admin(r *ResolvedServer) *BootstrapAdmin {
 }
 
 var serverFields = []serverField{
+	optionalInteger64Field("server.execution_budget.max_build_allocation_bytes", "LINGUAFLOW_EXECUTION_BUDGET_MAX_BUILD_ALLOCATION_BYTES", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.MaxBuildAllocationBytes }),
 	optionalInteger64Field("server.execution_budget.actor.max_unconfirmed_members", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_UNCONFIRMED_MEMBERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxUnconfirmedMembers }),
 	optionalInteger64Field("server.execution_budget.actor.max_payload_bytes", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxPayloadBytes }),
 	optionalInteger64Field("server.execution_budget.actor.max_prepare_owners", "LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PREPARE_OWNERS", "serve/local", false, func(r *ResolvedServer) **int64 { return &r.Config.ExecutionBudget.Actor.MaxPrepareOwners }),

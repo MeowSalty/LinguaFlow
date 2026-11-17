@@ -12,7 +12,7 @@ import (
 func limits(n int64) Limits { return Limits{n, n, n, n, n, n, n, n} }
 func newBudget(t *testing.T, a, i int64) *RootBudget {
 	t.Helper()
-	b, err := New(Policy{limits(a), limits(i)})
+	b, err := New(Policy{Actor: limits(a), Instance: limits(i)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +360,7 @@ func TestRebuildAndActorPrepareRemainQuiescent(t *testing.T) {
 }
 
 func TestActiveDescriptorMapBound(t *testing.T) {
-	p := Policy{limits(100), limits(100)}
+	p := Policy{Actor: limits(100), Instance: limits(100)}
 	p.Instance.MaxQueuedDescriptors = 2
 	b, err := New(p)
 	must(t, err)
@@ -388,7 +388,7 @@ func TestActiveDescriptorMapBound(t *testing.T) {
 }
 
 func TestAttachCannotCreateUnmeteredDescriptor(t *testing.T) {
-	p := Policy{limits(100), limits(100)}
+	p := Policy{Actor: limits(100), Instance: limits(100)}
 	p.Instance.MaxQueuedDescriptors = 2
 	b, err := New(p)
 	must(t, err)
