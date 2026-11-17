@@ -11,9 +11,6 @@ import (
 // the short permit. The resulting issue graph belongs to Document before the
 // permit is released; database callbacks continue to consume the opaque bytes.
 func applyStoredMemoryResult(ctx context.Context, result pipeline.BatchResult, apply func(*backend.BuildBounds, pipeline.BatchResult) error) error {
-	if result.PreparedPayload == nil {
-		return apply(nil, result)
-	}
 	runtime := pipeline.ExecutionRuntimeFromContext(ctx)
 	limit, input := backend.DefaultMaxResponseBytes, int64(len(result.PreparedPayload))
 	if runtime != nil {
@@ -21,9 +18,12 @@ func applyStoredMemoryResult(ctx context.Context, result pipeline.BatchResult, a
 		input = runtime.HandoffBytes
 	}
 	build := func() error {
-		b, err := backend.NewBuildBounds(limit, input)
+		b, err := backend.NewBuildBoundsFromContext(ctx, limit, input)
 		if err != nil {
 			return err
+		}
+		if result.PreparedPayload == nil {
+			return apply(b, result)
 		}
 		var full pipeline.BatchResult
 		if err = b.DecodeJSONLimited(result.PreparedPayload, &full, limit); err != nil {

@@ -1045,7 +1045,7 @@ func TestRubyHandoffAcceptanceHTTPMainConcurrency(t *testing.T) {
 }
 
 func TestRubyHandoffAcceptanceHTTPBoundedProtectionContextAndMetadata(t *testing.T) {
-	for _, kind := range []string{"protected_context_escapes", "metadata_depth65", "metadata_nodes65537", "response_over_R"} {
+	for _, kind := range []string{"protected_context_escapes", "metadata_depth65", "metadata_many_values65537", "response_over_R"} {
 		t.Run(kind, func(t *testing.T) {
 			count := 1
 			if kind == "protected_context_escapes" {
@@ -1067,7 +1067,7 @@ func TestRubyHandoffAcceptanceHTTPBoundedProtectionContextAndMetadata(t *testing
 				if kind == "metadata_depth65" {
 					update.SetMeta(`{"nested":` + strings.Repeat("[", 65) + "0" + strings.Repeat("]", 65) + "}")
 				}
-				if kind == "metadata_nodes65537" {
+				if kind == "metadata_many_values65537" {
 					update.SetMeta(`{"nodes":[` + strings.Repeat("0,", 65536) + "0]}")
 				}
 				update.ExecX(context.Background())
@@ -1102,7 +1102,7 @@ func TestRubyHandoffAcceptanceHTTPBoundedProtectionContextAndMetadata(t *testing
 			calls := barrier.calls
 			wire := barrier.wireBytes
 			barrier.mu.Unlock()
-			if kind == "protected_context_escapes" {
+			if kind == "protected_context_escapes" || kind == "metadata_many_values65537" {
 				if runErr != nil || len(result.Resolved) != count || calls != count {
 					t.Fatalf("protected/context actual pipeline: %+v %v HTTP%d", result, runErr, calls)
 				}

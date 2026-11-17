@@ -5,23 +5,37 @@ import (
 	"errors"
 	"sort"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 func (s *roundStore) HandoffResponse(ctx context.Context, in pipeline.MainResponse) error {
+	b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
+	if err != nil {
+		return err
+	}
+	if err := backend.ReserveSlice[workstate.PromotionMember](b, int64(len(in.Members))); err != nil {
+		b.CloseRetired()
+		return err
+	}
 	members := make([]workstate.PromotionMember, 0, len(in.Members))
+	defer func() { clear(members); members = nil; b.CloseRetired() }()
 	for _, m := range in.Members {
 		id, ok := s.segmentID(m.Index)
 		if !ok {
 			return permanentStoreError{workstate.ErrManifest}
 		}
-		members = append(members, workstate.PromotionMember{SegmentID: id, WorkID: s.WorkIdentity(m.Index), CandidateID: m.CandidateID, BaselineVersion: m.BaselineVersion, BaselineTarget: m.BaselineTarget, BaselineStatus: m.BaselineStatus, SourceGeneration: s.scope.SourceGeneration, SourceRevisionID: s.scope.SourceRevisionID})
+		workID := s.WorkIdentity(m.Index)
+		if err := b.ReserveAllocation(1, int64(len(workID))); err != nil {
+			return err
+		}
+		members = append(members, workstate.PromotionMember{SegmentID: id, WorkID: workID, CandidateID: m.CandidateID, BaselineVersion: m.BaselineVersion, BaselineTarget: m.BaselineTarget, BaselineStatus: m.BaselineStatus, SourceGeneration: s.scope.SourceGeneration, SourceRevisionID: s.scope.SourceRevisionID})
 	}
 	sort.Slice(members, func(i, j int) bool { return members[i].SegmentID < members[j].SegmentID })
 	r := in.Record
 	result := workstate.RequestResult{UsageKnown: r.UsageKnown, InputTokens: r.Usage.PromptTokens, OutputTokens: r.Usage.CompletionTokens, DurationMS: r.Duration.Milliseconds(), LastError: r.Error}
-	err := s.store.HandoffResponse(ctx, workstate.ResponseHandoff{RequestID: in.ID, Scope: s.scope, FreezePayload: in.FreezePayload, ResponsePayload: in.Raw, SnapshotDigest: s.digest, Members: members, BusinessBound: in.BusinessBound, Truncated: in.Truncated, Result: result})
+	err = s.store.HandoffResponse(ctx, workstate.ResponseHandoff{RequestID: in.ID, Scope: s.scope, FreezePayload: in.FreezePayload, ResponsePayload: in.Raw, SnapshotDigest: s.digest, Members: members, BusinessBound: in.BusinessBound, Truncated: in.Truncated, Result: result})
 	if errors.Is(err, workstate.ErrStopped) {
 		// A response arriving after Cancel cannot become recoverable work. Its
 		// already dispatched request still owns the provider's factual usage.
@@ -64,10 +78,36 @@ func (s *roundStore) Response(ctx context.Context, id string, freeze, raw, busin
 	if err != nil {
 		return pipeline.MainResponse{}, s.classify(err)
 	}
+	retained := false
+	defer func() {
+		if !retained {
+			release := in.ReleaseOwned
+			in = workstate.StoredResponse{}
+			if release != nil {
+				release()
+			}
+		}
+	}()
 	if in.Scope.JobID != s.scope.JobID || in.Scope.ResourceID != s.scope.ResourceID || in.Scope.RoundID != s.scope.RoundID || in.SnapshotDigest != s.digest {
 		return pipeline.MainResponse{}, permanentStoreError{workstate.ErrManifest}
 	}
+	b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
+	if err != nil {
+		return pipeline.MainResponse{}, err
+	}
+	if err = backend.ReserveSlice[pipeline.ResponseMember](b, int64(len(in.Members))); err != nil {
+		b.CloseRetired()
+		return pipeline.MainResponse{}, err
+	}
 	out := pipeline.MainResponse{MainResponseHeader: pipelineResponseHeader(in.ResponseHeader), FreezePayload: in.FreezePayload, Raw: in.ResponsePayload, CorrectedTargets: in.CorrectedTargets, CorrectedIndex: in.CorrectedIndex, Receipt: in.Receipt}
+	out.Members = make([]pipeline.ResponseMember, 0, len(in.Members))
+	defer func() {
+		if !retained {
+			clear(out.Members)
+			out = pipeline.MainResponse{}
+			b.CloseRetired()
+		}
+	}()
 	for _, m := range in.Members {
 		idx, ok := s.segmentIndex(m.SegmentID)
 		if !ok {
@@ -75,6 +115,18 @@ func (s *roundStore) Response(ctx context.Context, id string, freeze, raw, busin
 		}
 		out.Members = append(out.Members, pipeline.ResponseMember{Index: idx, SegmentID: m.SegmentID, WorkID: m.WorkID, CandidateID: m.CandidateID, BaselineVersion: m.BaselineVersion, BaselineTarget: m.BaselineTarget, BaselineStatus: m.BaselineStatus, SourceGeneration: m.SourceGeneration, SourceRevisionID: m.SourceRevisionID})
 	}
+	members := out.Members
+	out.ReleaseOwned = func() {
+		clear(members)
+		members = nil
+		release := in.ReleaseOwned
+		in = workstate.StoredResponse{}
+		b.CloseRetired()
+		if release != nil {
+			release()
+		}
+	}
+	retained = true
 	return out, nil
 }
 
@@ -106,6 +158,13 @@ func (s *roundStore) PromoteMember(ctx context.Context, id string, cursor int, c
 		if err != nil {
 			return s.classify(err)
 		}
+		defer func() {
+			release := member.ReleaseOwned
+			member = workstate.PromotionMember{}
+			if release != nil {
+				release()
+			}
+		}()
 		var ok bool
 		idx, ok = s.segmentIndex(member.SegmentID)
 		if !ok {

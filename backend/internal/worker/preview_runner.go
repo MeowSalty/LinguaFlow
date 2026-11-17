@@ -127,7 +127,7 @@ func (r *PreviewRunner) RunPreview(
 	collectorCtx := ctx
 	ctx, cancelCollector := context.WithCancel(ctx)
 	defer cancelCollector()
-	collector := preview.NewBoundedMemoryCollector(collectorCtx, preview.CollectorBudget{Reserve: documentLease.RetainPayload, Release: documentLease.ReleasePayload, RunBuild: documentLease.RunBuild, Cancel: cancelCollector})
+	collector := preview.NewBoundedMemoryCollector(collectorCtx, preview.CollectorBudget{Reserve: documentLease.RetainPayload, Release: documentLease.ReleasePayload, RunBuild: documentLease.RunBuild, AdoptAllocation: documentLease.AdoptRetainedAllocation, Cancel: cancelCollector})
 	_ = documentLease.RetainBacking(func() { _ = collector.Close() })
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: translationMemory}
 	eng, err := r.factory.BuildEngine(ctx, snapshot, resources, collector)

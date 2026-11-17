@@ -24,6 +24,7 @@ type inputPressureTransport struct {
 	err     error
 	trigger int32
 	closed  atomic.Int32
+	filled  atomic.Bool
 }
 type inputPressureBody struct {
 	io.ReadCloser
@@ -45,12 +46,15 @@ func (t *inputPressureTransport) RoundTrip(req *http.Request) (*http.Response, e
 			n := s.Policy.Instance.MaxPayloadBytes - s.Instance.PayloadBytes
 			if n > 0 {
 				t.err = t.root.Claim(t.scope, "pressure", resourcebudget.Vector{PayloadBytes: n})
+				if t.err == nil {
+					t.filled.Store(t.root.Snapshot(t.scope.ActorID).Instance.PayloadBytes == s.Policy.Instance.MaxPayloadBytes)
+				}
 			}
 		})
 	}}
 	return r, nil
 }
-func TestExecutionInputCapacityAfterMainRetainsUsage(t *testing.T) {
+func TestExecutionInputResponsePrepayAndLaterCapacityRetainsUsage(t *testing.T) {
 	for _, trigger := range []int32{1, 2} {
 		t.Run(fmt.Sprintf("after_%d_HTTP", trigger), func(t *testing.T) {
 			f := newRubyEntryFixture(t, false)
@@ -80,11 +84,21 @@ func TestExecutionInputCapacityAfterMainRetainsUsage(t *testing.T) {
 			defer cancel()
 			ctx = service.WithExecutionInputBudget(ctx, root, service.ExecutionScope(ctx), service.DefaultExecutionInputBytes)
 			result, err := runner.Run(ctx, service.QuickTranslateRunnerInput{Snapshot: f.snapshot, SourceLang: "en", TargetLang: "zh", SourceText: rubyEntrySource, Format: "txt", Glossary: glossary.Nop{}})
-			if !isExecutionCapacity(err) {
+			if result != nil {
+				t.Cleanup(result.ReleaseExecutionInputs)
+			}
+			if trigger == 1 {
+				if err != nil || result == nil || result.Status != "success" || result.TargetText != "alpha beta" {
+					t.Fatalf("prepaid response failed under full Root: result=%+v err=%v", result, err)
+				}
+			} else if !isExecutionCapacity(err) {
 				t.Fatalf("expected capacity failure after paid HTTP, got result=%+v err=%v", result, err)
 			}
-			if result == nil || result.TargetText != "" || result.Collector != nil {
+			if trigger != 1 && (result == nil || result.TargetText != "" || result.Collector != nil) {
 				t.Fatal("failed output leaked a draft or discarded finite metrics")
+			}
+			if trigger != 1 {
+				t.Logf("paid followup rejection: %T %v", err, err)
 			}
 			var calls, in, out int64
 			for _, m := range result.Metrics {
@@ -98,6 +112,10 @@ func TestExecutionInputCapacityAfterMainRetainsUsage(t *testing.T) {
 			if pressure.err != nil {
 				t.Fatal(pressure.err)
 			}
+			if !pressure.filled.Load() {
+				t.Fatal("HTTP pressure did not fill the Root")
+			}
+			result.ReleaseExecutionInputs()
 			if err = root.Transfer(pressure.scope, "pressure", resourcebudget.Vector{}); err != nil {
 				t.Fatal(err)
 			}
@@ -110,7 +128,7 @@ func TestExecutionInputCapacityAfterMainRetainsUsage(t *testing.T) {
 			if actual != int(trigger) {
 				t.Fatalf("new HTTP dispatched after capacity error: %d", actual)
 			}
-			t.Logf("real main HTTP=%d; finite usage calls=%d input=%d output=%d; no draft; all roots retired", actual, calls, in, out)
+			t.Logf("real HTTP=%d; finite paid usage calls=%d input=%d output=%d; prepaid response success=%t; all roots retired", actual, calls, in, out, trigger == 1)
 		})
 	}
 }

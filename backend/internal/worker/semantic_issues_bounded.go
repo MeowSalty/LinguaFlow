@@ -14,7 +14,7 @@ func mergeSemanticQAIssuesBounded(b *backend.BuildBounds, existing, fresh []qa.Q
 			n++
 		}
 	}
-	if err := b.ReserveNodes(int64(n), int64(unsafe.Sizeof(qa.QualityIssue{}))); err != nil {
+	if err := b.ReserveAllocation(int64(n), int64(unsafe.Sizeof(qa.QualityIssue{}))); err != nil {
 		return nil, err
 	}
 	out := make([]qa.QualityIssue, 0, n)

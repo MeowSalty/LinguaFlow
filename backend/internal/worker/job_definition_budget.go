@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -16,9 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
-// Job routing has a fixed node bound as well as the Server's descriptor budget.
-// These limits precede every ORM/JSON/map/slice allocation for a Job definition.
-const maxJobDefinitionNodes int64 = 65536
+// Execution plans keep their independent business round and segment-ID bounds.
 const maxJobDefinitionRounds int64 = 256
 const maxJobDefinitionSegmentIDs = service.MaxJobDefinitionSegmentIDs
 
@@ -37,6 +36,9 @@ func (r *JobRunner) loadJobDefinition(ctx context.Context, id int) (jobCtx conte
 		return
 	}
 	jobCtx = service.WithExecutionJobActor(ctx, actor, id)
+	if r.rootBudget != nil {
+		jobCtx = backend.WithBuildAllocation(jobCtx, r.rootBudget.Snapshot(actor).Policy.MaxBuildAllocationBytes, nil, nil)
+	}
 	if r.prepareActor != nil {
 		if err = r.prepareActor(jobCtx, actor); err != nil {
 			return
@@ -116,7 +118,7 @@ func (r *JobRunner) loadJobDefinition(ctx context.Context, id int) (jobCtx conte
 	if err != nil {
 		return
 	}
-	if rounds < 1 || rounds > maxJobDefinitionRounds || resources < 0 || resources > maxJobDefinitionNodes || roundRows < 0 || roundRows > maxJobDefinitionNodes || bytes < 0 || resourceBytes < 0 || bytes > service.DefaultExecutionInputBytes-resourceBytes {
+	if rounds < 1 || rounds > maxJobDefinitionRounds || resources < 0 || resources > int64(math.MaxInt) || roundRows < 0 || roundRows > int64(math.MaxInt) || bytes < 0 || resourceBytes < 0 || bytes > service.DefaultExecutionInputBytes-resourceBytes {
 		err = backend.ErrBuildCapacity
 		return
 	}
@@ -127,9 +129,9 @@ func (r *JobRunner) loadJobDefinition(ctx context.Context, id int) (jobCtx conte
 		return
 	}
 	bytes += resourceBytes
-	definitions := int64(1) + resources + max(roundRows, resources*rounds) + rounds
-	if definitions > maxJobDefinitionNodes {
-		err = backend.ErrBuildCapacity
+	definitions, e := service.ExecutionDefinitionCount(resources, roundRows, rounds)
+	if e != nil {
+		err = e
 		return
 	}
 	limit := r.pipeCfg.ResponseHandoffBytes
@@ -164,14 +166,14 @@ func (r *JobRunner) loadJobDefinition(ctx context.Context, id int) (jobCtx conte
 			close()
 		}
 	}()
-	bounds, e := backend.NewBuildBounds(0, bytes)
+	bounds, e := backend.NewBuildBoundsFromContext(jobCtx, 0, bytes)
 	if e != nil {
 		err = e
 		return
 	}
-	// Validate cumulative JSON nodes before ent's generated JSON decoder runs.
+	// Validate JSON structure before ent's generated JSON decoder runs.
 	// segment_ids is excluded: its length was already checked by the exact SQL
-	// count above, so it must not be decoded into the shared node arena. On
+	// count above, so it need not be decoded into the shared validation arena. On
 	// SQLite malformed JSON makes that count query itself fail and is retried as
 	// a transient read error; Postgres jsonb rejects it at write time.
 	for _, q := range []string{"SELECT execution_config,pipeline_runtime_state FROM jobs WHERE id=$1", "SELECT p.config FROM projects p JOIN jobs j ON j.project_id=p.id WHERE j.id=$1"} {

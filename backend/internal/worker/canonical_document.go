@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
@@ -22,6 +24,16 @@ func (r *JobRunner) loadCanonicalDocument(ctx context.Context, resource int, doc
 			lease.Close()
 		}
 	}()
+	if err = lease.InitializeDocumentSlots(ctx, rows); err != nil {
+		return err
+	}
+	array, err := backend.AllocationBytes(int64(len(rows)), int64(unsafe.Sizeof(pipeline.Segment{})))
+	if err != nil {
+		return err
+	}
+	if err = lease.RetainExplicitAllocation(ctx, array); err != nil {
+		return err
+	}
 	err = lease.RunBuild(ctx, func() error {
 		next = make([]pipeline.Segment, len(rows))
 		for i, row := range rows {
@@ -29,7 +41,11 @@ func (r *JobRunner) loadCanonicalDocument(ctx context.Context, resource int, doc
 			if err != nil {
 				return err
 			}
-			seg := pipeline.Segment{DBID: row.ID, DBIndex: row.SegmentIndex, OriginalSource: row.SourceText, ID: strconv.Itoa(row.SegmentIndex), ContentVersion: row.ContentVersion, TargetIsNull: row.TargetText == nil, Source: row.SourceText, Status: string(row.Status), Issues: row.QualityIssues, Translate: true, Meta: meta}
+			id := strconv.Itoa(row.SegmentIndex)
+			if err := lease.RetainExplicitAllocation(ctx, int64(len(id))); err != nil {
+				return err
+			}
+			seg := pipeline.Segment{DBID: row.ID, DBIndex: row.SegmentIndex, OriginalSource: row.SourceText, ID: id, ContentVersion: row.ContentVersion, TargetIsNull: row.TargetText == nil, Source: row.SourceText, Status: string(row.Status), Issues: row.QualityIssues, Translate: true, Meta: meta}
 			if i < len(doc.Segments) {
 				seg.CompletionModes = doc.Segments[i].CompletionModes
 			}

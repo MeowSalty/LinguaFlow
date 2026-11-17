@@ -113,7 +113,7 @@ func TestBuildTranslateAndReviseRoundsUseTopLevelStrategy(t *testing.T) {
 		Revise: &service.JobReviseRoundSnapshot{TemplateContent: templates.EmbeddedReviseTemplate()},
 	}
 
-	tr, err := buildTranslateRound(translateSnap, strategy, nil)
+	tr, err := buildTranslateRound(context.Background(), translateSnap, strategy, nil)
 	if err != nil {
 		t.Fatalf("buildTranslateRound: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestBuildTranslateAndReviseRoundsUseTopLevelStrategy(t *testing.T) {
 		t.Fatalf("translate Context = %+v，未按顶层 Strategy 注入", tr.Context)
 	}
 
-	rr, err := buildReviseRound(reviseSnap, strategy, nil)
+	rr, err := buildReviseRound(context.Background(), reviseSnap, strategy, nil)
 	if err != nil {
 		t.Fatalf("buildReviseRound: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestBuildRoundsZeroValueStrategyDegrades(t *testing.T) {
 		Revise: &service.JobReviseRoundSnapshot{TemplateContent: templates.EmbeddedReviseTemplate()},
 	}
 
-	tr, err := buildTranslateRound(translateSnap, strategy, nil)
+	tr, err := buildTranslateRound(context.Background(), translateSnap, strategy, nil)
 	if err != nil {
 		t.Fatalf("buildTranslateRound: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestBuildRoundsZeroValueStrategyDegrades(t *testing.T) {
 		t.Fatal("ruby 未启用时 translate 轮不应开启注音")
 	}
 
-	rr, err := buildReviseRound(reviseSnap, strategy, nil)
+	rr, err := buildReviseRound(context.Background(), reviseSnap, strategy, nil)
 	if err != nil {
 		t.Fatalf("buildReviseRound: %v", err)
 	}

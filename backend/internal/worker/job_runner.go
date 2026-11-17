@@ -27,7 +27,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -285,14 +284,6 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		}
 		requestRuntime.Lifetime = workerLifetime(ctx)
 		if err := requestRuntime.SetResponseLimits(r.pipeCfg.MaxResponseBytes, r.pipeCfg.ResponseHandoffBytes); err != nil {
-			return err
-		}
-		if r.dbDriver == "postgres" {
-			if err := requestRuntime.Admission.SetStorageRepresentationBound(postgresCandidateStorageBound); err != nil {
-				return err
-			}
-		}
-		if err := requestRuntime.Admission.SetCandidateReadAllocationBound(func(physical int64) (int64, error) { return service.ExecutionInputAllocationBound(physical, 1) }); err != nil {
 			return err
 		}
 		requestRuntime.JobID = jobID
@@ -642,12 +633,6 @@ func (r *JobRunner) recoveryProgress(ctx context.Context, jobID int) (recoveryPr
 	return recoveryProgress{confirmed: int64(confirmed), promoted: rows[0].Promoted, finishedRounds: int64(finished)}, nil
 }
 
-// DTO/Q is canonical JSON; the adapter independently commits enough K for
-// PostgreSQL's normalized JSONB projection before a provider request is sent.
-func postgresCandidateStorageBound(canonicalMax int64) (int64, error) {
-	return persistence.JSONStorageBound(persistence.StoragePostgresJSONB, canonicalMax, 65536, workstate.CandidateReadBytes)
-}
-
 // roundConcurrency 从快照提取某轮的站位容量（concurrency 字段）。
 func restoreCandidateHeader(window *pipeline.CandidateWindow, header workstate.CandidateHeader) error {
 	if header.DTOVersion != pipeline.CandidateDTOVersion {
@@ -837,6 +822,7 @@ func (r *JobRunner) processJobResource(
 	job := exec.Job
 	ctx = context.WithValue(ctx, jobWriteScopeKey{}, jobWriteScope{jobID: job.ID, epoch: job.RetryEpoch})
 	ctx = service.WithExecutionInputBudget(ctx, r.rootBudget, resourcebudget.Scope{ActorID: exec.ActorUserID, JobID: job.ID}, r.pipeCfg.ResponseHandoffBytes)
+	ctx = withWorkerDocumentOwnership(ctx)
 	defer service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
 	if registry == nil {
 		var err error

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -14,7 +13,7 @@ import (
 )
 
 func TestBudgetIntegrationJobDefinitionRejectsBeforeAllocation(t *testing.T) {
-	for _, kind := range []string{"metadata_bytes", "metadata_nodes", "descriptors"} {
+	for _, kind := range []string{"metadata_bytes", "metadata_many_values", "descriptors"} {
 		t.Run(kind, func(t *testing.T) {
 			f := newRubyPipelineFixture(t, 1)
 			limits := resourcebudget.Limits{MaxUnconfirmedMembers: 4096, MaxPayloadBytes: 1 << 30, MaxPrepareOwners: 16, MaxMainResponseOwners: 16, MaxAuxResponseOwners: 16, MaxBuildWorkers: 16, MaxQueuedDescriptors: 256, MaxLogicalStorageBytes: 1 << 30}
@@ -38,9 +37,9 @@ func TestBudgetIntegrationJobDefinitionRejectsBeforeAllocation(t *testing.T) {
 			if kind == "metadata_bytes" {
 				f.runner.pipeCfg.ResponseHandoffBytes = 1024
 			}
-			if kind == "metadata_nodes" {
-				// Dense short key/value pairs charge two nodes each against a
-				// node budget derived from the same byte projection.
+			if kind == "metadata_many_values" {
+				// Dense legal metadata is limited by its finite byte allocation,
+				// without a node quota derived from the raw representation.
 				project := f.client.Job.GetX(t.Context(), f.jobID).QueryProject().OnlyX(t.Context())
 				config := make(map[string]any, 800)
 				for i := range 800 {
@@ -48,13 +47,25 @@ func TestBudgetIntegrationJobDefinitionRejectsBeforeAllocation(t *testing.T) {
 				}
 				f.client.Project.UpdateOneID(project.ID).SetConfig(config).ExecX(t.Context())
 			}
-			_, _, _, _, close, err := f.runner.loadJobDefinition(t.Context(), f.jobID)
-			close()
-			if !errors.Is(err, backend.ErrBuildCapacity) && !errors.Is(err, resourcebudget.ErrCapacity) {
-				t.Fatalf("definition bound did not reject before entry: %v", err)
+			_, loaded, _, _, close, err := f.runner.loadJobDefinition(t.Context(), f.jobID)
+			if kind == "metadata_many_values" {
+				if err != nil {
+					close()
+					t.Fatalf("legal dense definition rejected: %v", err)
+				}
+				if len(loaded.Project.Config) != 800 {
+					close()
+					t.Fatal("legal metadata was trimmed")
+				}
+				if held := root.Snapshot(0).Instance; held.PayloadBytes <= 0 {
+					close()
+					t.Fatalf("definition lost finite allocation credit: %+v", held)
+				}
 			}
-			if kind == "metadata_nodes" && !strings.Contains(err.Error(), "node backing capacity") {
-				t.Fatalf("dense project metadata did not exhaust nodes: %v", err)
+			loaded = nil
+			close()
+			if kind != "metadata_many_values" && !errors.Is(err, backend.ErrBuildCapacity) && !errors.Is(err, resourcebudget.ErrCapacity) {
+				t.Fatalf("definition bound did not reject before entry: %v", err)
 			}
 			main, aux, _, _ := f.calls()
 			if main != 0 || aux != 0 {
@@ -63,7 +74,7 @@ func TestBudgetIntegrationJobDefinitionRejectsBeforeAllocation(t *testing.T) {
 			if got := root.Snapshot(0).Instance; got != (resourcebudget.Vector{}) {
 				t.Fatalf("failed definition retained root: %+v", got)
 			}
-			t.Logf("%s rejected before ORM definition/maps/HTTP, no root residue", kind)
+			t.Logf("%s definition admission completed without HTTP or root residue", kind)
 		})
 	}
 }

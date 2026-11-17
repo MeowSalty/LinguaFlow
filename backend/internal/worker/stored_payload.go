@@ -41,7 +41,7 @@ func (r *JobRunner) persistStoredEncodedBatch(ctx context.Context, mode string, 
 		var idx, consumed int
 		var issuePayload []byte
 		err := runtime.Run(ctx, func() error {
-			b, e := backend.NewBuildBounds(runtime.ResponseBytes, runtime.HandoffBytes)
+			b, e := backend.NewBuildBoundsFromContext(ctx, runtime.ResponseBytes, runtime.HandoffBytes)
 			if e != nil {
 				return e
 			}
@@ -62,9 +62,6 @@ func (r *JobRunner) persistStoredEncodedBatch(ctx context.Context, mode string, 
 			if mode == "semantic_qa" {
 				if issues == nil {
 					return nil
-				}
-				if e = b.ReserveNodes(int64(len(doc.Segments[idx].Issues)+len(issues))*8, 128); e != nil {
-					return e
 				}
 				reconciled, err := qa.ReconcileIssuesBounded(b, issues, doc.Segments[idx].Issues)
 				if err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/telemetry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
@@ -163,16 +164,6 @@ func testBudgetPaidAuxSave(t *testing.T, fillStorage bool) {
 	t.Logf("actual HTTP main=1/aux=2 both aux returned with actor and instance P=%d; full storage=%t; SQL candidate save/commit consumed prepaid credit without new P/LS claim", limits.MaxPayloadBytes, fillStorage)
 }
 
-func TestBudgetIntegrationPostgresSaveBoundRejectsUnreadableRepresentation(t *testing.T) {
-	physical, err := postgresCandidateStorageBound(4 << 20)
-	if err != nil || physical <= 4<<20 || physical > workstate.CandidateReadBytes {
-		t.Fatalf("physical maximum=%d err=%v", physical, err)
-	}
-	if _, err = postgresCandidateStorageBound(64 << 20); err == nil {
-		t.Fatal("unreadable maximum was silently truncated")
-	}
-}
-
 func TestBudgetIntegrationB11B12PreviewEntriesShareRoot(t *testing.T) {
 	for _, kind := range []string{"preview", "quick", "revision_preview"} {
 		t.Run(kind, func(t *testing.T) {
@@ -183,6 +174,7 @@ func TestBudgetIntegrationB11B12PreviewEntriesShareRoot(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.factory.rootBudget = root
+			observed := observeEntryBuildAllocations(t, f.factory)
 			blocker := resourcebudget.Scope{ActorID: 7, JobID: 987}
 			if err := root.Claim(blocker, "stored-blocker", resourcebudget.Vector{MainResponseOwners: 1}); err != nil {
 				t.Fatal(err)
@@ -215,7 +207,7 @@ func TestBudgetIntegrationB11B12PreviewEntriesShareRoot(t *testing.T) {
 			select {
 			case result := <-done:
 				if result.err != nil || result.status == "failed" {
-					t.Fatalf("entry did not drain after root release: %+v", result)
+					t.Fatalf("entry did not drain after root release: status=%s err=%T %v", result.status, result.err, result.err)
 				}
 			case <-ctx.Done():
 				t.Fatal("entry did not wake after shared root release")
@@ -228,6 +220,7 @@ func TestBudgetIntegrationB11B12PreviewEntriesShareRoot(t *testing.T) {
 			}
 			service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
 			if got := root.Snapshot(7).Instance; got != (resourcebudget.Vector{}) {
+				t.Logf("live runtime build owners: %v", entryBuildAllocations(observed))
 				t.Fatalf("entry leaked roots: %+v", got)
 			}
 			t.Logf("B-T11/B-T12 kind=%s caller_actor=%d blocker_actor=7 real_HTTP_calls=%d root slot blocked every entry before HTTP", kind, actor, calls)
@@ -371,13 +364,14 @@ func TestBudgetIntegrationOptionalBudgetPreviewEntries(t *testing.T) {
 					t.Fatal(err)
 				}
 				f.factory.rootBudget = root
+				observed := observeEntryBuildAllocations(t, f.factory)
 				ctx, cancel := context.WithTimeout(service.WithExecutionActor(context.Background(), 7), 5*time.Second)
 				defer cancel()
 				ctx = service.WithExecutionInputBudget(ctx, root, service.ExecutionScope(ctx), service.DefaultExecutionInputBytes)
 				defer service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
 				result := f.run(ctx, kind)
 				if result.err != nil || result.status == "failed" {
-					t.Fatalf("optional entry failed: %+v", result)
+					t.Fatalf("optional entry failed: status=%s err=%T %v", result.status, result.err, result.err)
 				}
 				f.mu.Lock()
 				calls := len(f.requests)
@@ -390,11 +384,31 @@ func TestBudgetIntegrationOptionalBudgetPreviewEntries(t *testing.T) {
 				}
 				service.ExecutionInputOwner(ctx).ReleaseExecutionInputs()
 				if got := root.Snapshot(7); got.Instance != (resourcebudget.Vector{}) || got.ActiveIdentities != 0 || len(root.CachedActorIDs()) != 0 {
+					t.Logf("live runtime build owners: %v", entryBuildAllocations(observed))
 					t.Fatalf("optional entry leaked roots: %+v", got)
 				}
 			})
 		}
 	}
+}
+
+func observeEntryBuildAllocations(t *testing.T, factory *EngineFactory) *allocationHTTPObserver {
+	t.Helper()
+	observed := &allocationHTTPObserver{}
+	clients := telemetry.NewHTTPClients(nil, observed)
+	t.Cleanup(clients.Shutdown)
+	factory.httpClients = clients
+	return observed
+}
+
+func entryBuildAllocations(observed *allocationHTTPObserver) map[string]int64 {
+	observed.mu.Lock()
+	admission := observed.admission
+	observed.mu.Unlock()
+	if admission == nil {
+		return nil
+	}
+	return admission.BuildAllocationSnapshot()
 }
 
 func TestBudgetIntegrationStoredJobRejectsHTTPWithoutSaveCredit(t *testing.T) {

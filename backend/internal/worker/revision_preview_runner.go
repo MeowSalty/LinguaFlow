@@ -129,7 +129,7 @@ func (r *RevisionPreviewRunner) RunRevisionPreview(
 	collectorCtx := ctx
 	ctx, cancelCollector := context.WithCancel(ctx)
 	defer cancelCollector()
-	collector := preview.NewBoundedMemoryCollector(collectorCtx, preview.CollectorBudget{Reserve: documentLease.RetainPayload, Release: documentLease.ReleasePayload, RunBuild: documentLease.RunBuild, Cancel: cancelCollector})
+	collector := preview.NewBoundedMemoryCollector(collectorCtx, preview.CollectorBudget{Reserve: documentLease.RetainPayload, Release: documentLease.ReleasePayload, RunBuild: documentLease.RunBuild, AdoptAllocation: documentLease.AdoptRetainedAllocation, Cancel: cancelCollector})
 	_ = documentLease.RetainBacking(func() { _ = collector.Close() })
 	// 执行 snapshot 已裁剪为单 revise 轮，但顶层 Strategy（计划级物化）天然存活。
 	// Repair 用服务层显式派生的 repairOpts 覆盖；Ruby 读顶层 Strategy，
