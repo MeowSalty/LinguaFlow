@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
@@ -20,9 +21,6 @@ func ParseMainMemberBounded(b *backend.BuildBounds, text string, textMode bool, 
 	if err != nil {
 		return Result{Fatal: true, ParseErr: err, Repaired: ops}, err
 	}
-	if err = b.ReserveNodes(3, 1024); err != nil {
-		return Result{}, err
-	}
 	r := Result{Trans: make(map[string]string, 1), Repaired: ops}
 	if wantedID == "" {
 		glossary, e := mainField(view, "glossary")
@@ -30,7 +28,7 @@ func ParseMainMemberBounded(b *backend.BuildBounds, text string, textMode bool, 
 			return r, e
 		}
 		if glossary.Kind() != 0 {
-			e = glossary.DecodeInto(&r.Glos, b.Snapshot().TextLimit)
+			e = glossary.DecodeInto(&r.Glos, b.OutputLimit())
 			if errors.Is(e, backend.ErrBuildCapacity) {
 				return r, e
 			}
@@ -196,7 +194,7 @@ func uniqueMainField(v backend.JSONValue, name string) (backend.JSONValue, error
 	return out, e
 }
 func mainViewBounded(b *backend.BuildBounds, text string, opt Options) (backend.JSONValue, []string, error) {
-	if e := b.ReserveNodes(32, 64); e != nil {
+	if e := backend.ReserveSlice[string](b, 16); e != nil {
 		return backend.JSONValue{}, nil, e
 	}
 	ops := make([]string, 0, 16)
@@ -276,9 +274,6 @@ func mainViewBounded(b *backend.BuildBounds, text string, opt Options) (backend.
 	return v, ops, err
 }
 func parseTextMemberBounded(b *backend.BuildBounds, text, wantedID string, opt Options) (Result, error) {
-	if e := b.ReserveNodes(3, 1024); e != nil {
-		return Result{}, e
-	}
 	r := Result{Trans: make(map[string]string, 1)}
 	if opt.JSONStructural {
 		s, _, e := cleanZeroWidthBounded(b, text)
@@ -306,7 +301,7 @@ func parseTextMemberBounded(b *backend.BuildBounds, text, wantedID string, opt O
 			inRuby, inGlossary = true, false
 			continue
 		}
-		if e := b.ReserveNodes(1, 256); e != nil {
+		if e := b.CheckContext(); e != nil {
 			return r, e
 		}
 		loc, findErr := backend.FindRegexpSubmatch(b, textLineRe, line)
@@ -327,7 +322,7 @@ func parseTextMemberBounded(b *backend.BuildBounds, text, wantedID string, opt O
 			continue
 		}
 		if inGlossary && wantedID == "" {
-			if e := b.ReserveNodes(4, 128); e != nil {
+			if e := backend.ReserveSlice[prompt.BootstrapEntry](b, 1); e != nil {
 				return r, e
 			}
 			if entry := parseGlossaryLine(line); entry != nil {

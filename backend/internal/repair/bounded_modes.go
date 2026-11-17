@@ -1,6 +1,7 @@
 package repair
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -65,7 +66,7 @@ func parseReviseBounded(text string, isTextMode bool, opt Options) ([]prompt.Rev
 	}
 	var output map[string][]ruby.OutputEntry
 	if value, ok := raw["ruby_output"]; ok {
-		data, e := b.EncodeJSON(value, b.Snapshot().TextLimit)
+		data, e := b.EncodeJSON(value, b.OutputLimit())
 		if e != nil {
 			return nil, nil, ops, e
 		}
@@ -79,7 +80,7 @@ func parseReviseBounded(text string, isTextMode bool, opt Options) ([]prompt.Rev
 
 func bootstrapTextBounded(text string, opt Options) ([]prompt.BootstrapEntry, []string, bool, error) {
 	b := opt.Bounds
-	if e := b.ReserveNodes(4, 32); e != nil {
+	if e := backend.ReserveSlice[string](b, 4); e != nil {
 		return nil, nil, false, e
 	}
 	ops := make([]string, 0, 4)
@@ -97,10 +98,7 @@ func bootstrapTextBounded(text string, opt Options) ([]prompt.BootstrapEntry, []
 		text = v
 		ops = append(ops, "text.strip-code-fence")
 	}
-	if e := b.ReserveNodes(1, 1024); e != nil {
-		return nil, ops, false, e
-	}
-	seen := make(map[string]bool)
+	var seen []string
 	var out []prompt.BootstrapEntry
 	header, in := false, false
 	for text != "" {
@@ -123,18 +121,18 @@ func bootstrapTextBounded(text string, opt Options) ([]prompt.BootstrapEntry, []
 		if header && !in {
 			continue
 		}
-		if e := b.ReserveNodes(4, 128); e != nil {
+		if e := backend.ReserveSlice[prompt.BootstrapEntry](b, 1); e != nil {
 			return nil, ops, header, e
 		}
 		entry := parseGlossaryLine(line)
-		if entry == nil || seen[entry.Source] {
+		if entry == nil || slices.Contains(seen, entry.Source) {
 			continue
 		}
-		if e := b.ReserveNodes(1, 1024); e != nil {
+		var e error
+		seen, e = backend.AppendNode(b, seen, entry.Source)
+		if e != nil {
 			return nil, ops, header, e
 		}
-		seen[entry.Source] = true
-		var e error
 		out, e = backend.AppendNode(b, out, *entry)
 		if e != nil {
 			return nil, ops, header, e

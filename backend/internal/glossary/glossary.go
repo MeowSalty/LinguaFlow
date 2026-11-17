@@ -39,8 +39,23 @@ type SkippedEntry struct {
 // 关键约定：Proposed.Target 与 Existing.Target 完全相等时既不算 Added 也不进
 // Skipped——视作 noop，避免误触发调用方的冲突修正。
 type AddResult struct {
-	Added   []Entry        // 真正写入表的条目
-	Skipped []SkippedEntry // 因冲突或非法被丢弃的条目
+	Added        []Entry        // 真正写入表的条目
+	Skipped      []SkippedEntry // 因冲突或非法被丢弃的条目
+	ReleaseOwned func()         `json:"-"`
+}
+
+// Release clears this result's temporary arrays before returning their lease.
+// Immutable dictionary entries retain their separate dictionary owner. A caller
+// must finish all borrows of Added/Skipped before releasing the result.
+func (r *AddResult) Release() {
+	if r == nil {
+		return
+	}
+	r.Added, r.Skipped = nil, nil
+	if release := r.ReleaseOwned; release != nil {
+		r.ReleaseOwned = nil
+		release()
+	}
 }
 
 // Glossary 在原文中查找命中的术语，并支持运行时增量。

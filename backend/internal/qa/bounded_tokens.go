@@ -100,9 +100,6 @@ func (q *boundedQA) addCount(counts map[string]int, key string) {
 	if q.err != nil {
 		return
 	}
-	if _, ok := counts[key]; !ok && !q.nodes(1) {
-		return
-	}
 	if counts[key] == math.MaxInt {
 		q.err = backend.ErrBuildCapacity
 		return
@@ -110,20 +107,35 @@ func (q *boundedQA) addCount(counts map[string]int, key string) {
 	counts[key]++
 }
 func (q *boundedQA) numberFacts(s string) (map[string]int, []string) {
-	if !q.nodes(2) {
-		return nil, nil
-	}
 	normalized := q.numberWidth(s)
-	counts := make(map[string]int)
+	var keys []string
 	var display []string
 	q.matches(numberTokenRe, normalized, func(raw string, _, _ int) {
 		key := q.normalizeNumber(raw)
-		q.addCount(counts, key)
+		if q.err == nil {
+			keys, q.err = backend.AppendNode(q.b, keys, key)
+		}
 		if q.err == nil {
 			display, q.err = backend.AppendNode(q.b, display, raw)
 		}
 	})
+	counts := q.factCounts(keys)
 	return counts, display
+}
+
+func (q *boundedQA) factCounts(keys []string) map[string]int {
+	if q.err != nil {
+		return nil
+	}
+	counts, err := backend.MakeMap[string, int](q.b, keys)
+	if err != nil {
+		q.err = err
+		return nil
+	}
+	for _, key := range keys {
+		q.addCount(counts, key)
+	}
+	return counts
 }
 func (q *boundedQA) list(items []string) string {
 	if q.err != nil {
@@ -171,17 +183,19 @@ func (q *boundedQA) numbers(i int) {
 	}
 }
 func (q *boundedQA) urlFacts(s string) map[string]int {
-	if !q.nodes(1) {
-		return nil
+	var keys []string
+	visit := func(raw string, _, _ int) {
+		key := q.lower(strings.TrimRight(raw, ".,;:!?)]}\"'>"))
+		if q.err == nil {
+			keys, q.err = backend.AppendNode(q.b, keys, key)
+		}
 	}
-	counts := make(map[string]int)
-	visit := func(raw string, _, _ int) { q.addCount(counts, q.lower(strings.TrimRight(raw, ".,;:!?)]}\"'>"))) }
 	q.matches(urlTokenRe, s, visit)
 	q.matches(emailTokenRe, s, visit)
-	return counts
+	return q.factCounts(keys)
 }
 func (q *boundedQA) sortedKeys(counts map[string]int) []string {
-	if !q.nodes(int64(len(counts))) || !q.nodes(1) {
+	if !reserveQASlice[string](q, int64(len(counts))) {
 		return nil
 	}
 	keys := make([]string, 0, len(counts))
@@ -215,18 +229,11 @@ func (q *boundedQA) placeholders(i int) {
 	if s == "" || !strings.Contains(s, "__LF_") {
 		return
 	}
-	if !q.nodes(1) {
-		return
-	}
-	seen := make(map[string]struct{})
+	var seen []string
 	q.matches(leftoverPlaceholderRe, s, func(hit string, _, _ int) {
-		if _, ok := seen[hit]; ok {
+		if !q.remember(&seen, hit) {
 			return
 		}
-		if !q.nodes(1) {
-			return
-		}
-		seen[hit] = struct{}{}
 		q.emit(i, CheckLeftoverPlaceholder, SeverityError, q.message("译文残留占位符：", hit), hit, nil)
 	})
 }
@@ -245,17 +252,16 @@ func (q *boundedQA) xmlName(token string) string {
 	return q.lower(token[loc[2]:loc[3]])
 }
 func (q *boundedQA) xmlFacts(s string) map[string]int {
-	if !q.nodes(1) {
-		return nil
-	}
-	counts := make(map[string]int)
+	var keys []string
 	q.matches(xmlTagTokenRe, s, func(token string, _, _ int) {
 		name := q.xmlName(token)
 		if _, skip := rubyTagFamily[name]; !skip {
-			q.addCount(counts, token)
+			if q.err == nil {
+				keys, q.err = backend.AppendNode(q.b, keys, token)
+			}
 		}
 	})
-	return counts
+	return q.factCounts(keys)
 }
 func (q *boundedQA) culprit(s string) string {
 	type frame struct{ name, token string }
@@ -322,7 +328,7 @@ func (q *boundedQA) xml(i int) {
 		}
 		hit := q.culprit(in.TargetText)
 		message := q.message("译文 XML 结构损坏（标签未闭合或嵌套错误）：", err.Error())
-		if !q.nodes(1) {
+		if !reserveQASlice[Span](q, 1) {
 			return
 		}
 		q.issues, q.err = backend.AppendNode(q.b, q.issues, QualityIssue{SegmentIndex: in.Index, Severity: SeverityError, Code: CheckXMLTagMismatch, Message: message, Span: &Span{MatchedText: hit}})
@@ -347,10 +353,7 @@ func (q *boundedQA) terms(i int, g glossary.Glossary, sourceLang, targetLang str
 		q.err = err
 		return
 	}
-	if !q.nodes(1) {
-		return
-	}
-	seen := make(map[string]struct{})
+	var seen []string
 	for _, entry := range hits {
 		if q.err != nil {
 			return
@@ -366,13 +369,9 @@ func (q *boundedQA) terms(i int, g glossary.Glossary, sourceLang, targetLang str
 			continue
 		}
 		key := q.message(entry.Source, "\x00", entry.Target)
-		if _, ok := seen[key]; ok {
+		if !q.remember(&seen, key) {
 			continue
 		}
-		if !q.nodes(1) {
-			return
-		}
-		seen[key] = struct{}{}
 		if forbidden {
 			q.emit(i, CheckForbiddenTerm, SeverityError, q.message("译文含禁译词「", entry.Target, "」（源术语「", entry.Source, "」）"), entry.Target, nil)
 		} else {
@@ -380,7 +379,7 @@ func (q *boundedQA) terms(i int, g glossary.Glossary, sourceLang, targetLang str
 			if entry.Mandatory {
 				severity = SeverityError
 			}
-			if !q.nodes(1) {
+			if !reserveQASlice[Span](q, 1) {
 				return
 			}
 			span := &Span{MatchedText: entry.Source}
@@ -472,21 +471,14 @@ func (q *boundedQA) residual(i int, c *SourceResidualChecker) {
 		return
 	}
 	p := q.clean(i)
-	if !q.nodes(1) {
-		return
-	}
-	seen := make(map[string]struct{})
+	var seen []string
 	for _, rule := range c.rules {
 		hitAny := false
 		add := func(run string) {
 			hitAny = true
-			if _, ok := seen[run]; ok {
+			if !q.remember(&seen, run) {
 				return
 			}
-			if !q.nodes(1) {
-				return
-			}
-			seen[run] = struct{}{}
 			q.emit(i, CheckSourceResidual, SeverityWarning, q.message("译文残留源语片段：", run), run, p.targetRegions)
 		}
 		if rule.anchor == anchorRequired {

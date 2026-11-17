@@ -15,9 +15,6 @@ type EntryVisitor interface {
 // the next original-order/longest-first match needs no private array of hits.
 func VisitEntrySnapshotMatches(ctx context.Context, b *backend.BuildBounds, head *EntrySnapshot, text string, longest bool, run func(context.Context, func() error) error, yield func(Entry) error) error {
 	lastOrder, lastLen := -1, math.MaxInt
-	if err := b.ReserveNodes(1, 128); err != nil {
-		return err
-	}
 	var best *EntrySnapshot
 	selectNext := func() error {
 		for n := head; n != nil; n = n.Previous {
@@ -31,9 +28,6 @@ func VisitEntrySnapshotMatches(ctx context.Context, b *backend.BuildBounds, head
 				}
 			} else if n.Order <= lastOrder {
 				continue
-			}
-			if err := b.ReserveNodes(1, 0); err != nil {
-				return err
 			}
 			source := strings.TrimSpace(n.Entry.Source)
 			if source == "" {

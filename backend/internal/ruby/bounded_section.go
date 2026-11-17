@@ -9,7 +9,7 @@ import (
 func ParseInlineMarkersBounded(b *backend.BuildBounds, text string) ([]OutputEntry, error) {
 	var out []OutputEntry
 	for from := 0; from < len(text); {
-		if e := b.ReserveNodes(1, 256); e != nil {
+		if e := b.CheckContext(); e != nil {
 			return nil, e
 		}
 		loc, findErr := backend.FindRegexpSubmatch(b, inlineMarkerRe, text[from:])
@@ -33,16 +33,13 @@ func ParseInlineMarkersBounded(b *backend.BuildBounds, text string) ([]OutputEnt
 	return out, nil
 }
 func ParseSectionRubyOutputBounded(b *backend.BuildBounds, lines []string) (map[string][]OutputEntry, error) {
-	if e := b.ReserveNodes(1, 1024); e != nil {
-		return nil, e
-	}
-	out := make(map[string][]OutputEntry)
+	out := make(map[string][]OutputEntry, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		if e := b.ReserveNodes(1, 256); e != nil {
+		if e := b.CheckContext(); e != nil {
 			return nil, e
 		}
 		loc, findErr := backend.FindRegexpSubmatch(b, sectionRubyLineRe, line)
@@ -67,9 +64,6 @@ func ParseSectionRubyOutputBounded(b *backend.BuildBounds, lines []string) (map[
 				continue
 			}
 			entry = OutputEntry{Base: base, Text: text, Kind: kind, ID: itemID}
-		}
-		if e := b.ReserveNodes(1, 1024); e != nil {
-			return nil, e
 		}
 		rows, e := backend.AppendNode(b, out[id], entry)
 		if e != nil {

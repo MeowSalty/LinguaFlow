@@ -56,12 +56,6 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 	}
 	var key, digest string
 	e := run(ctx, func() error {
-		if e := b.ReserveNodes(80, 1024); e != nil {
-			return e
-		}
-		if e := b.ReserveText(160, 160); e != nil {
-			return e
-		}
 		var e error
 		key, e = s.scope.key()
 		if e != nil {
@@ -76,13 +70,13 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 			text = text[n:]
 		}
 		digest = hex.EncodeToString(h.Sum(nil))
-		return nil
+		return b.ReserveText(0, int64(len(key)+len(digest)))
 	})
 	if e != nil {
 		return e
 	}
-	// Tx/client fixed records, query objects and scanner records receive their
-	// tickets before constructors or driver reads. No database call holds Run.
+	// ORM/driver internals have no known capacity. The query snapshot and
+	// actual stored string bytes remain part of the input contract.
 	tx, e := s.client.Tx(ctx)
 	if e != nil {
 		return e
@@ -90,17 +84,6 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 	defer tx.Rollback()
 	base := func() *ent.TMEntryQuery {
 		return tx.TMEntry.Query().Where(tmentry.ScopeKeyEQ(key), tmentry.SourceHashEQ(digest), tmentry.SourceLangEQ(strings.TrimSpace(srcLang)), tmentry.TargetLangEQ(strings.TrimSpace(tgtLang)))
-	}
-	reserveQuery := func() error {
-		return run(ctx, func() error {
-			if e := b.ReserveNodes(32, 1024); e != nil {
-				return e
-			}
-			return b.ReserveText(512, 512)
-		})
-	}
-	if e = reserveQuery(); e != nil {
-		return e
 	}
 	var stats []matchStats
 	e = base().Select().Modify(func(q *sql.Selector) {
@@ -119,18 +102,6 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 	if count == 0 {
 		return tx.Commit()
 	}
-	e = run(ctx, func() error {
-		if e := b.ReserveNodes(count, 1024); e != nil {
-			return e
-		}
-		return b.ReserveNodes(1, 24)
-	})
-	if e != nil {
-		return e
-	}
-	if e = reserveQuery(); e != nil {
-		return e
-	}
 	var headers []matchHeader
 	e = base().Order(ent.Desc(tmentry.FieldUsageCount), ent.Asc(tmentry.FieldID)).Select().Modify(func(q *sql.Selector) {
 		q.SelectExpr(sql.Expr("id AS id"), sql.Expr("length(CAST(source_text AS BLOB)) AS source_bytes"), sql.Expr("length(CAST(target_text AS BLOB)) AS target_bytes"))
@@ -141,6 +112,9 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 	if int64(len(headers)) != count {
 		return errors.New("TM match header count changed")
 	}
+	if e = backend.ReserveSlice[matchHeader](b, int64(cap(headers))); e != nil {
+		return e
+	}
 	for _, header := range headers {
 		if header.SourceBytes < 0 || header.TargetBytes < 0 || header.SourceBytes > b.OutputLimit()-header.TargetBytes {
 			return backend.ErrBuildCapacity
@@ -149,15 +123,13 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 			if e = claim(header.SourceBytes + header.TargetBytes); e != nil {
 				return e
 			}
-		}
-		e = run(ctx, func() error {
-			return b.ReserveText(header.SourceBytes+header.TargetBytes, header.SourceBytes+header.TargetBytes)
-		})
-		if e != nil {
-			return e
-		}
-		if e = reserveQuery(); e != nil {
-			return e
+		} else {
+			e = run(ctx, func() error {
+				return b.ReserveText(0, header.SourceBytes+header.TargetBytes)
+			})
+			if e != nil {
+				return e
+			}
 		}
 		row, e := tx.TMEntry.Query().Where(tmentry.IDEQ(header.ID)).Select(tmentry.FieldID, tmentry.FieldSourceText, tmentry.FieldTargetText).First(ctx)
 		if e != nil {
@@ -170,9 +142,6 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 			return e
 		}
 		row = nil
-		if e = reserveQuery(); e != nil {
-			return e
-		}
 		if e = tx.TMEntry.UpdateOneID(header.ID).AddUsageCount(1).Exec(ctx); e != nil {
 			return e
 		}

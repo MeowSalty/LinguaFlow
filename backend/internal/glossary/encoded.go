@@ -47,7 +47,7 @@ func AddEncoded(ctx context.Context, g Glossary, payload []byte, limit int64, bu
 		var entry Entry
 		var consumed int
 		decode := func() error {
-			b, e := backend.NewBuildBounds(limit, int64(len(payload)))
+			b, e := backend.NewBuildBoundsFromContext(ctx, limit, int64(len(payload)))
 			if e != nil {
 				return e
 			}
@@ -69,12 +69,13 @@ func AddEncoded(ctx context.Context, g Glossary, payload []byte, limit int64, bu
 		}
 		added, err := g.Add(ctx, entry)
 		if err != nil {
+			added.Release()
 			return result, err
 		}
 		result.Added += len(added.Added)
 		result.Skipped += len(added.Skipped)
 		entry = Entry{}
-		added = AddResult{}
+		added.Release()
 		pos += consumed
 		space()
 		if pos < len(payload) && payload[pos] == ',' {
@@ -160,7 +161,7 @@ func (g *FileGlossary) LookupSourcesBounded(ctx context.Context, text, src, tgt 
 	head := g.entrySnapshot.Load()
 	var out []string
 	fn := func() error {
-		b, e := backend.NewBuildBounds(limit, int64(len(text)))
+		b, e := backend.NewBuildBoundsFromContext(ctx, limit, int64(len(text)))
 		if e != nil {
 			return e
 		}

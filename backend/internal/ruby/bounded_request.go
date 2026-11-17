@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
@@ -53,14 +52,14 @@ func StripRubyTextBounded(b *backend.BuildBounds, source string) (string, error)
 }
 
 func (s *AlignmentState) requestPayloadBounded(b *backend.BuildBounds, source string, missing []Item) (alignmentRequestPayload, error) {
-	if e := b.ReserveNodes(int64(len(s.Regions)), int64(unsafe.Sizeof(alignmentRequestRegion{}))); e != nil {
+	if e := backend.ReserveSlice[alignmentRequestRegion](b, int64(len(s.Regions))); e != nil {
 		return alignmentRequestPayload{}, e
 	}
 	regions := make([]alignmentRequestRegion, len(s.Regions))
 	for i, r := range s.Regions {
 		regions[i] = alignmentRequestRegion{r.Text}
 	}
-	if e := b.ReserveNodes(int64(len(missing)), int64(unsafe.Sizeof(alignmentRequestItem{}))); e != nil {
+	if e := backend.ReserveSlice[alignmentRequestItem](b, int64(len(missing))); e != nil {
 		return alignmentRequestPayload{}, e
 	}
 	items := make([]alignmentRequestItem, len(missing))
@@ -101,7 +100,7 @@ func (s *AlignmentState) VisitAlignmentRequestTextsBounded(b *backend.BuildBound
 }
 func (s *AlignmentState) AlignmentRequestTextsBounded(b *backend.BuildBounds, source string, missing []Item) ([]string, error) {
 	n := 2 + len(s.Regions) + 2*len(missing)
-	if e := b.ReserveNodes(int64(n), 16); e != nil {
+	if e := backend.ReserveSlice[string](b, int64(n)); e != nil {
 		return nil, e
 	}
 	out := make([]string, 0, n)
@@ -125,11 +124,11 @@ func AlignmentBatchRequestWithCreditsBounded(b *backend.BuildBounds, members []A
 		Digest      string                   `json:"region_digest"`
 		Missing     []alignmentRequestItem   `json:"missing"`
 	}
-	if e := b.ReserveNodes(int64(len(members))+1, 1024); e != nil {
-		return "", e
+	seen, err := backend.MakeMapFor[AlignmentBatchKey, bool](b, members, func(m AlignmentBatchMember) AlignmentBatchKey { return AlignmentBatchKey{m.WorkID, m.CandidateID} })
+	if err != nil {
+		return "", err
 	}
-	seen := make(map[AlignmentBatchKey]bool, len(members))
-	if e := b.ReserveNodes(int64(len(members)), int64(unsafe.Sizeof(memberPayload{}))); e != nil {
+	if e := backend.ReserveSlice[memberPayload](b, int64(len(members))); e != nil {
 		return "", e
 	}
 	payload := struct {

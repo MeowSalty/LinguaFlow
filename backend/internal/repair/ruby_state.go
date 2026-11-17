@@ -17,7 +17,7 @@ func TryRepairRubyAlignmentForState(text string, opt Options) ([]ruby.OutputEntr
 		if e != nil {
 			return nil, ops, e
 		}
-		data, e := opt.Bounds.EncodeJSON(raw["ruby_output"], opt.Bounds.Snapshot().TextLimit)
+		data, e := opt.Bounds.EncodeJSON(raw["ruby_output"], opt.Bounds.OutputLimit())
 		if e != nil {
 			return nil, ops, e
 		}

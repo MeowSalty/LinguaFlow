@@ -9,8 +9,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
-func init() { backend.RegisterFixedRegexp(tagRe) }
-
 func ValidateFragmentBounded(b *backend.BuildBounds, s string) error {
 	if s == "" {
 		return nil

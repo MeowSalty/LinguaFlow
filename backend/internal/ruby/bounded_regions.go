@@ -31,7 +31,7 @@ func BuildTranslationRegionsBounded(b *backend.BuildBounds, translation, format 
 		if translation == "" {
 			return nil, nil
 		}
-		if e := b.ReserveNodes(2, 128); e != nil {
+		if e := backend.ReserveSlice[TranslationRegion](b, 1); e != nil {
 			return nil, e
 		}
 		return []TranslationRegion{{Text: translation, Mappings: []RegionMapping{{ViewEnd: len(translation), RawEnd: len(translation), Linear: true}}}}, nil
@@ -197,15 +197,15 @@ func decodeRegionBounded(b *backend.BuildBounds, raw string, rawStart int, xmlMo
 			} else if end := strings.IndexByte(raw[i:], ';'); end >= 0 && end <= 64 {
 				end += i + 1
 				encoded := raw[i:end]
-				if e := b.ReserveText(0, 4*int64(len(encoded)+7)); e != nil {
-					return TranslationRegion{}, e
-				}
-				if e := b.ReserveNodes(4, 1024); e != nil {
+				if e := b.ReserveText(0, 2*int64(len(encoded)+7)); e != nil {
 					return TranslationRegion{}, e
 				}
 				var value string
 				if e := xml.Unmarshal([]byte("<v>"+encoded+"</v>"), &value); e != nil {
 					return TranslationRegion{}, fmt.Errorf("ruby entity: %w", e)
+				}
+				if e := b.ReserveText(0, int64(len(value))); e != nil {
+					return TranslationRegion{}, e
 				}
 				if value != encoded {
 					if e := appendPiece(value, i, end, false); e != nil {
@@ -241,22 +241,25 @@ func decodeHTMLRegionEntityBounded(b *backend.BuildBounds, raw string) (string, 
 		end++
 	}
 	encoded := raw[:end]
-	if e := b.ReserveText(0, 2*int64(len(encoded))); e != nil {
-		return "", 0, e
-	}
 	decoded := html.UnescapeString(encoded)
 	if decoded == encoded {
 		return "", 0, nil
+	}
+	if e := b.ReserveText(0, int64(len(decoded))); e != nil {
+		return "", 0, e
 	}
 	rawEnd, decodedEnd := len(encoded), len(decoded)
 	for rawEnd > 1 && decodedEnd > 1 && encoded[rawEnd-1] == decoded[decodedEnd-1] {
 		rawEnd--
 		decodedEnd--
 	}
-	if e := b.ReserveText(0, 2*int64(rawEnd)); e != nil {
-		return "", 0, e
+	short := html.UnescapeString(encoded[:rawEnd])
+	if short != encoded[:rawEnd] {
+		if e := b.ReserveText(0, int64(len(short))); e != nil {
+			return "", 0, e
+		}
 	}
-	if html.UnescapeString(encoded[:rawEnd]) != decoded[:decodedEnd] {
+	if short != decoded[:decodedEnd] {
 		return decoded, len(encoded), nil
 	}
 	return decoded[:decodedEnd], rawEnd, nil

@@ -15,12 +15,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
-func init() {
-	for _, re := range []*regexp.Regexp{htmlTagRe, numberTokenRe, urlTokenRe, emailTokenRe, xmlTagTokenRe, xmlTagNameRe, leftoverPlaceholderRe, placeholderRe} {
-		backend.RegisterFixedRegexp(re)
-	}
-}
-
 // RunBounded runs the finite built-in rules under the caller's construction
 // budget. It does not acquire a CPU permit or invoke arbitrary checker plugins.
 func (e *Engine) RunBounded(ctx context.Context, b *backend.BuildBounds, inputs []CheckInput) ([]QualityIssue, error) {
@@ -30,10 +24,7 @@ func (e *Engine) RunBounded(ctx context.Context, b *backend.BuildBounds, inputs 
 	if b == nil {
 		return nil, backend.ErrBuildCapacity
 	}
-	if err := b.ReserveNodes(int64(len(inputs)), backend.MaxNodeAllocationBytes); err != nil {
-		return nil, err
-	}
-	if err := b.ReserveNodes(3, backend.MaxNodeAllocationBytes); err != nil {
+	if err := backend.ReserveSlice[boundedInput](b, int64(len(inputs))); err != nil {
 		return nil, err
 	}
 	q := boundedQA{ctx: ctx, b: b, inputs: inputs, prepared: make([]boundedInput, len(inputs))}
@@ -50,13 +41,12 @@ func (e *Engine) RunBounded(ctx context.Context, b *backend.BuildBounds, inputs 
 }
 
 type boundedQA struct {
-	ctx            context.Context
-	b              *backend.BuildBounds
-	inputs         []CheckInput
-	prepared       []boundedInput
-	issues         []QualityIssue
-	err            error
-	visitRemainder int64
+	ctx      context.Context
+	b        *backend.BuildBounds
+	inputs   []CheckInput
+	prepared []boundedInput
+	issues   []QualityIssue
+	err      error
 }
 type boundedInput struct {
 	sourceRegions, targetRegions                                               [][2]int
@@ -64,12 +54,21 @@ type boundedInput struct {
 	regionsReady, plainReady, cleanReady, baseReady                            bool
 }
 
-func (q *boundedQA) nodes(n int64) bool {
+func reserveQASlice[T any](q *boundedQA, count int64) bool {
 	if q.err == nil {
-		q.err = q.b.ReserveNodes(n, backend.MaxNodeAllocationBytes)
+		q.err = backend.ReserveSlice[T](q.b, count)
 	}
 	return q.err == nil
 }
+
+func (q *boundedQA) remember(keys *[]string, key string) bool {
+	if q.err != nil || slices.Contains(*keys, key) {
+		return false
+	}
+	*keys, q.err = backend.AppendNode(q.b, *keys, key)
+	return q.err == nil
+}
+
 func (q *boundedQA) message(parts ...string) string {
 	if q.err != nil {
 		return ""
@@ -100,32 +99,25 @@ func (q *boundedQA) decimal(n int) string {
 	if q.err != nil {
 		return ""
 	}
-	if q.err = q.b.ReserveText(20, 20); q.err != nil {
+	result := strconv.Itoa(n)
+	if q.err = q.b.ReserveText(0, int64(len(result))); q.err != nil {
 		return ""
 	}
-	return strconv.Itoa(n)
+	return result
 }
 func (q *boundedQA) floating(n float64, precision int) string {
 	if q.err != nil {
-		return ""
-	}
-	if !q.nodes(3) {
 		return ""
 	}
 	if precision < 0 || precision > 2 {
 		q.err = backend.ErrBuildCapacity
 		return ""
 	}
-	// float64 has at most 309 decimal integer digits. With sign/dot and the
-	// fixed <=2 fractional digits, U=320 covers every output. Append growth
-	// (<2U), its old backing (<=U), and FormatFloat's final string (<=U)
-	// each receive their separately rounded credit before strconv runs.
-	for _, capacity := range [...]int64{640, 320, 320} {
-		if q.err = q.b.ReserveText(capacity, capacity); q.err != nil {
-			return ""
-		}
+	result := strconv.FormatFloat(n, 'f', precision, 64)
+	if q.err = q.b.ReserveText(0, int64(len(result))); q.err != nil {
+		return ""
 	}
-	return strconv.FormatFloat(n, 'f', precision, 64)
+	return result
 }
 func (q *boundedQA) quote(s string) string {
 	if q.err != nil {
@@ -135,12 +127,11 @@ func (q *boundedQA) quote(s string) string {
 		q.err = backend.ErrBuildCapacity
 		return ""
 	}
-	for range 3 {
-		if q.err = q.b.ReserveText(32, 32); q.err != nil {
-			return ""
-		}
+	result := strconv.Quote(s)
+	if q.err = q.b.ReserveText(0, int64(len(result))); q.err != nil {
+		return ""
 	}
-	return strconv.Quote(s)
+	return result
 }
 func (q *boundedQA) lower(s string) string {
 	if q.err != nil {
@@ -191,24 +182,13 @@ func (q *boundedQA) matches(re *regexp.Regexp, text string, visit func(string, i
 }
 func isCapacity(err error) bool { return errors.Is(err, backend.ErrBuildCapacity) }
 
-// Bound non-allocating product searches too: each 64 UTF-8 comparisons consume
-// one logical visit from the caller's existing node budget, without allocating
-// an object or introducing another ledger. At most 63 comparisons remain.
+// Borrowed searches check cancellation without charging allocation bytes.
 func (q *boundedQA) visit(n int64) bool {
-	if q.err != nil {
-		return false
+	if q.err == nil {
+		q.err = q.ctx.Err()
 	}
-	if q.err = q.ctx.Err(); q.err != nil {
-		return false
-	}
-	if n < 0 || n > math.MaxInt64-q.visitRemainder {
+	if n < 0 {
 		q.err = backend.ErrBuildCapacity
-		return false
-	}
-	total := n + q.visitRemainder
-	q.visitRemainder = total % 64
-	if total >= 64 {
-		q.err = q.b.ReserveNodes(total/64, 0)
 	}
 	return q.err == nil
 }
@@ -219,19 +199,19 @@ func (q *boundedQA) appendRegion(out [][2]int, start, end int) [][2]int {
 	return out
 }
 func (q *boundedQA) regions(text string, protected map[string]string) [][2]int {
-	if !q.nodes(int64(len(protected))) || !q.nodes(2) {
+	if q.err = backend.ReserveSlice[string](q.b, int64(len(protected))); q.err != nil {
 		return nil
 	}
-	seen := make(map[string]struct{}, len(protected))
+	seen := make([]string, 0, len(protected))
 	var out [][2]int
 	for _, value := range protected {
 		if value == "" {
 			continue
 		}
-		if _, ok := seen[value]; ok {
+		if slices.Contains(seen, value) {
 			continue
 		}
-		seen[value] = struct{}{}
+		seen = append(seen, value)
 		from, runeFrom := 0, 0
 		for from <= len(text) && q.err == nil {
 			if !q.visit(int64(len(text) - from)) {
@@ -397,13 +377,16 @@ func (q *boundedQA) base(i int) *boundedInput {
 	return p
 }
 func (q *boundedQA) emit(i int, code string, severity IssueSeverity, message, matched string, regions [][2]int) {
-	if !q.nodes(10) {
-		return
-	}
 	var span *Span
 	if matched != "" {
 		span = q.locate(q.inputs[i].TargetText, matched, regions)
+		if q.err != nil {
+			return
+		}
 		if span == nil {
+			if !reserveQASlice[Span](q, 1) {
+				return
+			}
 			span = &Span{MatchedText: matched}
 		}
 	}
@@ -415,10 +398,7 @@ func (q *boundedQA) locate(target, matched string, regions [][2]int) *Span {
 	if matched == "" {
 		return nil
 	}
-	// Exact search, fallback search, and UTF-8 offset counting each scan at
-	// most the target once. Charge per issue before these repeated searches.
-	if int64(len(target)) > math.MaxInt64/3 || !q.visit(3*int64(len(target))) {
-		q.err = backend.ErrBuildCapacity
+	if !q.visit(int64(len(target))) || !reserveQASlice[Span](q, 1) {
 		return nil
 	}
 	span := &Span{MatchedText: matched}
@@ -437,6 +417,9 @@ func (q *boundedQA) locate(target, matched string, regions [][2]int) *Span {
 		}
 		covered := region < len(regions) && runeEnd > regions[region][0]
 		if !covered {
+			if !reserveQASlice[int](q, 2) {
+				return nil
+			}
 			startOffset, endOffset := runeStart, runeEnd
 			span.TargetStart = &startOffset
 			span.TargetEnd = &endOffset
@@ -478,6 +461,9 @@ func (q *boundedQA) locate(target, matched string, regions [][2]int) *Span {
 	}
 	first := utf8.RuneCountInString(target[:start])
 	last := first + utf8.RuneCountInString(target[start:end])
+	if !reserveQASlice[int](q, 2) {
+		return nil
+	}
 	span.TargetStart = &first
 	span.TargetEnd = &last
 	return span

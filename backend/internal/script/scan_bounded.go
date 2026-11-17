@@ -13,7 +13,7 @@ func (p Profile) ScanBounded(b *backend.BuildBounds, text string) (Evidence, boo
 		count, start, end, runes int
 		seen                     bool
 	}
-	if err := b.ReserveNodes(int64(len(p.Siblings)), 40); err != nil {
+	if err := backend.ReserveSlice[record](b, int64(len(p.Siblings))); err != nil {
 		return Evidence{}, false, err
 	}
 	stats := make([]record, len(p.Siblings))
