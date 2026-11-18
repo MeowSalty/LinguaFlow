@@ -110,24 +110,99 @@ func LogicalAttempt(v int) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldEQ(FieldLogicalAttempt, v))
 }
 
-// FreezePayload applies equality check predicate on the "freeze_payload" field. It's identical to FreezePayloadEQ.
-func FreezePayload(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldFreezePayload, v))
+// CapturePayload applies equality check predicate on the "capture_payload" field. It's identical to CapturePayloadEQ.
+func CapturePayload(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldCapturePayload, v))
 }
 
-// FreezeBytes applies equality check predicate on the "freeze_bytes" field. It's identical to FreezeBytesEQ.
-func FreezeBytes(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldFreezeBytes, v))
+// CaptureBytes applies equality check predicate on the "capture_bytes" field. It's identical to CaptureBytesEQ.
+func CaptureBytes(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldCaptureBytes, v))
 }
 
-// ResponsePayload applies equality check predicate on the "response_payload" field. It's identical to ResponsePayloadEQ.
-func ResponsePayload(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldResponsePayload, v))
+// MemberMode applies equality check predicate on the "member_mode" field. It's identical to MemberModeEQ.
+func MemberMode(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberMode, v))
 }
 
-// ResponseBytes applies equality check predicate on the "response_bytes" field. It's identical to ResponseBytesEQ.
-func ResponseBytes(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldResponseBytes, v))
+// MemberFormat applies equality check predicate on the "member_format" field. It's identical to MemberFormatEQ.
+func MemberFormat(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberFormat, v))
+}
+
+// SourceLang applies equality check predicate on the "source_lang" field. It's identical to SourceLangEQ.
+func SourceLang(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldSourceLang, v))
+}
+
+// TargetLang applies equality check predicate on the "target_lang" field. It's identical to TargetLangEQ.
+func TargetLang(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldTargetLang, v))
+}
+
+// TextMode applies equality check predicate on the "text_mode" field. It's identical to TextModeEQ.
+func TextMode(v bool) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldTextMode, v))
+}
+
+// MemberPool applies equality check predicate on the "member_pool" field. It's identical to MemberPoolEQ.
+func MemberPool(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberPool, v))
+}
+
+// MemberAttempt applies equality check predicate on the "member_attempt" field. It's identical to MemberAttemptEQ.
+func MemberAttempt(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberAttempt, v))
+}
+
+// ArchiveCursor applies equality check predicate on the "archive_cursor" field. It's identical to ArchiveCursorEQ.
+func ArchiveCursor(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldArchiveCursor, v))
+}
+
+// ArchiveDigest applies equality check predicate on the "archive_digest" field. It's identical to ArchiveDigestEQ.
+func ArchiveDigest(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldArchiveDigest, v))
+}
+
+// InputMemberBytes applies equality check predicate on the "input_member_bytes" field. It's identical to InputMemberBytesEQ.
+func InputMemberBytes(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldInputMemberBytes, v))
+}
+
+// OutputMemberBytes applies equality check predicate on the "output_member_bytes" field. It's identical to OutputMemberBytesEQ.
+func OutputMemberBytes(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldOutputMemberBytes, v))
+}
+
+// PublicBytes applies equality check predicate on the "public_bytes" field. It's identical to PublicBytesEQ.
+func PublicBytes(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldPublicBytes, v))
+}
+
+// MemberStorageBytes applies equality check predicate on the "member_storage_bytes" field. It's identical to MemberStorageBytesEQ.
+func MemberStorageBytes(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberStorageBytes, v))
+}
+
+// PublicDigest applies equality check predicate on the "public_digest" field. It's identical to PublicDigestEQ.
+func PublicDigest(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldPublicDigest, v))
+}
+
+// RequestMetadataBytes applies equality check predicate on the "request_metadata_bytes" field. It's identical to RequestMetadataBytesEQ.
+func RequestMetadataBytes(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldRequestMetadataBytes, v))
+}
+
+// ResponseGlossary applies equality check predicate on the "response_glossary" field. It's identical to ResponseGlossaryEQ.
+func ResponseGlossary(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldResponseGlossary, v))
+}
+
+// RemainingMembers applies equality check predicate on the "remaining_members" field. It's identical to RemainingMembersEQ.
+func RemainingMembers(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldRemainingMembers, v))
 }
 
 // ResponseFormatVersion applies equality check predicate on the "response_format_version" field. It's identical to ResponseFormatVersionEQ.
@@ -148,26 +223,6 @@ func FreezeDigest(v string) predicate.WorkRequest {
 // ResponseDigest applies equality check predicate on the "response_digest" field. It's identical to ResponseDigestEQ.
 func ResponseDigest(v string) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldEQ(FieldResponseDigest, v))
-}
-
-// CorrectedTargets applies equality check predicate on the "corrected_targets" field. It's identical to CorrectedTargetsEQ.
-func CorrectedTargets(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectedTargets, v))
-}
-
-// CorrectedTargetIndex applies equality check predicate on the "corrected_target_index" field. It's identical to CorrectedTargetIndexEQ.
-func CorrectedTargetIndex(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectedTargetIndex, v))
-}
-
-// CorrectedTargetBytes applies equality check predicate on the "corrected_target_bytes" field. It's identical to CorrectedTargetBytesEQ.
-func CorrectedTargetBytes(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectedTargetBytes, v))
-}
-
-// CorrectedTargetDigest applies equality check predicate on the "corrected_target_digest" field. It's identical to CorrectedTargetDigestEQ.
-func CorrectedTargetDigest(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectedTargetDigest, v))
 }
 
 // PromotionCursor applies equality check predicate on the "promotion_cursor" field. It's identical to PromotionCursorEQ.
@@ -193,11 +248,6 @@ func ResponseTruncated(v bool) predicate.WorkRequest {
 // PromotionState applies equality check predicate on the "promotion_state" field. It's identical to PromotionStateEQ.
 func PromotionState(v string) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldEQ(FieldPromotionState, v))
-}
-
-// PromotionStatus applies equality check predicate on the "promotion_status" field. It's identical to PromotionStatusEQ.
-func PromotionStatus(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldPromotionStatus, v))
 }
 
 // HandoffAt applies equality check predicate on the "handoff_at" field. It's identical to HandoffAtEQ.
@@ -735,184 +785,904 @@ func GlossaryReceiptNotNil() predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldNotNull(FieldGlossaryReceipt))
 }
 
-// FreezePayloadEQ applies the EQ predicate on the "freeze_payload" field.
-func FreezePayloadEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldFreezePayload, v))
+// CapturePayloadEQ applies the EQ predicate on the "capture_payload" field.
+func CapturePayloadEQ(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldCapturePayload, v))
 }
 
-// FreezePayloadNEQ applies the NEQ predicate on the "freeze_payload" field.
-func FreezePayloadNEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNEQ(FieldFreezePayload, v))
+// CapturePayloadNEQ applies the NEQ predicate on the "capture_payload" field.
+func CapturePayloadNEQ(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldCapturePayload, v))
 }
 
-// FreezePayloadIn applies the In predicate on the "freeze_payload" field.
-func FreezePayloadIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIn(FieldFreezePayload, vs...))
+// CapturePayloadIn applies the In predicate on the "capture_payload" field.
+func CapturePayloadIn(vs ...[]byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldCapturePayload, vs...))
 }
 
-// FreezePayloadNotIn applies the NotIn predicate on the "freeze_payload" field.
-func FreezePayloadNotIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotIn(FieldFreezePayload, vs...))
+// CapturePayloadNotIn applies the NotIn predicate on the "capture_payload" field.
+func CapturePayloadNotIn(vs ...[]byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldCapturePayload, vs...))
 }
 
-// FreezePayloadGT applies the GT predicate on the "freeze_payload" field.
-func FreezePayloadGT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGT(FieldFreezePayload, v))
+// CapturePayloadGT applies the GT predicate on the "capture_payload" field.
+func CapturePayloadGT(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldCapturePayload, v))
 }
 
-// FreezePayloadGTE applies the GTE predicate on the "freeze_payload" field.
-func FreezePayloadGTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGTE(FieldFreezePayload, v))
+// CapturePayloadGTE applies the GTE predicate on the "capture_payload" field.
+func CapturePayloadGTE(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldCapturePayload, v))
 }
 
-// FreezePayloadLT applies the LT predicate on the "freeze_payload" field.
-func FreezePayloadLT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLT(FieldFreezePayload, v))
+// CapturePayloadLT applies the LT predicate on the "capture_payload" field.
+func CapturePayloadLT(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldCapturePayload, v))
 }
 
-// FreezePayloadLTE applies the LTE predicate on the "freeze_payload" field.
-func FreezePayloadLTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLTE(FieldFreezePayload, v))
+// CapturePayloadLTE applies the LTE predicate on the "capture_payload" field.
+func CapturePayloadLTE(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldCapturePayload, v))
 }
 
-// FreezePayloadIsNil applies the IsNil predicate on the "freeze_payload" field.
-func FreezePayloadIsNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIsNull(FieldFreezePayload))
+// CapturePayloadIsNil applies the IsNil predicate on the "capture_payload" field.
+func CapturePayloadIsNil() predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIsNull(FieldCapturePayload))
 }
 
-// FreezePayloadNotNil applies the NotNil predicate on the "freeze_payload" field.
-func FreezePayloadNotNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotNull(FieldFreezePayload))
+// CapturePayloadNotNil applies the NotNil predicate on the "capture_payload" field.
+func CapturePayloadNotNil() predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotNull(FieldCapturePayload))
 }
 
-// FreezeBytesEQ applies the EQ predicate on the "freeze_bytes" field.
-func FreezeBytesEQ(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldFreezeBytes, v))
+// CaptureBytesEQ applies the EQ predicate on the "capture_bytes" field.
+func CaptureBytesEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldCaptureBytes, v))
 }
 
-// FreezeBytesNEQ applies the NEQ predicate on the "freeze_bytes" field.
-func FreezeBytesNEQ(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNEQ(FieldFreezeBytes, v))
+// CaptureBytesNEQ applies the NEQ predicate on the "capture_bytes" field.
+func CaptureBytesNEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldCaptureBytes, v))
 }
 
-// FreezeBytesIn applies the In predicate on the "freeze_bytes" field.
-func FreezeBytesIn(vs ...int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIn(FieldFreezeBytes, vs...))
+// CaptureBytesIn applies the In predicate on the "capture_bytes" field.
+func CaptureBytesIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldCaptureBytes, vs...))
 }
 
-// FreezeBytesNotIn applies the NotIn predicate on the "freeze_bytes" field.
-func FreezeBytesNotIn(vs ...int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotIn(FieldFreezeBytes, vs...))
+// CaptureBytesNotIn applies the NotIn predicate on the "capture_bytes" field.
+func CaptureBytesNotIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldCaptureBytes, vs...))
 }
 
-// FreezeBytesGT applies the GT predicate on the "freeze_bytes" field.
-func FreezeBytesGT(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGT(FieldFreezeBytes, v))
+// CaptureBytesGT applies the GT predicate on the "capture_bytes" field.
+func CaptureBytesGT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldCaptureBytes, v))
 }
 
-// FreezeBytesGTE applies the GTE predicate on the "freeze_bytes" field.
-func FreezeBytesGTE(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGTE(FieldFreezeBytes, v))
+// CaptureBytesGTE applies the GTE predicate on the "capture_bytes" field.
+func CaptureBytesGTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldCaptureBytes, v))
 }
 
-// FreezeBytesLT applies the LT predicate on the "freeze_bytes" field.
-func FreezeBytesLT(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLT(FieldFreezeBytes, v))
+// CaptureBytesLT applies the LT predicate on the "capture_bytes" field.
+func CaptureBytesLT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldCaptureBytes, v))
 }
 
-// FreezeBytesLTE applies the LTE predicate on the "freeze_bytes" field.
-func FreezeBytesLTE(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLTE(FieldFreezeBytes, v))
+// CaptureBytesLTE applies the LTE predicate on the "capture_bytes" field.
+func CaptureBytesLTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldCaptureBytes, v))
 }
 
-// ResponsePayloadEQ applies the EQ predicate on the "response_payload" field.
-func ResponsePayloadEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldResponsePayload, v))
+// MemberModeEQ applies the EQ predicate on the "member_mode" field.
+func MemberModeEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberMode, v))
 }
 
-// ResponsePayloadNEQ applies the NEQ predicate on the "response_payload" field.
-func ResponsePayloadNEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNEQ(FieldResponsePayload, v))
+// MemberModeNEQ applies the NEQ predicate on the "member_mode" field.
+func MemberModeNEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldMemberMode, v))
 }
 
-// ResponsePayloadIn applies the In predicate on the "response_payload" field.
-func ResponsePayloadIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIn(FieldResponsePayload, vs...))
+// MemberModeIn applies the In predicate on the "member_mode" field.
+func MemberModeIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldMemberMode, vs...))
 }
 
-// ResponsePayloadNotIn applies the NotIn predicate on the "response_payload" field.
-func ResponsePayloadNotIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotIn(FieldResponsePayload, vs...))
+// MemberModeNotIn applies the NotIn predicate on the "member_mode" field.
+func MemberModeNotIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldMemberMode, vs...))
 }
 
-// ResponsePayloadGT applies the GT predicate on the "response_payload" field.
-func ResponsePayloadGT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGT(FieldResponsePayload, v))
+// MemberModeGT applies the GT predicate on the "member_mode" field.
+func MemberModeGT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldMemberMode, v))
 }
 
-// ResponsePayloadGTE applies the GTE predicate on the "response_payload" field.
-func ResponsePayloadGTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGTE(FieldResponsePayload, v))
+// MemberModeGTE applies the GTE predicate on the "member_mode" field.
+func MemberModeGTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldMemberMode, v))
 }
 
-// ResponsePayloadLT applies the LT predicate on the "response_payload" field.
-func ResponsePayloadLT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLT(FieldResponsePayload, v))
+// MemberModeLT applies the LT predicate on the "member_mode" field.
+func MemberModeLT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldMemberMode, v))
 }
 
-// ResponsePayloadLTE applies the LTE predicate on the "response_payload" field.
-func ResponsePayloadLTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLTE(FieldResponsePayload, v))
+// MemberModeLTE applies the LTE predicate on the "member_mode" field.
+func MemberModeLTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldMemberMode, v))
 }
 
-// ResponsePayloadIsNil applies the IsNil predicate on the "response_payload" field.
-func ResponsePayloadIsNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIsNull(FieldResponsePayload))
+// MemberModeContains applies the Contains predicate on the "member_mode" field.
+func MemberModeContains(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContains(FieldMemberMode, v))
 }
 
-// ResponsePayloadNotNil applies the NotNil predicate on the "response_payload" field.
-func ResponsePayloadNotNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotNull(FieldResponsePayload))
+// MemberModeHasPrefix applies the HasPrefix predicate on the "member_mode" field.
+func MemberModeHasPrefix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasPrefix(FieldMemberMode, v))
 }
 
-// ResponseBytesEQ applies the EQ predicate on the "response_bytes" field.
-func ResponseBytesEQ(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldResponseBytes, v))
+// MemberModeHasSuffix applies the HasSuffix predicate on the "member_mode" field.
+func MemberModeHasSuffix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasSuffix(FieldMemberMode, v))
 }
 
-// ResponseBytesNEQ applies the NEQ predicate on the "response_bytes" field.
-func ResponseBytesNEQ(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNEQ(FieldResponseBytes, v))
+// MemberModeEqualFold applies the EqualFold predicate on the "member_mode" field.
+func MemberModeEqualFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEqualFold(FieldMemberMode, v))
 }
 
-// ResponseBytesIn applies the In predicate on the "response_bytes" field.
-func ResponseBytesIn(vs ...int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIn(FieldResponseBytes, vs...))
+// MemberModeContainsFold applies the ContainsFold predicate on the "member_mode" field.
+func MemberModeContainsFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContainsFold(FieldMemberMode, v))
 }
 
-// ResponseBytesNotIn applies the NotIn predicate on the "response_bytes" field.
-func ResponseBytesNotIn(vs ...int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotIn(FieldResponseBytes, vs...))
+// MemberFormatEQ applies the EQ predicate on the "member_format" field.
+func MemberFormatEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberFormat, v))
 }
 
-// ResponseBytesGT applies the GT predicate on the "response_bytes" field.
-func ResponseBytesGT(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGT(FieldResponseBytes, v))
+// MemberFormatNEQ applies the NEQ predicate on the "member_format" field.
+func MemberFormatNEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldMemberFormat, v))
 }
 
-// ResponseBytesGTE applies the GTE predicate on the "response_bytes" field.
-func ResponseBytesGTE(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGTE(FieldResponseBytes, v))
+// MemberFormatIn applies the In predicate on the "member_format" field.
+func MemberFormatIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldMemberFormat, vs...))
 }
 
-// ResponseBytesLT applies the LT predicate on the "response_bytes" field.
-func ResponseBytesLT(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLT(FieldResponseBytes, v))
+// MemberFormatNotIn applies the NotIn predicate on the "member_format" field.
+func MemberFormatNotIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldMemberFormat, vs...))
 }
 
-// ResponseBytesLTE applies the LTE predicate on the "response_bytes" field.
-func ResponseBytesLTE(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLTE(FieldResponseBytes, v))
+// MemberFormatGT applies the GT predicate on the "member_format" field.
+func MemberFormatGT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldMemberFormat, v))
+}
+
+// MemberFormatGTE applies the GTE predicate on the "member_format" field.
+func MemberFormatGTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldMemberFormat, v))
+}
+
+// MemberFormatLT applies the LT predicate on the "member_format" field.
+func MemberFormatLT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldMemberFormat, v))
+}
+
+// MemberFormatLTE applies the LTE predicate on the "member_format" field.
+func MemberFormatLTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldMemberFormat, v))
+}
+
+// MemberFormatContains applies the Contains predicate on the "member_format" field.
+func MemberFormatContains(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContains(FieldMemberFormat, v))
+}
+
+// MemberFormatHasPrefix applies the HasPrefix predicate on the "member_format" field.
+func MemberFormatHasPrefix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasPrefix(FieldMemberFormat, v))
+}
+
+// MemberFormatHasSuffix applies the HasSuffix predicate on the "member_format" field.
+func MemberFormatHasSuffix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasSuffix(FieldMemberFormat, v))
+}
+
+// MemberFormatEqualFold applies the EqualFold predicate on the "member_format" field.
+func MemberFormatEqualFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEqualFold(FieldMemberFormat, v))
+}
+
+// MemberFormatContainsFold applies the ContainsFold predicate on the "member_format" field.
+func MemberFormatContainsFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContainsFold(FieldMemberFormat, v))
+}
+
+// SourceLangEQ applies the EQ predicate on the "source_lang" field.
+func SourceLangEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldSourceLang, v))
+}
+
+// SourceLangNEQ applies the NEQ predicate on the "source_lang" field.
+func SourceLangNEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldSourceLang, v))
+}
+
+// SourceLangIn applies the In predicate on the "source_lang" field.
+func SourceLangIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldSourceLang, vs...))
+}
+
+// SourceLangNotIn applies the NotIn predicate on the "source_lang" field.
+func SourceLangNotIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldSourceLang, vs...))
+}
+
+// SourceLangGT applies the GT predicate on the "source_lang" field.
+func SourceLangGT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldSourceLang, v))
+}
+
+// SourceLangGTE applies the GTE predicate on the "source_lang" field.
+func SourceLangGTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldSourceLang, v))
+}
+
+// SourceLangLT applies the LT predicate on the "source_lang" field.
+func SourceLangLT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldSourceLang, v))
+}
+
+// SourceLangLTE applies the LTE predicate on the "source_lang" field.
+func SourceLangLTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldSourceLang, v))
+}
+
+// SourceLangContains applies the Contains predicate on the "source_lang" field.
+func SourceLangContains(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContains(FieldSourceLang, v))
+}
+
+// SourceLangHasPrefix applies the HasPrefix predicate on the "source_lang" field.
+func SourceLangHasPrefix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasPrefix(FieldSourceLang, v))
+}
+
+// SourceLangHasSuffix applies the HasSuffix predicate on the "source_lang" field.
+func SourceLangHasSuffix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasSuffix(FieldSourceLang, v))
+}
+
+// SourceLangEqualFold applies the EqualFold predicate on the "source_lang" field.
+func SourceLangEqualFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEqualFold(FieldSourceLang, v))
+}
+
+// SourceLangContainsFold applies the ContainsFold predicate on the "source_lang" field.
+func SourceLangContainsFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContainsFold(FieldSourceLang, v))
+}
+
+// TargetLangEQ applies the EQ predicate on the "target_lang" field.
+func TargetLangEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldTargetLang, v))
+}
+
+// TargetLangNEQ applies the NEQ predicate on the "target_lang" field.
+func TargetLangNEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldTargetLang, v))
+}
+
+// TargetLangIn applies the In predicate on the "target_lang" field.
+func TargetLangIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldTargetLang, vs...))
+}
+
+// TargetLangNotIn applies the NotIn predicate on the "target_lang" field.
+func TargetLangNotIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldTargetLang, vs...))
+}
+
+// TargetLangGT applies the GT predicate on the "target_lang" field.
+func TargetLangGT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldTargetLang, v))
+}
+
+// TargetLangGTE applies the GTE predicate on the "target_lang" field.
+func TargetLangGTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldTargetLang, v))
+}
+
+// TargetLangLT applies the LT predicate on the "target_lang" field.
+func TargetLangLT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldTargetLang, v))
+}
+
+// TargetLangLTE applies the LTE predicate on the "target_lang" field.
+func TargetLangLTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldTargetLang, v))
+}
+
+// TargetLangContains applies the Contains predicate on the "target_lang" field.
+func TargetLangContains(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContains(FieldTargetLang, v))
+}
+
+// TargetLangHasPrefix applies the HasPrefix predicate on the "target_lang" field.
+func TargetLangHasPrefix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasPrefix(FieldTargetLang, v))
+}
+
+// TargetLangHasSuffix applies the HasSuffix predicate on the "target_lang" field.
+func TargetLangHasSuffix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasSuffix(FieldTargetLang, v))
+}
+
+// TargetLangEqualFold applies the EqualFold predicate on the "target_lang" field.
+func TargetLangEqualFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEqualFold(FieldTargetLang, v))
+}
+
+// TargetLangContainsFold applies the ContainsFold predicate on the "target_lang" field.
+func TargetLangContainsFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContainsFold(FieldTargetLang, v))
+}
+
+// TextModeEQ applies the EQ predicate on the "text_mode" field.
+func TextModeEQ(v bool) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldTextMode, v))
+}
+
+// TextModeNEQ applies the NEQ predicate on the "text_mode" field.
+func TextModeNEQ(v bool) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldTextMode, v))
+}
+
+// MemberPoolEQ applies the EQ predicate on the "member_pool" field.
+func MemberPoolEQ(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberPool, v))
+}
+
+// MemberPoolNEQ applies the NEQ predicate on the "member_pool" field.
+func MemberPoolNEQ(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldMemberPool, v))
+}
+
+// MemberPoolIn applies the In predicate on the "member_pool" field.
+func MemberPoolIn(vs ...int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldMemberPool, vs...))
+}
+
+// MemberPoolNotIn applies the NotIn predicate on the "member_pool" field.
+func MemberPoolNotIn(vs ...int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldMemberPool, vs...))
+}
+
+// MemberPoolGT applies the GT predicate on the "member_pool" field.
+func MemberPoolGT(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldMemberPool, v))
+}
+
+// MemberPoolGTE applies the GTE predicate on the "member_pool" field.
+func MemberPoolGTE(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldMemberPool, v))
+}
+
+// MemberPoolLT applies the LT predicate on the "member_pool" field.
+func MemberPoolLT(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldMemberPool, v))
+}
+
+// MemberPoolLTE applies the LTE predicate on the "member_pool" field.
+func MemberPoolLTE(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldMemberPool, v))
+}
+
+// MemberAttemptEQ applies the EQ predicate on the "member_attempt" field.
+func MemberAttemptEQ(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberAttempt, v))
+}
+
+// MemberAttemptNEQ applies the NEQ predicate on the "member_attempt" field.
+func MemberAttemptNEQ(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldMemberAttempt, v))
+}
+
+// MemberAttemptIn applies the In predicate on the "member_attempt" field.
+func MemberAttemptIn(vs ...int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldMemberAttempt, vs...))
+}
+
+// MemberAttemptNotIn applies the NotIn predicate on the "member_attempt" field.
+func MemberAttemptNotIn(vs ...int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldMemberAttempt, vs...))
+}
+
+// MemberAttemptGT applies the GT predicate on the "member_attempt" field.
+func MemberAttemptGT(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldMemberAttempt, v))
+}
+
+// MemberAttemptGTE applies the GTE predicate on the "member_attempt" field.
+func MemberAttemptGTE(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldMemberAttempt, v))
+}
+
+// MemberAttemptLT applies the LT predicate on the "member_attempt" field.
+func MemberAttemptLT(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldMemberAttempt, v))
+}
+
+// MemberAttemptLTE applies the LTE predicate on the "member_attempt" field.
+func MemberAttemptLTE(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldMemberAttempt, v))
+}
+
+// ArchiveCursorEQ applies the EQ predicate on the "archive_cursor" field.
+func ArchiveCursorEQ(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldArchiveCursor, v))
+}
+
+// ArchiveCursorNEQ applies the NEQ predicate on the "archive_cursor" field.
+func ArchiveCursorNEQ(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldArchiveCursor, v))
+}
+
+// ArchiveCursorIn applies the In predicate on the "archive_cursor" field.
+func ArchiveCursorIn(vs ...int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldArchiveCursor, vs...))
+}
+
+// ArchiveCursorNotIn applies the NotIn predicate on the "archive_cursor" field.
+func ArchiveCursorNotIn(vs ...int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldArchiveCursor, vs...))
+}
+
+// ArchiveCursorGT applies the GT predicate on the "archive_cursor" field.
+func ArchiveCursorGT(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldArchiveCursor, v))
+}
+
+// ArchiveCursorGTE applies the GTE predicate on the "archive_cursor" field.
+func ArchiveCursorGTE(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldArchiveCursor, v))
+}
+
+// ArchiveCursorLT applies the LT predicate on the "archive_cursor" field.
+func ArchiveCursorLT(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldArchiveCursor, v))
+}
+
+// ArchiveCursorLTE applies the LTE predicate on the "archive_cursor" field.
+func ArchiveCursorLTE(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldArchiveCursor, v))
+}
+
+// ArchiveDigestEQ applies the EQ predicate on the "archive_digest" field.
+func ArchiveDigestEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestNEQ applies the NEQ predicate on the "archive_digest" field.
+func ArchiveDigestNEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestIn applies the In predicate on the "archive_digest" field.
+func ArchiveDigestIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldArchiveDigest, vs...))
+}
+
+// ArchiveDigestNotIn applies the NotIn predicate on the "archive_digest" field.
+func ArchiveDigestNotIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldArchiveDigest, vs...))
+}
+
+// ArchiveDigestGT applies the GT predicate on the "archive_digest" field.
+func ArchiveDigestGT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestGTE applies the GTE predicate on the "archive_digest" field.
+func ArchiveDigestGTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestLT applies the LT predicate on the "archive_digest" field.
+func ArchiveDigestLT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestLTE applies the LTE predicate on the "archive_digest" field.
+func ArchiveDigestLTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestContains applies the Contains predicate on the "archive_digest" field.
+func ArchiveDigestContains(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContains(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestHasPrefix applies the HasPrefix predicate on the "archive_digest" field.
+func ArchiveDigestHasPrefix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasPrefix(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestHasSuffix applies the HasSuffix predicate on the "archive_digest" field.
+func ArchiveDigestHasSuffix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasSuffix(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestEqualFold applies the EqualFold predicate on the "archive_digest" field.
+func ArchiveDigestEqualFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEqualFold(FieldArchiveDigest, v))
+}
+
+// ArchiveDigestContainsFold applies the ContainsFold predicate on the "archive_digest" field.
+func ArchiveDigestContainsFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContainsFold(FieldArchiveDigest, v))
+}
+
+// InputMemberBytesEQ applies the EQ predicate on the "input_member_bytes" field.
+func InputMemberBytesEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldInputMemberBytes, v))
+}
+
+// InputMemberBytesNEQ applies the NEQ predicate on the "input_member_bytes" field.
+func InputMemberBytesNEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldInputMemberBytes, v))
+}
+
+// InputMemberBytesIn applies the In predicate on the "input_member_bytes" field.
+func InputMemberBytesIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldInputMemberBytes, vs...))
+}
+
+// InputMemberBytesNotIn applies the NotIn predicate on the "input_member_bytes" field.
+func InputMemberBytesNotIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldInputMemberBytes, vs...))
+}
+
+// InputMemberBytesGT applies the GT predicate on the "input_member_bytes" field.
+func InputMemberBytesGT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldInputMemberBytes, v))
+}
+
+// InputMemberBytesGTE applies the GTE predicate on the "input_member_bytes" field.
+func InputMemberBytesGTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldInputMemberBytes, v))
+}
+
+// InputMemberBytesLT applies the LT predicate on the "input_member_bytes" field.
+func InputMemberBytesLT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldInputMemberBytes, v))
+}
+
+// InputMemberBytesLTE applies the LTE predicate on the "input_member_bytes" field.
+func InputMemberBytesLTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldInputMemberBytes, v))
+}
+
+// OutputMemberBytesEQ applies the EQ predicate on the "output_member_bytes" field.
+func OutputMemberBytesEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldOutputMemberBytes, v))
+}
+
+// OutputMemberBytesNEQ applies the NEQ predicate on the "output_member_bytes" field.
+func OutputMemberBytesNEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldOutputMemberBytes, v))
+}
+
+// OutputMemberBytesIn applies the In predicate on the "output_member_bytes" field.
+func OutputMemberBytesIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldOutputMemberBytes, vs...))
+}
+
+// OutputMemberBytesNotIn applies the NotIn predicate on the "output_member_bytes" field.
+func OutputMemberBytesNotIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldOutputMemberBytes, vs...))
+}
+
+// OutputMemberBytesGT applies the GT predicate on the "output_member_bytes" field.
+func OutputMemberBytesGT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldOutputMemberBytes, v))
+}
+
+// OutputMemberBytesGTE applies the GTE predicate on the "output_member_bytes" field.
+func OutputMemberBytesGTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldOutputMemberBytes, v))
+}
+
+// OutputMemberBytesLT applies the LT predicate on the "output_member_bytes" field.
+func OutputMemberBytesLT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldOutputMemberBytes, v))
+}
+
+// OutputMemberBytesLTE applies the LTE predicate on the "output_member_bytes" field.
+func OutputMemberBytesLTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldOutputMemberBytes, v))
+}
+
+// PublicBytesEQ applies the EQ predicate on the "public_bytes" field.
+func PublicBytesEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldPublicBytes, v))
+}
+
+// PublicBytesNEQ applies the NEQ predicate on the "public_bytes" field.
+func PublicBytesNEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldPublicBytes, v))
+}
+
+// PublicBytesIn applies the In predicate on the "public_bytes" field.
+func PublicBytesIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldPublicBytes, vs...))
+}
+
+// PublicBytesNotIn applies the NotIn predicate on the "public_bytes" field.
+func PublicBytesNotIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldPublicBytes, vs...))
+}
+
+// PublicBytesGT applies the GT predicate on the "public_bytes" field.
+func PublicBytesGT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldPublicBytes, v))
+}
+
+// PublicBytesGTE applies the GTE predicate on the "public_bytes" field.
+func PublicBytesGTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldPublicBytes, v))
+}
+
+// PublicBytesLT applies the LT predicate on the "public_bytes" field.
+func PublicBytesLT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldPublicBytes, v))
+}
+
+// PublicBytesLTE applies the LTE predicate on the "public_bytes" field.
+func PublicBytesLTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldPublicBytes, v))
+}
+
+// MemberStorageBytesEQ applies the EQ predicate on the "member_storage_bytes" field.
+func MemberStorageBytesEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldMemberStorageBytes, v))
+}
+
+// MemberStorageBytesNEQ applies the NEQ predicate on the "member_storage_bytes" field.
+func MemberStorageBytesNEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldMemberStorageBytes, v))
+}
+
+// MemberStorageBytesIn applies the In predicate on the "member_storage_bytes" field.
+func MemberStorageBytesIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldMemberStorageBytes, vs...))
+}
+
+// MemberStorageBytesNotIn applies the NotIn predicate on the "member_storage_bytes" field.
+func MemberStorageBytesNotIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldMemberStorageBytes, vs...))
+}
+
+// MemberStorageBytesGT applies the GT predicate on the "member_storage_bytes" field.
+func MemberStorageBytesGT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldMemberStorageBytes, v))
+}
+
+// MemberStorageBytesGTE applies the GTE predicate on the "member_storage_bytes" field.
+func MemberStorageBytesGTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldMemberStorageBytes, v))
+}
+
+// MemberStorageBytesLT applies the LT predicate on the "member_storage_bytes" field.
+func MemberStorageBytesLT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldMemberStorageBytes, v))
+}
+
+// MemberStorageBytesLTE applies the LTE predicate on the "member_storage_bytes" field.
+func MemberStorageBytesLTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldMemberStorageBytes, v))
+}
+
+// PublicDigestEQ applies the EQ predicate on the "public_digest" field.
+func PublicDigestEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldPublicDigest, v))
+}
+
+// PublicDigestNEQ applies the NEQ predicate on the "public_digest" field.
+func PublicDigestNEQ(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldPublicDigest, v))
+}
+
+// PublicDigestIn applies the In predicate on the "public_digest" field.
+func PublicDigestIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldPublicDigest, vs...))
+}
+
+// PublicDigestNotIn applies the NotIn predicate on the "public_digest" field.
+func PublicDigestNotIn(vs ...string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldPublicDigest, vs...))
+}
+
+// PublicDigestGT applies the GT predicate on the "public_digest" field.
+func PublicDigestGT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldPublicDigest, v))
+}
+
+// PublicDigestGTE applies the GTE predicate on the "public_digest" field.
+func PublicDigestGTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldPublicDigest, v))
+}
+
+// PublicDigestLT applies the LT predicate on the "public_digest" field.
+func PublicDigestLT(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldPublicDigest, v))
+}
+
+// PublicDigestLTE applies the LTE predicate on the "public_digest" field.
+func PublicDigestLTE(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldPublicDigest, v))
+}
+
+// PublicDigestContains applies the Contains predicate on the "public_digest" field.
+func PublicDigestContains(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContains(FieldPublicDigest, v))
+}
+
+// PublicDigestHasPrefix applies the HasPrefix predicate on the "public_digest" field.
+func PublicDigestHasPrefix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasPrefix(FieldPublicDigest, v))
+}
+
+// PublicDigestHasSuffix applies the HasSuffix predicate on the "public_digest" field.
+func PublicDigestHasSuffix(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldHasSuffix(FieldPublicDigest, v))
+}
+
+// PublicDigestEqualFold applies the EqualFold predicate on the "public_digest" field.
+func PublicDigestEqualFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEqualFold(FieldPublicDigest, v))
+}
+
+// PublicDigestContainsFold applies the ContainsFold predicate on the "public_digest" field.
+func PublicDigestContainsFold(v string) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldContainsFold(FieldPublicDigest, v))
+}
+
+// RequestMetadataBytesEQ applies the EQ predicate on the "request_metadata_bytes" field.
+func RequestMetadataBytesEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldRequestMetadataBytes, v))
+}
+
+// RequestMetadataBytesNEQ applies the NEQ predicate on the "request_metadata_bytes" field.
+func RequestMetadataBytesNEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldRequestMetadataBytes, v))
+}
+
+// RequestMetadataBytesIn applies the In predicate on the "request_metadata_bytes" field.
+func RequestMetadataBytesIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldRequestMetadataBytes, vs...))
+}
+
+// RequestMetadataBytesNotIn applies the NotIn predicate on the "request_metadata_bytes" field.
+func RequestMetadataBytesNotIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldRequestMetadataBytes, vs...))
+}
+
+// RequestMetadataBytesGT applies the GT predicate on the "request_metadata_bytes" field.
+func RequestMetadataBytesGT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldRequestMetadataBytes, v))
+}
+
+// RequestMetadataBytesGTE applies the GTE predicate on the "request_metadata_bytes" field.
+func RequestMetadataBytesGTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldRequestMetadataBytes, v))
+}
+
+// RequestMetadataBytesLT applies the LT predicate on the "request_metadata_bytes" field.
+func RequestMetadataBytesLT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldRequestMetadataBytes, v))
+}
+
+// RequestMetadataBytesLTE applies the LTE predicate on the "request_metadata_bytes" field.
+func RequestMetadataBytesLTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldRequestMetadataBytes, v))
+}
+
+// ResponseGlossaryEQ applies the EQ predicate on the "response_glossary" field.
+func ResponseGlossaryEQ(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldResponseGlossary, v))
+}
+
+// ResponseGlossaryNEQ applies the NEQ predicate on the "response_glossary" field.
+func ResponseGlossaryNEQ(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldResponseGlossary, v))
+}
+
+// ResponseGlossaryIn applies the In predicate on the "response_glossary" field.
+func ResponseGlossaryIn(vs ...[]byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldResponseGlossary, vs...))
+}
+
+// ResponseGlossaryNotIn applies the NotIn predicate on the "response_glossary" field.
+func ResponseGlossaryNotIn(vs ...[]byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldResponseGlossary, vs...))
+}
+
+// ResponseGlossaryGT applies the GT predicate on the "response_glossary" field.
+func ResponseGlossaryGT(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldResponseGlossary, v))
+}
+
+// ResponseGlossaryGTE applies the GTE predicate on the "response_glossary" field.
+func ResponseGlossaryGTE(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldResponseGlossary, v))
+}
+
+// ResponseGlossaryLT applies the LT predicate on the "response_glossary" field.
+func ResponseGlossaryLT(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldResponseGlossary, v))
+}
+
+// ResponseGlossaryLTE applies the LTE predicate on the "response_glossary" field.
+func ResponseGlossaryLTE(v []byte) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldResponseGlossary, v))
+}
+
+// ResponseGlossaryIsNil applies the IsNil predicate on the "response_glossary" field.
+func ResponseGlossaryIsNil() predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIsNull(FieldResponseGlossary))
+}
+
+// ResponseGlossaryNotNil applies the NotNil predicate on the "response_glossary" field.
+func ResponseGlossaryNotNil() predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotNull(FieldResponseGlossary))
+}
+
+// RemainingMembersEQ applies the EQ predicate on the "remaining_members" field.
+func RemainingMembersEQ(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldRemainingMembers, v))
+}
+
+// RemainingMembersNEQ applies the NEQ predicate on the "remaining_members" field.
+func RemainingMembersNEQ(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldRemainingMembers, v))
+}
+
+// RemainingMembersIn applies the In predicate on the "remaining_members" field.
+func RemainingMembersIn(vs ...int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldRemainingMembers, vs...))
+}
+
+// RemainingMembersNotIn applies the NotIn predicate on the "remaining_members" field.
+func RemainingMembersNotIn(vs ...int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldRemainingMembers, vs...))
+}
+
+// RemainingMembersGT applies the GT predicate on the "remaining_members" field.
+func RemainingMembersGT(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldRemainingMembers, v))
+}
+
+// RemainingMembersGTE applies the GTE predicate on the "remaining_members" field.
+func RemainingMembersGTE(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldRemainingMembers, v))
+}
+
+// RemainingMembersLT applies the LT predicate on the "remaining_members" field.
+func RemainingMembersLT(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldRemainingMembers, v))
+}
+
+// RemainingMembersLTE applies the LTE predicate on the "remaining_members" field.
+func RemainingMembersLTE(v int) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldRemainingMembers, v))
 }
 
 // ResponseFormatVersionEQ applies the EQ predicate on the "response_format_version" field.
@@ -1150,221 +1920,6 @@ func ResponseDigestContainsFold(v string) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldContainsFold(FieldResponseDigest, v))
 }
 
-// CorrectedTargetsEQ applies the EQ predicate on the "corrected_targets" field.
-func CorrectedTargetsEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectedTargets, v))
-}
-
-// CorrectedTargetsNEQ applies the NEQ predicate on the "corrected_targets" field.
-func CorrectedTargetsNEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNEQ(FieldCorrectedTargets, v))
-}
-
-// CorrectedTargetsIn applies the In predicate on the "corrected_targets" field.
-func CorrectedTargetsIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIn(FieldCorrectedTargets, vs...))
-}
-
-// CorrectedTargetsNotIn applies the NotIn predicate on the "corrected_targets" field.
-func CorrectedTargetsNotIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotIn(FieldCorrectedTargets, vs...))
-}
-
-// CorrectedTargetsGT applies the GT predicate on the "corrected_targets" field.
-func CorrectedTargetsGT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGT(FieldCorrectedTargets, v))
-}
-
-// CorrectedTargetsGTE applies the GTE predicate on the "corrected_targets" field.
-func CorrectedTargetsGTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGTE(FieldCorrectedTargets, v))
-}
-
-// CorrectedTargetsLT applies the LT predicate on the "corrected_targets" field.
-func CorrectedTargetsLT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLT(FieldCorrectedTargets, v))
-}
-
-// CorrectedTargetsLTE applies the LTE predicate on the "corrected_targets" field.
-func CorrectedTargetsLTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLTE(FieldCorrectedTargets, v))
-}
-
-// CorrectedTargetsIsNil applies the IsNil predicate on the "corrected_targets" field.
-func CorrectedTargetsIsNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIsNull(FieldCorrectedTargets))
-}
-
-// CorrectedTargetsNotNil applies the NotNil predicate on the "corrected_targets" field.
-func CorrectedTargetsNotNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotNull(FieldCorrectedTargets))
-}
-
-// CorrectedTargetIndexEQ applies the EQ predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectedTargetIndex, v))
-}
-
-// CorrectedTargetIndexNEQ applies the NEQ predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexNEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNEQ(FieldCorrectedTargetIndex, v))
-}
-
-// CorrectedTargetIndexIn applies the In predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIn(FieldCorrectedTargetIndex, vs...))
-}
-
-// CorrectedTargetIndexNotIn applies the NotIn predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexNotIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotIn(FieldCorrectedTargetIndex, vs...))
-}
-
-// CorrectedTargetIndexGT applies the GT predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexGT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGT(FieldCorrectedTargetIndex, v))
-}
-
-// CorrectedTargetIndexGTE applies the GTE predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexGTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGTE(FieldCorrectedTargetIndex, v))
-}
-
-// CorrectedTargetIndexLT applies the LT predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexLT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLT(FieldCorrectedTargetIndex, v))
-}
-
-// CorrectedTargetIndexLTE applies the LTE predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexLTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLTE(FieldCorrectedTargetIndex, v))
-}
-
-// CorrectedTargetIndexIsNil applies the IsNil predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexIsNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIsNull(FieldCorrectedTargetIndex))
-}
-
-// CorrectedTargetIndexNotNil applies the NotNil predicate on the "corrected_target_index" field.
-func CorrectedTargetIndexNotNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotNull(FieldCorrectedTargetIndex))
-}
-
-// CorrectedTargetBytesEQ applies the EQ predicate on the "corrected_target_bytes" field.
-func CorrectedTargetBytesEQ(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectedTargetBytes, v))
-}
-
-// CorrectedTargetBytesNEQ applies the NEQ predicate on the "corrected_target_bytes" field.
-func CorrectedTargetBytesNEQ(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNEQ(FieldCorrectedTargetBytes, v))
-}
-
-// CorrectedTargetBytesIn applies the In predicate on the "corrected_target_bytes" field.
-func CorrectedTargetBytesIn(vs ...int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIn(FieldCorrectedTargetBytes, vs...))
-}
-
-// CorrectedTargetBytesNotIn applies the NotIn predicate on the "corrected_target_bytes" field.
-func CorrectedTargetBytesNotIn(vs ...int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotIn(FieldCorrectedTargetBytes, vs...))
-}
-
-// CorrectedTargetBytesGT applies the GT predicate on the "corrected_target_bytes" field.
-func CorrectedTargetBytesGT(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGT(FieldCorrectedTargetBytes, v))
-}
-
-// CorrectedTargetBytesGTE applies the GTE predicate on the "corrected_target_bytes" field.
-func CorrectedTargetBytesGTE(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGTE(FieldCorrectedTargetBytes, v))
-}
-
-// CorrectedTargetBytesLT applies the LT predicate on the "corrected_target_bytes" field.
-func CorrectedTargetBytesLT(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLT(FieldCorrectedTargetBytes, v))
-}
-
-// CorrectedTargetBytesLTE applies the LTE predicate on the "corrected_target_bytes" field.
-func CorrectedTargetBytesLTE(v int64) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLTE(FieldCorrectedTargetBytes, v))
-}
-
-// CorrectedTargetDigestEQ applies the EQ predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestEQ(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestNEQ applies the NEQ predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestNEQ(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNEQ(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestIn applies the In predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestIn(vs ...string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIn(FieldCorrectedTargetDigest, vs...))
-}
-
-// CorrectedTargetDigestNotIn applies the NotIn predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestNotIn(vs ...string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotIn(FieldCorrectedTargetDigest, vs...))
-}
-
-// CorrectedTargetDigestGT applies the GT predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestGT(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGT(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestGTE applies the GTE predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestGTE(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGTE(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestLT applies the LT predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestLT(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLT(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestLTE applies the LTE predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestLTE(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLTE(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestContains applies the Contains predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestContains(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldContains(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestHasPrefix applies the HasPrefix predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestHasPrefix(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldHasPrefix(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestHasSuffix applies the HasSuffix predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestHasSuffix(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldHasSuffix(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestEqualFold applies the EqualFold predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestEqualFold(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEqualFold(FieldCorrectedTargetDigest, v))
-}
-
-// CorrectedTargetDigestContainsFold applies the ContainsFold predicate on the "corrected_target_digest" field.
-func CorrectedTargetDigestContainsFold(v string) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldContainsFold(FieldCorrectedTargetDigest, v))
-}
-
-// PromotionMembersIsNil applies the IsNil predicate on the "promotion_members" field.
-func PromotionMembersIsNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIsNull(FieldPromotionMembers))
-}
-
-// PromotionMembersNotNil applies the NotNil predicate on the "promotion_members" field.
-func PromotionMembersNotNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotNull(FieldPromotionMembers))
-}
-
 // PromotionCursorEQ applies the EQ predicate on the "promotion_cursor" field.
 func PromotionCursorEQ(v int) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldEQ(FieldPromotionCursor, v))
@@ -1558,56 +2113,6 @@ func PromotionStateEqualFold(v string) predicate.WorkRequest {
 // PromotionStateContainsFold applies the ContainsFold predicate on the "promotion_state" field.
 func PromotionStateContainsFold(v string) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldContainsFold(FieldPromotionState, v))
-}
-
-// PromotionStatusEQ applies the EQ predicate on the "promotion_status" field.
-func PromotionStatusEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldEQ(FieldPromotionStatus, v))
-}
-
-// PromotionStatusNEQ applies the NEQ predicate on the "promotion_status" field.
-func PromotionStatusNEQ(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNEQ(FieldPromotionStatus, v))
-}
-
-// PromotionStatusIn applies the In predicate on the "promotion_status" field.
-func PromotionStatusIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIn(FieldPromotionStatus, vs...))
-}
-
-// PromotionStatusNotIn applies the NotIn predicate on the "promotion_status" field.
-func PromotionStatusNotIn(vs ...[]byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotIn(FieldPromotionStatus, vs...))
-}
-
-// PromotionStatusGT applies the GT predicate on the "promotion_status" field.
-func PromotionStatusGT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGT(FieldPromotionStatus, v))
-}
-
-// PromotionStatusGTE applies the GTE predicate on the "promotion_status" field.
-func PromotionStatusGTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldGTE(FieldPromotionStatus, v))
-}
-
-// PromotionStatusLT applies the LT predicate on the "promotion_status" field.
-func PromotionStatusLT(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLT(FieldPromotionStatus, v))
-}
-
-// PromotionStatusLTE applies the LTE predicate on the "promotion_status" field.
-func PromotionStatusLTE(v []byte) predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldLTE(FieldPromotionStatus, v))
-}
-
-// PromotionStatusIsNil applies the IsNil predicate on the "promotion_status" field.
-func PromotionStatusIsNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldIsNull(FieldPromotionStatus))
-}
-
-// PromotionStatusNotNil applies the NotNil predicate on the "promotion_status" field.
-func PromotionStatusNotNil() predicate.WorkRequest {
-	return predicate.WorkRequest(sql.FieldNotNull(FieldPromotionStatus))
 }
 
 // HandoffAtEQ applies the EQ predicate on the "handoff_at" field.

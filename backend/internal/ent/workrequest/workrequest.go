@@ -44,14 +44,44 @@ const (
 	FieldDebits = "debits"
 	// FieldGlossaryReceipt holds the string denoting the glossary_receipt field in the database.
 	FieldGlossaryReceipt = "glossary_receipt"
-	// FieldFreezePayload holds the string denoting the freeze_payload field in the database.
-	FieldFreezePayload = "freeze_payload"
-	// FieldFreezeBytes holds the string denoting the freeze_bytes field in the database.
-	FieldFreezeBytes = "freeze_bytes"
-	// FieldResponsePayload holds the string denoting the response_payload field in the database.
-	FieldResponsePayload = "response_payload"
-	// FieldResponseBytes holds the string denoting the response_bytes field in the database.
-	FieldResponseBytes = "response_bytes"
+	// FieldCapturePayload holds the string denoting the capture_payload field in the database.
+	FieldCapturePayload = "capture_payload"
+	// FieldCaptureBytes holds the string denoting the capture_bytes field in the database.
+	FieldCaptureBytes = "capture_bytes"
+	// FieldMemberMode holds the string denoting the member_mode field in the database.
+	FieldMemberMode = "member_mode"
+	// FieldMemberFormat holds the string denoting the member_format field in the database.
+	FieldMemberFormat = "member_format"
+	// FieldSourceLang holds the string denoting the source_lang field in the database.
+	FieldSourceLang = "source_lang"
+	// FieldTargetLang holds the string denoting the target_lang field in the database.
+	FieldTargetLang = "target_lang"
+	// FieldTextMode holds the string denoting the text_mode field in the database.
+	FieldTextMode = "text_mode"
+	// FieldMemberPool holds the string denoting the member_pool field in the database.
+	FieldMemberPool = "member_pool"
+	// FieldMemberAttempt holds the string denoting the member_attempt field in the database.
+	FieldMemberAttempt = "member_attempt"
+	// FieldArchiveCursor holds the string denoting the archive_cursor field in the database.
+	FieldArchiveCursor = "archive_cursor"
+	// FieldArchiveDigest holds the string denoting the archive_digest field in the database.
+	FieldArchiveDigest = "archive_digest"
+	// FieldInputMemberBytes holds the string denoting the input_member_bytes field in the database.
+	FieldInputMemberBytes = "input_member_bytes"
+	// FieldOutputMemberBytes holds the string denoting the output_member_bytes field in the database.
+	FieldOutputMemberBytes = "output_member_bytes"
+	// FieldPublicBytes holds the string denoting the public_bytes field in the database.
+	FieldPublicBytes = "public_bytes"
+	// FieldMemberStorageBytes holds the string denoting the member_storage_bytes field in the database.
+	FieldMemberStorageBytes = "member_storage_bytes"
+	// FieldPublicDigest holds the string denoting the public_digest field in the database.
+	FieldPublicDigest = "public_digest"
+	// FieldRequestMetadataBytes holds the string denoting the request_metadata_bytes field in the database.
+	FieldRequestMetadataBytes = "request_metadata_bytes"
+	// FieldResponseGlossary holds the string denoting the response_glossary field in the database.
+	FieldResponseGlossary = "response_glossary"
+	// FieldRemainingMembers holds the string denoting the remaining_members field in the database.
+	FieldRemainingMembers = "remaining_members"
 	// FieldResponseFormatVersion holds the string denoting the response_format_version field in the database.
 	FieldResponseFormatVersion = "response_format_version"
 	// FieldSnapshotDigest holds the string denoting the snapshot_digest field in the database.
@@ -60,16 +90,6 @@ const (
 	FieldFreezeDigest = "freeze_digest"
 	// FieldResponseDigest holds the string denoting the response_digest field in the database.
 	FieldResponseDigest = "response_digest"
-	// FieldCorrectedTargets holds the string denoting the corrected_targets field in the database.
-	FieldCorrectedTargets = "corrected_targets"
-	// FieldCorrectedTargetIndex holds the string denoting the corrected_target_index field in the database.
-	FieldCorrectedTargetIndex = "corrected_target_index"
-	// FieldCorrectedTargetBytes holds the string denoting the corrected_target_bytes field in the database.
-	FieldCorrectedTargetBytes = "corrected_target_bytes"
-	// FieldCorrectedTargetDigest holds the string denoting the corrected_target_digest field in the database.
-	FieldCorrectedTargetDigest = "corrected_target_digest"
-	// FieldPromotionMembers holds the string denoting the promotion_members field in the database.
-	FieldPromotionMembers = "promotion_members"
 	// FieldPromotionCursor holds the string denoting the promotion_cursor field in the database.
 	FieldPromotionCursor = "promotion_cursor"
 	// FieldPromotionCount holds the string denoting the promotion_count field in the database.
@@ -80,8 +100,6 @@ const (
 	FieldResponseTruncated = "response_truncated"
 	// FieldPromotionState holds the string denoting the promotion_state field in the database.
 	FieldPromotionState = "promotion_state"
-	// FieldPromotionStatus holds the string denoting the promotion_status field in the database.
-	FieldPromotionStatus = "promotion_status"
 	// FieldHandoffAt holds the string denoting the handoff_at field in the database.
 	FieldHandoffAt = "handoff_at"
 	// FieldUsageRecordID holds the string denoting the usage_record_id field in the database.
@@ -151,25 +169,34 @@ var Columns = []string{
 	FieldMembers,
 	FieldDebits,
 	FieldGlossaryReceipt,
-	FieldFreezePayload,
-	FieldFreezeBytes,
-	FieldResponsePayload,
-	FieldResponseBytes,
+	FieldCapturePayload,
+	FieldCaptureBytes,
+	FieldMemberMode,
+	FieldMemberFormat,
+	FieldSourceLang,
+	FieldTargetLang,
+	FieldTextMode,
+	FieldMemberPool,
+	FieldMemberAttempt,
+	FieldArchiveCursor,
+	FieldArchiveDigest,
+	FieldInputMemberBytes,
+	FieldOutputMemberBytes,
+	FieldPublicBytes,
+	FieldMemberStorageBytes,
+	FieldPublicDigest,
+	FieldRequestMetadataBytes,
+	FieldResponseGlossary,
+	FieldRemainingMembers,
 	FieldResponseFormatVersion,
 	FieldSnapshotDigest,
 	FieldFreezeDigest,
 	FieldResponseDigest,
-	FieldCorrectedTargets,
-	FieldCorrectedTargetIndex,
-	FieldCorrectedTargetBytes,
-	FieldCorrectedTargetDigest,
-	FieldPromotionMembers,
 	FieldPromotionCursor,
 	FieldPromotionCount,
 	FieldBusinessBound,
 	FieldResponseTruncated,
 	FieldPromotionState,
-	FieldPromotionStatus,
 	FieldHandoffAt,
 	FieldUsageRecordID,
 	FieldBudgetModel,
@@ -219,14 +246,60 @@ var (
 	DefaultLogicalAttempt int
 	// LogicalAttemptValidator is a validator for the "logical_attempt" field. It is called by the builders before save.
 	LogicalAttemptValidator func(int) error
-	// DefaultFreezeBytes holds the default value on creation for the "freeze_bytes" field.
-	DefaultFreezeBytes int64
-	// FreezeBytesValidator is a validator for the "freeze_bytes" field. It is called by the builders before save.
-	FreezeBytesValidator func(int64) error
-	// DefaultResponseBytes holds the default value on creation for the "response_bytes" field.
-	DefaultResponseBytes int64
-	// ResponseBytesValidator is a validator for the "response_bytes" field. It is called by the builders before save.
-	ResponseBytesValidator func(int64) error
+	// DefaultCaptureBytes holds the default value on creation for the "capture_bytes" field.
+	DefaultCaptureBytes int64
+	// CaptureBytesValidator is a validator for the "capture_bytes" field. It is called by the builders before save.
+	CaptureBytesValidator func(int64) error
+	// DefaultMemberMode holds the default value on creation for the "member_mode" field.
+	DefaultMemberMode string
+	// DefaultMemberFormat holds the default value on creation for the "member_format" field.
+	DefaultMemberFormat string
+	// DefaultSourceLang holds the default value on creation for the "source_lang" field.
+	DefaultSourceLang string
+	// DefaultTargetLang holds the default value on creation for the "target_lang" field.
+	DefaultTargetLang string
+	// DefaultTextMode holds the default value on creation for the "text_mode" field.
+	DefaultTextMode bool
+	// DefaultMemberPool holds the default value on creation for the "member_pool" field.
+	DefaultMemberPool int
+	// MemberPoolValidator is a validator for the "member_pool" field. It is called by the builders before save.
+	MemberPoolValidator func(int) error
+	// DefaultMemberAttempt holds the default value on creation for the "member_attempt" field.
+	DefaultMemberAttempt int
+	// MemberAttemptValidator is a validator for the "member_attempt" field. It is called by the builders before save.
+	MemberAttemptValidator func(int) error
+	// DefaultArchiveCursor holds the default value on creation for the "archive_cursor" field.
+	DefaultArchiveCursor int
+	// ArchiveCursorValidator is a validator for the "archive_cursor" field. It is called by the builders before save.
+	ArchiveCursorValidator func(int) error
+	// DefaultArchiveDigest holds the default value on creation for the "archive_digest" field.
+	DefaultArchiveDigest string
+	// DefaultInputMemberBytes holds the default value on creation for the "input_member_bytes" field.
+	DefaultInputMemberBytes int64
+	// InputMemberBytesValidator is a validator for the "input_member_bytes" field. It is called by the builders before save.
+	InputMemberBytesValidator func(int64) error
+	// DefaultOutputMemberBytes holds the default value on creation for the "output_member_bytes" field.
+	DefaultOutputMemberBytes int64
+	// OutputMemberBytesValidator is a validator for the "output_member_bytes" field. It is called by the builders before save.
+	OutputMemberBytesValidator func(int64) error
+	// DefaultPublicBytes holds the default value on creation for the "public_bytes" field.
+	DefaultPublicBytes int64
+	// PublicBytesValidator is a validator for the "public_bytes" field. It is called by the builders before save.
+	PublicBytesValidator func(int64) error
+	// DefaultMemberStorageBytes holds the default value on creation for the "member_storage_bytes" field.
+	DefaultMemberStorageBytes int64
+	// MemberStorageBytesValidator is a validator for the "member_storage_bytes" field. It is called by the builders before save.
+	MemberStorageBytesValidator func(int64) error
+	// DefaultPublicDigest holds the default value on creation for the "public_digest" field.
+	DefaultPublicDigest string
+	// DefaultRequestMetadataBytes holds the default value on creation for the "request_metadata_bytes" field.
+	DefaultRequestMetadataBytes int64
+	// RequestMetadataBytesValidator is a validator for the "request_metadata_bytes" field. It is called by the builders before save.
+	RequestMetadataBytesValidator func(int64) error
+	// DefaultRemainingMembers holds the default value on creation for the "remaining_members" field.
+	DefaultRemainingMembers int
+	// RemainingMembersValidator is a validator for the "remaining_members" field. It is called by the builders before save.
+	RemainingMembersValidator func(int) error
 	// DefaultResponseFormatVersion holds the default value on creation for the "response_format_version" field.
 	DefaultResponseFormatVersion int
 	// ResponseFormatVersionValidator is a validator for the "response_format_version" field. It is called by the builders before save.
@@ -237,12 +310,6 @@ var (
 	DefaultFreezeDigest string
 	// DefaultResponseDigest holds the default value on creation for the "response_digest" field.
 	DefaultResponseDigest string
-	// DefaultCorrectedTargetBytes holds the default value on creation for the "corrected_target_bytes" field.
-	DefaultCorrectedTargetBytes int64
-	// CorrectedTargetBytesValidator is a validator for the "corrected_target_bytes" field. It is called by the builders before save.
-	CorrectedTargetBytesValidator func(int64) error
-	// DefaultCorrectedTargetDigest holds the default value on creation for the "corrected_target_digest" field.
-	DefaultCorrectedTargetDigest string
 	// DefaultPromotionCursor holds the default value on creation for the "promotion_cursor" field.
 	DefaultPromotionCursor int
 	// PromotionCursorValidator is a validator for the "promotion_cursor" field. It is called by the builders before save.
@@ -348,14 +415,89 @@ func ByLogicalAttempt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLogicalAttempt, opts...).ToFunc()
 }
 
-// ByFreezeBytes orders the results by the freeze_bytes field.
-func ByFreezeBytes(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldFreezeBytes, opts...).ToFunc()
+// ByCaptureBytes orders the results by the capture_bytes field.
+func ByCaptureBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCaptureBytes, opts...).ToFunc()
 }
 
-// ByResponseBytes orders the results by the response_bytes field.
-func ByResponseBytes(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldResponseBytes, opts...).ToFunc()
+// ByMemberMode orders the results by the member_mode field.
+func ByMemberMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMemberMode, opts...).ToFunc()
+}
+
+// ByMemberFormat orders the results by the member_format field.
+func ByMemberFormat(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMemberFormat, opts...).ToFunc()
+}
+
+// BySourceLang orders the results by the source_lang field.
+func BySourceLang(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceLang, opts...).ToFunc()
+}
+
+// ByTargetLang orders the results by the target_lang field.
+func ByTargetLang(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTargetLang, opts...).ToFunc()
+}
+
+// ByTextMode orders the results by the text_mode field.
+func ByTextMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTextMode, opts...).ToFunc()
+}
+
+// ByMemberPool orders the results by the member_pool field.
+func ByMemberPool(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMemberPool, opts...).ToFunc()
+}
+
+// ByMemberAttempt orders the results by the member_attempt field.
+func ByMemberAttempt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMemberAttempt, opts...).ToFunc()
+}
+
+// ByArchiveCursor orders the results by the archive_cursor field.
+func ByArchiveCursor(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldArchiveCursor, opts...).ToFunc()
+}
+
+// ByArchiveDigest orders the results by the archive_digest field.
+func ByArchiveDigest(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldArchiveDigest, opts...).ToFunc()
+}
+
+// ByInputMemberBytes orders the results by the input_member_bytes field.
+func ByInputMemberBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInputMemberBytes, opts...).ToFunc()
+}
+
+// ByOutputMemberBytes orders the results by the output_member_bytes field.
+func ByOutputMemberBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOutputMemberBytes, opts...).ToFunc()
+}
+
+// ByPublicBytes orders the results by the public_bytes field.
+func ByPublicBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPublicBytes, opts...).ToFunc()
+}
+
+// ByMemberStorageBytes orders the results by the member_storage_bytes field.
+func ByMemberStorageBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMemberStorageBytes, opts...).ToFunc()
+}
+
+// ByPublicDigest orders the results by the public_digest field.
+func ByPublicDigest(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPublicDigest, opts...).ToFunc()
+}
+
+// ByRequestMetadataBytes orders the results by the request_metadata_bytes field.
+func ByRequestMetadataBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRequestMetadataBytes, opts...).ToFunc()
+}
+
+// ByRemainingMembers orders the results by the remaining_members field.
+func ByRemainingMembers(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRemainingMembers, opts...).ToFunc()
 }
 
 // ByResponseFormatVersion orders the results by the response_format_version field.
@@ -376,16 +518,6 @@ func ByFreezeDigest(opts ...sql.OrderTermOption) OrderOption {
 // ByResponseDigest orders the results by the response_digest field.
 func ByResponseDigest(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldResponseDigest, opts...).ToFunc()
-}
-
-// ByCorrectedTargetBytes orders the results by the corrected_target_bytes field.
-func ByCorrectedTargetBytes(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldCorrectedTargetBytes, opts...).ToFunc()
-}
-
-// ByCorrectedTargetDigest orders the results by the corrected_target_digest field.
-func ByCorrectedTargetDigest(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldCorrectedTargetDigest, opts...).ToFunc()
 }
 
 // ByPromotionCursor orders the results by the promotion_cursor field.

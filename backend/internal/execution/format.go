@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-const ResponseFormatVersion = 1
+const ResponseFormatVersion = 2
 
 var ErrUnsupportedExecutionFormat = errors.New("unsupported execution format: preserve this task as history; finish it using the previous version and its pre-upgrade database, or create a new task")
 

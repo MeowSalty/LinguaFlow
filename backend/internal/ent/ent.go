@@ -77,6 +77,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequestinputmember"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workresponsemember"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -202,6 +204,8 @@ func checkColumn(t, c string) error {
 			workcandidate.Table:             workcandidate.ValidColumn,
 			workitem.Table:                  workitem.ValidColumn,
 			workrequest.Table:               workrequest.ValidColumn,
+			workrequestinputmember.Table:    workrequestinputmember.ValidColumn,
+			workresponsemember.Table:        workresponsemember.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)
