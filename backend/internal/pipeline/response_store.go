@@ -1,18 +1,14 @@
 package pipeline
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"sort"
 	"strings"
-	"sync"
 	"unsafe"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 )
 
 type ResponseMember struct {
@@ -28,191 +24,91 @@ type ResponseMember struct {
 }
 
 type MainResponseHeader struct {
-	DatabaseID     int
-	ID             string
-	ResourceID     int
-	RoundID        int
-	SnapshotDigest string
-	FreezeDigest   string
-	ResponseDigest string
-	FreezeBytes    int64
-	ResponseBytes  int64
-	CorrectedBytes int64
-	MetadataBytes  int64
-	BusinessBound  int64
-	MemberCount    int
-	Cursor         int
-	Phase          string
-	Truncated      bool
+	FrozenContext
+	CaptureEpoch                                     int64
+	FormatVersion                                    int
+	ArchiveCursor                                    int
+	ArchiveDigest                                    string
+	InputMemberBytes, OutputMemberBytes, PublicBytes int64
+	DatabaseID                                       int
+	ID                                               string
+	ResourceID                                       int
+	RoundID                                          int
+	SnapshotDigest                                   string
+	FreezeDigest                                     string
+	ResponseDigest                                   string
+	FreezeBytes                                      int64
+	ResponseBytes                                    int64
+	CorrectedBytes                                   int64
+	MetadataBytes                                    int64
+	BusinessBound                                    int64
+	MemberCount                                      int
+	Cursor                                           int
+	Phase                                            string
+	Truncated                                        bool
 }
 
-type MainResponse struct {
-	ReleaseOwned func()
+type memoryResponseRecord struct {
 	MainResponseHeader
-	FreezePayload    []byte
-	Raw              []byte
-	CorrectedTargets []byte
-	CorrectedIndex   []byte
-	Members          []ResponseMember
-	Receipt          []byte
-	Record           RequestRecord
+	Receipt []byte
 }
-
 type memoryResponse struct {
-	business          *memoryResponseBusiness
-	receiptAllocation *backend.OwnedAllocation
-	runtime           *ExecutionRuntime
-	historyAdmission  *backend.RequestAdmission
-	historyOwner      string
-	retiredNext       *memoryResponse
-	intent            RequestIntent
-	freezeIdentity    string
-	response          MainResponse
-	record            RequestRecord
-	status            []byte
-}
-
-// A store reference and each reader share exactly one immutable backing owner.
-// Replacing the current value only ends the store reference.
-type memoryResponseBusiness struct {
-	mu          sync.Mutex
-	refs        int
-	body, index []byte
-	allocation  *backend.OwnedAllocation
-	admission   *backend.RequestAdmission
-	owner       string
-	bytes       int64
-}
-
-func (b *memoryResponseBusiness) borrow() func() {
-	if b == nil {
-		return nil
-	}
-	b.mu.Lock()
-	b.refs++
-	b.mu.Unlock()
-	var once sync.Once
-	return func() { once.Do(b.release) }
-}
-
-func (b *memoryResponseBusiness) release() {
-	if b == nil {
-		return
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.refs--
-	if b.refs != 0 {
-		return
-	}
-	b.body, b.index = nil, nil
-	if b.admission != nil {
-		_ = b.admission.ReleaseBuild(b.owner)
-	} else {
-		b.allocation.Release()
-	}
-	b.allocation = nil
-}
-
-func (s *MemoryRoundStore) SaveResponseBusiness(ctx context.Context, id string, in glossary.ResponseBusiness) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	r := s.requests[id]
-	if r == nil || r.response.Cursor != 0 || r.response.Phase != "response_pending" || int64(len(in.Body)) > r.response.BusinessBound || len(in.Index) != r.response.MemberCount*16 || len(in.Receipt) > 32<<10 {
-		return fmt.Errorf("invalid response business handoff")
-	}
-	owner := "business:" + r.historyOwner + ":" + NewWorkID()
-	content := &memoryResponseBusiness{refs: 1, body: in.Body, index: in.Index, allocation: in.ContentAllocation, owner: owner, bytes: int64(cap(in.Body)) + int64(cap(in.Index))}
-	if r.historyAdmission != nil && content.bytes > 0 {
-		if err := backend.TransferBuildAllocationToBuild(ctx, in.ContentAllocation, owner); err != nil {
-			return err
-		}
-		content.admission = r.historyAdmission
-	} else {
-		content.allocation = in.ContentAllocation.Transfer()
-		if content.bytes > 0 && content.allocation == nil {
-			return backend.ErrBuildCapacity
-		}
-	}
-	old := r.business
-	r.business = content
-	// Immutable business buffers transfer into the store. The producer only
-	// borrows them afterwards; retirement replaces buffers instead of mutating.
-	r.response.CorrectedTargets = in.Body
-	r.response.CorrectedIndex = in.Index
-	r.response.CorrectedBytes = int64(len(in.Body))
-	old.release()
-	if r.historyAdmission != nil && len(in.Receipt) > 0 {
-		if err := backend.TransferBuildAllocationToBuild(ctx, in.ReceiptAllocation, r.historyOwner); err != nil {
-			return err
-		}
-	}
-	r.response.Receipt = in.Receipt
-	if r.historyAdmission == nil {
-		r.receiptAllocation = in.ReceiptAllocation.Transfer()
-	}
-	r.response.Phase = "glossary_processed"
-	return nil
+	inputs                   map[int]InputMemberFrame
+	outputs                  map[int]OutputMemberFrame
+	capture                  *memberBacking
+	memberBackings           map[int]*memberBacking
+	outputBackings           map[int]*memberBacking
+	archiveStaging           map[int]*memberBacking
+	memberOutcomes           map[int]memoryMemberOutcome
+	corrections              map[int]OutputMemberFrame
+	correctionBackings       map[int]*memberBacking
+	stagedCorrections        map[int]OutputMemberFrame
+	stagedCorrectionBackings map[int]*memberBacking
+	publicBacking            *memberBacking
+	publicDigest             [sha256.Size]byte
+	historyAdmission         *backend.RequestAdmission
+	historyOwner             string
+	retiredNext              *memoryResponse
+	intent                   RequestIntent
+	response                 memoryResponseRecord
+	record                   RequestRecord
 }
 
 func responseDigest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
-
 func (s *MemoryRoundStore) Reserve(ctx context.Context, intent RequestIntent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
 		return fmt.Errorf("round store closed")
 	}
+	if len(intent.InputMembers) > 0 {
+		return s.reserveMembers(ctx, intent)
+	}
 	if old := s.requests[intent.ID]; old != nil {
-		if old.intent.InputDigest != intent.InputDigest || old.freezeIdentity != responseDigest(intent.FreezePayload) {
+		if old.intent.InputDigest != intent.InputDigest {
 			return fmt.Errorf("request identity reused")
 		}
 		return nil
 	}
-	b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
-	if err != nil {
-		return err
-	}
-	if err = backend.ReserveSlice[byte](b, int64(len(intent.PromotionMembers))); err != nil {
-		return err
-	}
-	// The audit record survives promotion. It owns its identity separately from
-	// the request payload, which can be dropped and refunded after consumption.
-	historyOwner := "history:" + s.identity + ":" + intent.ID
-	runtime := ExecutionRuntimeFromContext(ctx)
-	historyCtx := ctx
-	var admission *backend.RequestAdmission
-	if runtime != nil {
-		admission = runtime.Admission
-		historyCtx = runtime.BuildContext(ctx, historyOwner)
-	}
-	historyBounds, err := backend.NewBuildBoundsFromContext(historyCtx, 0, 0)
-	if err != nil {
-		return err
-	}
-	installed := false
-	defer func() {
-		if !installed && admission != nil {
-			_ = admission.ReleaseBuild(historyOwner)
+	admission, _ := backend.BuildOwnership(ctx)
+	r := &memoryResponse{intent: intent, record: RequestRecord{State: "reserved"}, historyAdmission: admission, historyOwner: "history:" + s.identity + ":" + intent.ID}
+	if admission != nil {
+		history := backend.WithBuildOwnership(ctx, admission, r.historyOwner)
+		history = backend.WithBuildReservation(history, func(n int64) error {
+			return admission.ClaimBuildBounded(r.historyOwner, n, backend.BuildAllocationLimit(ctx))
+		}, func(n int64) { _ = admission.ReleaseBuildBytes(r.historyOwner, n) })
+		b, err := backend.NewBuildBoundsFromContext(history, 0, 0)
+		if err != nil {
+			return err
 		}
-	}()
-	if err = historyBounds.ReserveAllocation(1, int64(unsafe.Sizeof(memoryResponse{}))); err != nil {
-		return err
-	}
-	for _, text := range []string{intent.ID, intent.InputDigest} {
-		if err = historyBounds.ReserveAllocation(int64(len(text)), 1); err != nil {
+		if err = b.ReserveAllocation(1, int64(unsafe.Sizeof(memoryResponse{}))); err != nil {
 			return err
 		}
 	}
-	if err = historyBounds.ReserveAllocation(64, 1); err != nil {
-		return err
-	}
-	intent.ID, intent.InputDigest = strings.Clone(intent.ID), strings.Clone(intent.InputDigest)
 	s.nextRequest++
-	// RequestIntent is frozen before reservation. The in-memory store retains
-	// that immutable backing until response promotion rather than cloning it.
-	s.requests[intent.ID] = &memoryResponse{runtime: runtime, historyAdmission: admission, historyOwner: historyOwner, intent: intent, status: make([]byte, len(intent.PromotionMembers)), freezeIdentity: responseDigest(intent.FreezePayload), record: RequestRecord{State: "reserved"}, response: MainResponse{MainResponseHeader: MainResponseHeader{ID: intent.ID, DatabaseID: s.nextRequest}}}
-	installed = true
+	r.response.DatabaseID = s.nextRequest
+	r.response.ID = intent.ID
+	s.requests[intent.ID] = r
 	for _, idx := range intent.Indices {
 		cur := s.state.Cursors[idx]
 		if intent.Phase != "prompt_upgrade" && intent.Stage == backend.RequestStageMain {
@@ -222,7 +118,6 @@ func (s *MemoryRoundStore) Reserve(ctx context.Context, intent RequestIntent) er
 	}
 	return nil
 }
-
 func (s *MemoryRoundStore) Record(ctx context.Context, id string, record RequestRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -274,7 +169,7 @@ func (s *MemoryRoundStore) Record(ctx context.Context, id string, record Request
 		}
 		r.record.State = record.State
 		r.record.Error = record.Error
-		if record.State == "failed" || record.State == "completed" && r.response.Raw == nil && r.response.FreezePayload == nil {
+		if record.State == "failed" || record.State == "completed" && r.response.Phase == "" {
 			r.dropRequestBacking()
 		}
 	}
@@ -310,60 +205,6 @@ func (s *MemoryRoundStore) AbortRequest(_ context.Context, id string) error {
 	return nil
 }
 
-func (s *MemoryRoundStore) HandoffResponse(ctx context.Context, response MainResponse) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	r := s.requests[response.ID]
-	if r == nil || len(response.Raw) == 0 || len(response.FreezePayload) == 0 {
-		return fmt.Errorf("invalid response handoff")
-	}
-	// Reserve froze this immutable payload; its existing digest is borrowed.
-	fd := r.freezeIdentity
-	b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
-	if err != nil {
-		return err
-	}
-	digestCredit, err := b.OwnAllocation(64, 1)
-	if err != nil {
-		return err
-	}
-	rd := responseDigest(response.Raw)
-	if r.response.ResponseDigest != "" {
-		defer digestCredit.Release()
-		if r.response.ResponseDigest != rd || r.response.FreezeDigest != fd {
-			return fmt.Errorf("response identity reused")
-		}
-		return nil
-	}
-	if r.historyAdmission != nil {
-		if err = backend.TransferProviderResponseToBuild(ctx, digestCredit, r.historyOwner); err != nil {
-			rd = ""
-			digestCredit.Release()
-			return err
-		}
-	}
-	response.DatabaseID = r.response.DatabaseID
-	response.ID = r.intent.ID
-	response.FreezePayload = r.intent.FreezePayload
-	r.intent.FreezePayload = nil
-	// Handoff transfers immutable raw/member backing to the durable in-memory
-	// record. The producer subsequently keeps only its header.
-	r.intent.PromotionMembers = nil
-	response.FreezeBytes, response.ResponseBytes = int64(len(response.FreezePayload)), int64(len(response.Raw))
-	response.MemberCount = len(response.Members)
-	response.FreezeDigest, response.ResponseDigest = fd, rd
-	response.Cursor, response.Phase = 0, "response_pending"
-	r.response = response
-	r.record = response.Record
-	r.record.State = "completed"
-	for _, m := range response.Members {
-		cur := s.state.Cursors[m.Index]
-		cur.State = "response_pending"
-		s.state.Cursors[m.Index] = cur
-	}
-	return nil
-}
-
 func (s *MemoryRoundStore) ResponseHeaders(_ context.Context, after, limit int) ([]MainResponseHeader, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -372,7 +213,7 @@ func (s *MemoryRoundStore) ResponseHeaders(_ context.Context, after, limit int) 
 	}
 	var headers []MainResponseHeader
 	for _, r := range s.requests {
-		if r.response.DatabaseID > after && (r.response.Phase == "response_pending" || r.response.Phase == "glossary_processed") {
+		if r.response.DatabaseID > after && (r.response.Phase == "capture_pending" || r.response.Phase == "outputs_ready" || r.response.Phase == "business_ready") {
 			headers = append(headers, r.response.MainResponseHeader)
 		}
 	}
@@ -386,24 +227,10 @@ func (s *MemoryRoundStore) ResponseHeaders(_ context.Context, after, limit int) 
 	return headers, after, nil
 }
 
-func (s *MemoryRoundStore) Response(_ context.Context, id string, freeze, raw, business int64) (MainResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	r := s.requests[id]
-	if r == nil || r.response.FreezeBytes > freeze || r.response.ResponseBytes > raw || r.response.CorrectedBytes > business {
-		return MainResponse{}, fmt.Errorf("saved response capacity conflict")
-	}
-	result := r.response
-	// Promotion only reads these immutable buffers. Replacement under the store
-	// lock leaves existing borrowers valid until their short build finishes.
-	result.ReleaseOwned = r.business.borrow()
-	return result, nil
-}
-
-func (s *MemoryRoundStore) PromoteMember(ctx context.Context, id string, cursor int, candidate *Candidate, next WorkCursor, failure string) error {
+func (s *MemoryRoundStore) PromoteMember(ctx context.Context, key MemberKey, candidate *Candidate, next WorkCursor, failure string) error {
 	var payload []byte
-	var err error
 	if candidate != nil {
+		var err error
 		payload, err = candidate.Encode()
 		if err != nil {
 			return err
@@ -411,93 +238,24 @@ func (s *MemoryRoundStore) PromoteMember(ctx context.Context, id string, cursor 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r := s.requests[id]
-	if r == nil || cursor < 0 || cursor >= len(r.response.Members) {
-		return fmt.Errorf("invalid promotion")
+	r, err := s.memberLocked(key)
+	if err != nil {
+		return err
 	}
-	m := r.response.Members[cursor]
-	if r.response.Cursor > cursor {
-		if candidate != nil && (r.status[cursor] != 1 || (!s.confirmed[candidate.ID] && s.headers[candidate.ID].Version <= candidate.Version && !bytes.Equal(s.candidates[candidate.ID], payload))) {
-			return fmt.Errorf("promotion identity reused")
-		}
-		return nil
-	}
-	if r.response.Cursor != cursor {
-		return fmt.Errorf("promotion cursor mismatch")
-	}
-	if candidate != nil {
-		if candidate.ID != m.CandidateID || candidate.Index != m.Index || candidate.ParentRequestID != id {
-			return fmt.Errorf("promotion member mismatch")
-		}
-	}
-	if len(r.response.CorrectedIndex) > 0 {
-		b, err := backend.NewBuildBoundsFromContext(ctx, int64(len(r.response.CorrectedTargets))+int64(len(r.response.CorrectedIndex)), 0)
-		if err != nil {
-			return err
-		}
-		defer b.CloseRetired()
-		body, index, err := glossary.RemoveResponseTargetBounded(b, r.response.CorrectedTargets, r.response.CorrectedIndex, cursor)
-		if err != nil {
-			return err
-		}
-		allocation, err := b.RetainedAllocation(int64(cap(body)) + int64(cap(index)))
-		if err != nil {
-			return err
-		}
-		if err = allocation.DetachBuild(); err != nil {
-			allocation.Release()
-			return err
-		}
-		owner := "business:" + r.historyOwner + ":" + NewWorkID()
-		content := &memoryResponseBusiness{refs: 1, body: body, index: index, allocation: allocation, owner: owner, bytes: int64(cap(body)) + int64(cap(index))}
-		if r.historyAdmission != nil {
-			if err = backend.TransferBuildAllocationToBuild(ctx, allocation, owner); err != nil {
-				content.body, content.index = nil, nil
-				body, index = nil, nil
-				allocation.Release()
-				return err
-			}
-			content.admission = r.historyAdmission
-		}
-		old := r.business
-		r.business = content
-		r.response.CorrectedTargets, r.response.CorrectedIndex = body, index
-		r.response.CorrectedBytes = int64(len(body))
-		old.release()
-	}
-	if candidate != nil {
-		s.candidates[candidate.ID] = payload
-		s.retainCandidateRuntime(ctx, candidate.ID)
-		candidate.StoredBytes = int64(len(payload))
-		s.headers[candidate.ID] = HeaderForCandidate(candidate)
-		next.State = "candidate"
-		r.status[cursor] = 1
-	} else {
-		r.status[cursor] = 2
-	}
-	s.state.Cursors[m.Index] = next
-	r.response.Cursor++
-	if r.response.Cursor == len(r.response.Members) {
-		r.response.Phase = "promoted"
-		r.response.Raw = nil
-		r.response.FreezePayload = nil
-		r.response.CorrectedTargets = nil
-		r.response.CorrectedIndex = nil
-		oldBusiness := r.business
-		r.business = nil
-		oldBusiness.release()
-		r.response.Members = nil
-		r.intent.Indices = nil
-		r.intent.Members = nil
-		r.status = nil
-		r.dropRequestBacking()
-		r.response.FreezeBytes, r.response.ResponseBytes, r.response.CorrectedBytes, r.response.BusinessBound = 0, 0, 0, 0
-	}
-	return nil
+	return s.promoteMemberLocked(ctx, r, key.Ordinal, candidate, next, failure, payload)
 }
-
 func (r *memoryResponse) dropRequestBacking() {
-	// Identity reuse checks still need these two owned strings and the digest.
+	for _, backings := range []map[int]*memberBacking{r.memberBackings, r.outputBackings, r.correctionBackings, r.stagedCorrectionBackings} {
+		for id, b := range backings {
+			b.drop()
+			delete(backings, id)
+		}
+	}
+	r.capture.drop()
+	r.capture = nil
+	r.inputs = nil
+	r.outputs = nil
+	r.corrections = nil
+	r.stagedCorrections = nil
 	r.intent = RequestIntent{ID: r.intent.ID, InputDigest: r.intent.InputDigest}
-	r.status = nil
 }

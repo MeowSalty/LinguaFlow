@@ -15,11 +15,11 @@ type memoryPromotionBoundaryStore struct {
 	cause    error
 }
 
-func (s *memoryPromotionBoundaryStore) PromoteMember(ctx context.Context, id string, cursor int, c *Candidate, next WorkCursor, failure string) error {
+func (s *memoryPromotionBoundaryStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure string) error {
 	if s.boundary == "before_write" {
 		return s.cause
 	}
-	if err := s.MemoryRoundStore.PromoteMember(ctx, id, cursor, c, next, failure); err != nil {
+	if err := s.MemoryRoundStore.PromoteMember(ctx, key, c, next, failure); err != nil {
 		return err
 	}
 	if s.boundary == "after_write" {

@@ -25,16 +25,21 @@ func TestBoundedMainMemberCapacityIsIndependent(t *testing.T) {
 		if textMode {
 			text = "[1] small\n[2] " + big + "\n[glossary]\n海 | sea"
 		}
-		r, e := ParseMainMemberBounded(boundsForTest(t, 8192, 1<<20), text, textMode, []string{"1", "2"}, "1", Options{JSONStructural: true})
-		if e != nil || r.Trans["1"] != "small" {
+		a, e := PrepareArchive(boundsForTest(t, 1<<20, 1<<20), text, textMode, false, []string{"1", "2"}, Options{JSONStructural: true})
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer a.Release()
+		r, e := a.Member(boundsForTest(t, 8192, 1<<20), 0)
+		if e != nil || r.Target != "small" {
 			t.Fatalf("sibling text=%v result=%v err=%v", textMode, r, e)
 		}
-		_, e = ParseMainMemberBounded(boundsForTest(t, 8192, 1<<20), text, textMode, nil, "2", Options{JSONStructural: true})
+		_, e = a.Member(boundsForTest(t, 8192, 1<<20), 1)
 		if !errors.Is(e, backend.ErrBuildCapacity) {
 			t.Fatalf("large selected: %v", e)
 		}
-		business, e := ParseMainMemberBounded(boundsForTest(t, 8192, 1<<20), text, textMode, nil, "", Options{JSONStructural: true})
-		if e != nil || len(business.Glos) != 1 || business.Glos[0].Target != "sea" {
+		business, e := a.Glossary(boundsForTest(t, 8192, 1<<20))
+		if e != nil || len(business) != 1 || business[0].Target != "sea" {
 			t.Fatalf("business: %#v %v", business, e)
 		}
 	}
@@ -48,15 +53,20 @@ func TestBoundedRepairSemanticParity(t *testing.T) {
 		if old.Fatal != got.Fatal || !reflect.DeepEqual(old.Trans, got.Trans) || !slices.Equal(old.Missing, got.Missing) || !reflect.DeepEqual(old.Glos, got.Glos) {
 			t.Fatalf("old=%#v got=%#v input=%q", old, got, text)
 		}
-		for _, id := range []string{"1", "2"} {
-			r, e := ParseMainMemberBounded(boundsForTest(t, 1<<20, 1<<20), text, false, nil, id, Options{JSONStructural: true, SchemaAliases: true})
+		a, e := PrepareArchive(boundsForTest(t, 1<<20, 1<<20), text, false, false, []string{"1", "2"}, Options{JSONStructural: true, SchemaAliases: true})
+		if e != nil {
 			if old.Fatal {
 				continue
 			}
-			if e != nil || r.Trans[id] != old.Trans[id] {
-				t.Fatalf("member %s old=%q got=%v e=%v input=%q", id, old.Trans[id], r.Trans, e, text)
+			t.Fatal(e)
+		}
+		for ordinal, id := range []string{"1", "2"} {
+			r, e := a.Member(boundsForTest(t, 1<<20, 1<<20), ordinal)
+			if e != nil || r.Target != old.Trans[id] {
+				t.Fatalf("member %s old=%q got=%v e=%v input=%q", id, old.Trans[id], r, e, text)
 			}
 		}
+		a.Release()
 	}
 	text := "[1] first\ncontinuation\n[2] second\n[ruby]\n1: first | reading | phonetic | #1\n[glossary]\n海 | sea"
 	old := TryRepairText(text, []string{"1", "2"}, Options{})
@@ -64,8 +74,13 @@ func TestBoundedRepairSemanticParity(t *testing.T) {
 	if !reflect.DeepEqual(old.Trans, got.Trans) || !reflect.DeepEqual(old.RubyOutput, got.RubyOutput) || !reflect.DeepEqual(old.Glos, got.Glos) {
 		t.Fatalf("text old=%#v got=%#v", old, got)
 	}
-	r, e := ParseMainMemberBounded(boundsForTest(t, 1<<20, 1<<20), text, true, nil, "1", Options{})
-	if e != nil || r.Trans["1"] != old.Trans["1"] || !reflect.DeepEqual(r.RubyOutput["1"], old.RubyOutput["1"]) {
+	a, e := PrepareArchive(boundsForTest(t, 1<<20, 1<<20), text, true, false, []string{"1", "2"}, Options{})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer a.Release()
+	r, e := a.Member(boundsForTest(t, 1<<20, 1<<20), 0)
+	if e != nil || r.Target != old.Trans["1"] || !reflect.DeepEqual(r.RubyOutput, old.RubyOutput["1"]) {
 		t.Fatalf("text selected=%#v err=%v", r, e)
 	}
 }
@@ -76,17 +91,27 @@ func TestBoundedReviseMemberCapacityAndDuplicates(t *testing.T) {
 		if mode {
 			text = "[revisions]\n1 | first\n1 | later\n2 | " + big
 		}
-		r, _, e := ParseReviseMemberBounded(boundsForTest(t, 8192, 1<<20), text, mode, "1", Options{JSONStructural: true})
-		if e != nil || r == nil || r.Target != "first" {
+		a, e := PrepareArchive(boundsForTest(t, 1<<20, 1<<20), text, mode, true, []string{"1", "2"}, Options{JSONStructural: true})
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer a.Release()
+		r, e := a.Member(boundsForTest(t, 8192, 1<<20), 0)
+		if e != nil || r.Revision == nil || r.Revision.Target != "first" {
 			t.Fatalf("revision=%#v err=%v", r, e)
 		}
-		_, _, e = ParseReviseMemberBounded(boundsForTest(t, 8192, 1<<20), text, mode, "2", Options{JSONStructural: true})
+		_, e = a.Member(boundsForTest(t, 8192, 1<<20), 1)
 		if !errors.Is(e, backend.ErrBuildCapacity) {
 			t.Fatal(e)
 		}
 	}
-	r, _, e := ParseReviseMemberBounded(boundsForTest(t, 8192, 1<<20), `[{"id":"1","target":"bare"}]`, false, "1", Options{JSONStructural: true})
-	if e != nil || r == nil || r.Target != "bare" {
+	a, e := PrepareArchive(boundsForTest(t, 1<<20, 1<<20), `[{"id":"1","target":"bare"}]`, false, true, []string{"1"}, Options{JSONStructural: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer a.Release()
+	r, e := a.Member(boundsForTest(t, 8192, 1<<20), 0)
+	if e != nil || r.Revision == nil || r.Revision.Target != "bare" {
 		t.Fatalf("bare=%v err=%v", r, e)
 	}
 }

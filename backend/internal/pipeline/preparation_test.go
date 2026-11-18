@@ -144,6 +144,12 @@ func TestRuntimeProductionObserverAndOriginalHandoffBudget(t *testing.T) {
 	ctx := s.Context(context.Background())
 	deadline := time.Now().Add(20 * time.Millisecond)
 	s.startHandoff(deadline)
+	for _, advance := range []time.Duration{time.Second, time.Minute, 120 * time.Second} {
+		s.startHandoff(deadline.Add(advance))
+		if got := persistence.Deadline(s.accountingContext(ctx)); !got.Equal(deadline) {
+			t.Fatalf("progress/retry refreshed attempt deadline: %v", got)
+		}
+	}
 	if got := persistence.Deadline(s.accountingContext(ctx)); !got.Equal(deadline) {
 		t.Fatalf("later sent or abort budget extended original handoff: %v", got)
 	}

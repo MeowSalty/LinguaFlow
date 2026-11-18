@@ -17,22 +17,20 @@ func TestAllocationMemoryHistorySurvivesPayloadUntilClose(t *testing.T) {
 	r := testExecutionRuntime(t, 1)
 	defer r.Close()
 	s := NewMemoryRoundStore(nil)
+	defer s.Close()
 	ctx := r.BuildContext(WithExecutionRuntime(context.Background(), r), "build:request")
-	intent := RequestIntent{ID: "request", InputDigest: "input", FreezePayload: []byte(`{}`), Indices: []int{0}, PromotionMembers: []ResponseMember{{Index: 0}}}
-	if err := s.Reserve(ctx, intent); err != nil {
-		t.Fatal(err)
-	}
-	history := s.requests[intent.ID].historyOwner
+	header := memberFixtureReserve(t, ctx, s, "request", 1024, memberFixtureInputs(1))
+	history := s.requests[header.ID].historyOwner
 	before := r.Admission.BuildBytes(history)
 	if before == 0 {
 		t.Fatal("unfunded history")
 	}
-	response := MainResponse{MainResponseHeader: MainResponseHeader{ID: intent.ID}, FreezePayload: intent.FreezePayload, Raw: []byte(`{"translations":{}}`), Members: intent.PromotionMembers}
-	if err := s.HandoffResponse(ctx, response); err != nil {
+	header = memberFixtureOutputs(t, ctx, s, header, []archivedOutput{{Missing: true}}, nil)
+	if err := s.PublishBusiness(ctx, header.ID, glossary.ResponseBusiness{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	before = r.Admission.BuildBytes(history)
-	if err := s.PromoteMember(ctx, intent.ID, 0, nil, WorkCursor{}, ""); err != nil {
+	if err := s.PromoteMember(ctx, archiveMemberKey(header, 0), nil, WorkCursor{}, "missing response member"); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Admission.ReleaseBuild("build:request"); err != nil {
@@ -41,7 +39,7 @@ func TestAllocationMemoryHistorySurvivesPayloadUntilClose(t *testing.T) {
 	if len(s.requests) != 1 || r.Admission.BuildBytes(history) != before {
 		t.Fatal("history refunded at payload completion")
 	}
-	if s.requests[intent.ID].intent.Indices != nil || s.requests[intent.ID].response.Raw != nil {
+	if s.requests[header.ID].intent.Indices != nil || s.requests[header.ID].capture != nil || len(s.requests[header.ID].inputs) != 0 || len(s.requests[header.ID].outputs) != 0 {
 		t.Fatal("payload survived promotion")
 	}
 	r.Close()
@@ -286,7 +284,7 @@ func TestAllocationMainProducerDropsTransferredPayloadReferences(t *testing.T) {
 	if err != nil || len(result.Resolved) != 1 || captured == nil {
 		t.Fatalf("main handoff failed: result=%+v captured=%v err=%v", result, captured != nil, err)
 	}
-	if captured.rawResponse != nil || captured.intent.FreezePayload != nil || captured.intent.PromotionMembers != nil || captured.intent.Indices != nil || captured.intent.Members != nil {
+	if captured.rawResponse != nil || captured.intent.InputMembers != nil || captured.intent.Indices != nil || captured.intent.Members != nil {
 		t.Fatal("retained provider context still references transferred producer payload")
 	}
 }
@@ -569,67 +567,120 @@ func TestAllocationMemoryBusinessRetirementKeepsImmutableSibling(t *testing.T) {
 	s := NewMemoryRoundStore(nil)
 	defer s.Close()
 	ctx := r.BuildContext(WithExecutionRuntime(context.Background(), r), "promotion:business")
-	intent := RequestIntent{ID: "business", InputDigest: "input", FreezePayload: []byte(`{}`), PromotionMembers: []ResponseMember{{Index: 0}, {Index: 1}}, BusinessBound: 1024}
-	if err := s.Reserve(ctx, intent); err != nil {
+	header := memberFixtureReserve(t, ctx, s, "business", 1024, memberFixtureInputs(2))
+	header = memberFixtureOutputs(t, ctx, s, header, []archivedOutput{{Target: "original first"}, {Target: "original sibling"}}, nil)
+	first := memberFixtureCorrection(t, ctx, s, header, 0, "first")
+	sibling := memberFixtureCorrection(t, ctx, s, header, 1, "sibling")
+	receipt, receiptAllocation := memberFixturePayload(t, ctx, glossary.ResponseReceipt{Version: glossary.ResponseReceiptVersion, RequestID: header.ID})
+	if err := s.PublishBusiness(ctx, header.ID, glossary.ResponseBusiness{Receipt: receipt, ReceiptAllocation: receiptAllocation}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.HandoffResponse(ctx, MainResponse{MainResponseHeader: MainResponseHeader{ID: intent.ID, BusinessBound: 1024}, FreezePayload: intent.FreezePayload, Raw: []byte(`{}`), Members: intent.PromotionMembers}); err != nil {
-		t.Fatal(err)
-	}
-	body, index, err := glossary.EncodeResponseBusiness([]glossary.ResponseTarget{{Text: "first"}, {Text: "sibling"}}, 1024)
+	borrowed, err := s.LoadOutputMember(ctx, archiveMemberKey(header, 0), true, 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var business glossary.ResponseBusiness
-	if err = b.CloneInto(glossary.ResponseBusiness{Body: body, Index: index}, &business); err != nil {
-		t.Fatal(err)
-	}
-	business.ContentAllocation, err = b.RetainedAllocation(int64(cap(business.Body)) + int64(cap(business.Index)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = business.ContentAllocation.DetachBuild(); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.SaveResponseBusiness(ctx, intent.ID, business); err != nil {
-		t.Fatal(err)
-	}
-	borrowed, err := s.Response(ctx, intent.ID, 1024, 1024, 1024)
-	if err != nil {
-		t.Fatal(err)
-	}
-	originalOwner := s.requests[intent.ID].business.owner
-	originalBytes := int64(cap(business.Body)) + int64(cap(business.Index))
-	business = glossary.ResponseBusiness{}
+	originalOwner := "corrected:" + header.ID + ":0"
+	siblingOwner := "corrected:" + header.ID + ":1"
+	originalBytes := int64(cap(first.Payload))
+	siblingBytes := int64(cap(sibling.Payload))
+	first = OutputMemberFrame{}
+	sibling = OutputMemberFrame{}
 	if got := r.Admission.BuildBytes(originalOwner); got != originalBytes {
 		t.Fatalf("original content owner=%d want=%d", got, originalBytes)
 	}
-	if err = s.PromoteMember(ctx, intent.ID, 0, nil, WorkCursor{}, ""); err != nil {
+	if err = s.PromoteMember(ctx, archiveMemberKey(header, 0), nil, WorkCursor{}, "fixture retirement"); err != nil {
 		t.Fatal(err)
 	}
-	if string(borrowed.CorrectedTargets) != "firstsibling" || string(s.requests[intent.ID].response.CorrectedTargets) != "sibling" {
+	current, err := s.LoadOutputMember(ctx, archiveMemberKey(header, 1), true, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LoadOutputMember(ctx, archiveMemberKey(header, 1), true, current.Bytes-1); err == nil {
+		t.Fatal("member output limit was bypassed")
+	}
+	model, err := s.LoadOutputMember(ctx, archiveMemberKey(header, 1), false, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if memberFixtureDecode(t, model).Target != "original sibling" {
+		t.Fatal("publication mutated the immutable model member")
+	}
+	model.Release()
+	if memberFixtureDecode(t, borrowed).Target != "first" || memberFixtureDecode(t, current).Target != "sibling" {
 		t.Fatal("retirement mutated borrowed response or lost sibling")
+	}
+	current.Release()
+	current.Release()
+	if got := r.Admission.BuildBytes(siblingOwner); got != siblingBytes {
+		t.Fatalf("sibling backing changed during earlier retirement: %d want=%d", got, siblingBytes)
 	}
 	if got := r.Admission.BuildBytes(originalOwner); got != originalBytes {
 		t.Fatalf("borrowed content refunded early: %d want=%d", got, originalBytes)
 	}
-	releaseBorrowed := borrowed.ReleaseOwned
-	borrowed = MainResponse{}
+	releaseBorrowed := borrowed.Release
+	borrowed = OutputMemberFrame{}
+	releaseBorrowed()
 	releaseBorrowed()
 	if got := r.Admission.BuildBytes(originalOwner); got != 0 {
 		t.Fatalf("last reader retained content: %d", got)
 	}
-	if err = s.PromoteMember(ctx, intent.ID, 1, nil, WorkCursor{}, ""); err != nil {
+	if err = s.PromoteMember(ctx, archiveMemberKey(header, 1), nil, WorkCursor{}, "fixture retirement"); err != nil {
 		t.Fatal(err)
 	}
-	if s.requests[intent.ID].response.CorrectedTargets != nil || s.requests[intent.ID].response.CorrectedIndex != nil {
+	if len(s.requests[header.ID].corrections) != 0 || len(s.requests[header.ID].outputs) != 0 || r.Admission.BuildBytes(siblingOwner) != 0 || s.requests[header.ID].response.OutputMemberBytes != 0 {
 		t.Fatal("final retirement retained business backing")
+	}
+	if got := r.Admission.BuildBytes("receipt:" + header.ID); got != int64(cap(receipt)) {
+		t.Fatalf("retirement refunded receipt history: %d want=%d", got, cap(receipt))
 	}
 	if err = r.Admission.ReleaseBuild("promotion:business"); err != nil {
 		t.Fatal(err)
 	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Admission.BuildBytes("receipt:" + header.ID); got != 0 {
+		t.Fatalf("receipt survived Store.Close: %d", got)
+	}
+}
+
+func TestAllocationMemoryBusinessReceiptFailureDoesNotInstall(t *testing.T) {
+	r := testExecutionRuntime(t, 1)
+	defer r.Close()
+	s := NewMemoryRoundStore(nil)
+	defer s.Close()
+	ctx := r.BuildContext(WithExecutionRuntime(context.Background(), r), "promotion:receipt-failure")
+	header := memberFixtureReserve(t, ctx, s, "receipt-failure", 1024, memberFixtureInputs(1))
+	header = memberFixtureOutputs(t, ctx, s, header, []archivedOutput{{Target: "model"}}, nil)
+	correction := memberFixtureCorrection(t, ctx, s, header, 0, "corrected")
+	receipt, _ := memberFixturePayload(t, ctx, glossary.ResponseReceipt{Version: glossary.ResponseReceiptVersion, RequestID: header.ID})
+	installed := false
+	// Withholding an actual backing receipt must reject the entire publication,
+	// before its dictionary install callback or staged member becomes visible.
+	err := s.PublishBusiness(ctx, header.ID, glossary.ResponseBusiness{Receipt: receipt}, func() { installed = true })
+	if !errors.Is(err, backend.ErrBuildCapacity) || installed || s.requests[header.ID].response.Phase != "outputs_ready" || len(s.requests[header.ID].corrections) != 0 {
+		t.Fatalf("failed receipt transfer published state: installed=%v phase=%s err=%v", installed, s.requests[header.ID].response.Phase, err)
+	}
+	owner := "corrected:" + header.ID + ":0"
+	if got := r.Admission.BuildBytes(owner); got != int64(cap(correction.Payload)) {
+		t.Fatalf("failed publish lost staged backing: %d want=%d", got, cap(correction.Payload))
+	}
+	if _, err := s.LoadOutputMember(ctx, archiveMemberKey(header, 0), true, 1024); err == nil {
+		t.Fatal("unpublished corrected member became readable")
+	}
+	if err := s.AbortMemberBusiness(ctx, header.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Admission.BuildBytes(owner); got != 0 {
+		t.Fatalf("aborted correction retained owner: %d", got)
+	}
+	model, err := s.LoadOutputMember(ctx, archiveMemberKey(header, 0), false, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if memberFixtureDecode(t, model).Target != "model" {
+		t.Fatal("rollback lost original model output")
+	}
+	model.Release()
+	model.Release()
 }

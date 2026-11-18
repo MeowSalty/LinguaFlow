@@ -31,24 +31,24 @@ type RoundRecovery struct {
 }
 
 type RequestIntent struct {
-	RoundIndex       int
-	ResourceID       int
-	ID               string
-	Stage            backend.RequestStage
-	BackendID        int
-	Indices          []int
-	CandidateID      string
-	Pool             int
-	Attempt          int
-	LogicalAttempt   int
-	NetworkAttempt   int
-	Phase            string
-	InputDigest      string
-	Members          []RequestMember
-	FreezePayload    []byte
-	SnapshotDigest   string
-	PromotionMembers []ResponseMember
-	BusinessBound    int64
+	FrozenContext
+	InputMembers   []InputMemberFrame
+	RoundIndex     int
+	ResourceID     int
+	ID             string
+	Stage          backend.RequestStage
+	BackendID      int
+	Indices        []int
+	CandidateID    string
+	Pool           int
+	Attempt        int
+	LogicalAttempt int
+	NetworkAttempt int
+	Phase          string
+	InputDigest    string
+	Members        []RequestMember
+	SnapshotDigest string
+	BusinessBound  int64
 }
 
 // RequestMember freezes one candidate's identity and pre-dispatch attempt
@@ -87,6 +87,7 @@ const (
 // RoundStore is the persistence boundary consumed by the staged executor.
 // The database adapter owns identity mapping and all transactional acceptance.
 type RoundStore interface {
+	MemberResponseStore
 	CanonicalRoundStore
 	CandidatePayloadStore
 	Committer
@@ -98,10 +99,8 @@ type RoundStore interface {
 	Cursors(context.Context, []CursorTransition) error
 	Reserve(context.Context, RequestIntent) error
 	Record(context.Context, string, RequestRecord) error
-	HandoffResponse(context.Context, MainResponse) error
 	ResponseHeaders(context.Context, int, int) ([]MainResponseHeader, int, error)
-	Response(context.Context, string, int64, int64, int64) (MainResponse, error)
-	PromoteMember(context.Context, string, int, *Candidate, WorkCursor, string) error
+	PromoteMember(context.Context, MemberKey, *Candidate, WorkCursor, string) error
 }
 
 // Committer confirms one candidate atomically. Infrastructure owns version
@@ -118,6 +117,10 @@ type RequestAborter interface {
 
 // MemoryRoundStore gives synchronous entrypoints exactly the same candidate and
 // confirmation contract without manufacturing Job checkpoints or durable recovery.
+type memoryCandidateOwner struct {
+	Admission *backend.RequestAdmission
+	Window    *CandidateWindow
+}
 type MemoryRoundStore struct {
 	mu                  sync.Mutex
 	state               RoundRecovery
@@ -129,7 +132,7 @@ type MemoryRoundStore struct {
 	requests            map[string]*memoryResponse
 	nextRequest         int
 	closed              bool
-	candidateRuntimes   map[string]map[*ExecutionRuntime]struct{}
+	candidateOwners     map[string]map[memoryCandidateOwner]struct{}
 	promotionCandidates map[string]*Candidate
 	promotionActive     map[string]bool
 }
@@ -151,7 +154,7 @@ func (s *MemoryRoundStore) Close() error {
 	// has joined; retire each actual payload before its matching inventory.
 	s.candidates, s.headers, s.confirmed, s.promotionCandidates = nil, nil, nil, nil
 	s.promotionActive = nil
-	for id, runtimes := range s.candidateRuntimes {
+	for id, runtimes := range s.candidateOwners {
 		for runtime := range runtimes {
 			runtime.Admission.ReleaseMemoryPromotion(id)
 			runtime.Window.Release(id)
@@ -159,7 +162,7 @@ func (s *MemoryRoundStore) Close() error {
 			result = errors.Join(result, runtime.Admission.ReleaseBuild(s.promotionOwner(id)))
 		}
 	}
-	s.candidateRuntimes = nil
+	s.candidateOwners = nil
 	// Keep each record's owned identity and audit backing until the table is
 	// gone. The record pointer avoids allocating another table during Close.
 	var retired *memoryResponse
@@ -171,17 +174,16 @@ func (s *MemoryRoundStore) Close() error {
 	for retired != nil {
 		record := retired
 		retired = record.retiredNext
-		admission, owner, requestID, runtime := record.historyAdmission, record.historyOwner, record.intent.ID, record.runtime
-		business := record.business
-		receipt := record.receiptAllocation
+		admission, owner := record.historyAdmission, record.historyOwner
+		for _, backings := range []map[int]*memberBacking{record.memberBackings, record.outputBackings, record.correctionBackings, record.stagedCorrectionBackings, record.archiveStaging} {
+			for _, backing := range backings {
+				result = errors.Join(result, backing.drop())
+			}
+		}
+		record.capture.drop()
+		record.publicBacking.drop()
 		*record = memoryResponse{}
 		record = nil
-		business.release()
-		receipt.Release()
-		if runtime != nil {
-			runtime.Window.Release(requestID)
-			result = errors.Join(result, runtime.releaseMainOwner(requestID))
-		}
 		if admission != nil {
 			result = errors.Join(result, admission.ReleaseBuild(owner))
 		}
@@ -257,13 +259,13 @@ func (s *MemoryRoundStore) Save(ctx context.Context, c *Candidate) error {
 
 func (s *MemoryRoundStore) retainCandidateRuntime(ctx context.Context, id string) {
 	if runtime := ExecutionRuntimeFromContext(ctx); runtime != nil {
-		if s.candidateRuntimes == nil {
-			s.candidateRuntimes = make(map[string]map[*ExecutionRuntime]struct{})
+		if s.candidateOwners == nil {
+			s.candidateOwners = make(map[string]map[memoryCandidateOwner]struct{})
 		}
-		if s.candidateRuntimes[id] == nil {
-			s.candidateRuntimes[id] = make(map[*ExecutionRuntime]struct{})
+		if s.candidateOwners[id] == nil {
+			s.candidateOwners[id] = make(map[memoryCandidateOwner]struct{})
 		}
-		s.candidateRuntimes[id][runtime] = struct{}{}
+		s.candidateOwners[id][memoryCandidateOwner{runtime.Admission, runtime.Window}] = struct{}{}
 	}
 }
 
@@ -291,13 +293,13 @@ func (s *MemoryRoundStore) retainPromotionAllocation(ctx context.Context, candid
 		}
 		// Failed staged runs stop their admission. A resumed response uses a
 		// fresh runtime; same-runtime reliable retries keep the original object.
-		if _, sameRuntime := s.candidateRuntimes[id][runtime]; sameRuntime {
+		if _, sameRuntime := s.candidateOwners[id][memoryCandidateOwner{runtime.Admission, runtime.Window}]; sameRuntime {
 			return backend.ErrPipelineCapacity
 		}
 		// A finished failed attempt may be rebuilt from its retained response.
 		// A saved row or an active borrower rules out replacing its backing.
 		response := s.requests[candidate.ParentRequestID]
-		if s.promotionActive[id] || s.candidates[id] != nil || s.confirmed[id] || response == nil || response.response.Cursor >= len(response.response.Members) || response.response.Members[response.response.Cursor].CandidateID != id || old.ParentRequestID != candidate.ParentRequestID || old.WorkID != candidate.WorkID || old.Version != candidate.Version {
+		if s.promotionActive[id] || s.candidates[id] != nil || s.confirmed[id] || response == nil || response.response.Cursor >= response.response.MemberCount || response.inputs[response.response.Cursor].CandidateID != id || old.ParentRequestID != candidate.ParentRequestID || old.WorkID != candidate.WorkID || old.Version != candidate.Version {
 			return backend.ErrPipelineCapacity
 		}
 	}
@@ -337,12 +339,13 @@ func (s *MemoryRoundStore) retainPromotionAllocation(ctx context.Context, candid
 		// loses its last payload/header reference and original credits.
 		*old = Candidate{}
 		old = nil
-		for previous := range s.candidateRuntimes[id] {
-			if previous == runtime {
+		for previous := range s.candidateOwners[id] {
+			if previous == (memoryCandidateOwner{runtime.Admission, runtime.Window}) {
 				continue
 			}
 			previous.Admission.ReleaseMemoryPromotion(id)
 			previous.Window.Release(id)
+			delete(s.candidateOwners[id], previous)
 			if err = previous.Admission.ReleaseBuild(s.promotionOwner(id)); err != nil {
 				return err
 			}
@@ -366,7 +369,7 @@ func (s *MemoryRoundStore) dropPromotionPayload(id string) {
 	if candidate := s.promotionCandidates[id]; candidate != nil {
 		candidate.PreparedPayload = nil
 	}
-	for runtime := range s.candidateRuntimes[id] {
+	for runtime := range s.candidateOwners[id] {
 		runtime.Admission.ReleaseMemoryPromotion(id)
 	}
 }

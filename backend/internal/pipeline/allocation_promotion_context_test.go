@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 )
 
 func TestAllocationPromotionContextCannotManufactureResponseCredit(t *testing.T) {
@@ -14,7 +15,9 @@ func TestAllocationPromotionContextCannotManufactureResponseCredit(t *testing.T)
 	defer r.Close()
 	ctx := r.BuildContext(context.Background(), "promotion:restored")
 	got, err := r.mainResponseBuildContext(ctx, "restored")
-	if err != nil || got != ctx || backend.HasActiveBuildAllocationSource(got) {
+	a, owner := backend.BuildOwnership(ctx)
+	gotAdmission, gotOwner := backend.BuildOwnership(got)
+	if err != nil || gotAdmission != a || gotOwner != owner || persistence.Deadline(got).IsZero() || backend.HasActiveBuildAllocationSource(got) {
 		t.Fatalf("restored inventory acquired a source: %v", err)
 	}
 	standalone, err := backend.WithProviderResponseAllocation(context.Background(), r.responseLimit())
