@@ -290,7 +290,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		if err := requestRuntime.ConfigureEpisodeStore(jobCtx, jobID, workstate.NewStore(r.client)); err != nil {
 			return err
 		}
-		defer requestRuntime.Close()
+		defer func() { returnErr = errors.Join(returnErr, requestRuntime.Close()) }()
 		var storageBudget *workstate.StorageBudget
 		defer func() {
 			if storageBudget != nil {
@@ -310,6 +310,19 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 			// retained SQL backing before unloading the runtime attachment.
 			factCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 			defer cancel()
+			if err := requestRuntime.CloseMainOwners(); err != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("joined response owner retirement: %w", err))
+				return
+			}
+			if storageBudget != nil {
+				// Settle pending receipts while their admission metadata still
+				// exists. Settle takes the inventory lock itself, before the
+				// aggregate read below acquires it for joined runtime facts.
+				if err := storageBudget.Settle(factCtx); err != nil {
+					returnErr = errors.Join(returnErr, fmt.Errorf("joined storage reconciliation: %w", err))
+					return
+				}
+			}
 			if r.budgetInventoryLock != nil {
 				r.budgetInventoryLock.Lock()
 				defer r.budgetInventoryLock.Unlock()
@@ -906,7 +919,7 @@ func (r *JobRunner) processJobResource(
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
-	defer func() { _ = eng.Close() }()
+	defer func() { retErr = errors.Join(retErr, eng.Close()) }()
 
 	var mu sync.Mutex
 	completedCount := 0

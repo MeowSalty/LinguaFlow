@@ -323,7 +323,7 @@ func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sample
 		requestIdentities[request.Identity] = true
 		if request.State == "cancelled_before_dispatch" {
 			abortedRequests++
-			if request.UsageKnown || request.UsageRecordID != nil || request.InputTokens != 0 || request.OutputTokens != 0 || request.HandoffAt != nil || request.ResponseBytes != 0 || len(request.ResponsePayload) != 0 || request.FreezeBytes != 0 || len(request.FreezePayload) != 0 || request.BusinessBound != 0 || len(request.PromotionMembers) != 0 {
+			if request.UsageKnown || request.UsageRecordID != nil || request.InputTokens != 0 || request.OutputTokens != 0 || request.HandoffAt != nil || request.CaptureBytes != 0 || (request.CaptureBytes+request.OutputMemberBytes) != 0 || request.InputMemberBytes != 0 || request.BusinessBound != 0 || request.RemainingMembers != 0 {
 				invalidAbortedRequests++
 			}
 			continue

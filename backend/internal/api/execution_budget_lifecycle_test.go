@@ -56,7 +56,7 @@ func TestBudgetIntegrationCancelUnknownAuxRetryAttach(t *testing.T) {
 					round := c.JobRound.Create().SetJobID(j.ID).SetJobResourceID(jr.ID).SetRoundIndex(0).SetMode("correct").SetStatus(service.JobRoundStatusRunning).SaveX(ctx)
 					builder := c.WorkRequest.Create().SetIdentity("unknown-aux").SetJobID(j.ID).SetResourceID(r.ID).SetJobRoundID(round.ID).SetRetryEpoch(0).SetSegmentIds([]int{1}).SetStage("alignment").SetBackendID(0).SetBudgetModel("budget").SetInputDigest("opaque").SetState("unknown").SetUsageKnown(false)
 					if body {
-						builder.SetFreezePayload([]byte("reliable freeze")).SetFreezeBytes(15)
+						builder.SetCapturePayload([]byte("reliable capture")).SetCaptureBytes(16)
 					}
 					builder.SaveX(ctx)
 					if err = s.executionBudget.Rebuild(ctx, s.budgetSource); err != nil {
@@ -125,7 +125,7 @@ func TestBudgetIntegrationCancelUnknownAuxRetryAttach(t *testing.T) {
 					}
 					// Retry keeps the old attempt identity and epoch; an old response
 					// cannot create new reliable backing under the new Job epoch.
-					err = workstate.NewStore(c).HandoffResponse(ctx, workstate.ResponseHandoff{RequestID: old.Identity, Scope: workstate.Scope{JobID: j.ID, ResourceID: r.ID, RoundID: round.ID, RetryEpoch: 0}, FreezePayload: []byte("late"), ResponsePayload: []byte("late"), SnapshotDigest: "late"})
+					err = workstate.NewStore(c).CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: old.Identity, Scope: workstate.Scope{JobID: j.ID, ResourceID: r.ID, RoundID: round.ID, RetryEpoch: 0}, SnapshotDigest: "late"}, Payload: []byte("late")})
 					if err == nil || !errors.Is(err, workstate.ErrStopped) {
 						t.Fatalf("late old-epoch response: %v", err)
 					}
@@ -170,12 +170,12 @@ func TestBudgetIntegrationActorScanAndInactiveCleanup(t *testing.T) {
 						status = "paused"
 					}
 					j := jobQuerySeed(t, c, p.ID, status, "manual", time.Now().UTC())
-					c.Job.UpdateOne(j).SetCreatedByID(u.ID).SetExecutionConfig(map[string]any{"schema_version": 4, "defaults_version": 4, "response_format_version": 1}).ExecX(ctx)
+					c.Job.UpdateOne(j).SetCreatedByID(u.ID).SetExecutionConfig(map[string]any{"schema_version": execution.SnapshotSchemaVersion, "defaults_version": execution.SnapshotDefaultsVersion, "response_format_version": execution.ResponseFormatVersion}).ExecX(ctx)
 					r := c.Resource.Create().SetProjectID(p.ID).SetPath("budget.txt").SetFormat("txt").SetStoragePath("budget.txt").SaveX(ctx)
 					jr := c.JobResource.Create().SetJobID(j.ID).SetResourceID(r.ID).SaveX(ctx)
 					round := c.JobRound.Create().SetJobID(j.ID).SetJobResourceID(jr.ID).SetRoundIndex(0).SetMode("translate").SaveX(ctx)
 					payload := []byte("可靠冻结文本")
-					c.WorkRequest.Create().SetIdentity("race-request").SetJobID(j.ID).SetResourceID(r.ID).SetJobRoundID(round.ID).SetRetryEpoch(0).SetSegmentIds([]int{1}).SetStage("main").SetBackendID(0).SetBudgetModel("budget").SetInputDigest("digest").SetFreezePayload(payload).SetFreezeBytes(int64(len(payload))).SetState("sent").SaveX(ctx)
+					c.WorkRequest.Create().SetIdentity("race-request").SetJobID(j.ID).SetResourceID(r.ID).SetJobRoundID(round.ID).SetRetryEpoch(0).SetSegmentIds([]int{1}).SetStage("main").SetBackendID(0).SetBudgetModel("budget").SetInputDigest("digest").SetCapturePayload(payload).SetCaptureBytes(int64(len(payload))).SetState("sent").SaveX(ctx)
 					s.budgetSource = workstate.InventorySource{DB: c, Driver: "sqlite", ItemBytes: 1 << 20}
 					var err error
 					s.executionBudget, err = resourcebudget.New(testBudgetPolicy(t, scenario.budget))

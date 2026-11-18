@@ -79,7 +79,7 @@ func TestRubyPipelineSQLitePausePersistsRawBeforeCandidateCapacityCheck(t *testi
 		t.Fatal("capacity failure produced accepted work")
 	}
 	request := f.client.WorkRequest.Query().OnlyX(ctx)
-	if request.State != "completed" || request.PromotionState != "response_pending" || request.PromotionCursor != 0 || len(request.ResponsePayload) == 0 || len(request.FreezePayload) == 0 {
+	if request.State != "completed" || request.PromotionState != "business_ready" || request.PromotionCursor != 0 || (request.CaptureBytes+request.OutputMemberBytes) == 0 || request.InputMemberBytes == 0 {
 		t.Fatalf("pause lost unpromoted reliable raw: %+v", request)
 	}
 	f.assertUsage(t, 1)

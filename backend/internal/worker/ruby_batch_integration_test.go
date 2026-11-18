@@ -86,7 +86,7 @@ func prepareRubyBatchCandidates(t *testing.T, f *rubyPipelineFixture) {
 		}
 	}
 	main := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).OnlyX(ctx)
-	if main.PromotionCursor != 4 || main.PromotionState != "promoted" || main.State != "completed" || len(main.FreezePayload) != 0 || len(main.ResponsePayload) != 0 {
+	if main.PromotionCursor != 4 || main.PromotionState != "promoted" || main.State != "completed" || main.InputMemberBytes != 0 || (main.CaptureBytes+main.OutputMemberBytes) != 0 {
 		t.Fatalf("promotion barrier did not retain reliable main response: %+v", main)
 	}
 	f.assertUsage(t, 1)

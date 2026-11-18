@@ -311,16 +311,16 @@ func TestRubyHandoffAcceptanceHTTPStoredRoundsOwnResponseUntilDurable(t *testing
 
 type handoffLateCancelStore struct {
 	*roundStore
-	entered chan pipeline.MainResponse
+	entered chan pipeline.CapturedResponse
 	release <-chan struct{}
 }
 
-func (s *handoffLateCancelStore) HandoffResponse(ctx context.Context, response pipeline.MainResponse) error {
+func (s *handoffLateCancelStore) CaptureResponse(ctx context.Context, response pipeline.CapturedResponse) error {
 	s.entered <- response
 	// Fault sits outside the transaction; an in-flight late saver must join
 	// before owner retirement and the production cancellation cleanup.
 	<-s.release
-	return s.roundStore.HandoffResponse(ctx, response)
+	return s.roundStore.CaptureResponse(ctx, response)
 }
 func TestRubyHandoffAcceptanceHTTPCancelLateSaverJoinsBeforeCleanup(t *testing.T) {
 	f, httpBarrier := newHandoffHTTPFixture(t, "translate", 1, 3, 3)
@@ -349,7 +349,7 @@ func TestRubyHandoffAcceptanceHTTPCancelLateSaverJoinsBeforeCleanup(t *testing.T
 	for _, row := range f.client.Segment.Query().Where(segment.ResourceIDEQ(f.resourceIDs[0])).AllX(context.Background()) {
 		baselineVersions[row.ID] = row.ContentVersion
 	}
-	entered := make(chan pipeline.MainResponse, 1)
+	entered := make(chan pipeline.CapturedResponse, 1)
 	release := make(chan struct{})
 	var once sync.Once
 	open := func() { once.Do(func() { close(release) }) }
@@ -370,7 +370,7 @@ func TestRubyHandoffAcceptanceHTTPCancelLateSaverJoinsBeforeCleanup(t *testing.T
 	}
 	defer cleanup()
 	fail := func(format string, args ...any) { cleanup(); t.Fatalf(format, args...) }
-	var late pipeline.MainResponse
+	var late pipeline.CapturedResponse
 	select {
 	case late = <-entered:
 	case err := <-done:
@@ -413,7 +413,7 @@ func TestRubyHandoffAcceptanceHTTPCancelLateSaverJoinsBeforeCleanup(t *testing.T
 	if state.ProgressID != "" || state.ResponseID != "" || state.BusinessOwner != "" {
 		fail("Cancel did not fence late generation and clear bindings: %+v", state)
 	}
-	if err := base.HandoffResponse(readCtx, late); err == nil {
+	if err := base.CaptureResponse(readCtx, late); err == nil {
 		fail("post-cleanup late raw save bypassed Cancel generation")
 	}
 	for _, row := range f.client.Segment.Query().Where(segment.ResourceIDEQ(f.resourceIDs[0])).AllX(readCtx) {
@@ -425,7 +425,7 @@ func TestRubyHandoffAcceptanceHTTPCancelLateSaverJoinsBeforeCleanup(t *testing.T
 		fail("Cancel late save created candidate/checkpoint")
 	}
 	for _, row := range f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).AllX(readCtx) {
-		if len(row.FreezePayload) != 0 || len(row.ResponsePayload) != 0 || len(row.CorrectedTargets) != 0 {
+		if row.InputMemberBytes != 0 || (row.CaptureBytes+row.OutputMemberBytes) != 0 || row.OutputMemberBytes != 0 {
 			fail("Cancel retained private request payload%s", row.Identity)
 		}
 	}
@@ -541,7 +541,7 @@ func runHandoffRecoveryGrowthThirtyTwo(t *testing.T, fullJ bool) {
 		seed.Close()
 		if err != nil || !gate.Paused() {
 			for _, row := range f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).AllX(context.Background()) {
-				t.Logf("full_R_seed state%s phase%s raw_bytes%d freeze%d gate_paused%v boundary_error%v", row.State, row.PromotionState, row.ResponseBytes, row.FreezeBytes, gate.Paused(), lateStore.err)
+				t.Logf("full_R_seed state%s phase%s raw_bytes%d freeze%d gate_paused%v boundary_error%v", row.State, row.PromotionState, row.CaptureBytes, row.InputMemberBytes, gate.Paused(), lateStore.err)
 			}
 			t.Fatalf("real future raw seed: %v", err)
 		}
@@ -1141,7 +1141,7 @@ func TestRubyHandoffAcceptanceHTTPBoundedProtectionContextAndMetadata(t *testing
 					t.Fatalf("bounded failure checkpoint%d", n)
 				}
 				for _, record := range f.client.WorkRequest.Query().AllX(context.Background()) {
-					if len(record.ResponsePayload) != 0 || record.ResponseBytes != 0 {
+					if (record.CaptureBytes+record.OutputMemberBytes) != 0 || record.CaptureBytes != 0 {
 						t.Fatalf("out-of-budget raw persisted")
 					}
 				}
@@ -1289,8 +1289,8 @@ func runHandoffHTTPCase(t *testing.T, mode string, concurrency, count, batch, ac
 		}
 	}
 	maxFreeze := int64(0)
-	for _, request := range f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID), workrequest.StateNEQ("cancelled_before_dispatch")).Select(workrequest.FieldFreezeBytes, workrequest.FieldBusinessBound, workrequest.FieldPromotionCount).AllX(context.Background()) {
-		maxFreeze = max(maxFreeze, request.FreezeBytes)
+	for _, request := range f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID), workrequest.StateNEQ("cancelled_before_dispatch")).Select(workrequest.FieldInputMemberBytes, workrequest.FieldBusinessBound, workrequest.FieldPromotionCount).AllX(context.Background()) {
+		maxFreeze = max(maxFreeze, request.InputMemberBytes)
 		if inline {
 			// Reservation may reach the shorter tail batch before held HTTP
 			// calls finish. Its business limit follows its own frozen members.
@@ -1347,12 +1347,12 @@ func runHandoffHTTPCase(t *testing.T, mode string, concurrency, count, batch, ac
 	}
 	for _, request := range f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).AllX(readCtx) {
 		if request.State == "cancelled_before_dispatch" {
-			if len(request.ResponsePayload) != 0 || len(request.FreezePayload) != 0 || request.ResponseBytes != 0 || request.FreezeBytes != 0 {
+			if (request.CaptureBytes+request.OutputMemberBytes) != 0 || request.InputMemberBytes != 0 || request.CaptureBytes != 0 {
 				fail("cancelled descriptor retained backing: %s", request.Identity)
 			}
 			continue
 		}
-		if request.State != "completed" || request.PromotionState != "promoted" || len(request.ResponsePayload) != 0 || len(request.FreezePayload) != 0 {
+		if request.State != "completed" || request.PromotionState != "promoted" || (request.CaptureBytes+request.OutputMemberBytes) != 0 || request.InputMemberBytes != 0 {
 			fail("terminal raw carrier retained payload or incomplete promotion: %s/%s", request.State, request.PromotionState)
 		}
 	}
@@ -1739,12 +1739,12 @@ func runHandoffHTTPAuxScopes(t *testing.T, twoJobs bool, counts ...int) {
 	for _, request := range f.client.WorkRequest.Query().AllX(readCtx) {
 		if request.State == "cancelled_before_dispatch" {
 			unsent++
-			if request.UsageKnown || request.UsageRecordID != nil || request.InputTokens != 0 || request.OutputTokens != 0 || len(request.FreezePayload) != 0 || request.FreezeBytes != 0 || len(request.ResponsePayload) != 0 || request.ResponseBytes != 0 || len(request.CorrectedTargets) != 0 || len(request.CorrectedTargetIndex) != 0 || request.CorrectedTargetBytes != 0 || request.BusinessBound != 0 || len(request.GlossaryReceipt) != 0 || len(request.PromotionMembers) != 0 {
+			if request.UsageKnown || request.UsageRecordID != nil || request.InputTokens != 0 || request.OutputTokens != 0 || request.InputMemberBytes != 0 || (request.CaptureBytes+request.OutputMemberBytes) != 0 || request.CaptureBytes != 0 || request.OutputMemberBytes != 0 || request.BusinessBound != 0 || len(request.GlossaryReceipt) != 0 || request.RemainingMembers != 0 {
 				fail("undispatched A8 audit retained paid usage or backing: %+v", request)
 			}
 			continue
 		}
-		if request.State != "completed" || len(request.ResponsePayload) != 0 || len(request.FreezePayload) != 0 {
+		if request.State != "completed" || (request.CaptureBytes+request.OutputMemberBytes) != 0 || request.InputMemberBytes != 0 {
 			fail("terminal A8 request retained unfinished/raw work: stage=%s state=%s", request.Stage, request.State)
 		}
 		if request.Stage == "main" {
@@ -1822,17 +1822,17 @@ func (s *handoffCrashBoundaryStore) boundary(phase string) {
 		_, _ = bufio.NewReader(os.Stdin).ReadByte()
 	})
 }
-func (s *handoffCrashBoundaryStore) HandoffResponse(ctx context.Context, response pipeline.MainResponse) error {
+func (s *handoffCrashBoundaryStore) CaptureResponse(ctx context.Context, response pipeline.CapturedResponse) error {
 	s.boundary("raw_before")
-	err := s.roundStore.HandoffResponse(ctx, response)
+	err := s.roundStore.CaptureResponse(ctx, response)
 	if err == nil {
 		s.boundary("raw_after")
 	}
 	return err
 }
-func (s *handoffCrashBoundaryStore) PromoteMember(ctx context.Context, id string, cursor int, c *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
+func (s *handoffCrashBoundaryStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, c *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
 	s.boundary("promotion_before")
-	err := s.roundStore.PromoteMember(ctx, id, cursor, c, next, failure)
+	err := s.roundStore.PromoteMember(ctx, key, c, next, failure)
 	if err == nil {
 		s.boundary("promotion_after")
 	}
@@ -1951,8 +1951,8 @@ func TestRubyHandoffAcceptanceMainProcessKillRecovery(t *testing.T) {
 			f := loadHandoffCrashFixture(t, path)
 			before := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).OnlyX(context.Background())
 			identity, digest := before.Identity, before.SnapshotDigest
-			if phase != "raw_before" && (before.State != "completed" || before.UsageRecordID == nil || len(before.ResponsePayload) == 0 && before.PromotionCursor < before.PromotionCount) {
-				t.Fatalf("kill lost a reliable raw boundary: %s cursor=%d/%d bytes=%d", before.State, before.PromotionCursor, before.PromotionCount, before.ResponseBytes)
+			if phase != "raw_before" && (before.State != "completed" || before.UsageRecordID == nil || (before.CaptureBytes+before.OutputMemberBytes) == 0 && before.PromotionCursor < before.PromotionCount) {
+				t.Fatalf("kill lost a reliable raw boundary: %s cursor=%d/%d bytes=%d", before.State, before.PromotionCursor, before.PromotionCount, before.CaptureBytes)
 			}
 			if err := f.jobs.PrepareRecovery(context.Background()); err != nil {
 				t.Fatal(err)
@@ -1981,7 +1981,7 @@ func TestRubyHandoffAcceptanceMainProcessKillRecovery(t *testing.T) {
 				t.Fatal("restart rewrote the frozen request identity/digest/epoch")
 			}
 			if phase != "raw_before" {
-				if request.State != "completed" || request.PromotionCursor != 3 || request.PromotionCount != 3 || len(request.FreezePayload) != 0 || len(request.ResponsePayload) != 0 {
+				if request.State != "completed" || request.PromotionCursor != 3 || request.PromotionCount != 3 || request.InputMemberBytes != 0 || (request.CaptureBytes+request.OutputMemberBytes) != 0 {
 					t.Fatalf("reliable raw restart did not finish atomic promotion: cursor=%d/%d state=%s", request.PromotionCursor, request.PromotionCount, request.State)
 				}
 				f.assertUsage(t, 1)
@@ -2221,7 +2221,7 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 				fail("scope checkpoints=%d", n)
 			}
 			for _, request := range f.client.WorkRequest.Query().AllX(context.Background()) {
-				if len(request.FreezePayload) != 0 || len(request.ResponsePayload) != 0 || len(request.CorrectedTargets) != 0 || request.FreezeBytes != 0 || request.ResponseBytes != 0 || request.CorrectedTargetBytes != 0 {
+				if request.InputMemberBytes != 0 || (request.CaptureBytes+request.OutputMemberBytes) != 0 || request.OutputMemberBytes != 0 || request.CaptureBytes != 0 {
 					fail("distinct Job durable request payload retained: request%s/job%d", request.Identity, request.JobID)
 				}
 			}
@@ -2255,20 +2255,20 @@ func (s *handoffPauseBoundaryStore) boundary(ctx context.Context, phase string) 
 	}
 	return s.err
 }
-func (s *handoffPauseBoundaryStore) HandoffResponse(ctx context.Context, response pipeline.MainResponse) error {
+func (s *handoffPauseBoundaryStore) CaptureResponse(ctx context.Context, response pipeline.CapturedResponse) error {
 	if err := s.boundary(ctx, "raw_before"); err != nil {
 		return err
 	}
-	if err := s.roundStore.HandoffResponse(ctx, response); err != nil {
+	if err := s.roundStore.CaptureResponse(ctx, response); err != nil {
 		return err
 	}
 	return s.boundary(ctx, "raw_after")
 }
-func (s *handoffPauseBoundaryStore) PromoteMember(ctx context.Context, id string, cursor int, c *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
+func (s *handoffPauseBoundaryStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, c *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
 	if err := s.boundary(ctx, "promotion_before"); err != nil {
 		return err
 	}
-	if err := s.roundStore.PromoteMember(ctx, id, cursor, c, next, failure); err != nil {
+	if err := s.roundStore.PromoteMember(ctx, key, c, next, failure); err != nil {
 		return err
 	}
 	return s.boundary(ctx, "promotion_after")
@@ -2300,7 +2300,7 @@ func TestRubyHandoffAcceptanceHTTPPauseReliableRawAndPromotion(t *testing.T) {
 				t.Fatalf("pause lost reliable main response: state=%s cursor%dof%d", request.State, request.PromotionCursor, request.PromotionCount)
 			}
 			if phase == "raw_before" || phase == "raw_after" {
-				if request.PromotionCursor != 0 || len(request.ResponsePayload) == 0 {
+				if request.PromotionCursor != 0 || (request.CaptureBytes+request.OutputMemberBytes) == 0 {
 					t.Fatal("raw pause prematurely promoted or discarded carrier")
 				}
 			}
@@ -2329,7 +2329,7 @@ func TestRubyHandoffAcceptanceHTTPPauseReliableRawAndPromotion(t *testing.T) {
 				t.Fatalf("Pause/Resume replayed reliable HTTP: %d", calls)
 			}
 			final := f.client.WorkRequest.GetX(ctx, request.ID)
-			if final.Identity != request.Identity || final.SnapshotDigest != request.SnapshotDigest || final.PromotionCursor != 3 || final.RetryEpoch != request.RetryEpoch || len(final.ResponsePayload) != 0 || len(final.FreezePayload) != 0 {
+			if final.Identity != request.Identity || final.SnapshotDigest != request.SnapshotDigest || final.PromotionCursor != 3 || final.RetryEpoch != request.RetryEpoch || (final.CaptureBytes+final.OutputMemberBytes) != 0 || final.InputMemberBytes != 0 {
 				t.Fatal("resume changed reliable identity or did not clear promoted carrier")
 			}
 			for _, row := range f.client.Segment.Query().Where(segment.ResourceIDEQ(f.resourceIDs[0])).AllX(ctx) {
@@ -2423,7 +2423,7 @@ func TestRubyHandoffAcceptanceHTTPPauseDuringGrantedMainJoinsRaw(t *testing.T) {
 		fail("granted HTTP remained draining%d", gate.Inflight())
 	}
 	request := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).OnlyX(context.Background())
-	if request.State != "completed" || request.PromotionCursor != 0 || request.PromotionCount != 3 || len(request.ResponsePayload) == 0 || !request.UsageKnown {
+	if request.State != "completed" || request.PromotionCursor != 0 || request.PromotionCount != 3 || (request.CaptureBytes+request.OutputMemberBytes) == 0 || !request.UsageKnown {
 		fail("Pause dropped reliable unpromoted raw: state%s cursor%d/%d", request.State, request.PromotionCursor, request.PromotionCount)
 	}
 	if err = f.jobs.MarkJobPaused(context.Background(), f.jobID); err != nil {
@@ -2500,8 +2500,8 @@ func TestRubyHandoffAcceptanceHTTPGlossaryLargeReceiptReplay(t *testing.T) {
 		var store pipeline.RoundStore = durable
 		if wrap {
 			store = &handoffPauseBoundaryStore{roundStore: durable, phase: "promotion_before", pause: func(ctx context.Context) error {
-				row := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).Select(workrequest.FieldBusinessBound, workrequest.FieldCorrectedTargetBytes).OnlyX(ctx)
-				businessBound, correctedAtPause = row.BusinessBound, row.CorrectedTargetBytes
+				row := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).Select(workrequest.FieldBusinessBound, workrequest.FieldOutputMemberBytes).OnlyX(ctx)
+				businessBound, correctedAtPause = row.BusinessBound, row.OutputMemberBytes
 				_, err := f.jobs.PauseJob(ctx, f.ownerID, f.jobID)
 				if err == nil {
 					gate.Pause()
@@ -2549,7 +2549,7 @@ func TestRubyHandoffAcceptanceHTTPGlossaryLargeReceiptReplay(t *testing.T) {
 		t.Fatalf("manual edit changed original48KiB transaction result: target=%v status%s", row.TargetText, row.Status)
 	}
 	final := f.client.WorkRequest.GetX(ctx, request.ID)
-	if string(final.GlossaryReceipt) != originalReceipt || len(final.CorrectedTargets) != 0 || len(final.ResponsePayload) != 0 || final.PromotionCursor != 1 {
+	if string(final.GlossaryReceipt) != originalReceipt || final.OutputMemberBytes != 0 || (final.CaptureBytes+final.OutputMemberBytes) != 0 || final.PromotionCursor != 1 {
 		t.Fatal("replay changed receipt or retained business/raw body")
 	}
 	if f.client.GlossaryEntry.GetX(ctx, old.ID).Target != "manual later" || f.client.GlossaryEntry.Query().CountX(ctx) != 21 {
@@ -2580,8 +2580,8 @@ type handoffRawReturn struct {
 	err error
 }
 
-func (s *handoffBlockedDurableStore) HandoffResponse(ctx context.Context, response pipeline.MainResponse) error {
-	err := s.roundStore.HandoffResponse(ctx, response)
+func (s *handoffBlockedDurableStore) CaptureResponse(ctx context.Context, response pipeline.CapturedResponse) error {
+	err := s.roundStore.CaptureResponse(ctx, response)
 	if s.returned != nil {
 		s.returned <- handoffRawReturn{id: response.ID, err: err}
 	}
@@ -2606,12 +2606,12 @@ func (s *handoffBlockedDurableStore) wait(ctx context.Context, phase string) err
 		return ctx.Err()
 	}
 }
-func (s *handoffBlockedDurableStore) PromoteMember(ctx context.Context, id string, cursor int, c *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
+func (s *handoffBlockedDurableStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, c *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
 	s.promotions.Add(1)
 	if err := s.wait(ctx, "promotion"); err != nil {
 		return err
 	}
-	return s.roundStore.PromoteMember(ctx, id, cursor, c, next, failure)
+	return s.roundStore.PromoteMember(ctx, key, c, next, failure)
 }
 func (s *handoffBlockedDurableStore) Commit(ctx context.Context, c *pipeline.Candidate, result pipeline.TranslatedSegment) (pipeline.CommitOutcome, error) {
 	if err := s.wait(ctx, "commit"); err != nil {
@@ -2763,7 +2763,7 @@ func TestRubyHandoffAcceptanceHTTPSimultaneousRawDurableBeforeConsumers(t *testi
 				if row.State != "completed" || row.UsageRecordID == nil || !row.UsageKnown {
 					fail("full-wave raw lost reliable usage: %s %s", row.Identity, row.State)
 				}
-				if phase == "promotion" && (row.PromotionCursor != 0 || len(row.ResponsePayload) == 0) {
+				if phase == "promotion" && (row.PromotionCursor != 0 || (row.CaptureBytes+row.OutputMemberBytes) == 0) {
 					fail("blocked promotion lost raw carrier %s", row.Identity)
 				}
 			}
@@ -2777,10 +2777,10 @@ func TestRubyHandoffAcceptanceHTTPSimultaneousRawDurableBeforeConsumers(t *testi
 			if tc.fullJ && phase == "promotion" {
 				var rawTotal int64
 				for _, row := range requests {
-					if row.ResponseBytes < (1<<20)-1024 || row.ResponseBytes > 1<<20 {
-						fail("full J raw budget row %s bytes%d", row.Identity, row.ResponseBytes)
+					if row.CaptureBytes < (1<<20)-1024 || row.CaptureBytes > 1<<20 {
+						fail("full J raw budget row %s bytes%d", row.Identity, row.CaptureBytes)
 					}
-					rawTotal += row.ResponseBytes
+					rawTotal += row.CaptureBytes
 				}
 				if rawTotal < int64(count)*((1<<20)-1024) || j-atRaw.HandoffBytes >= (1<<20)+(32<<10) {
 					fail("near-R32 did not fill J ordinary handoff: raw%d free%d accounting%+v", rawTotal, j-atRaw.HandoffBytes, atRaw)
@@ -2884,7 +2884,7 @@ func TestRubyHandoffAcceptanceHTTPResponseFitsRButOneMemberExceedsQ(t *testing.T
 		}
 	}
 	request := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).OnlyX(ctx)
-	if request.State != "completed" || request.PromotionCursor != 2 || request.PromotionCount != 2 || len(request.ResponsePayload) != 0 || len(request.FreezePayload) != 0 {
+	if request.State != "completed" || request.PromotionCursor != 2 || request.PromotionCount != 2 || (request.CaptureBytes+request.OutputMemberBytes) != 0 || request.InputMemberBytes != 0 {
 		t.Fatalf("single-member failure lost raw prefix/cleanup: state%s cursor%d/%d", request.State, request.PromotionCursor, request.PromotionCount)
 	}
 	if n := f.client.WorkCandidate.Query().CountX(ctx); n != 1 {
@@ -2978,7 +2978,7 @@ func runHandoffRunnerFixedFuture16(t *testing.T, limit int) {
 	}
 	f.roundIDs[0] = createJobRoundRow(t, f.client, f.jobID, f.jobResources[0], 0, "revise")
 	raw := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID), workrequest.StateEQ("completed")).OnlyX(ctx)
-	if raw.PromotionCursor != 0 || raw.PromotionCount != 16 || len(raw.ResponsePayload) == 0 {
+	if raw.PromotionCursor != 0 || raw.PromotionCount != 16 || (raw.CaptureBytes+raw.OutputMemberBytes) == 0 {
 		t.Fatal("fixture did not own full reliable future16")
 	}
 	freezeDigest := raw.SnapshotDigest
@@ -3022,7 +3022,7 @@ func runHandoffRunnerFixedFuture16(t *testing.T, limit int) {
 	if n := f.client.JobRoundSegment.Query().CountX(ctx); n != 32 || f.client.Job.GetX(ctx, f.jobID).Status != service.JobStatusCompleted {
 		t.Fatalf("S%d incomplete checkpoint=%d status=%s", limit, n, f.client.Job.GetX(ctx, f.jobID).Status)
 	}
-	if last := f.client.WorkRequest.GetX(ctx, raw.ID); last.PromotionCount != 16 || last.PromotionCursor != 16 || last.Identity != raw.Identity || last.SnapshotDigest != freezeDigest || len(last.ResponsePayload) != 0 {
+	if last := f.client.WorkRequest.GetX(ctx, raw.ID); last.PromotionCount != 16 || last.PromotionCursor != 16 || last.Identity != raw.Identity || last.SnapshotDigest != freezeDigest || (last.CaptureBytes+last.OutputMemberBytes) != 0 {
 		t.Fatal("future raw identity changed or was not consumed exactly once")
 	}
 	f.assertUsage(t, wantCalls)
@@ -3396,8 +3396,8 @@ func logHandoffFutureFailure(t *testing.T, f *rubyPipelineFixture, http *handoff
 	}
 	state, err := workstate.NewStore(f.client).LoadRuntimeState(ctx, f.jobID)
 	t.Logf("future_failure runtime_state=%+v err=%v", state, err)
-	for _, row := range f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).Select(workrequest.FieldIdentity, workrequest.FieldState, workrequest.FieldRetryEpoch, workrequest.FieldJobRoundID, workrequest.FieldResourceID, workrequest.FieldPromotionCursor, workrequest.FieldPromotionCount, workrequest.FieldPromotionState, workrequest.FieldFreezeBytes, workrequest.FieldResponseBytes, workrequest.FieldBusinessBound, workrequest.FieldCorrectedTargetBytes).AllX(ctx) {
-		t.Logf("request%s/round%d/res%d/epoch%d %s phase%s cursor%d/%d freeze%d raw%d business%d corrected%d", row.Identity, row.JobRoundID, row.ResourceID, row.RetryEpoch, row.State, row.PromotionState, row.PromotionCursor, row.PromotionCount, row.FreezeBytes, row.ResponseBytes, row.BusinessBound, row.CorrectedTargetBytes)
+	for _, row := range f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).Select(workrequest.FieldIdentity, workrequest.FieldState, workrequest.FieldRetryEpoch, workrequest.FieldJobRoundID, workrequest.FieldResourceID, workrequest.FieldPromotionCursor, workrequest.FieldPromotionCount, workrequest.FieldPromotionState, workrequest.FieldInputMemberBytes, workrequest.FieldCaptureBytes, workrequest.FieldBusinessBound, workrequest.FieldOutputMemberBytes).AllX(ctx) {
+		t.Logf("request%s/round%d/res%d/epoch%d %s phase%s cursor%d/%d freeze%d raw%d business%d corrected%d", row.Identity, row.JobRoundID, row.ResourceID, row.RetryEpoch, row.State, row.PromotionState, row.PromotionCursor, row.PromotionCount, row.InputMemberBytes, row.CaptureBytes, row.BusinessBound, row.OutputMemberBytes)
 	}
 	for _, row := range f.client.WorkCandidate.Query().Select(workcandidate.FieldIdentity, workcandidate.FieldPayloadBytes, workcandidate.FieldState, workcandidate.FieldVersion, workcandidate.FieldDtoVersion).AllX(ctx) {
 		t.Logf("candidate%s state%s bytes%d version%d DTO%d", row.Identity, row.State, row.PayloadBytes, row.Version, row.DtoVersion)
