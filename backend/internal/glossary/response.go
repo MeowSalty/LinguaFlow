@@ -3,17 +3,20 @@ package glossary
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
 const ResponseReceiptVersion = 2
+const ResponseReceiptLimit = 2 << 10
 
 type ResponseTarget struct {
+	Ordinal int
 	ID      string
 	Text    string
 	Failure string
@@ -29,24 +32,23 @@ type ResponseProcess struct {
 	RequestID, InputDigest, TargetLang string
 	Entries                            []Entry
 	EntriesPayload                     []byte
-	Targets                            []ResponseTarget
 	Rewrite                            bool
 	ItemLimit, BusinessLimit           int64
 	Validate                           func(context.Context, ResponseTarget) error
 	Build                              func(context.Context, func() error) error
-	TrackBounds                        func(*backend.BuildBounds)
+	VisitTargets                       func(context.Context, func(ResponseTarget) error) error
+	WriteTarget                        func(context.Context, ResponseTarget) error
+	Publish                            func(context.Context, ResponseBusiness, func()) error
 }
 type ResponseBusiness struct {
-	Body, Index, Receipt []byte
-	ContentAllocation    *backend.OwnedAllocation `json:"-"`
-	ReceiptAllocation    *backend.OwnedAllocation `json:"-"`
+	Receipt           []byte
+	ReceiptAllocation *backend.OwnedAllocation `json:"-"`
 }
 
 // Release follows the last borrower of the returned immutable buffers.
 func (out *ResponseBusiness) Release() {
-	content, receipt := out.ContentAllocation, out.ReceiptAllocation
+	receipt := out.ReceiptAllocation
 	*out = ResponseBusiness{}
-	content.Release()
 	receipt.Release()
 }
 
@@ -116,257 +118,121 @@ func SafeReplaceBounded(b *backend.BuildBounds, s, from, to, lang string, limit 
 	return string(w.Bytes()), true, nil
 }
 
-func EncodeResponseBusiness(targets []ResponseTarget, limit int64) ([]byte, []byte, error) {
-	b, err := backend.NewBuildBounds(limit, 0)
-	if err != nil {
-		return nil, nil, err
-	}
-	return EncodeResponseBusinessBounded(b, targets, limit)
-}
-func EncodeResponseBusinessBounded(b *backend.BuildBounds, targets []ResponseTarget, limit int64) ([]byte, []byte, error) {
-	size := int64(0)
-	for _, target := range targets {
-		if int64(len(target.Text)) > limit-size {
-			return nil, nil, backend.ErrBuildCapacity
-		}
-		size += int64(len(target.Text))
-	}
-	if err := b.ReserveText(size, size); err != nil {
-		return nil, nil, err
-	}
-	if err := backend.ReserveSlice[[2]uint64](b, int64(len(targets))); err != nil {
-		return nil, nil, err
-	}
-	body := make([]byte, int(size))
-	index := make([]byte, len(targets)*16)
-	offset := 0
-	for i, t := range targets {
-		binary.LittleEndian.PutUint64(index[i*16:], uint64(offset))
-		binary.LittleEndian.PutUint64(index[i*16+8:], uint64(len(t.Text)))
-		copy(body[offset:], t.Text)
-		offset += len(t.Text)
-	}
-	return body, index, nil
-}
-
-func rewriteResponse(ctx context.Context, in ResponseProcess, decisions []SkippedEntry) (targets []ResponseTarget, release func(), err error) {
-	var scopes []*backend.BuildBounds
-	release = func() {
-		targets = nil
-		for _, b := range scopes {
-			b.CloseRetired()
-		}
-		scopes = nil
-	}
-	defer func() {
-		if err != nil {
-			release()
-		}
-	}()
-	initial, err := backend.NewBuildBoundsFromContext(ctx, in.ItemLimit, 0)
-	if err != nil {
-		return nil, release, err
-	}
-	scopes = append(scopes, initial)
-	if err = backend.ReserveSlice[ResponseTarget](initial, int64(len(in.Targets))); err != nil {
-		return nil, release, err
-	}
-	targets = append([]ResponseTarget(nil), in.Targets...)
-	for i := range targets {
-		b, err := backend.NewBuildBoundsFromContext(ctx, in.ItemLimit, int64(len(targets[i].Text)))
-		if err != nil {
-			return nil, release, err
-		}
-		scopes = append(scopes, b)
-		for _, sk := range decisions {
-			if !in.Rewrite || sk.Reason != SkipReasonExists {
-				continue
-			}
-			text, _, err := SafeReplaceBounded(b, targets[i].Text, sk.Proposed.Target, sk.Existing.Target, in.TargetLang, in.ItemLimit)
-			if err != nil {
-				targets[i].Failure = fmt.Sprintf("capacity: %v", err)
-				targets[i].Text = ""
-				break
-			}
-			targets[i].Text = text
-		}
-		if targets[i].Failure == "" && in.Validate != nil {
-			if err := in.Validate(ctx, targets[i]); err != nil {
-				targets[i].Failure = err.Error()
-				targets[i].Text = ""
-			}
-		}
-	}
-	return targets, release, nil
-}
-
+// BuildResponseBusiness visits each model member once. The sink takes a private
+// immutable member before the iterator releases its borrowed frame.
 func BuildResponseBusiness(ctx context.Context, in ResponseProcess, result AddResult) (out ResponseBusiness, err error) {
-	if in.Build != nil {
-		run := in.Build
-		in.Build = nil
-		err = run(ctx, func() error { var e error; out, e = BuildResponseBusiness(ctx, in, result); return e })
-		return out, err
-	}
+	return buildResponseBusiness(ctx, in, result.Skipped, len(result.Added), len(result.Skipped))
+}
 
-	targets, releaseTargets, err := rewriteResponse(ctx, in, result.Skipped)
-	if err != nil {
-		return ResponseBusiness{}, err
-	}
-	defer func() { targets = nil; releaseTargets() }()
-	b, err := backend.NewBuildBoundsFromContext(ctx, in.BusinessLimit, 0)
-	if err != nil {
-		return out, err
-	}
-	defer b.CloseRetired()
+func buildResponseBusiness(ctx context.Context, in ResponseProcess, decisions []SkippedEntry, added, skipped int) (out ResponseBusiness, err error) {
 	defer func() {
 		if err != nil {
 			out.Release()
 		}
 	}()
-	if in.Rewrite {
-		out.Body, out.Index, err = EncodeResponseBusinessBounded(b, targets, in.BusinessLimit)
+	h := sha256.New()
+	var total int64
+	ordinal := 0
+	if in.VisitTargets != nil {
+		if in.WriteTarget == nil {
+			return out, fmt.Errorf("missing response member sink")
+		}
+		err = in.VisitTargets(ctx, func(target ResponseTarget) error {
+			if target.Ordinal != ordinal {
+				return fmt.Errorf("invalid response member ordinal: got %d want %d", target.Ordinal, ordinal)
+			}
+			ordinal++
+			if e := ctx.Err(); e != nil {
+				return e
+			}
+			b, e := backend.NewBuildBoundsFromContext(ctx, in.ItemLimit, int64(len(target.Text)))
+			if e != nil {
+				return e
+			}
+			defer b.CloseRetired()
+			build := func() error {
+				for _, sk := range decisions {
+					if !in.Rewrite || target.Failure != "" || sk.Reason != SkipReasonExists {
+						continue
+					}
+					text, _, replaceErr := SafeReplaceBounded(b, target.Text, sk.Proposed.Target, sk.Existing.Target, in.TargetLang, in.ItemLimit)
+					if replaceErr != nil {
+						if errors.Is(replaceErr, context.Canceled) || errors.Is(replaceErr, context.DeadlineExceeded) {
+							return replaceErr
+						}
+						target.Failure, target.Text = fmt.Sprintf("capacity: %v", replaceErr), ""
+						break
+					}
+					target.Text = text
+				}
+				if target.Failure == "" && in.Validate != nil {
+					if validateErr := in.Validate(ctx, target); validateErr != nil {
+						if errors.Is(validateErr, context.Canceled) || errors.Is(validateErr, context.DeadlineExceeded) {
+							return validateErr
+						}
+						target.Failure, target.Text = validateErr.Error(), ""
+					}
+				}
+				return nil
+			}
+			if in.Build != nil {
+				e = in.Build(ctx, build)
+			} else {
+				e = build()
+			}
+			if e != nil {
+				return e
+			}
+			if e = ctx.Err(); e != nil {
+				return e
+			}
+			if int64(len(target.Text)) > in.ItemLimit {
+				return backend.ErrBuildCapacity
+			}
+			if int64(len(target.Text)) > in.BusinessLimit-total {
+				return backend.ErrBuildCapacity
+			}
+			total += int64(len(target.Text))
+			if e = in.WriteTarget(ctx, target); e != nil {
+				return e
+			}
+			// The digest borrows immutable text; it must not allocate a second
+			// full member byte backing outside the explicit ownership ledger.
+			_, e = h.Write(unsafe.Slice(unsafe.StringData(target.Text), len(target.Text)))
+			return e
+		})
 		if err != nil {
 			return out, err
 		}
-	} else {
-		if err = backend.ReserveSlice[[2]uint64](b, int64(len(in.Targets))); err != nil {
-			return out, err
+	}
+	buildReceipt := func() error {
+		b, e := backend.NewBuildBoundsFromContext(ctx, ResponseReceiptLimit, 0)
+		if e != nil {
+			return e
 		}
-		out.Index = make([]byte, len(in.Targets)*16)
+		defer b.CloseRetired()
+		// SHA256 is a fixed local value; only the owned hex string and encoded
+		// receipt acquire backing, independently of the business text limit.
+		var sum [sha256.Size]byte
+		h.Sum(sum[:0])
+		if e = b.ReserveText(sha256.Size*2, sha256.Size*2); e != nil {
+			return e
+		}
+		r := ResponseReceipt{Version: ResponseReceiptVersion, RequestID: in.RequestID, InputDigest: in.InputDigest, OutcomeDigest: hex.EncodeToString(sum[:]), Added: added, Skipped: skipped}
+		out.Receipt, e = b.EncodeJSON(r, ResponseReceiptLimit)
+		if e != nil {
+			return e
+		}
+		out.ReceiptAllocation, e = b.RetainedAllocation(int64(cap(out.Receipt)))
+		if e == nil {
+			e = out.ReceiptAllocation.DetachBuild()
+		}
+		return e
 	}
-	out.ContentAllocation, err = b.RetainedAllocation(int64(cap(out.Body)) + int64(cap(out.Index)))
-	if err != nil {
-		return out, err
-	}
-	if err = out.ContentAllocation.DetachBuild(); err != nil {
-		return out, err
-	}
-	receiptBounds, err := backend.NewBuildBoundsFromContext(ctx, 32<<10, 0)
-	if err != nil {
-		return out, err
-	}
-	defer receiptBounds.CloseRetired()
-	h := sha256.Sum256(out.Body)
-	if err = receiptBounds.ReserveText(int64(hex.EncodedLen(len(h))), int64(hex.EncodedLen(len(h)))); err != nil {
-		return out, err
-	}
-	r := ResponseReceipt{Version: 2, RequestID: in.RequestID, InputDigest: in.InputDigest, OutcomeDigest: hex.EncodeToString(h[:]), Added: len(result.Added), Skipped: len(result.Skipped)}
-	out.Receipt, err = receiptBounds.EncodeJSON(r, 32<<10)
-	r = ResponseReceipt{}
-	if err == nil {
-		out.ReceiptAllocation, err = receiptBounds.RetainedAllocation(int64(cap(out.Receipt)))
-	}
-	if err == nil {
-		err = out.ReceiptAllocation.DetachBuild()
+	if in.Build != nil {
+		err = in.Build(ctx, buildReceipt)
+	} else {
+		err = buildReceipt()
 	}
 	return out, err
-}
-
-// ProcessResponse stages FileGlossary additions under its existing mutation
-// lock. A failed bounded rewrite leaves the glossary unchanged.
-func (g *FileGlossary) ProcessResponse(ctx context.Context, in ResponseProcess) (ResponseBusiness, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if in.EntriesPayload != nil {
-		var out ResponseBusiness
-		build := func() error {
-			b, err := backend.NewBuildBoundsFromContext(ctx, int64(len(in.EntriesPayload))+in.BusinessLimit, int64(len(in.EntriesPayload)))
-			if err != nil {
-				return err
-			}
-			defer func() { in.Entries = nil; b.CloseRetired() }()
-			if err = b.DecodeJSON(in.EntriesPayload, &in.Entries); err != nil {
-				return err
-			}
-			in.Build = nil
-			in.EntriesPayload = nil
-			out, err = g.processResponseLocked(ctx, in)
-			return err
-		}
-		var err error
-		if in.Build != nil {
-			err = in.Build(ctx, build)
-		} else {
-			err = build()
-		}
-		return out, err
-	}
-	return g.processResponseLocked(ctx, in)
-}
-func (g *FileGlossary) processResponseLocked(ctx context.Context, in ResponseProcess) (ResponseBusiness, error) {
-	var result AddResult
-	pending := map[string]Entry{}
-	for _, entry := range in.Entries {
-		if entry.Source == "" || entry.Target == "" {
-			result.Skipped = append(result.Skipped, SkippedEntry{Proposed: entry, Reason: SkipReasonEmpty})
-			continue
-		}
-		key := normKey(entry)
-		existing, ok := pending[key]
-		if !ok {
-			if idx, found := g.bySource[key]; found {
-				existing, ok = g.entries[idx], true
-			}
-		}
-		if ok {
-			if existing.Target != entry.Target {
-				result.Skipped = append(result.Skipped, SkippedEntry{Proposed: entry, Existing: Entry{Target: existing.Target}, Reason: SkipReasonExists})
-			}
-			continue
-		}
-		pending[key] = entry
-		result.Added = append(result.Added, entry)
-	}
-	out, err := BuildResponseBusiness(ctx, in, result)
-	if err != nil {
-		return out, err
-	}
-	if err = g.applyOwnedEntriesLocked(ctx, result.Added); err != nil {
-		out.Release()
-		return ResponseBusiness{}, err
-	}
-	if len(result.Added) > 0 {
-		g.dirty = true
-	}
-	return out, nil
-}
-
-// RemoveResponseTarget retires one final UTF-8 slice while preserving fixed slot identity.
-func RemoveResponseTarget(body, index []byte, member int) ([]byte, []byte, error) {
-	b, err := backend.NewBuildBounds(int64(len(body))+int64(len(index)), 0)
-	if err != nil {
-		return nil, nil, err
-	}
-	return RemoveResponseTargetBounded(b, body, index, member)
-}
-
-func RemoveResponseTargetBounded(b *backend.BuildBounds, body, index []byte, member int) ([]byte, []byte, error) {
-	if member < 0 || len(index)%16 != 0 || member >= len(index)/16 {
-		return nil, nil, fmt.Errorf("invalid response target index")
-	}
-	start := binary.LittleEndian.Uint64(index[member*16:])
-	n := binary.LittleEndian.Uint64(index[member*16+8:])
-	if start > uint64(len(body)) || n > uint64(len(body))-start {
-		return nil, nil, fmt.Errorf("invalid response target range")
-	}
-	if err := b.ReserveText(int64(len(body))-int64(n), int64(len(body))-int64(n)); err != nil {
-		return nil, nil, err
-	}
-	if err := b.ReserveText(int64(len(index)), int64(len(index))); err != nil {
-		return nil, nil, err
-	}
-	out := make([]byte, len(body)-int(n))
-	copy(out, body[:int(start)])
-	copy(out[int(start):], body[int(start+n):])
-	slots := make([]byte, len(index))
-	copy(slots, index)
-	binary.LittleEndian.PutUint64(slots[member*16+8:], 0)
-	for i := member + 1; i < len(slots)/16; i++ {
-		offset := binary.LittleEndian.Uint64(slots[i*16:])
-		if offset < n {
-			return nil, nil, fmt.Errorf("invalid response target offset")
-		}
-		binary.LittleEndian.PutUint64(slots[i*16:], offset-n)
-	}
-	return out, slots, nil
 }
