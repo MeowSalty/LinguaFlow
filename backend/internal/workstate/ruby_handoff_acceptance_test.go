@@ -248,14 +248,15 @@ func runHandoffPersistedBorrower(t *testing.T, lowered bool) {
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.HandoffResponse(ctx, h); err != nil {
+	if err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
+	publishFixtureBusiness(t, ctx, store, r)
 	cursor, err := store.LoadCursor(ctx, scope, seg.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.PromoteMember(ctx, MemberPromotion{Scope: scope, RequestID: r.ID, Cursor: 0, Candidate: &c, Next: cursor}); err != nil {
+	if err := store.PromoteMember(ctx, MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: cursor}); err != nil {
 		t.Fatal(err)
 	}
 	if lowered {
@@ -268,6 +269,9 @@ func runHandoffPersistedBorrower(t *testing.T, lowered bool) {
 		}
 		r2, _, _ := rawRequest(late, seg)
 		r2.ID = "other-sent-inventory"
+		for i := range r2.InputMembers {
+			r2.InputMembers[i].Key.RequestID = r2.ID
+		}
 		if err := store.ReserveRequest(ctx, r2); err != nil {
 			t.Fatal(err)
 		}

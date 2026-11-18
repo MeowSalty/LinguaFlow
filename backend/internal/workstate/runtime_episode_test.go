@@ -15,7 +15,7 @@ func TestRubyHandoffProgressSurvivesRestartAndPause(t *testing.T) {
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.HandoffResponse(ctx, h); err != nil {
+	if err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	limits := backend.PipelineBudgetLimits{Segments: 1, Candidates: 128, Item: 1024, Responses: 1024, Handoff: 4096}

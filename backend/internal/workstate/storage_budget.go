@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
@@ -31,7 +33,18 @@ type StorageBudget struct {
 	before  int64
 	moved   map[string]int64
 	touched map[string]struct{}
+	changes map[storageRowKey]storageRowChange
+	// A committed write can outlive its fact query. Preserve its exact delta
+	// until authority returns; a duplicate ACK must not replace that baseline.
+	pending    bool
+	pendingErr error
+	closed     bool
 }
+type storageRowKey struct {
+	table string
+	id    int
+}
+type storageRowChange struct{ before int64 }
 
 func WithStorageBudget(ctx context.Context, b *StorageBudget) context.Context {
 	return context.WithValue(ctx, storageBudgetKey{}, b)
@@ -53,6 +66,10 @@ func InstallStorageHooks(client *ent.Client) {
 				tx = m.Client()
 			case *ent.WorkCandidateMutation:
 				tx = m.Client()
+			case *ent.WorkRequestInputMemberMutation:
+				tx = m.Client()
+			case *ent.WorkResponseMemberMutation:
+				tx = m.Client()
 			default:
 				return next.Mutate(ctx, m)
 			}
@@ -61,14 +78,47 @@ func InstallStorageHooks(client *ent.Client) {
 	}
 	client.WorkRequest.Use(h)
 	client.WorkCandidate.Use(h)
+	client.WorkRequestInputMember.Use(h)
+	client.WorkResponseMember.Use(h)
 }
 func (b *StorageBudget) Close() error {
+	if b.InventoryLock != nil {
+		b.InventoryLock.Lock()
+		defer b.InventoryLock.Unlock()
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, ok := b.Root.Usage(b.Scope, StorageIdentity(b.Scope.JobID)); ok {
-		return b.Root.Detach(b.Scope, StorageIdentity(b.Scope.JobID))
+	if b.closed {
+		return nil
 	}
+	if b.pending {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := b.settlePendingLocked(ctx); err != nil {
+			return err
+		}
+	}
+	if _, ok := b.Root.Usage(b.Scope, StorageIdentity(b.Scope.JobID)); ok {
+		if err := b.Root.Detach(b.Scope, StorageIdentity(b.Scope.JobID)); err != nil {
+			return err
+		}
+	}
+	b.closed = true
+	b.moved, b.touched, b.changes = nil, nil, nil
 	return nil
+}
+
+// Settle reconciles a joined writer's outstanding storage facts before its
+// admission metadata is retired. It neither starts another write nor detaches
+// the durable identity, and follows the same lock order as begin and Close.
+func (b *StorageBudget) Settle(ctx context.Context) error {
+	if b.InventoryLock != nil {
+		b.InventoryLock.Lock()
+		defer b.InventoryLock.Unlock()
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.settlePendingLocked(ctx)
 }
 
 func (b *StorageBudget) begin(ctx context.Context) error {
@@ -76,8 +126,37 @@ func (b *StorageBudget) begin(ctx context.Context) error {
 		b.InventoryLock.Lock()
 	}
 	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		if b.InventoryLock != nil {
+			b.InventoryLock.Unlock()
+		}
+		return backend.AnnotateRejection(resourcebudget.ErrIdentity, backend.RejectionEvidence{Branch: "storage_budget_closed", Operation: "storage_begin", StoreKind: b.Source.Driver, ScopeKnown: true, Scope: b.Scope})
+	}
+	if err := b.settlePendingLocked(ctx); err != nil {
+		b.mu.Unlock()
+		if b.InventoryLock != nil {
+			b.InventoryLock.Unlock()
+		}
+		return err
+	}
 	b.moved = make(map[string]int64)
 	b.touched = make(map[string]struct{})
+	b.changes = make(map[storageRowKey]storageRowChange)
+	if b.Source.Columns == nil {
+		fields, err := b.Source.requestStorageFields(ctx)
+		if err != nil {
+			b.mu.Unlock()
+			if b.InventoryLock != nil {
+				b.InventoryLock.Unlock()
+			}
+			return err
+		}
+		b.Source.Columns = make(map[string]bool, len(fields))
+		for _, field := range fields {
+			b.Source.Columns[field] = true
+		}
+	}
 
 	if usage, ok := b.Root.Usage(b.Scope, StorageIdentity(b.Scope.JobID)); ok {
 		b.before = usage.LogicalStorageBytes
@@ -97,7 +176,7 @@ func (b *StorageBudget) begin(ctx context.Context) error {
 	return err
 }
 
-var storageFields = map[string]bool{"freeze_payload": true, "response_payload": true, "corrected_targets": true, "corrected_target_index": true, "glossary_receipt": true, "promotion_members": true, "promotion_status": true, "members": true, "debits": true, "segment_ids": true, "payload": true, "pipeline_header": true, "baseline_target": true}
+var storageFields = map[string]bool{"freeze_payload": true, "response_payload": true, "corrected_targets": true, "corrected_target_index": true, "glossary_receipt": true, "promotion_members": true, "promotion_status": true, "members": true, "debits": true, "segment_ids": true, "payload": true, "pipeline_header": true, "baseline_target": true, "capture_payload": true, "response_glossary": true, "corrected_payload": true, "prompt_id": true, "work_id": true, "candidate_id": true, "baseline_digest": true, "baseline_status": true, "payload_digest": true, "corrected_digest": true, "failure": true, "candidate_digest": true}
 
 func storageSize(v any) (int64, error) {
 	switch v := v.(type) {
@@ -142,15 +221,15 @@ func (b *StorageBudget) fieldSize(ctx context.Context, client *ent.Client, field
 func (b *StorageBudget) hook(client *ent.Client) ent.Hook {
 	return func(next ent.Mutator) ent.Mutator {
 		return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-			var table string
-			switch m.(type) {
-			case *ent.WorkRequestMutation:
-				table = "work_requests"
-			case *ent.WorkCandidateMutation:
-				table = "work_candidates"
-			default:
+			table := mutationStorageTable(m)
+			if table == "" {
 				return next.Mutate(ctx, m)
 			}
+			beforeKey, err := b.recordStorageBefore(ctx, client, m)
+			if err != nil {
+				return nil, err
+			}
+
 			var size, old int64
 			requestID := persistence.MetadataFromContext(ctx).RequestID
 			if requestID == "" {
@@ -170,14 +249,20 @@ func (b *StorageBudget) hook(client *ent.Client) ent.Hook {
 				if !ok {
 					continue
 				}
-				n, err := b.fieldSize(ctx, client, field, v)
+				var n int64
+				var err error
+				if (table == "work_request_input_members" || table == "work_response_members") && (field == "payload" || field == "corrected_payload") {
+					n, err = storageSize(v)
+				} else {
+					n, err = b.fieldSize(ctx, client, field, v)
+				}
 				if err != nil {
 					return nil, err
 				}
 				if err = addInventory(&size, n); err != nil {
 					return nil, err
 				}
-				fields = append(fields, b.Source.length(field))
+				fields = append(fields, b.Source.storageLength(table, field))
 			}
 			if !m.Op().Is(ent.OpCreate) {
 				if id, ok := m.(interface{ ID() (int, bool) }); ok {
@@ -185,6 +270,8 @@ func (b *StorageBudget) hook(client *ent.Client) ent.Hook {
 						identity := "identity"
 						if table == "work_candidates" {
 							identity = "parent_request_id"
+						} else if table == "work_request_input_members" || table == "work_response_members" {
+							identity = "(SELECT identity FROM work_requests WHERE id=request_id)"
 						}
 						lengths := joinLengths(fields)
 						if lengths == "" {
@@ -240,10 +327,12 @@ func (b *StorageBudget) hook(client *ent.Client) ent.Hook {
 				} else {
 					// Frozen request metadata is written before dispatch. Reliable
 					// response/candidate bodies must consume the dispatch reservation.
-					if _, response := m.Field("response_payload"); response {
-						return nil, fmt.Errorf("%w: missing pre-dispatch save credit", resourcebudget.ErrCapacity)
+					for _, field := range []string{"capture_payload", "response_glossary", "corrected_payload"} {
+						if _, reliable := m.Field(field); reliable {
+							return nil, fmt.Errorf("%w: missing pre-dispatch save credit", resourcebudget.ErrCapacity)
+						}
 					}
-					if _, candidate := m.Field("payload"); candidate {
+					if _, payload := m.Field("payload"); payload && table != "work_request_input_members" {
 						return nil, fmt.Errorf("%w: missing candidate save credit", resourcebudget.ErrCapacity)
 					}
 					owned, ok := b.Root.Usage(b.Scope, StorageIdentity(b.Scope.JobID))
@@ -261,7 +350,16 @@ func (b *StorageBudget) hook(client *ent.Client) ent.Hook {
 					}
 				}
 			}
-			return next.Mutate(ctx, m)
+			value, writeErr := next.Mutate(ctx, m)
+			if id, ok := mutationRowID(m, value); ok {
+				key := storageRowKey{table: table, id: id}
+				if _, exists := b.changes[key]; !exists {
+					b.changes[key] = storageRowChange{}
+				}
+			} else {
+				_ = beforeKey
+			}
+			return value, writeErr
 		})
 	}
 }
@@ -284,7 +382,25 @@ func (b *StorageBudget) finish(ctx context.Context, transactionErr error) error 
 	if b.InventoryLock != nil {
 		defer b.InventoryLock.Unlock()
 	}
-	_, actual, err := b.Source.Job(ctx, b.Scope.JobID)
+	b.pending, b.pendingErr = true, transactionErr
+	return b.settlePendingLocked(ctx)
+}
+
+// settlePendingLocked runs with the inventory and invocation locks held. It
+// consumes the original transaction facts before a new attempt can begin.
+func (b *StorageBudget) settlePendingLocked(ctx context.Context) error {
+	if !b.pending {
+		return nil
+	}
+	if err := b.settleLocked(ctx, b.pendingErr); err != nil {
+		return fmt.Errorf("pending storage settlement: %w", err)
+	}
+	b.pending, b.pendingErr = false, nil
+	return nil
+}
+
+func (b *StorageBudget) settleLocked(ctx context.Context, transactionErr error) error {
+	actual, err := b.actualChangedStorage(ctx)
 	if err != nil {
 		return err
 	}
@@ -302,6 +418,9 @@ func (b *StorageBudget) finish(ctx context.Context, transactionErr error) error 
 			if err = metadata.SetRequestMetadataBytes(id, members, n); err != nil {
 				return err
 			}
+			// A retired metadata source is consumed exactly once. If a later
+			// receipt or Root adjustment fails, retry only the unsettled facts.
+			delete(b.touched, id)
 		}
 	}
 	owned, ok := b.Root.Usage(b.Scope, StorageIdentity(b.Scope.JobID))
@@ -315,7 +434,7 @@ func (b *StorageBudget) finish(ctx context.Context, transactionErr error) error 
 		return fmt.Errorf("%w: unreserved storage write", resourcebudget.ErrIdentity)
 	}
 	if extra := owned.LogicalStorageBytes - actual; extra > 0 {
-		if transactionErr != nil && (!unknownCommit(transactionErr) || actual == b.before) {
+		if storageRollbackKnown(transactionErr) {
 			for id, moved := range b.moved {
 				refund := min(extra, moved)
 				if refund == 0 {
@@ -323,6 +442,12 @@ func (b *StorageBudget) finish(ctx context.Context, transactionErr error) error 
 				}
 				var err error
 				if b.Credit != nil {
+					if _, live := b.Credit.StorageCredit(id); !live {
+						// The source has ended. Proven unused durable charge can
+						// be released, but its retired receipt cannot be recreated.
+						delete(b.moved, id)
+						continue
+					}
 					err = b.Credit.RefundStorage(id, refund)
 				} else {
 					err = b.Root.Move(b.Scope, StorageIdentity(b.Scope.JobID), RuntimeIdentity(b.Scope.JobID), resourcebudget.Vector{LogicalStorageBytes: refund})
@@ -330,6 +455,7 @@ func (b *StorageBudget) finish(ctx context.Context, transactionErr error) error 
 				if err != nil {
 					return err
 				}
+				b.moved[id] -= refund
 				extra -= refund
 			}
 		}
@@ -338,6 +464,17 @@ func (b *StorageBudget) finish(ctx context.Context, transactionErr error) error 
 		}
 	}
 	return nil
+}
+
+func storageRollbackKnown(err error) bool {
+	// Equal byte totals (or equal row lengths) do not establish non-commit:
+	// a completed replacement can retire precisely as many bytes as it writes.
+	var absent *NotCommittedError
+	if errors.As(err, &absent) {
+		return true
+	}
+	var tx *TransactionError
+	return errors.As(err, &tx) && tx.Outcome == "not_committed"
 }
 
 func addInventoryValue(values map[string]int64, id string, n int64) error {

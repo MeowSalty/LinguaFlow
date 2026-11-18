@@ -3,6 +3,8 @@ package workstate
 import (
 	"context"
 	"encoding/json"
+	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"math"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -11,6 +13,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequestinputmember"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workresponsemember"
 )
 
 const RuntimeStateLimit = 2048
@@ -42,7 +46,9 @@ func saveRuntimeState(ctx context.Context, tx *ent.Client, jobID int, s backend.
 	return tx.Job.UpdateOneID(jobID).SetPipelineRuntimeState(data).Exec(ctx)
 }
 func (s *Store) LoadRuntimeState(ctx context.Context, jobID int) (backend.PipelineRuntimeState, error) {
-	j, err := s.client.Job.Get(ctx, jobID)
+	j, err := s.client.Job.Query().Where(job.IDEQ(jobID), func(q *sql.Selector) {
+		q.Where(projectedLengthPredicate(q, job.FieldPipelineRuntimeState, "<=", RuntimeStateLimit))
+	}).Select(job.FieldID, job.FieldPipelineRuntimeState).Only(ctx)
 	if err != nil {
 		return backend.PipelineRuntimeState{}, err
 	}
@@ -80,7 +86,7 @@ func runtimeInventory(ctx context.Context, tx *ent.Client, jobID int, itemLimit 
 		}
 	}
 	for after := 0; ; {
-		rows, e := tx.WorkRequest.Query().Where(workrequest.IDGT(after), workrequest.JobIDEQ(jobID), workrequest.StateEQ("completed"), workrequest.PromotionStateIn("response_pending", "glossary_processed")).Select(workrequest.FieldID, workrequest.FieldPromotionCount, workrequest.FieldPromotionCursor, workrequest.FieldFreezeBytes, workrequest.FieldResponseBytes, workrequest.FieldCorrectedTargetBytes).Order(ent.Asc(workrequest.FieldID)).Limit(16).All(ctx)
+		rows, e := tx.WorkRequest.Query().Where(workrequest.IDGT(after), workrequest.JobIDEQ(jobID), workrequest.StateEQ("completed"), workrequest.PromotionStateIn("capture_pending", "outputs_ready", "business_ready")).Select(workrequest.FieldID, workrequest.FieldPromotionCount, workrequest.FieldPromotionCursor, workrequest.FieldInputMemberBytes, workrequest.FieldCaptureBytes, workrequest.FieldOutputMemberBytes, workrequest.FieldPublicBytes).Order(ent.Asc(workrequest.FieldID)).Limit(16).All(ctx)
 		if e != nil {
 			return 0, 0, 0, e
 		}
@@ -88,7 +94,7 @@ func runtimeInventory(ctx context.Context, tx *ent.Client, jobID int, itemLimit 
 			break
 		}
 		for _, row := range rows {
-			for _, b := range []int64{row.FreezeBytes, row.ResponseBytes, row.CorrectedTargetBytes, backend.RequestMetadataBytes} {
+			for _, b := range []int64{row.InputMemberBytes, row.CaptureBytes, row.OutputMemberBytes, row.PublicBytes, backend.RequestMetadataBytes} {
 				if e = addInventory(&handoff, b); e != nil {
 					return 0, 0, 0, e
 				}
@@ -278,8 +284,21 @@ func (s *Store) CleanupCancelledPayloads(ctx context.Context, jobID int) error {
 			return err
 		}
 		state.ProgressID, state.ResponseID, state.BusinessOwner = "", "", ""
-		if _, err := tx.WorkRequest.Update().Where(workrequest.JobIDEQ(jobID), workrequest.Or(workrequest.StateIn("reserved", "sent", "received", "unknown"), workrequest.FreezeBytesGT(0), workrequest.ResponseBytesGT(0), workrequest.CorrectedTargetBytesGT(0))).SetPromotionState("cancelled").ClearFreezePayload().SetFreezeBytes(0).ClearResponsePayload().SetResponseBytes(0).ClearCorrectedTargets().ClearCorrectedTargetIndex().SetCorrectedTargetBytes(0).SetBusinessBound(0).Save(ctx); err != nil {
+		ids, err := tx.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID)).IDs(ctx)
+		if err != nil {
 			return err
+		}
+		for start := 0; start < len(ids); start += 16 {
+			page := ids[start:min(start+16, len(ids))]
+			if _, err = tx.WorkRequestInputMember.Update().Where(workrequestinputmember.RequestIDIn(page...)).ClearPayload().SetPayloadBytes(0).Save(ctx); err != nil {
+				return err
+			}
+			if _, err = tx.WorkResponseMember.Update().Where(workresponsemember.RequestIDIn(page...)).ClearPayload().SetPayloadBytes(0).ClearCorrectedPayload().SetCorrectedBytes(0).SetState("cancelled").Save(ctx); err != nil {
+				return err
+			}
+			if _, err = tx.WorkRequest.Update().Where(workrequest.IDIn(page...)).SetPromotionState("cancelled").ClearCapturePayload().SetCaptureBytes(0).ClearResponseGlossary().SetPublicBytes(0).SetInputMemberBytes(0).SetOutputMemberBytes(0).SetRemainingMembers(0).SetBusinessBound(0).Save(ctx); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.WorkCandidate.Update().Where(workcandidate.HasWorkItemWith(workitem.JobIDEQ(jobID)), workcandidate.StateIn("pending_alignment", "ready_to_commit")).SetState("cancelled").ClearPayload().SetGrowthReserved(false).SetPayloadBytes(0).Save(ctx); err != nil {
 			return err
@@ -316,7 +335,7 @@ func (s *Store) ReleaseRuntimeBusiness(ctx context.Context, jobID int, previous 
 		if err != nil {
 			return err
 		}
-		if old.State != "completed" || old.PromotionState != "glossary_processed" || old.PromotionCursor >= old.PromotionCount {
+		if old.State != "completed" || old.PromotionState != "business_ready" || old.PromotionCursor >= old.PromotionCount {
 			return ErrManifest
 		}
 		j, err := tx.Job.Get(ctx, jobID)

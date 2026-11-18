@@ -28,22 +28,8 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 			return ErrManifest
 		}
 	}
-	var promotionPayload []byte
 	var err error
-	if len(r.PromotionMembers) > 0 {
-		r.PromotionMembers = append([]PromotionMember(nil), r.PromotionMembers...)
-		sort.Slice(r.PromotionMembers, func(i, j int) bool { return r.PromotionMembers[i].SegmentID < r.PromotionMembers[j].SegmentID })
-		if r.Stage != "main" || len(r.FreezePayload) == 0 || r.SnapshotDigest == "" || r.BusinessBound < 0 {
-			return ErrManifest
-		}
-		if err := validatePromotionMembers(ctx, r.Scope, ids, r.PromotionMembers); err != nil {
-			return err
-		}
-		promotionPayload, err = json.Marshal(r.PromotionMembers)
-		if err != nil {
-			return err
-		}
-	}
+
 	members, err := normalizedMembers(r, ids)
 	if err != nil {
 		return err
@@ -62,15 +48,6 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 		}
 		old, err := projectedRequest(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(r.ID))).Only(ctx)
 		if err == nil {
-			if len(promotionPayload) > 0 {
-				equal, err := promotionMembersMatch(ctx, tx, old, promotionPayload)
-				if err != nil {
-					return err
-				}
-				if old.FreezeDigest != payloadDigest(r.FreezePayload) || old.SnapshotDigest != r.SnapshotDigest || !equal || old.BusinessBound != r.BusinessBound {
-					return ErrManifest
-				}
-			}
 			oldMembers, err := decodeRequestMembers(old.Members)
 			if err != nil {
 				return err
@@ -222,13 +199,11 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 		if len(encodedMembers) > 0 {
 			create.SetMembers(encodedMembers)
 		}
-		if len(promotionPayload) > 0 {
-			if err := guardExecution(ctx, tx, r.Scope.JobID); err != nil {
-				return err
-			}
-			create.SetFreezePayload(r.FreezePayload).SetFreezeBytes(int64(len(r.FreezePayload))).SetFreezeDigest(payloadDigest(r.FreezePayload)).SetSnapshotDigest(r.SnapshotDigest).SetResponseFormatVersion(1).SetPromotionMembers(promotionPayload).SetPromotionCount(len(r.PromotionMembers)).SetPromotionStatus(make([]byte, len(r.PromotionMembers))).SetBusinessBound(r.BusinessBound)
+		row, err := create.Save(ctx)
+		if err != nil {
+			return err
 		}
-		return create.Exec(ctx)
+		return saveInputMembersTx(ctx, tx, row, r)
 	})
 	return s.finishUnknown(ctx, r.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) { return reservationExists(ctx, tx, r) })
 }
