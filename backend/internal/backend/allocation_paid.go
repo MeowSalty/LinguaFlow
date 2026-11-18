@@ -33,27 +33,27 @@ func TransferBuildAllocationToBuild(ctx context.Context, allocation *OwnedAlloca
 	}
 	a, owner := BuildOwnership(ctx)
 	if a == nil || allocation == nil {
-		return ErrBuildCapacity
+		return AnnotateRejection(ErrBuildCapacity, RejectionEvidence{Branch: "build_transfer_source_missing", Operation: "transfer_build_allocation", SourceOwner: owner, TargetOwner: target})
 	}
 	allocation.mu.Lock()
 	defer allocation.mu.Unlock()
 	b := allocation.bounds
 	if b == nil {
-		return ErrBuildCapacity
+		return AnnotateRejection(ErrBuildCapacity, RejectionEvidence{Branch: "build_transfer_receipt_consumed", Operation: "transfer_build_allocation", SourceOwner: owner, TargetOwner: target})
 	}
 	b.capacityMu.Lock()
 	defer b.capacityMu.Unlock()
 	if b.retired || b.ctx == nil {
-		return ErrBuildCapacity
+		return b.rejectLocked(ErrBuildCapacity, "build_transfer_bounds_retired", "transfer_build_allocation", RejectionEvidence{TargetOwner: target})
 	}
 	if source, sourceOwner := BuildOwnership(b.ctx); source != a || sourceOwner != owner {
-		return ErrBuildCapacity
+		return b.rejectLocked(ErrBuildCapacity, "build_transfer_source_identity_mismatch", "transfer_build_allocation", RejectionEvidence{TargetOwner: target})
 	}
 	if p := b.meterSource; p != nil {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		if p.paid != 0 || allocation.bytes > p.live {
-			return ErrBuildCapacity
+			return b.rejectLocked(ErrBuildCapacity, "build_transfer_meter_credit_invalid", "transfer_build_allocation", mergeRejection(RejectionEvidence{TargetOwner: target}, p.rejectionEvidenceLocked()))
 		}
 	}
 	if err := a.MoveBuildBytes(owner, target, allocation.bytes); err != nil {
@@ -134,28 +134,28 @@ func TransferProviderResponseToLease(ctx context.Context, allocation *OwnedAlloc
 func transferProviderResponse(ctx context.Context, allocation *OwnedAllocation, target string, root *resourcebudget.RootBudget, scope resourcebudget.Scope, identity string) error {
 	p, ok := ctx.Value(providerAllocationKey{}).(*providerAllocation)
 	if !ok || allocation == nil {
-		return ErrBuildCapacity
+		return AnnotateRejection(ErrBuildCapacity, RejectionEvidence{Branch: "paid_transfer_source_missing", Operation: "transfer_paid_response", TargetOwner: target})
 	}
 	allocation.mu.Lock()
 	defer allocation.mu.Unlock()
 	b := allocation.bounds
 	if b == nil {
-		return ErrBuildCapacity
+		return AnnotateRejection(ErrBuildCapacity, RejectionEvidence{Branch: "paid_transfer_receipt_consumed", Operation: "transfer_paid_response", TargetOwner: target})
 	}
 	b.capacityMu.Lock()
 	defer b.capacityMu.Unlock()
 	if b.retired || b.meterSource != p || allocation.bytes > b.live || allocation.bytes > b.owned {
-		return ErrBuildCapacity
+		return b.rejectLocked(ErrBuildCapacity, "paid_transfer_receipt_source_invalid", "transfer_paid_response", RejectionEvidence{TargetOwner: target})
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	n := allocation.bytes
 	if n < 0 || n > p.live {
-		return ErrBuildCapacity
+		return b.rejectLocked(ErrBuildCapacity, "paid_transfer_meter_credit_insufficient", "transfer_paid_response", mergeRejection(RejectionEvidence{TargetOwner: target}, p.rejectionEvidenceLocked()))
 	}
 	a := p.ownership.admission
 	if a == nil || !validBuildOwner(p.owner) {
-		return ErrBuildCapacity
+		return b.rejectLocked(ErrBuildCapacity, "paid_transfer_admission_missing", "transfer_paid_response", mergeRejection(RejectionEvidence{TargetOwner: target}, p.rejectionEvidenceLocked()))
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -278,15 +278,27 @@ func (a *RequestAdmission) setResponseWireCreditLocked(o providerResponseOwnersh
 func (a *RequestAdmission) transferPaidResponseLocked(p *providerAllocation, n int64, target string, root *resourcebudget.RootBudget, scope resourcebudget.Scope, identity string) error {
 	paid, err := a.responseCreditLocked(p.ownership)
 	wire, wireErr := a.responseWireCreditLocked(p.ownership)
+	ledgerKnown := err == nil && wireErr == nil
+	reject := func(cause error, branch string) error {
+		d := p.rejectionEvidenceLocked()
+		d.TargetOwner = target
+		if d.TargetOwner == "" {
+			d.TargetOwner = identity
+		}
+		d.LedgerCreditKnown, d.LedgerPaid, d.LedgerWire = ledgerKnown, paid, wire
+		d.SourceBytesKnown, d.SourceBytes = true, a.buildAllocations[p.owner]
+		d.InventoryKnown, d.RequestedBytes = true, n
+		return a.rejectLocked(cause, branch, "transfer_paid_response", d)
+	}
 	if err != nil || wireErr != nil || paid != p.paid || wire != p.wireCredit {
-		return ErrPipelineCapacity
+		return reject(ErrPipelineCapacity, "paid_transfer_credit_mismatch")
 	}
 	if target == "" {
 		if identity == "" || identity == a.rootID || root != a.root || root != nil && scope != a.rootScope {
-			return resourcebudget.ErrIdentity
+			return reject(resourcebudget.ErrIdentity, "paid_transfer_root_identity_mismatch")
 		}
 	} else if !validBuildOwner(target) || target == p.owner {
-		return ErrBuildCapacity
+		return reject(ErrBuildCapacity, "paid_transfer_target_invalid")
 	}
 	oldExtra := max(p.live-paid-wire, 0)
 	nextPaid := max(paid-n, 0)
@@ -294,7 +306,7 @@ func (a *RequestAdmission) transferPaidResponseLocked(p *providerAllocation, n i
 	nextExtra := max(p.live-n-nextPaid-nextWire, 0)
 	oldSource := a.buildAllocations[p.owner]
 	if oldSource < oldExtra {
-		return ErrBuildCapacity
+		return reject(ErrBuildCapacity, "paid_transfer_source_credit_insufficient")
 	}
 	oldTarget := a.buildAllocations[target]
 	nextTarget, err := CheckedAdd(oldTarget, n)
@@ -332,12 +344,12 @@ func (a *RequestAdmission) transferPaidResponseLocked(p *providerAllocation, n i
 		a.buildAllocations[target] = nextTarget
 		if err = a.syncRootLocked(0); err != nil {
 			rollback()
-			return err
+			return reject(err, "paid_transfer_root_rejected")
 		}
 	} else if root != nil {
 		if err = root.Move(scope, a.rootID, identity, resourcebudget.Vector{PayloadBytes: n}); err != nil {
 			rollback()
-			return err
+			return reject(err, "paid_transfer_root_rejected")
 		}
 	}
 	a.notifyLocked()

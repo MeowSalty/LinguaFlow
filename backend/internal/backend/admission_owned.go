@@ -21,7 +21,7 @@ func (a *RequestAdmission) ObserveOwned(category, key string, bytes int64) {
 		return
 	}
 	switch category {
-	case "freeze", "raw", "wire", "candidate", "aux", "attachment", "codec", "db_copy":
+	case "freeze", "raw", "wire", "candidate", "aux", "attachment", "codec", "db_copy", "durable_member":
 	default:
 		return
 	}

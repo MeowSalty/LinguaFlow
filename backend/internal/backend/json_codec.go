@@ -923,6 +923,7 @@ func (b *BuildBounds) ownedJSONString(d []byte) (string, *OwnedAllocation, error
 }
 
 func (b *BuildBounds) DecodeJSON(data []byte, v any) error {
+	ObserveMemberWork(b.ctx, MemberWorkEvent{Phase: "decode", Operation: "decode", Bytes: int64(len(data))})
 	dst := reflect.ValueOf(v)
 	if !dst.IsValid() || dst.Kind() != reflect.Pointer || dst.IsNil() {
 		return errors.New("bounded JSON destination must be a nonnil pointer")

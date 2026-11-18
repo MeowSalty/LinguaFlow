@@ -42,8 +42,13 @@ func TestRequestMetadataOriginalSlotsOutliveRemainingMembers(t *testing.T) {
 	if before.PayloadBytes != after.PayloadBytes || after.UnconfirmedMembers != 0 {
 		t.Fatalf("remaining S refunded original metadata: before=%+v after=%+v", before, after)
 	}
-	if err := a.SetRequestMetadataBytes("main", 15, 1000); !errors.Is(err, backend.ErrPipelineCapacity) {
+	err = a.SetRequestMetadataBytes("main", 15, 1000)
+	if !errors.Is(err, backend.ErrPipelineCapacity) {
 		t.Fatal("accepted a shorter original table")
+	}
+	var rejection *backend.RejectionError
+	if !errors.As(err, &rejection) || rejection.Evidence.Branch != "request_metadata_facts_mismatch" || rejection.Evidence.InventoryMembers != 16 || rejection.Evidence.RequestedMembers != 15 {
+		t.Fatalf("original/remaining member mismatch lost rejection facts: %v", err)
 	}
 	if err := a.SetRequestMetadataBytes("main", 16, 1000); err != nil {
 		t.Fatal("authoritative facts rejected", err)
@@ -132,5 +137,72 @@ func TestRequestMetadataUnknownFactsKeepOnlyKnownActual(t *testing.T) {
 	exact, _ := root.Usage(scope, "job:1:runtime")
 	if exact.PayloadBytes != 1000 {
 		t.Fatal("rebuild did not settle exact retained fact")
+	}
+}
+
+func TestRequestMetadataRetiredSourceSettlesAuthoritativeFactOnce(t *testing.T) {
+	a := contractAdmission(t, 256, 4, 64<<20)
+	root := contractRoot(t, 64<<20)
+	scope := resourcebudget.Scope{ActorID: 1, JobID: 1}
+	if err := a.AttachRootBudget(root, scope); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.PrepareMembers("retired", 16, 1, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetRequestMetadataBytes("retired", 16, 1000); err != nil {
+		t.Fatal(err)
+	}
+	a.MarkRequestMetadataUncertain("retired")
+	a.ReleaseBudgetEntry("retired")
+	if held, _ := root.Usage(scope, "job:1:runtime"); held.PayloadBytes != 1000 {
+		t.Fatalf("retirement dropped unknown durable fact: %+v", held)
+	}
+	if err := a.SetRequestMetadataBytes("retired", 16, 900); err != nil {
+		t.Fatal(err)
+	}
+	if exact, _ := root.Usage(scope, "job:1:runtime"); exact.PayloadBytes != 900 {
+		t.Fatalf("retired source did not settle authoritative bytes: %+v", exact)
+	}
+	if err := a.SetRequestMetadataBytes("retired", 16, 900); !errors.Is(err, backend.ErrPipelineCapacity) {
+		t.Fatalf("retired source metadata was recreated: %v", err)
+	}
+}
+
+func TestRequestMetadataClosedSourceCannotChangeFreshRuntime(t *testing.T) {
+	old := contractAdmission(t, 256, 4, 64<<20)
+	root := contractRoot(t, 64<<20)
+	scope := resourcebudget.Scope{ActorID: 1, JobID: 1}
+	if err := old.AttachRootBudget(root, scope); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.PrepareMembers("old", 16, 1, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.SetRequestMetadataBytes("old", 16, 1000); err != nil {
+		t.Fatal(err)
+	}
+	old.MarkRequestMetadataUncertain("old")
+	old.ReleaseBudgetEntry("old")
+	old.Close()
+	fresh := contractAdmission(t, 256, 4, 64<<20)
+	if err := fresh.RestoreRootMetadata(1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := fresh.AttachRootBudget(root, scope); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := root.Usage(scope, "job:1:runtime")
+	if err := old.SetRequestMetadataBytes("old", 16, 900); !errors.Is(err, backend.ErrAdmissionClosed) {
+		t.Fatalf("closed source changed fresh runtime: %v", err)
+	}
+	if after, _ := root.Usage(scope, "job:1:runtime"); after != before {
+		t.Fatalf("late source modified new owner: before=%+v after=%+v", before, after)
+	}
+	if err := old.SetRequestMetadataBytes("old", 16, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := root.Usage(scope, "job:1:runtime"); after != before {
+		t.Fatal("retiring equal old fact touched fresh owner")
 	}
 }
