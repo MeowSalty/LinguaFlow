@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -43,11 +45,19 @@ func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault
 		t.Fatal(err)
 	}
 	member := workstate.PromotionMember{SegmentID: seg.ID, WorkID: workstate.WorkIdentity(scope, seg.ID), CandidateID: "candidate", BaselineVersion: seg.ContentVersion, BaselineTarget: seg.TargetText, BaselineStatus: string(seg.Status), SourceGeneration: scope.SourceGeneration, SourceRevisionID: scope.SourceRevisionID}
-	request := workstate.Request{ID: "ruby-business", Scope: scope, SegmentIDs: []int{seg.ID}, Stage: "main", BackendID: 1, BudgetModel: "stage_separated", InputDigest: "input", MainAttempt: true, MaxMainAttempts: 2, FreezePayload: []byte("freeze"), SnapshotDigest: digest, PromotionMembers: []workstate.PromotionMember{member}, BusinessBound: 1 << 20}
+	digestBytes := func(p []byte) string { h := sha256.Sum256(p); return hex.EncodeToString(h[:]) }
+	key := workstate.MemberKey{RequestID: "ruby-business", Ordinal: 0}
+	inputPayload := []byte(`{"source":"raw source"}`)
+	request := workstate.Request{ID: "ruby-business", Scope: scope, SegmentIDs: []int{seg.ID}, Stage: "main", BackendID: 1, BudgetModel: "stage_separated", InputDigest: "input", MainAttempt: true, MaxMainAttempts: 2, SnapshotDigest: digest, InputMembers: []workstate.InputMember{{Key: key, PromotionMember: member, PromptID: "1", Payload: inputPayload, Digest: digestBytes(inputPayload)}}, BusinessBound: 1 << 20}
 	if err := store.ReserveRequest(ctx, request); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.HandoffResponse(ctx, workstate.ResponseHandoff{RequestID: request.ID, Scope: scope, FreezePayload: request.FreezePayload, ResponsePayload: []byte("complete response"), SnapshotDigest: digest, Members: request.PromotionMembers, BusinessBound: 1 << 20, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 3}}); err != nil {
+	capture := []byte("complete response")
+	if err := store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: request.ID, Scope: scope, SnapshotDigest: digest}, Payload: capture, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 3}}); err != nil {
+		t.Fatal(err)
+	}
+	model := []byte(`{"text":"候选"}`)
+	if err := store.PublishOutputs(ctx, workstate.OutputPublication{Key: key, Members: []workstate.OutputMember{{Key: key, Payload: model, Bytes: int64(len(model)), Digest: digestBytes(model)}}, Next: 1, Digest: digestBytes(model), Complete: true}); err != nil {
 		t.Fatal(err)
 	}
 	large := strings.Repeat("规范", 8000)
@@ -83,7 +93,20 @@ func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault
 	for i := 0; i < 20; i++ {
 		entries = append(entries, glossary.Entry{Source: strings.Repeat("A", i+1), Target: "term", Notes: strings.Repeat("n", 2048)})
 	}
-	in := glossary.ResponseProcess{RequestID: request.ID, InputDigest: "raw-digest", TargetLang: "zh", Rewrite: true, ItemLimit: 1 << 20, BusinessLimit: 1 << 20, Entries: entries, Targets: []glossary.ResponseTarget{{ID: "1", Text: "候选"}}}
+	in := glossary.ResponseProcess{RequestID: request.ID, InputDigest: digestBytes(capture), TargetLang: "zh", Rewrite: true, ItemLimit: 1 << 20, BusinessLimit: 1 << 20, Entries: entries}
+	in.VisitTargets = func(ctx context.Context, visit func(glossary.ResponseTarget) error) error {
+		return visit(glossary.ResponseTarget{Ordinal: 0, ID: "1", Text: "候选"})
+	}
+	in.WriteTarget = func(ctx context.Context, target glossary.ResponseTarget) error {
+		payload, err := json.Marshal(target)
+		if err != nil {
+			return err
+		}
+		return store.StageCorrectedMember(ctx, workstate.OutputMember{Key: key, Payload: payload, Bytes: int64(len(payload)), Digest: digestBytes(payload)})
+	}
+	in.Publish = func(ctx context.Context, out glossary.ResponseBusiness, _ func()) error {
+		return store.PublishMemberBusiness(ctx, request.ID, out.Receipt)
+	}
 	fault := errors.New("receipt fault")
 	fail := true
 	env.client.WorkRequest.Use(func(next ent.Mutator) ent.Mutator {
@@ -142,8 +165,18 @@ func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(out.Body) != large || len(out.Receipt) > 32<<10 {
-		t.Fatalf("body=%d receipt=%d", len(out.Body), len(out.Receipt))
+	defer out.Release()
+	corrected, loadErr := store.LoadOutputMember(ctx, key, true, 1<<20)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	defer corrected.Release()
+	var final glossary.ResponseTarget
+	if err := json.Unmarshal(corrected.Payload, &final); err != nil {
+		t.Fatal(err)
+	}
+	if final.Text != large || len(out.Receipt) > glossary.ResponseReceiptLimit {
+		t.Fatalf("body=%d receipt=%d", len(final.Text), len(out.Receipt))
 	}
 	var receipt glossary.ResponseReceipt
 	if err := json.Unmarshal(out.Receipt, &receipt); err != nil || receipt.Version != 2 || receipt.Added != 20 || receipt.Skipped != 1 {
@@ -179,8 +212,13 @@ func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault
 		}
 	}
 	env.client.GlossaryEntry.UpdateOneID(old.ID).SetTarget("manual later").ExecX(ctx)
+	in.VisitTargets = func(context.Context, func(glossary.ResponseTarget) error) error {
+		t.Fatal("receipt replay visited model members")
+		return nil
+	}
 	replayed, err := g.ProcessResponse(ctx, in)
-	if err != nil || string(replayed.Body) != large || string(replayed.Receipt) != string(out.Receipt) {
+	defer replayed.Release()
+	if err != nil || string(replayed.Receipt) != string(out.Receipt) {
 		t.Fatalf("replay changed %v", err)
 	}
 	if owner != nil && owner.usage.PayloadBytes != adopted {

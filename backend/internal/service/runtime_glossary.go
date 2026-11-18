@@ -20,6 +20,7 @@ type DatabaseGlossary struct {
 	lookupCache   map[string][]glossary.Entry
 	revision      uint64
 	entrySnapshot atomic.Pointer[glossary.EntrySnapshot]
+	pendingCache  *pendingGlossaryCache
 }
 
 func NewDatabaseGlossary(ctx context.Context, client *ent.Client, projectRow *ent.Project) (*DatabaseGlossary, error) {

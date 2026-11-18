@@ -18,6 +18,12 @@ func (g *executionGlossary) ProcessResponse(ctx context.Context, in glossary.Res
 	}
 	g.mutation.Lock()
 	defer g.mutation.Unlock()
+	g.lease.mu.Lock()
+	closed := g.lease.closed
+	g.lease.mu.Unlock()
+	if closed {
+		return glossary.ResponseBusiness{}, errors.New("execution glossary closed")
+	}
 	oldCount, oldBacking := len(g.entries), g.entryBacking
 	result, processErr := g.database.ProcessResponse(g.allocationContext(ctx), in)
 	g.mu.Lock()
@@ -38,8 +44,7 @@ func (g *executionGlossary) ProcessResponse(ctx context.Context, in glossary.Res
 		settleErr = g.retireReplacedBacking(oldBacking)
 	}
 	if err := errors.Join(processErr, settleErr); err != nil {
-		result.Release()
-		return glossary.ResponseBusiness{}, err
+		return result, err
 	}
 	return result, nil
 }

@@ -39,12 +39,14 @@ func TestRetryRetainsReliableUnpromotedRawAcrossEpoch(t *testing.T) {
 			sum := sha256.Sum256(encoded)
 			digest := hex.EncodeToString(sum[:])
 			members := []workstate.PromotionMember{{SegmentID: seg.ID, WorkID: workstate.WorkIdentity(scope, seg.ID), CandidateID: "raw-candidate", BaselineVersion: seg.ContentVersion, BaselineTarget: seg.TargetText, BaselineStatus: string(seg.Status), SourceGeneration: scope.SourceGeneration, SourceRevisionID: scope.SourceRevisionID}}
-			request := workstate.Request{ID: "raw-before-retry", Scope: scope, SegmentIDs: []int{seg.ID}, Stage: "main", BackendID: 1, BudgetModel: "stage_separated", InputDigest: "frozen-input", MainAttempt: true, MaxMainAttempts: 3, FreezePayload: []byte("frozen"), SnapshotDigest: digest, PromotionMembers: members}
+			input := []byte("frozen")
+			inputSum := sha256.Sum256(input)
+			request := workstate.Request{ID: "raw-before-retry", Scope: scope, SegmentIDs: []int{seg.ID}, Stage: "main", BackendID: 1, BudgetModel: "stage_separated", InputDigest: "frozen-input", MainAttempt: true, MaxMainAttempts: 3, SnapshotDigest: digest, InputMembers: []workstate.InputMember{{Key: workstate.MemberKey{RequestID: "raw-before-retry", CaptureEpoch: 7}, PromotionMember: members[0], PromptID: "1", Payload: input, Digest: hex.EncodeToString(inputSum[:])}}}
 			if err := store.ReserveRequest(ctx, request); err != nil {
 				t.Fatal(err)
 			}
 			response := []byte("reliable untranslated response")
-			if err := store.HandoffResponse(ctx, workstate.ResponseHandoff{RequestID: request.ID, Scope: scope, FreezePayload: request.FreezePayload, ResponsePayload: response, SnapshotDigest: digest, Members: members, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 3, OutputTokens: 4}}); err != nil {
+			if err := store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: request.ID, Scope: scope, SnapshotDigest: digest}, Payload: response, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 3, OutputTokens: 4}}); err != nil {
 				t.Fatal(err)
 			}
 			env.client.Job.UpdateOneID(j.ID).SetStatus(JobStatusFailed).ExecX(ctx)
@@ -75,7 +77,7 @@ func TestRetryRetainsReliableUnpromotedRawAcrossEpoch(t *testing.T) {
 					t.Fatal("invalid raw retry did not roll back the execution reset")
 				}
 				raw := env.client.WorkRequest.Query().Where(workrequest.IdentityEQ(request.ID)).OnlyX(ctx)
-				if raw.RetryEpoch != 7 || raw.State != "completed" || string(raw.ResponsePayload) != string(response) || raw.PromotionCursor != 0 || env.client.UsageRecord.Query().CountX(ctx) != 1 {
+				if raw.RetryEpoch != 7 || raw.State != "completed" || string(raw.CapturePayload) != string(response) || raw.PromotionCursor != 0 || env.client.UsageRecord.Query().CountX(ctx) != 1 {
 					t.Fatal("invalid raw retry changed durable response or accounting")
 				}
 				return
@@ -94,7 +96,7 @@ func TestRetryRetainsReliableUnpromotedRawAcrossEpoch(t *testing.T) {
 				t.Fatalf("raw member reentered main dispatch: %+v", item)
 			}
 			raw := env.client.WorkRequest.Query().Where(workrequest.IdentityEQ(request.ID)).OnlyX(ctx)
-			if raw.RetryEpoch != 7 || raw.State != "completed" || string(raw.ResponsePayload) != string(response) || raw.PromotionCursor != 0 || env.client.UsageRecord.Query().CountX(ctx) != 1 {
+			if raw.RetryEpoch != 7 || raw.State != "completed" || string(raw.CapturePayload) != string(response) || raw.PromotionCursor != 0 || env.client.UsageRecord.Query().CountX(ctx) != 1 {
 				t.Fatal("retry changed raw identity, payload, cursor, or accounting")
 			}
 		})

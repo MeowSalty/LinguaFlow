@@ -1269,6 +1269,8 @@ func loadExecutionGlossary(ctx context.Context, client *ent.Client, project *ent
 		g.database = &DatabaseGlossary{client: client, projectID: project.ID, lookupCache: make(map[string][]glossary.Entry)}
 	}
 	l.clear = func() {
+		g.mutation.Lock()
+		defer g.mutation.Unlock()
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		clear(g.entries)
@@ -1276,6 +1278,12 @@ func loadExecutionGlossary(ctx context.Context, client *ent.Client, project *ent
 		g.head = nil
 		if g.database != nil {
 			g.database.mu.Lock()
+			if pending := g.database.pendingCache; pending != nil {
+				if pending.settlement.rollback != nil {
+					_ = pending.settlement.rollback()
+				}
+				g.database.pendingCache = nil
+			}
 			clear(g.database.entries)
 			g.database.entries = nil
 			clear(g.database.lookupCache)

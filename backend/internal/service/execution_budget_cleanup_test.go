@@ -31,7 +31,8 @@ func seedCleanupStock(t *testing.T, ctx context.Context, c *lfent.Client, projec
 	s := c.Segment.Query().Where(segment.ResourceIDEQ(resourceID)).FirstX(ctx)
 	w := c.WorkItem.Create().SetJobID(j.ID).SetResourceID(resourceID).SetJobRoundID(r.ID).SetSegmentID(s.ID).SetState("candidate").SetMemberOwned(true).SaveX(ctx)
 	c.WorkCandidate.Create().SetIdentity(fmt.Sprintf("candidate-%d", j.ID)).SetWorkItemID(w.ID).SetDtoVersion(1).SetSnapshotDigest("digest").SetMode("translate").SetSourceGeneration(0).SetBaselineVersion(1).SetBaselineStatus("pending").SetPayload(json.RawMessage(`{"target":"saved"}`)).SetGrowthReserved(true).SaveX(ctx)
-	c.WorkRequest.Create().SetIdentity(fmt.Sprintf("request-%d", j.ID)).SetJobID(j.ID).SetResourceID(resourceID).SetJobRoundID(r.ID).SetRetryEpoch(0).SetSegmentIds([]int{s.ID}).SetStage("main").SetBackendID(0).SetBudgetModel("m").SetInputDigest("digest").SetFreezePayload([]byte("freeze")).SetResponsePayload([]byte("raw")).SetState("failed").SaveX(ctx)
+	request := c.WorkRequest.Create().SetIdentity(fmt.Sprintf("request-%d", j.ID)).SetJobID(j.ID).SetResourceID(resourceID).SetJobRoundID(r.ID).SetRetryEpoch(0).SetSegmentIds([]int{s.ID}).SetStage("main").SetBackendID(0).SetBudgetModel("m").SetInputDigest("digest").SetCapturePayload([]byte("raw")).SetCaptureBytes(3).SetInputMemberBytes(6).SetState("failed").SaveX(ctx)
+	c.WorkRequestInputMember.Create().SetRequestID(request.ID).SetOrdinal(0).SetPromptID("1").SetSegmentID(s.ID).SetSegmentIndex(0).SetWorkID(fmt.Sprintf("cleanup-work-%d", w.ID)).SetCandidateID("cleanup-member").SetBaselineVersion(1).SetBaselineDigest("digest").SetBaselineTargetIsNull(true).SetBaselineStatus("pending").SetSourceGeneration(0).SetPayload([]byte("freeze")).SetPayloadBytes(6).SetPayloadDigest("digest").SaveX(ctx)
 	return j.ID
 }
 
@@ -357,7 +358,7 @@ func TestExecutionBudgetCleanupWaitsForClaimAndBlocksRegistration(t *testing.T) 
 	if c.Job.Query().Where(job.IDEQ(id)).CountX(ctx) != 1 {
 		t.Fatal("resource deletion removed job history")
 	}
-	if _, err := c.WorkRequest.Create().SetIdentity("late-deleted-resource").SetJobID(id).SetResourceID(res.ID).SetJobRoundID(request.JobRoundID).SetRetryEpoch(0).SetSegmentIds(request.SegmentIds).SetStage("main").SetBackendID(0).SetBudgetModel("m").SetInputDigest("digest").SetResponsePayload([]byte("late body")).Save(ctx); err == nil {
+	if _, err := c.WorkRequest.Create().SetIdentity("late-deleted-resource").SetJobID(id).SetResourceID(res.ID).SetJobRoundID(request.JobRoundID).SetRetryEpoch(0).SetSegmentIds(request.SegmentIds).SetStage("main").SetBackendID(0).SetBudgetModel("m").SetInputDigest("digest").SetCapturePayload([]byte("late body")).Save(ctx); err == nil {
 		t.Fatal("late backing write accepted a deleted resource")
 	}
 	assertCleanupSQL(t, ctx, cleanup)
