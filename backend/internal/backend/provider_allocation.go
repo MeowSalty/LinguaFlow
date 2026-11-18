@@ -37,16 +37,28 @@ func (p *providerAllocation) reserve(bytes int64) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
-		return ErrBuildCapacity
+		d := p.rejectionEvidenceLocked()
+		d.Branch, d.Operation = "provider_meter_closed", "reserve_provider_allocation"
+		return AnnotateRejection(ErrBuildCapacity, d)
 	}
 	if a := p.ownership.admission; a != nil {
 		a.mu.Lock()
 		paid, err := a.responseCreditLocked(p.ownership)
 		wire, wireErr := a.responseWireCreditLocked(p.ownership)
-		a.mu.Unlock()
 		if err != nil || wireErr != nil || paid != p.paid || wire != p.wireCredit {
-			return ErrPipelineCapacity
+			d := p.rejectionEvidenceLocked()
+			d.LedgerCreditKnown, d.LedgerPaid, d.LedgerWire = err == nil && wireErr == nil, paid, wire
+			cause := ErrPipelineCapacity
+			if err != nil {
+				cause = err
+			} else if wireErr != nil {
+				cause = wireErr
+			}
+			err = a.rejectLocked(cause, "provider_credit_mismatch", "reserve_provider_allocation", d)
+			a.mu.Unlock()
+			return err
 		}
+		a.mu.Unlock()
 	}
 	next, err := CheckedAdd(p.live, bytes)
 	if err != nil {
@@ -59,7 +71,9 @@ func (p *providerAllocation) reserve(bytes int64) error {
 		flow += bytes
 	}
 	if p.limit > 0 && next > p.limit {
-		return &AllocationCapacityError{p.live, bytes, p.limit}
+		d := p.rejectionEvidenceLocked()
+		d.Branch, d.Operation = "provider_allocation_limit", "reserve_provider_allocation"
+		return AnnotateRejection(&AllocationCapacityError{p.live, bytes, p.limit}, d)
 	}
 	credit := p.paid + p.wireCredit
 	delta := max(next-credit, 0) - max(p.live-credit, 0)
@@ -95,7 +109,9 @@ func WithProviderResponseAllocation(ctx context.Context, responseBytes int64) (c
 		if ownership != current.ownership {
 			policy, _ := ctx.Value(buildAllocationKey{}).(buildAllocationPolicy)
 			if policy.source != nil {
-				return nil, ErrPipelineCapacity
+				d := RejectionEvidenceFromContext(ctx)
+				d.Branch, d.Operation = "provider_ownership_mismatch", "bind_provider_allocation"
+				return nil, AnnotateRejection(ErrPipelineCapacity, d)
 			}
 			ctx = context.WithValue(ctx, providerAllocationKey{}, struct{}{})
 		} else {
@@ -106,14 +122,27 @@ func WithProviderResponseAllocation(ctx context.Context, responseBytes int64) (c
 				a.mu.Lock()
 				paid, err := a.responseCreditLocked(current.ownership)
 				wire, wireErr := a.responseWireCreditLocked(current.ownership)
-				a.mu.Unlock()
 				if err != nil || wireErr != nil || paid != current.paid || wire != current.wireCredit {
-					activeErr = ErrPipelineCapacity
+					d := current.rejectionEvidenceLocked()
+					d.LedgerCreditKnown, d.LedgerPaid, d.LedgerWire = err == nil && wireErr == nil, paid, wire
+					cause := ErrPipelineCapacity
+					if err != nil {
+						cause = err
+					} else if wireErr != nil {
+						cause = wireErr
+					}
+					activeErr = a.rejectLocked(cause, "provider_credit_mismatch", "bind_provider_allocation", d)
 				}
+				a.mu.Unlock()
+			}
+			var closedEvidence RejectionEvidence
+			if closed {
+				closedEvidence = current.rejectionEvidenceLocked()
 			}
 			current.mu.Unlock()
 			if closed {
-				return nil, ErrBuildCapacity
+				closedEvidence.Branch, closedEvidence.Operation = "provider_meter_closed", "bind_provider_allocation"
+				return nil, AnnotateRejection(ErrBuildCapacity, closedEvidence)
 			}
 			if activeErr != nil {
 				return nil, activeErr
