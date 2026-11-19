@@ -3,6 +3,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"math"
 )
 
@@ -115,11 +116,15 @@ type PipelineBudgetSnapshot struct {
 	Revision                                                                                  uint64
 }
 type requestBudget struct {
+	facts                                       responsecontract.ResponseFacts
+	phase                                       responsecontract.ResponsePhase
+	factsKnown                                  bool
 	round, resource                             int
 	known, freeze, wire, raw, business          int64
 	responseCredit                              int64
 	providerWireOriginal, providerWireRemaining int64
 	providerWireBound                           bool
+	liveProvider                                bool
 	granted, progress                           bool
 	pinned                                      bool
 	full                                        bool
@@ -1279,43 +1284,74 @@ func (a *RequestAdmission) ReserveFinalResultCredit(id string, size int64) error
 	return nil
 }
 
-func (a *RequestAdmission) RestoreResponseOwner(id string, round, resource int, freeze, raw, business int64) error {
+// RestoreResponseOwnership adopts confirmed canonical inventory, not original live HTTP capacities.
+// changed=true is reserved for the current transaction-confirmed advancement.
+func (a *RequestAdmission) RestoreResponseOwnership(id string, round, resource int, facts responsecontract.ResponseFacts, phase responsecontract.ResponsePhase, changed bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	b := a.budget
-	if b == nil || id == "" || freeze < 0 || raw < 0 || raw > b.limits.Responses || business < 0 {
-		return a.rejectLocked(ErrPipelineCapacity, "restore_response_invalid", "restore_response_owner", RejectionEvidence{RequestID: id})
+	if b == nil || id == "" || facts.Validate() != nil || !phase.Valid() || facts.CaptureBytes > b.limits.Responses {
+		return a.rejectLocked(ErrPipelineCapacity, "restore_response_invalid", "restore_response_ownership", RejectionEvidence{RequestID: id})
 	}
 	if _, ok := a.config.MainConcurrency[round]; !ok {
-		return a.rejectLocked(ErrPipelineCapacity, "restore_response_round_missing", "restore_response_owner", RejectionEvidence{RequestID: id})
+		return ErrPipelineCapacity
 	}
-	if old, ok := b.requests[id]; ok {
-		if old.freeze != freeze || old.raw != raw || old.business != business {
-			return a.rejectLocked(ErrPipelineCapacity, "restore_response_identity_mismatch", "restore_response_owner", RejectionEvidence{RequestID: id, ResponseBytesKnown: true, FreezeBytes: old.freeze, ExpectedFreezeBytes: freeze, ResponseBytes: old.raw, ExpectedResponseBytes: raw, BusinessBytes: old.business, ExpectedBusinessBytes: business})
+	known, err := checkedSum(facts.InputMemberBytes, facts.ModelOutputBytes, facts.PublicBytes)
+	if err != nil {
+		return err
+	}
+	owned, err := checkedSum(known, facts.CaptureBytes, facts.CorrectionBytes, RequestMetadataBytes)
+	if err != nil {
+		return err
+	}
+	old, exists := b.requests[id]
+	base := b.baseHandoff
+	lane := b.lane
+	if exists && old.factsKnown {
+		if old.round != round || old.resource != resource {
+			return ErrPipelineCapacity
 		}
-		return nil
+		if old.facts == facts && old.phase == phase {
+			return nil
+		}
+		if !changed || !old.phase.CanAdvance(phase) {
+			return a.rejectLocked(ErrPipelineCapacity, "restore_response_identity_mismatch", "restore_response_ownership", RejectionEvidence{RequestID: id})
+		}
 	}
-	if b.inventoryRestored {
-		owned, e := checkedSum(freeze, raw, RequestMetadataBytes)
-		if e != nil || owned > b.baseHandoff {
-			cause := ErrPipelineCapacity
-			if e != nil {
-				cause = errors.Join(ErrPipelineCapacity, e)
-			}
-			return a.rejectLocked(cause, "restore_response_inventory_insufficient", "restore_response_owner", RejectionEvidence{RequestID: id, InventoryKnown: true, InventoryBytes: b.baseHandoff, RequestedBytes: owned})
+	if !exists && b.inventoryRestored {
+		if owned > b.baseHandoff {
+			return a.rejectLocked(ErrPipelineCapacity, "restore_response_inventory_insufficient", "restore_response_ownership", RejectionEvidence{RequestID: id, InventoryKnown: true, InventoryBytes: b.baseHandoff, RequestedBytes: owned})
 		}
 		b.baseHandoff -= owned
 	}
-	lane, err := checkedSum(b.limits.Item, b.limits.Responses, RequestMetadataBytes, b.businessMaximum(business))
-	if err != nil || freeze > b.limits.Handoff {
-		cause := ErrPipelineCapacity
-		if err != nil {
-			cause = errors.Join(ErrPipelineCapacity, err)
-		}
-		return a.rejectLocked(cause, "restore_response_handoff_invalid", "restore_response_owner", RejectionEvidence{RequestID: id})
+	next := old
+	next.round, next.resource = round, resource
+	next.known, next.freeze = known, facts.InputMemberBytes
+	next.raw = facts.CaptureBytes
+	if !exists || !old.liveProvider {
+		next.responseCredit = facts.CaptureBytes
 	}
-	b.requests[id] = requestBudget{round: round, resource: resource, known: freeze, freeze: freeze, raw: raw, responseCredit: raw, business: business, granted: true, restored: b.inventoryRestored}
-	b.lane = lane
+	next.business, next.corrected = facts.BusinessReservation, facts.CorrectionBytes
+	next.granted = true
+	if !exists {
+		next.restored = true
+	}
+	next.businessAttached = phase == responsecontract.BusinessReady || phase.Terminal()
+	next.facts, next.phase, next.factsKnown = facts, phase, true
+	b.requests[id] = next
+	b.lane, err = checkedSum(b.limits.Item, b.limits.Responses, RequestMetadataBytes, b.businessMaximum(0))
+	if err == nil {
+		err = a.syncRootLocked(0)
+	}
+	if err != nil {
+		if exists {
+			b.requests[id] = old
+		} else {
+			delete(b.requests, id)
+		}
+		b.baseHandoff, b.lane = base, lane
+		return err
+	}
 	a.notifyLocked()
 	return nil
 }
@@ -1536,36 +1572,6 @@ func (a *RequestAdmission) PinResponses(ids []string) error {
 		b.lane = lane
 		a.notifyLocked()
 	}
-	return nil
-}
-func (a *RequestAdmission) RestoreResponseBusiness(id string, bytes int64) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	b := a.budget
-	if b == nil || bytes < 0 {
-		return ErrPipelineCapacity
-	}
-	r, ok := b.requests[id]
-	if !ok || bytes > r.business {
-		return ErrPipelineCapacity
-	}
-	old := r
-	base := b.baseHandoff
-	if r.restored && !r.businessAttached {
-		if bytes > b.baseHandoff {
-			return ErrPipelineCapacity
-		}
-		b.baseHandoff -= bytes
-	}
-	r.corrected = bytes
-	r.businessAttached = true
-	b.requests[id] = r
-	if err := a.syncRootLocked(0); err != nil {
-		b.requests[id] = old
-		b.baseHandoff = base
-		return err
-	}
-	a.notifyLocked()
 	return nil
 }
 func (a *RequestAdmission) UnpinResponse(id string) error {

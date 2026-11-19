@@ -79,7 +79,13 @@ func (p *providerAllocation) reserve(bytes int64) error {
 	delta := max(next-credit, 0) - max(p.live-credit, 0)
 	if delta > 0 && p.rootReserve != nil {
 		if err = p.rootReserve(delta); err != nil {
-			return err
+			// A live meter retains its original callbacks and remaining R. That
+			// callback predates archive/promotion context, so classify its actual
+			// failed probe here rather than recreate or refill the meter.
+			if p.sourceAdmission != nil && p.ownership.stage == RequestStageMain {
+				err = p.sourceAdmission.ClassifyResponseCapacity(p.ownership.id, err)
+			}
+			return AnnotateRejection(err, p.rejectionEvidenceLocked())
 		}
 	}
 	p.live, p.peak, p.flow = next, max(p.peak, next), flow
@@ -191,6 +197,11 @@ func WithProviderResponseAllocation(ctx context.Context, responseBytes int64) (c
 		}
 		current.paid = paid
 		current.wireCredit = wire
+		if current.ownership.stage == RequestStageMain {
+			r := a.budget.requests[current.ownership.id]
+			r.liveProvider = true
+			a.budget.requests[current.ownership.id] = r
+		}
 		a.mu.Unlock()
 	}
 	ctx = providerAllocationContext(ctx, current)
