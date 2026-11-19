@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 )
 
 func boundsForTest(t *testing.T, q, r int64) *backend.BuildBounds {
@@ -35,7 +36,8 @@ func TestBoundedMainMemberCapacityIsIndependent(t *testing.T) {
 			t.Fatalf("sibling text=%v result=%v err=%v", textMode, r, e)
 		}
 		_, e = a.Member(boundsForTest(t, 8192, 1<<20), 1)
-		if !errors.Is(e, backend.ErrBuildCapacity) {
+		var content *responsecontract.MemberContentError
+		if !errors.As(e, &content) || content.Kind != responsecontract.MemberTooLarge || content.Ordinal != 1 || content.Limit != 8192 || content.Observed != int64(len(big)) {
 			t.Fatalf("large selected: %v", e)
 		}
 		business, e := a.Glossary(boundsForTest(t, 8192, 1<<20))
@@ -101,7 +103,8 @@ func TestBoundedReviseMemberCapacityAndDuplicates(t *testing.T) {
 			t.Fatalf("revision=%#v err=%v", r, e)
 		}
 		_, e = a.Member(boundsForTest(t, 8192, 1<<20), 1)
-		if !errors.Is(e, backend.ErrBuildCapacity) {
+		var content *responsecontract.MemberContentError
+		if !errors.As(e, &content) || content.Kind != responsecontract.MemberTooLarge || content.Ordinal != 1 || content.Limit != 8192 || content.Observed != int64(len(big)) {
 			t.Fatal(e)
 		}
 	}

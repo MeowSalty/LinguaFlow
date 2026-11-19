@@ -2,6 +2,7 @@ package repair
 
 import (
 	"errors"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"strings"
 	"unicode"
 	"unicode/utf16"
@@ -15,6 +16,7 @@ import (
 // ArchiveMember is one normalized output, bound to the frozen request ordinal.
 // Failure is a content failure; capacity and cancellation remain returned errors.
 type ArchiveMember struct {
+	Outcome    responsecontract.MemberOutcome
 	Target     string
 	Revision   *prompt.ReviseRevision
 	RubyOutput []ruby.OutputEntry
@@ -539,6 +541,9 @@ func (a *Archive) Member(b *backend.BuildBounds, ordinal int) (ArchiveMember, er
 		if s.target.Kind() != '"' {
 			member.Failure = "selected translation has no translatable string"
 			return member, nil
+		}
+		if n := s.target.DecodedStringBytes(); n > limitText(b) {
+			return member, &responsecontract.MemberContentError{Ordinal: ordinal, Kind: responsecontract.MemberTooLarge, Limit: limitText(b), Observed: n}
 		}
 		target, err := s.target.StringLimitedBounded(b, limitText(b))
 		if err != nil {

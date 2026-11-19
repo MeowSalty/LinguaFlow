@@ -3,12 +3,11 @@ package repair
 import (
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
 func TestMemberResponseArchiveLinear(t *testing.T) {
@@ -140,7 +139,8 @@ func TestMemberResponseArchiveRubyAndLimits(t *testing.T) {
 		if err != nil || m.Target != "small" {
 			t.Fatalf("small sibling=%v err=%v", m, err)
 		}
-		if _, err = a.Member(boundsForTest(t, 8192, 1<<20), 1); !errors.Is(err, backend.ErrBuildCapacity) {
+		var content *responsecontract.MemberContentError
+		if _, err = a.Member(boundsForTest(t, 8192, 1<<20), 1); !errors.As(err, &content) || content.Kind != responsecontract.MemberTooLarge || content.Ordinal != 1 {
 			t.Fatalf("large selected error=%v", err)
 		}
 		a.Release()

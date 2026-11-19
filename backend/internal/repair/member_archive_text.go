@@ -1,6 +1,7 @@
 package repair
 
 import (
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -142,6 +143,16 @@ func (a *Archive) textMember(b *backend.BuildBounds, ordinal int, s archiveSlot)
 		return m, nil
 	}
 	if s.found {
+		var n int64
+		for i, part := range s.parts {
+			if i > 0 {
+				n++
+			}
+			n += int64(len(part))
+		}
+		if n > limitText(b) {
+			return m, &responsecontract.MemberContentError{Ordinal: ordinal, Kind: responsecontract.MemberTooLarge, Limit: limitText(b), Observed: n}
+		}
 		target, err := joinFragmentsBounded(b, s.parts, "\n", limitText(b))
 		if err != nil {
 			return m, err
