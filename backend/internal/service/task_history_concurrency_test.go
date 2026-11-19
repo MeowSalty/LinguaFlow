@@ -84,6 +84,12 @@ func (d *historyObservedDriver) ExecContext(ctx context.Context, query string, a
 		ExecContext(context.Context, string, ...any) (sql.Result, error)
 	}).ExecContext(ctx, query, args...)
 }
+func (d *historyObservedDriver) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	d.observe(query)
+	return d.Driver.(interface {
+		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	}).QueryContext(ctx, query, args...)
+}
 
 type historyObservedTx struct {
 	dialect.Tx
@@ -109,6 +115,14 @@ func (t *historyObservedTx) ExecContext(ctx context.Context, query string, args 
 	}).ExecContext(ctx, query, args...)
 	t.driver.completed(err)
 	return result, err
+}
+func (t *historyObservedTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	t.driver.observe(query)
+	rows, err := t.Tx.(interface {
+		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	}).QueryContext(ctx, query, args...)
+	t.driver.completed(err)
+	return rows, err
 }
 
 func TestTaskHistorySQLiteRevokeAfterRepeatedWriteConflicts(t *testing.T) {

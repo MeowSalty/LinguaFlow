@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"entgo.io/ent/dialect/sql"
 	"errors"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/migrate"
 	"strconv"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/accountidentity"
@@ -201,61 +203,25 @@ func (s *InitializationService) Validate(ctx context.Context, mode string) (*ent
 	return local, nil
 }
 
-// 保持此清单与 ent/migrate.Tables 同步；其完整性有测试保障。
+// The generated schema is the only business-table registry, shared by preflight and transaction recheck.
 func initializationBusinessChecks(c *ent.Client) map[string]func(context.Context) (bool, error) {
-	return map[string]func(context.Context) (bool, error){
-		"auth_connections":           c.AuthConnection.Query().Exist,
-		"auth_connection_revisions":  c.AuthConnectionRevision.Query().Exist,
-		"auth_channel_policies":      c.AuthChannelPolicy.Query().Exist,
-		"local_account_policies":     c.LocalAccountPolicy.Query().Exist,
-		"authentication_recoveries":  c.AuthenticationRecovery.Query().Exist,
-		"auth_connection_secrets":    c.AuthConnectionSecret.Query().Exist,
-		"auth_transactions":          c.AuthTransaction.Query().Exist,
-		"reauthentication_proofs":    c.ReauthenticationProof.Query().Exist,
-		"external_identities":        c.ExternalIdentity.Query().Exist,
-		"login_bindings":             c.LoginBinding.Query().Exist,
-		"refresh_sessions":           c.RefreshSession.Query().Exist,
-		"storage_connections":        c.StorageConnection.Query().Exist,
-		"storage_retirements":        c.StorageRetirement.Query().Exist,
-		"storage_retirement_entries": c.StorageRetirementEntry.Query().Exist,
-		"storage_path_claims":        c.StoragePathClaim.Query().Exist,
-		"storage_namespaces":         c.StorageNamespace.Query().Exist,
-		"storage_spaces":             c.StorageSpace.Query().Exist,
-		"storage_auth_versions":      c.StorageAuthVersion.Query().Exist,
-		"blobs":                      c.Blob.Query().Exist,
-		"blob_locations":             c.BlobLocation.Query().Exist,
-		"source_revisions":           c.SourceRevision.Query().Exist,
-		"storage_tasks":              c.StorageTask.Query().Exist,
-		"storage_checks":             c.StorageCheck.Query().Exist,
-		"storage_check_writes":       c.StorageCheckWrite.Query().Exist,
-		"storage_upload_batches":     c.StorageUploadBatch.Query().Exist,
-		"storage_upload_batch_items": c.StorageUploadBatchItem.Query().Exist,
-		"storage_writes":             c.StorageWrite.Query().Exist,
-		"storage_reservations":       c.StorageReservation.Query().Exist,
-		"deletion_entries":           c.DeletionEntry.Query().Exist,
-		"backup_pins":                c.BackupPin.Query().Exist,
-		"export_artifacts":           c.ExportArtifact.Query().Exist,
-		"storage_migration_items":    c.StorageMigrationItem.Query().Exist,
-		"storage_backups":            c.StorageBackup.Query().Exist,
-
-		"activity_logs": c.ActivityLog.Query().Exist, "backends": c.Backend.Query().Exist,
-		"credentials": c.Credential.Query().Exist, "credential_versions": c.CredentialVersion.Query().Exist,
-		"credential_job_references":  c.CredentialJobReference.Query().Exist,
-		"bootstrap_prompt_templates": c.BootstrapPromptTemplate.Query().Exist,
-		"execution_plan_templates":   c.ExecutionPlanTemplate.Query().Exist, "execution_profiles": c.ExecutionProfile.Query().Exist,
-		"glossary_entries": c.GlossaryEntry.Query().Exist, "jobs": c.Job.Query().Exist,
-		"job_resources": c.JobResource.Query().Exist, "job_rounds": c.JobRound.Query().Exist,
-		"job_round_segments": c.JobRoundSegment.Query().Exist, "organizations": c.Organization.Query().Exist,
-		"org_memberships": c.OrgMembership.Query().Exist, "projects": c.Project.Query().Exist,
-		"prune_prompt_templates": c.PrunePromptTemplate.Query().Exist, "refresh_tokens": c.RefreshToken.Query().Exist,
-		"resources": c.Resource.Query().Exist, "segments": c.Segment.Query().Exist,
-		"segment_revisions": c.SegmentRevision.Query().Exist, "sse_events": c.SSEEvent.Query().Exist,
-		"work_items": c.WorkItem.Query().Exist, "work_candidates": c.WorkCandidate.Query().Exist,
-		"work_requests": c.WorkRequest.Query().Exist,
-		"sync_tasks":    c.SyncTask.Query().Exist, "system_settings": c.SystemSetting.Query().Exist,
-		"tm_entries": c.TMEntry.Query().Exist, "translation_prompt_templates": c.TranslationPromptTemplate.Query().Exist,
-		"usage_records": c.UsageRecord.Query().Exist, "users": c.User.Query().Exist,
+	checks := make(map[string]func(context.Context) (bool, error), len(migrate.Tables)-1)
+	for _, table := range migrate.Tables {
+		if table.Name == "instance_initializations" {
+			continue
+		}
+		name := table.Name
+		checks[name] = func(ctx context.Context) (bool, error) {
+			query, args := sql.Dialect(c.DialectName()).SelectExpr(sql.Expr("1")).From(sql.Dialect(c.DialectName()).Table(name)).Limit(1).Query()
+			rows, err := c.QueryContext(ctx, query, args...)
+			if err != nil {
+				return false, err
+			}
+			exists := rows.Next()
+			return exists, errors.Join(rows.Err(), rows.Close())
+		}
 	}
+	return checks
 }
 
 // MaintainAdministrator 是显式的部署侧操作。它不能认领
