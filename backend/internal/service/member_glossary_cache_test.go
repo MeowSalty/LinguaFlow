@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"reflect"
 	"strings"
 	"sync"
@@ -55,11 +56,11 @@ func newMemberGlossaryCacheFixture(t *testing.T) memberGlossaryCacheFixture {
 		t.Fatal(err)
 	}
 	capture := []byte("captured model response")
-	if err = store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: key.RequestID, Scope: scope}, Payload: capture, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 7, OutputTokens: 3}}); err != nil {
+	if _, err = store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: key.RequestID, Scope: scope}, Payload: capture, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 7, OutputTokens: 3}}); err != nil {
 		t.Fatal(err)
 	}
 	output := []byte(`{"target":"translated"}`)
-	if err = store.PublishOutputs(ctx, workstate.OutputPublication{Key: key, Members: []workstate.OutputMember{{Key: key, Payload: output, Bytes: int64(len(output)), Digest: digest(output)}}, Next: 1, Digest: digest(output), Complete: true}); err != nil {
+	if _, err = store.PublishOutputs(ctx, workstate.OutputPublication{Key: key, Members: []workstate.OutputMember{{Key: key, Payload: output, Bytes: int64(len(output)), Digest: digest(output)}}, Next: 1, Digest: digest(output), Complete: true}); err != nil {
 		t.Fatal(err)
 	}
 	// A nonempty old cache makes Close exercise replacement and the original
@@ -123,7 +124,7 @@ func newMemberGlossaryCacheFixture(t *testing.T) memberGlossaryCacheFixture {
 		}
 	})
 	in := glossary.ResponseProcess{RequestID: key.RequestID, InputDigest: digest(capture), Entries: []glossary.Entry{{Source: "new term", Target: "new target", Notes: "private dictionary backing"}}, ItemLimit: 4096, BusinessLimit: 4096}
-	in.Publish = func(ctx context.Context, out glossary.ResponseBusiness, _ func()) error {
+	in.Publish = func(ctx context.Context, out glossary.ResponseBusiness, _ *responsecontract.PreparedPublication) error {
 		return store.PublishMemberBusiness(ctx, key.RequestID, out.Receipt)
 	}
 	return memberGlossaryCacheFixture{ctx, env, g, lease, root, a, in}
@@ -155,7 +156,9 @@ func TestMemberGlossaryCachePaidRollback(t *testing.T) {
 	}
 	rootBefore := f.root.Snapshot(actor).Instance
 	fault := errors.New("publication failed after private cache prepared")
-	f.in.Publish = func(context.Context, glossary.ResponseBusiness, func()) error { return fault }
+	f.in.Publish = func(context.Context, glossary.ResponseBusiness, *responsecontract.PreparedPublication) error {
+		return fault
+	}
 	out, err := f.g.ProcessResponse(f.ctx, f.in)
 	out.Release()
 	if !errors.Is(err, fault) {

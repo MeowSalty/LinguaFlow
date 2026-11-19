@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -23,10 +24,39 @@ import (
 var _ glossary.ResponseProcessor = (*DatabaseGlossary)(nil)
 
 type pendingGlossaryCache struct {
-	requestID, digest string
-	entries           []glossary.Entry
-	head              *glossary.EntrySnapshot
-	settlement        glossaryCacheSettlement
+	proof      responseBusinessProof
+	entries    []glossary.Entry
+	head       *glossary.EntrySnapshot
+	settlement glossaryCacheSettlement
+}
+
+type responseBusinessProof struct {
+	identity                  workstate.ResponseIdentityProof
+	projectID                 int
+	inputDigest, publicDigest string
+	publicBytes               int64
+}
+
+func (p responseBusinessProof) matches(req *ent.WorkRequest) bool {
+	var receipt glossary.ResponseReceipt
+	return p.identity.Matches(req) && int64(len(req.GlossaryReceipt)) == p.publicBytes && req.PublicDigest == p.publicDigest && responseReceiptMatches(req, glossary.ResponseProcess{RequestID: p.identity.RequestID, InputDigest: p.inputDigest, CaptureEpoch: p.identity.CaptureEpoch}, &receipt)
+}
+
+func (p responseBusinessProof) exists(ctx context.Context, tx *ent.Client) (bool, error) {
+	req, err := responseBusinessRequest(ctx, tx, p.identity.RequestID, p.projectID)
+	if err != nil {
+		return false, err
+	}
+	if !p.identity.Matches(req) || req.ResponseDigest != p.inputDigest {
+		return false, workstate.ErrManifest
+	}
+	if len(req.GlossaryReceipt) == 0 && req.PromotionState == "outputs_ready" {
+		return false, nil
+	}
+	if !p.matches(req) {
+		return false, workstate.ErrManifest
+	}
+	return true, nil
 }
 
 // An unknown COMMIT keeps its unpublished copy and reversible ownership until
@@ -36,15 +66,11 @@ func (g *DatabaseGlossary) resolvePendingCache(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
-	req, err := responseBusinessRequest(ctx, g.client, p.requestID, g.projectID)
+	confirmed, err := workstate.VerifyCommitConfirmation(ctx, g.client, p.proof.identity.JobID, p.proof.exists)
 	if err != nil {
 		return err
 	}
-	if len(req.GlossaryReceipt) > 0 {
-		var receipt glossary.ResponseReceipt
-		if !responseReceiptMatches(req, glossary.ResponseProcess{RequestID: p.requestID, InputDigest: p.digest}, &receipt) {
-			return workstate.ErrManifest
-		}
+	if confirmed {
 		if p.settlement.commit != nil {
 			if err := p.settlement.commit(); err != nil {
 				return err
@@ -69,6 +95,17 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 	if err := g.resolvePendingCache(ctx); err != nil {
 		return out, err
 	}
+	current, err := responseBusinessRequest(ctx, g.client, in.RequestID, g.projectID)
+	if err != nil {
+		return out, err
+	}
+	proof := responseBusinessProof{identity: workstate.ResponseIdentityFromRow(current), projectID: g.projectID, inputDigest: in.InputDigest, publicBytes: current.PublicBytes, publicDigest: current.PublicDigest}
+	if proof.identity.CaptureEpoch != in.CaptureEpoch || g.executionJobID > 0 && proof.identity.JobID != g.executionJobID {
+		return out, workstate.ErrManifest
+	}
+	// This callback observes the scalar result filled before COMMIT. Neither
+	// the response process nor receipt/candidate buffers survive in the proof.
+	ctx = workstate.WithCommitConfirmation(ctx, g.client, proof.identity.JobID, func(factCtx context.Context, tx *ent.Client) (bool, error) { return proof.exists(factCtx, tx) })
 	var added []glossary.Entry
 	var cachedEntries []glossary.Entry
 	var cachedHead *glossary.EntrySnapshot
@@ -83,7 +120,7 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 	}()
 	// Public decisions survive through member rewrites and cache preparation;
 	// each transaction attempt retires its private copy before retrying.
-	err := workstate.Transaction(ctx, g.client, func(tx *ent.Client) error {
+	err = workstate.Transaction(ctx, g.client, func(tx *ent.Client) error {
 		// A proved-not-committed attempt can retry. Its private dictionary copy
 		// must retire before the next attempt prepares another actual copy.
 		if cacheSettlement.rollback != nil {
@@ -106,6 +143,9 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 		req, err = responseBusinessRequest(ctx, tx, in.RequestID, g.projectID)
 		if err != nil {
 			return err
+		}
+		if !proof.identity.Matches(req) {
+			return workstate.ErrManifest
 		}
 		if req.ResponseFormatVersion != 2 || req.ResponseDigest != in.InputDigest {
 			return workstate.ErrManifest
@@ -161,6 +201,9 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 		if err != nil {
 			return err
 		}
+		proof.publicBytes = int64(len(out.Receipt))
+		receiptDigest := sha256.Sum256(out.Receipt)
+		proof.publicDigest = hex.EncodeToString(receiptDigest[:])
 		cachedEntries, cachedHead, cacheSettlement, err = g.prepareCachedEntries(ctx, added)
 		if err != nil {
 			return err
@@ -168,7 +211,7 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 		if in.Publish == nil {
 			return fmt.Errorf("missing response business publisher")
 		}
-		return in.Publish(businessCtx, out, nil)
+		return in.Publish(businessCtx, out, &responsecontract.PreparedPublication{Install: func() {}, Rollback: cacheSettlement.rollback, Park: cacheSettlement.park})
 	})
 	var transactionErr *workstate.TransactionError
 	uncertain := errors.As(err, &transactionErr) && transactionErr.Uncertain()
@@ -179,8 +222,7 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 		defer finish()
 		req, lookup := responseBusinessRequest(factCtx, g.client, in.RequestID, g.projectID)
 		if lookup == nil && len(req.GlossaryReceipt) > 0 {
-			var r glossary.ResponseReceipt
-			if responseReceiptMatches(req, in, &r) {
+			if proof.matches(req) {
 				out.Release()
 				out = glossary.ResponseBusiness{Receipt: req.GlossaryReceipt}
 				err = nil
@@ -192,7 +234,7 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 			if cacheSettlement.park != nil {
 				cacheSettlement.park()
 			}
-			g.pendingCache = &pendingGlossaryCache{requestID: in.RequestID, digest: in.InputDigest, entries: cachedEntries, head: cachedHead, settlement: cacheSettlement}
+			g.pendingCache = &pendingGlossaryCache{proof: proof, entries: cachedEntries, head: cachedHead, settlement: cacheSettlement}
 			installed = true // The pending owner, rather than the visible cache, retains it.
 		}
 		out.Release()
@@ -204,7 +246,7 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 				if cacheSettlement.park != nil {
 					cacheSettlement.park()
 				}
-				g.pendingCache = &pendingGlossaryCache{requestID: in.RequestID, digest: in.InputDigest, entries: cachedEntries, head: cachedHead, settlement: cacheSettlement}
+				g.pendingCache = &pendingGlossaryCache{proof: proof, entries: cachedEntries, head: cachedHead, settlement: cacheSettlement}
 				installed = true
 				out.Release()
 				return glossary.ResponseBusiness{}, err
@@ -298,7 +340,7 @@ func responseBusinessRequest(ctx context.Context, client *ent.Client, id string,
 			expression = "COALESCE(OCTET_LENGTH(CAST(" + s.C(workrequest.FieldGlossaryReceipt) + " AS TEXT)),0)"
 		}
 		s.Where(sql.Or(sql.NEQ(s.C(workrequest.FieldPromotionState), "business_ready"), sql.ExprP(expression+" = "+s.C(workrequest.FieldPublicBytes))))
-	}).Select(workrequest.FieldID, workrequest.FieldIdentity, workrequest.FieldJobID, workrequest.FieldJobRoundID, workrequest.FieldSnapshotDigest, workrequest.FieldResponseDigest, workrequest.FieldResponseFormatVersion, workrequest.FieldState, workrequest.FieldPromotionState, workrequest.FieldPromotionCursor, workrequest.FieldPublicBytes, workrequest.FieldPublicDigest, workrequest.FieldGlossaryReceipt).Only(ctx)
+	}).Select(workrequest.FieldID, workrequest.FieldIdentity, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldPromotionCount, workrequest.FieldFreezeDigest, workrequest.FieldSnapshotDigest, workrequest.FieldResponseDigest, workrequest.FieldResponseFormatVersion, workrequest.FieldState, workrequest.FieldPromotionState, workrequest.FieldPromotionCursor, workrequest.FieldPublicKind, workrequest.FieldPublicBytes, workrequest.FieldPublicDigest, workrequest.FieldGlossaryReceipt).Only(ctx)
 	if ent.IsNotFound(err) {
 		if exists, lookup := q.Exist(ctx); lookup != nil {
 			return nil, lookup
@@ -311,8 +353,10 @@ func responseBusinessRequest(ctx context.Context, client *ent.Client, id string,
 
 func responseReceiptMatches(req *ent.WorkRequest, in glossary.ResponseProcess, r *glossary.ResponseReceipt) bool {
 	sum := sha256.Sum256(req.GlossaryReceipt)
-	if int64(len(req.GlossaryReceipt)) != req.PublicBytes || hex.EncodeToString(sum[:]) != req.PublicDigest {
+	businessReady := req.PromotionState == "business_ready" && req.PublicKind == workrequest.PublicKindReceipt && int64(len(req.GlossaryReceipt)) == req.PublicBytes
+	promoted := req.PromotionState == "promoted" && req.PublicKind == workrequest.PublicKindNone && req.PublicBytes == 0
+	if !businessReady && !promoted || hex.EncodeToString(sum[:]) != req.PublicDigest {
 		return false
 	}
-	return req.ResponseFormatVersion == 2 && req.ResponseDigest == in.InputDigest && req.State == "completed" && req.PromotionState == "business_ready" && len(req.GlossaryReceipt) > 0 && len(req.GlossaryReceipt) <= glossary.ResponseReceiptLimit && json.Unmarshal(req.GlossaryReceipt, r) == nil && r.Version == glossary.ResponseReceiptVersion && r.RequestID == in.RequestID && r.InputDigest == in.InputDigest && len(r.OutcomeDigest) == 64 && r.Added >= 0 && r.Skipped >= 0
+	return req.ResponseFormatVersion == 2 && req.RetryEpoch == in.CaptureEpoch && req.ResponseDigest == in.InputDigest && req.State == "completed" && len(req.GlossaryReceipt) > 0 && len(req.GlossaryReceipt) <= glossary.ResponseReceiptLimit && json.Unmarshal(req.GlossaryReceipt, r) == nil && r.Version == glossary.ResponseReceiptVersion && r.RequestID == in.RequestID && r.InputDigest == in.InputDigest && len(r.OutcomeDigest) == 64 && r.Added >= 0 && r.Skipped >= 0
 }

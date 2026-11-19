@@ -6,13 +6,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -26,6 +29,14 @@ func TestRubyHandoffGlossaryDictionaryCommitRetryAndLostACK(t *testing.T) {
 	for _, mode := range []string{"retry_not_committed", "committed_ack_lost", "committed_ack_lost_cancelled"} {
 		t.Run(mode, func(t *testing.T) { testGlossaryBusinessAtomicAndReplay(t, true, mode) })
 	}
+}
+
+func TestMemberBusinessUnknownACKKeepsCanonicalIdentityBeforeRefund(t *testing.T) {
+	testGlossaryBusinessAtomicAndReplay(t, false, "committed_identity_changed")
+}
+
+func TestMemberPendingCacheAbsenceJoinsOriginalWriter(t *testing.T) {
+	testGlossaryBusinessAtomicAndReplay(t, false, "pending_cache_writer")
 }
 
 func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault string) {
@@ -53,11 +64,11 @@ func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault
 		t.Fatal(err)
 	}
 	capture := []byte("complete response")
-	if err := store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: request.ID, Scope: scope, SnapshotDigest: digest}, Payload: capture, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 3}}); err != nil {
+	if _, err := store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: request.ID, Scope: scope, SnapshotDigest: digest}, Payload: capture, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 3}}); err != nil {
 		t.Fatal(err)
 	}
 	model := []byte(`{"text":"候选"}`)
-	if err := store.PublishOutputs(ctx, workstate.OutputPublication{Key: key, Members: []workstate.OutputMember{{Key: key, Payload: model, Bytes: int64(len(model)), Digest: digestBytes(model)}}, Next: 1, Digest: digestBytes(model), Complete: true}); err != nil {
+	if _, err := store.PublishOutputs(ctx, workstate.OutputPublication{Key: key, Members: []workstate.OutputMember{{Key: key, Payload: model, Bytes: int64(len(model)), Digest: digestBytes(model)}}, Next: 1, Digest: digestBytes(model), Complete: true}); err != nil {
 		t.Fatal(err)
 	}
 	large := strings.Repeat("规范", 8000)
@@ -104,7 +115,7 @@ func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault
 		}
 		return store.StageCorrectedMember(ctx, workstate.OutputMember{Key: key, Payload: payload, Bytes: int64(len(payload)), Digest: digestBytes(payload)})
 	}
-	in.Publish = func(ctx context.Context, out glossary.ResponseBusiness, _ func()) error {
+	in.Publish = func(ctx context.Context, out glossary.ResponseBusiness, _ *responsecontract.PreparedPublication) error {
 		return store.PublishMemberBusiness(ctx, request.ID, out.Receipt)
 	}
 	fault := errors.New("receipt fault")
@@ -127,7 +138,94 @@ func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault
 		t.Fatalf("rollback retained dictionary growth: %d/%d", owner.usage.PayloadBytes, before)
 	}
 	fail = false
+	if commitFault == "pending_cache_writer" {
+		database := g.(*DatabaseGlossary)
+		row, err := responseBusinessRequest(ctx, env.client, request.ID, env.project.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		root, err := resourcebudget.New(resourcebudget.Policy{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cacheScope := resourcebudget.Scope{ActorID: 1, CallID: "pending-cache"}
+		cacheBytes := int64(unsafe.Sizeof(glossary.Entry{})) + int64(len("pending")+len("entry"))
+		if err := root.Claim(cacheScope, "pending-cache", resourcebudget.Vector{PayloadBytes: cacheBytes}); err != nil {
+			t.Fatal(err)
+		}
+		cache := []glossary.Entry{{Source: strings.Clone("pending"), Target: strings.Clone("entry")}}
+		rollbacks := 0
+		database.pendingCache = &pendingGlossaryCache{proof: responseBusinessProof{identity: workstate.ResponseIdentityFromRow(row), projectID: env.project.ID, inputDigest: in.InputDigest}, entries: cache, settlement: glossaryCacheSettlement{rollback: func() error {
+			clear(cache)
+			cache = nil
+			rollbacks++
+			return root.Release(cacheScope, "pending-cache", resourcebudget.Vector{PayloadBytes: cacheBytes})
+		}}}
+		t.Cleanup(func() {
+			if database.pendingCache != nil {
+				if err := database.resolvePendingCache(context.Background()); err != nil {
+					t.Error(err)
+				}
+			}
+		})
+		tx, err := env.client.Tx(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+		if err := workstate.LockJob(ctx, tx.Client(), j.ID); err != nil {
+			t.Fatal(err)
+		}
+		blocked, finish := context.WithTimeout(ctx, 100*time.Millisecond)
+		err = database.resolvePendingCache(blocked)
+		finish()
+		if !errors.Is(err, context.DeadlineExceeded) || rollbacks != 0 || database.pendingCache == nil || root.Snapshot(1).Instance.PayloadBytes != cacheBytes {
+			t.Fatalf("unjoined writer was mistaken for absent receipt: rollbacks=%d err=%v", rollbacks, err)
+		}
+		if err := tx.Rollback(); err != nil {
+			t.Fatal(err)
+		}
+		if err := database.resolvePendingCache(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if rollbacks != 1 || database.pendingCache != nil || cache != nil || root.Snapshot(1).Instance != (resourcebudget.Vector{}) {
+			t.Fatal("proved rollback retained actual pending cache")
+		}
+		return
+	}
 	commitCalls := 0
+	var storage *workstate.StorageBudget
+	var storageRoot *resourcebudget.RootBudget
+	var commitCharge int64
+	if commitFault == "committed_identity_changed" {
+		actor := env.client.User.Query().FirstX(ctx)
+		env.client.Job.UpdateOneID(j.ID).SetCreatedByID(actor.ID).ExecX(ctx)
+		var err error
+		storageRoot, err = resourcebudget.New(resourcebudget.Policy{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := workstate.InventorySource{DB: env.client, Driver: "sqlite", ActorID: actor.ID, ItemBytes: 1 << 20}
+		if err = storageRoot.Rebuild(ctx, source); err != nil {
+			t.Fatal(err)
+		}
+		if err = storageRoot.RebuildActor(ctx, actor.ID, source); err != nil {
+			t.Fatal(err)
+		}
+		storageScope := resourcebudget.Scope{ActorID: actor.ID, JobID: j.ID}
+		if err = storageRoot.Claim(storageScope, workstate.RuntimeIdentity(j.ID), resourcebudget.Vector{LogicalStorageBytes: 8 << 20}); err != nil {
+			t.Fatal(err)
+		}
+		storage = &workstate.StorageBudget{Root: storageRoot, Scope: storageScope, Source: source}
+		workstate.InstallStorageHooks(env.client)
+		ctx = workstate.WithStorageBudget(ctx, storage)
+		t.Cleanup(func() {
+			_, _ = env.client.ExecContext(context.Background(), "UPDATE work_requests SET retry_epoch=0 WHERE identity=?", request.ID)
+			if err := storage.Close(); err != nil {
+				t.Error(err)
+			}
+		})
+	}
 	processCtx, cancelProcess := context.WithCancel(ctx)
 	defer cancelProcess()
 	if commitFault != "" {
@@ -147,6 +245,13 @@ func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault
 							if err := next.Commit(ctx, tx); err != nil {
 								return err
 							}
+							if commitFault == "committed_identity_changed" {
+								commitCharge = storageRoot.Snapshot(storage.Scope.ActorID).Instance.LogicalStorageBytes
+								if _, err := env.client.ExecContext(context.Background(), "UPDATE work_requests SET retry_epoch=1 WHERE identity=?", request.ID); err != nil {
+									return err
+								}
+								return errors.New("committed business acknowledgement lost")
+							}
 							if strings.HasPrefix(commitFault, "committed_ack_lost") {
 								if commitFault == "committed_ack_lost_cancelled" {
 									cancelProcess()
@@ -162,6 +267,35 @@ func testGlossaryBusinessAtomicAndReplay(t *testing.T, wrapped bool, commitFault
 		})
 	}
 	out, err := g.ProcessResponse(processCtx, in)
+	if commitFault == "committed_identity_changed" {
+		if !errors.Is(err, workstate.ErrManifest) {
+			t.Fatalf("business unknown ACK accepted changed epoch: %v", err)
+		}
+		retained := storageRoot.Snapshot(storage.Scope.ActorID).Instance
+		if retained.LogicalStorageBytes != commitCharge {
+			t.Fatalf("business unknown ACK refunded: commit=%d retained=%d", commitCharge, retained.LogicalStorageBytes)
+		}
+		if err := storage.Settle(ctx); !errors.Is(err, workstate.ErrManifest) {
+			t.Fatalf("business settlement accepted changed identity: %v", err)
+		}
+		if err := storage.Close(); !errors.Is(err, workstate.ErrManifest) {
+			t.Fatalf("business close accepted changed identity: %v", err)
+		}
+		if storageRoot.Snapshot(storage.Scope.ActorID).Instance != retained || env.client.UsageRecord.Query().CountX(ctx) != 1 {
+			t.Fatal("business failed identity refunded or repeated usage")
+		}
+		if _, err := env.client.ExecContext(ctx, "UPDATE work_requests SET retry_epoch=0 WHERE identity=?", request.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := storage.Settle(ctx); err != nil {
+			t.Fatal("restored business identity did not settle", err)
+		}
+		in.VisitTargets = func(context.Context, func(glossary.ResponseTarget) error) error {
+			t.Fatal("unknown ACK replay revisited members")
+			return nil
+		}
+		out, err = g.ProcessResponse(ctx, in)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

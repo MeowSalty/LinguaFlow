@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"unsafe"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 )
 
@@ -14,10 +16,17 @@ var _ glossary.ResponseProcessor = (*executionGlossary)(nil)
 // before commit, using the current response credit's formal ownership transfer.
 func (g *executionGlossary) ProcessResponse(ctx context.Context, in glossary.ResponseProcess) (glossary.ResponseBusiness, error) {
 	if g.database == nil {
-		return glossary.ResponseBusiness{}, errors.New("memory execution glossary has no atomic response processor")
+		return g.processMemoryResponse(ctx, in)
 	}
+	g.retirement.Lock()
+	defer g.retirement.Unlock()
 	g.mutation.Lock()
-	defer g.mutation.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			g.mutation.Unlock()
+		}
+	}()
 	g.lease.mu.Lock()
 	closed := g.lease.closed
 	g.lease.mu.Unlock()
@@ -27,7 +36,6 @@ func (g *executionGlossary) ProcessResponse(ctx context.Context, in glossary.Res
 	oldCount, oldBacking := len(g.entries), g.entryBacking
 	result, processErr := g.database.ProcessResponse(g.allocationContext(ctx), in)
 	g.mu.Lock()
-	defer g.mu.Unlock()
 	g.database.mu.RLock()
 	g.entries = g.database.entries
 	g.head = g.database.entrySnapshot.Load()
@@ -41,7 +49,14 @@ func (g *executionGlossary) ProcessResponse(ctx context.Context, in glossary.Res
 	g.bytes += retained
 	var settleErr error
 	if len(g.entries) != oldCount {
-		settleErr = g.retireReplacedBacking(oldBacking)
+		g.entryBacking, settleErr = backend.AllocationBytes(int64(cap(g.entries)), int64(unsafe.Sizeof(glossary.Entry{})))
+	}
+	changed := len(g.entries) != oldCount
+	g.mu.Unlock()
+	g.mutation.Unlock()
+	locked = false
+	if changed && settleErr == nil {
+		settleErr = g.lease.ReleasePayload(oldBacking)
 	}
 	if err := errors.Join(processErr, settleErr); err != nil {
 		return result, err

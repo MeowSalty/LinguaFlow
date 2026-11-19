@@ -46,7 +46,7 @@ func TestRetryRetainsReliableUnpromotedRawAcrossEpoch(t *testing.T) {
 				t.Fatal(err)
 			}
 			response := []byte("reliable untranslated response")
-			if err := store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: request.ID, Scope: scope, SnapshotDigest: digest}, Payload: response, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 3, OutputTokens: 4}}); err != nil {
+			if _, err := store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: request.ID, Scope: scope, SnapshotDigest: digest}, Payload: response, Result: workstate.RequestResult{UsageKnown: true, InputTokens: 3, OutputTokens: 4}}); err != nil {
 				t.Fatal(err)
 			}
 			env.client.Job.UpdateOneID(j.ID).SetStatus(JobStatusFailed).ExecX(ctx)

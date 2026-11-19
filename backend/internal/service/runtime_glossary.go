@@ -13,14 +13,15 @@ import (
 )
 
 type DatabaseGlossary struct {
-	client        *ent.Client
-	projectID     int
-	mu            sync.RWMutex
-	entries       []glossary.Entry
-	lookupCache   map[string][]glossary.Entry
-	revision      uint64
-	entrySnapshot atomic.Pointer[glossary.EntrySnapshot]
-	pendingCache  *pendingGlossaryCache
+	client         *ent.Client
+	projectID      int
+	executionJobID int
+	mu             sync.RWMutex
+	entries        []glossary.Entry
+	lookupCache    map[string][]glossary.Entry
+	revision       uint64
+	entrySnapshot  atomic.Pointer[glossary.EntrySnapshot]
+	pendingCache   *pendingGlossaryCache
 }
 
 func NewDatabaseGlossary(ctx context.Context, client *ent.Client, projectRow *ent.Project) (*DatabaseGlossary, error) {
@@ -39,10 +40,11 @@ func NewDatabaseGlossary(ctx context.Context, client *ent.Client, projectRow *en
 		entries = append(entries, glossaryEntryFromRow(row))
 	}
 	g := &DatabaseGlossary{
-		client:      client,
-		projectID:   projectRow.ID,
-		entries:     entries,
-		lookupCache: make(map[string][]glossary.Entry),
+		client:         client,
+		projectID:      projectRow.ID,
+		executionJobID: ExecutionScope(ctx).JobID,
+		entries:        entries,
+		lookupCache:    make(map[string][]glossary.Entry),
 	}
 	g.publishEntrySnapshotLocked()
 	return g, nil
