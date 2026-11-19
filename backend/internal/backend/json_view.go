@@ -205,6 +205,9 @@ func (v JSONValue) StringLimitedBounded(b *BuildBounds, maxBytes int64) (string,
 	defer func() { b.stringLimit = old }()
 	return b.stringValue(v.Raw())
 }
+
+// DecodedStringBytes measures a structurally validated selected token without allocation.
+func (v JSONValue) DecodedStringBytes() int64 { return decodedJSONStringBytes(v.Raw()) }
 func (v JSONValue) DecodeInto(dst any, maxStringBytes int64) error {
 	return v.DecodeIntoBounded(v.view.b, dst, maxStringBytes)
 }
@@ -212,6 +215,8 @@ func (v JSONValue) DecodeInto(dst any, maxStringBytes int64) error {
 // DecodeIntoBounded decodes only this subtree against independent consumer
 // bounds; the shared offset arena and its preparation owner remain unchanged.
 func (v JSONValue) DecodeIntoBounded(b *BuildBounds, dst any, maxStringBytes int64) error {
+	b.jsonOperations++
+	defer b.retireJSONFields()
 	d := reflect.ValueOf(dst)
 	if !d.IsValid() || d.Kind() != reflect.Pointer || d.IsNil() {
 		return &BuildCapacityError{"JSON view destination"}

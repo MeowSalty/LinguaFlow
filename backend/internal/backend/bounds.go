@@ -32,6 +32,7 @@ type BuildBounds struct {
 	depth                                                     int
 	outputBytes, stringLimit                                  int64
 	fieldCache                                                *decoderFieldCache
+	jsonOperations                                            int
 	decodeAllocations                                         *decodeAllocationScope
 	ctx                                                       context.Context
 	reserve                                                   func(int64) error
