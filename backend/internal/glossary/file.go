@@ -28,9 +28,12 @@ var csvHeader = []string{"source", "target", "case_sensitive", "forbidden", "man
 //
 // 并发：Lookup 持读锁；Add/Save 持写/读锁。Save 走 os.CreateTemp + os.Rename 原子写。
 type FileGlossary struct {
+	retirement          sync.Mutex
 	entrySnapshot       atomic.Pointer[EntrySnapshot]
 	path                string
+	mutation            sync.Mutex
 	mu                  sync.RWMutex
+	closed              bool
 	entries             []Entry
 	bySource            map[string]int // 推荐条目按 source、禁译条目按 source+target 去重
 	dirty               bool           // Add 过且尚未 Save
@@ -154,14 +157,27 @@ func (g *FileGlossary) Lookup(_ context.Context, text, _, _ string) ([]Entry, er
 // 不同的写入 Skipped（Reason=exists, Existing 填表中已有版本），调用方可据此做下游
 // 修正（例如把本批译文里的 Proposed.Target 替换为 Existing.Target）。
 // Proposed.Target 与 Existing.Target 完全相等时视作 noop，既不进 Added 也不进 Skipped。
-func (g *FileGlossary) Add(_ context.Context, entries ...Entry) (AddResult, error) {
-	var result AddResult
+func (g *FileGlossary) Add(ctx context.Context, entries ...Entry) (result AddResult, resultErr error) {
+	g.retirement.Lock()
+	defer g.retirement.Unlock()
+	g.mutation.Lock()
 	if len(entries) == 0 {
+		g.mutation.Unlock()
 		return result, nil
 	}
 	g.mu.Lock()
-	defer g.mu.Unlock()
-	added := false
+	var retire func() error
+	defer func() {
+		g.mu.Unlock()
+		g.mutation.Unlock()
+		if retire != nil {
+			resultErr = errors.Join(resultErr, retire())
+		}
+	}()
+	if g.closed {
+		return result, errors.New("glossary: closed")
+	}
+	pending := map[string]Entry{}
 	for _, e := range entries {
 		e.Source = strings.TrimSpace(e.Source)
 		e.Target = strings.TrimSpace(e.Target)
@@ -170,8 +186,14 @@ func (g *FileGlossary) Add(_ context.Context, entries ...Entry) (AddResult, erro
 			result.Skipped = append(result.Skipped, SkippedEntry{Proposed: e, Reason: SkipReasonEmpty})
 			continue
 		}
-		if idx, exists := g.bySource[normKey(e)]; exists {
-			existing := g.entries[idx]
+		key := normKey(e)
+		existing, exists := pending[key]
+		if !exists {
+			if idx, found := g.bySource[key]; found {
+				existing, exists = g.entries[idx], true
+			}
+		}
+		if exists {
 			if existing.Target == e.Target {
 				// 完全相同的提议视作 noop，不报冲突。
 				continue
@@ -183,20 +205,29 @@ func (g *FileGlossary) Add(_ context.Context, entries ...Entry) (AddResult, erro
 			})
 			continue
 		}
-		g.addLocked(e)
+		pending[key] = e
 		result.Added = append(result.Added, e)
-		added = true
 	}
-	if added {
-		g.sortLocked()
-		g.dirty = true
+	if len(result.Added) > 0 {
+		prepared, err := g.prepareOwnedEntriesLocked(ctx, result.Added)
+		if err != nil {
+			return AddResult{}, err
+		}
+		prepared.install()
+		retire = prepared.retire
 	}
 	return result, nil
 }
 
 // Save 原子写出当前所有 entries 到 path。表头固定为 csvHeader。
 func (g *FileGlossary) Save(_ context.Context) error {
+	g.mutation.Lock()
+	defer g.mutation.Unlock()
 	g.mu.RLock()
+	if g.closed {
+		g.mu.RUnlock()
+		return errors.New("glossary: closed")
+	}
 	snapshot := make([]Entry, len(g.entries))
 	copy(snapshot, g.entries)
 	path := g.path

@@ -3,6 +3,7 @@ package glossary
 import (
 	"context"
 	"errors"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
@@ -10,13 +11,28 @@ import (
 // ProcessResponse prepares the dictionary, member sink and receipt before the
 // sink publishes both endpoints under the dictionary/store lock order.
 func (g *FileGlossary) ProcessResponse(ctx context.Context, in ResponseProcess) (out ResponseBusiness, err error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.retirement.Lock()
+	defer g.retirement.Unlock()
+	g.mutation.Lock()
+	locked := true
+	unlockPublication := func() {
+		if locked {
+			locked = false
+			g.mutation.Unlock()
+		}
+	}
+	defer unlockPublication()
+	g.mu.RLock()
+	closed := g.closed
+	g.mu.RUnlock()
+	if closed {
+		return out, errors.New("glossary: closed")
+	}
 	b, err := backend.NewBuildBoundsFromContext(ctx, 0, int64(len(in.EntriesPayload)))
 	if err != nil {
 		return out, err
 	}
-	defer b.CloseRetired()
+	defer func() { unlockPublication(); b.CloseRetired() }()
 	var result AddResult
 	pending := map[string]Entry{}
 	defer func() { result = AddResult{}; pending = nil }()
@@ -60,6 +76,7 @@ func (g *FileGlossary) ProcessResponse(ctx context.Context, in ResponseProcess) 
 	published := false
 	defer func() {
 		if !published {
+			unlockPublication()
 			err = errors.Join(err, prepared.rollback())
 			out.Release()
 		}
@@ -69,19 +86,25 @@ func (g *FileGlossary) ProcessResponse(ctx context.Context, in ResponseProcess) 
 		return out, err
 	}
 	if in.Publish != nil {
-		install := func() { prepared.install(); published = true }
-		if err = in.Publish(ctx, out, install); err != nil && !published {
+		install := &responsecontract.PreparedPublication{Install: func() { prepared.install(); published = true }, Rollback: prepared.rollback, Retire: prepared.retire}
+		g.mu.Lock()
+		err = in.Publish(ctx, out, install)
+		g.mu.Unlock()
+		if err != nil && !published {
 			return out, err
 		}
 		if !published {
 			return out, errors.New("response publisher omitted dictionary installation")
 		}
 	} else {
+		g.mu.Lock()
 		prepared.install()
+		g.mu.Unlock()
 	}
 	published = true
 	// The authoritative publication already happened. Retiring replaced backing
 	// cannot turn that fact into a rollback or release the published receipt.
-	err = prepared.retire()
+	unlockPublication()
+	err = errors.Join(err, prepared.retire())
 	return out, err
 }

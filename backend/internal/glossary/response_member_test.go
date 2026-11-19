@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -43,7 +43,7 @@ func TestMemberResponseGlossarySourceOrderAndBoundaries(t *testing.T) {
 				actual = append(actual, target.Text)
 				return nil
 			}
-			in.Publish = func(_ context.Context, out ResponseBusiness, install func()) error {
+			in.Publish = func(_ context.Context, out ResponseBusiness, install *responsecontract.PreparedPublication) error {
 				publishes++
 				if len(g.entries) != 2 {
 					t.Fatal("dictionary installed before receipt publication")
@@ -55,7 +55,7 @@ func TestMemberResponseGlossarySourceOrderAndBoundaries(t *testing.T) {
 				if receipt.Added != 1 || receipt.Skipped != 3 {
 					t.Fatalf("receipt %+v", receipt)
 				}
-				install()
+				install.InstallOnce()
 				return nil
 			}
 			out, err := g.ProcessResponse(context.Background(), in)
@@ -94,7 +94,7 @@ func TestMemberResponseGlossaryPrepareFailureIsAtomic(t *testing.T) {
 				}
 				return nil
 			}
-			in.Publish = func(context.Context, ResponseBusiness, func()) error { return fault }
+			in.Publish = func(context.Context, ResponseBusiness, *responsecontract.PreparedPublication) error { return fault }
 			out, err := g.ProcessResponse(context.Background(), in)
 			out.Release()
 			if !errors.Is(err, fault) || len(g.entries) != 0 || g.entrySnapshot.Load() != nil || g.dirty {
@@ -123,7 +123,7 @@ func TestMemberResponseFileGlossaryPublicationRollback(t *testing.T) {
 				}
 				return nil
 			}
-			in.Publish = func(context.Context, ResponseBusiness, func()) error { return fault }
+			in.Publish = func(context.Context, ResponseBusiness, *responsecontract.PreparedPublication) error { return fault }
 			out, err := g.ProcessResponse(t.Context(), in)
 			out.Release()
 			if !errors.Is(err, fault) || len(g.entries) != 0 || g.entrySnapshot.Load() != nil || g.dirty {
@@ -132,7 +132,10 @@ func TestMemberResponseFileGlossaryPublicationRollback(t *testing.T) {
 			// The failure releases the mutation lock and leaves a writable file
 			// adapter. Only the publisher's atomic install makes entries visible.
 			in.WriteTarget = func(context.Context, ResponseTarget) error { return nil }
-			in.Publish = func(_ context.Context, _ ResponseBusiness, install func()) error { install(); return nil }
+			in.Publish = func(_ context.Context, _ ResponseBusiness, install *responsecontract.PreparedPublication) error {
+				install.InstallOnce()
+				return nil
+			}
 			out, err = g.ProcessResponse(t.Context(), in)
 			out.Release()
 			if err != nil {
@@ -155,8 +158,9 @@ func TestMemberResponseGlossaryIndependentLimitsAndFailure(t *testing.T) {
 		return visit(ResponseTarget{Text: "new"})
 	}
 	in.WriteTarget = func(_ context.Context, target ResponseTarget) error {
-		if target.Text != "" || !strings.Contains(target.Failure, "capacity") {
-			t.Fatalf("oversize member %+v", target)
+		key := responsecontract.MemberKey{RequestID: in.RequestID, Ordinal: 0, CaptureEpoch: in.CaptureEpoch}
+		if target.Text != "" || target.Failure == "" || target.Outcome.Key != key || target.Outcome.Reason != responsecontract.MemberTooLarge || target.Outcome.Limit != in.ItemLimit || target.Outcome.Observed <= in.ItemLimit {
+			t.Fatalf("oversize member: text_bytes=%d failure_present=%t key_matches=%t reason=%s limit=%d observed=%d", len(target.Text), target.Failure != "", target.Outcome.Key == key, target.Outcome.Reason, target.Outcome.Limit, target.Outcome.Observed)
 		}
 		return nil
 	}
@@ -217,7 +221,7 @@ func TestMemberResponseGlossaryPreparedOwnerRollback(t *testing.T) {
 	}
 	before := a.BuildBytes(g.allocationOwner)
 	fault := errors.New("prepublication failure")
-	in := ResponseProcess{RequestID: "r", InputDigest: "digest", ItemLimit: 4096, BusinessLimit: 4096, EntriesPayload: []byte(`[{"Source":"A","Target":"added","Notes":"private"}]`), Publish: func(context.Context, ResponseBusiness, func()) error { return fault }}
+	in := ResponseProcess{RequestID: "r", InputDigest: "digest", ItemLimit: 4096, BusinessLimit: 4096, EntriesPayload: []byte(`[{"Source":"A","Target":"added","Notes":"private"}]`), Publish: func(context.Context, ResponseBusiness, *responsecontract.PreparedPublication) error { return fault }}
 	out, err := g.ProcessResponse(ctx, in)
 	out.Release()
 	if !errors.Is(err, fault) {
@@ -293,7 +297,10 @@ func TestMemberResponseGlossaryFullPaidRoot(t *testing.T) {
 	fault := errors.New("publish cancelled")
 	in := ResponseProcess{RequestID: "paid", InputDigest: "digest", ItemLimit: 4096, BusinessLimit: 4096, Entries: []Entry{{Source: "thread pool", Target: "private", Notes: "a real retained dictionary entry"}}}
 	publicationCtx, cancelPublication := context.WithCancel(ctx)
-	in.Publish = func(context.Context, ResponseBusiness, func()) error { cancelPublication(); return fault }
+	in.Publish = func(context.Context, ResponseBusiness, *responsecontract.PreparedPublication) error {
+		cancelPublication()
+		return fault
+	}
 	out, err := g.ProcessResponse(publicationCtx, in)
 	out.Release()
 	if !errors.Is(err, fault) {
@@ -302,7 +309,10 @@ func TestMemberResponseGlossaryFullPaidRoot(t *testing.T) {
 	if root.Snapshot(1).Actor.PayloadBytes != before || a.BuildBytes(g.allocationOwner) != dictionaryBefore || backend.ProviderResponseSnapshot(ctx).LiveBytes != sourceBefore.LiveBytes {
 		t.Fatalf("rollback changed real ledger: root=%+v source=%+v", root.Snapshot(1), backend.ProviderResponseSnapshot(ctx))
 	}
-	in.Publish = func(_ context.Context, _ ResponseBusiness, install func()) error { install(); return nil }
+	in.Publish = func(_ context.Context, _ ResponseBusiness, install *responsecontract.PreparedPublication) error {
+		install.InstallOnce()
+		return nil
+	}
 	out, err = g.ProcessResponse(ctx, in)
 	if err != nil {
 		t.Fatal(err)

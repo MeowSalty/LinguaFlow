@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"strings"
 	"unsafe"
 
@@ -16,6 +17,7 @@ const ResponseReceiptVersion = 2
 const ResponseReceiptLimit = 2 << 10
 
 type ResponseTarget struct {
+	Outcome responsecontract.MemberOutcome
 	Ordinal int
 	ID      string
 	Text    string
@@ -29,6 +31,7 @@ type ResponseReceipt struct {
 	Added, Skipped int
 }
 type ResponseProcess struct {
+	CaptureEpoch                       int64
 	RequestID, InputDigest, TargetLang string
 	Entries                            []Entry
 	EntriesPayload                     []byte
@@ -38,7 +41,7 @@ type ResponseProcess struct {
 	Build                              func(context.Context, func() error) error
 	VisitTargets                       func(context.Context, func(ResponseTarget) error) error
 	WriteTarget                        func(context.Context, ResponseTarget) error
-	Publish                            func(context.Context, ResponseBusiness, func()) error
+	Publish                            func(context.Context, ResponseBusiness, *responsecontract.PreparedPublication) error
 }
 type ResponseBusiness struct {
 	Receipt           []byte
@@ -53,6 +56,7 @@ func (out *ResponseBusiness) Release() {
 }
 
 type ResponseProcessor interface {
+	ResponsePublicationDomain(responsecontract.PublicationDomain) (responsecontract.PublicationDomain, error)
 	ProcessResponse(context.Context, ResponseProcess) (ResponseBusiness, error)
 }
 
@@ -82,11 +86,11 @@ func SafeReplaceBounded(b *backend.BuildBounds, s, from, to, lang string, limit 
 	size := int64(len(s))
 	delta := int64(len(to)) - int64(len(from))
 	if delta > 0 && (count > (limit-size)/delta || size > limit) {
-		return "", false, backend.ErrBuildCapacity
+		return "", false, &responsecontract.MemberContentError{Ordinal: -1, Kind: responsecontract.MemberTooLarge, Limit: limit, Observed: limit + 1}
 	}
 	size += count * delta
 	if size < 0 || size > limit {
-		return "", false, backend.ErrBuildCapacity
+		return "", false, &responsecontract.MemberContentError{Ordinal: -1, Kind: responsecontract.MemberTooLarge, Limit: limit, Observed: limit + 1}
 	}
 	w := backend.NewBoundedWriter(b, size)
 	defer w.Release()
@@ -157,20 +161,25 @@ func buildResponseBusiness(ctx context.Context, in ResponseProcess, decisions []
 					}
 					text, _, replaceErr := SafeReplaceBounded(b, target.Text, sk.Proposed.Target, sk.Existing.Target, in.TargetLang, in.ItemLimit)
 					if replaceErr != nil {
-						if errors.Is(replaceErr, context.Canceled) || errors.Is(replaceErr, context.DeadlineExceeded) {
+						var content *responsecontract.MemberContentError
+						if !errors.As(replaceErr, &content) {
 							return replaceErr
 						}
-						target.Failure, target.Text = fmt.Sprintf("capacity: %v", replaceErr), ""
+						content.Ordinal = target.Ordinal
+						target.Failure, target.Text = content.Error(), ""
+						target.Outcome = responsecontract.MemberOutcome{Key: responsecontract.MemberKey{RequestID: in.RequestID, Ordinal: target.Ordinal, CaptureEpoch: in.CaptureEpoch}, Reason: content.Kind, Limit: content.Limit, Observed: content.Observed}
 						break
 					}
 					target.Text = text
 				}
 				if target.Failure == "" && in.Validate != nil {
 					if validateErr := in.Validate(ctx, target); validateErr != nil {
-						if errors.Is(validateErr, context.Canceled) || errors.Is(validateErr, context.DeadlineExceeded) {
+						var content *responsecontract.MemberContentError
+						if !errors.As(validateErr, &content) {
 							return validateErr
 						}
 						target.Failure, target.Text = validateErr.Error(), ""
+						target.Outcome = responsecontract.MemberOutcome{Key: responsecontract.MemberKey{RequestID: in.RequestID, Ordinal: target.Ordinal, CaptureEpoch: in.CaptureEpoch}, Reason: content.Kind, Limit: content.Limit, Observed: content.Observed}
 					}
 				}
 				return nil

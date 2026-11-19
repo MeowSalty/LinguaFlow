@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"slices"
 	"strings"
 	"unicode"
@@ -17,8 +18,15 @@ import (
 // request admission ledger. It is a dictionary lifetime, independent of any
 // promotion build. Close follows all dictionary users and returned borrowers.
 func (g *FileGlossary) BindAllocationOwner(ctx context.Context, a *backend.RequestAdmission) error {
+	g.retirement.Lock()
+	defer g.retirement.Unlock()
+	g.mutation.Lock()
+	defer g.mutation.Unlock()
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.closed {
+		return errors.New("glossary: closed")
+	}
 	if g.allocationAdmission != nil {
 		if g.allocationAdmission != a {
 			return backend.ErrBuildCapacity
@@ -280,11 +288,16 @@ func (g *FileGlossary) prepareOwnedEntriesLocked(ctx context.Context, entries []
 	return prepared, nil
 }
 func (g *FileGlossary) Close() error {
+	g.retirement.Lock()
+	defer g.retirement.Unlock()
+	g.mutation.Lock()
 	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.closed = true
 	g.entries = nil
 	g.bySource = nil
 	g.entrySnapshot.Store(nil)
+	g.mu.Unlock()
+	g.mutation.Unlock()
 	if g.allocationAdmission == nil {
 		return nil
 	}
