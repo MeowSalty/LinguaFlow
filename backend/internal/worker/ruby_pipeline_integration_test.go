@@ -432,19 +432,21 @@ func (s *rubyPipelineFaultStore) Save(ctx context.Context, candidate *pipeline.C
 	return nil
 }
 
-func (s *rubyPipelineFaultStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, candidate *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
+func (s *rubyPipelineFaultStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, candidate *pipeline.Candidate, next pipeline.WorkCursor, failure pipeline.MemberOutcome) (pipeline.MainResponseHeader, error) {
 	if candidate != nil && s.beforeSave != nil {
 		if err := s.beforeSave(ctx, candidate); err != nil {
-			return err
+			return pipeline.MainResponseHeader{}, err
 		}
 	}
-	if err := s.roundStore.PromoteMember(ctx, key, candidate, next, failure); err != nil {
-		return err
+	if _, err := s.roundStore.PromoteMember(ctx, key, candidate, next, failure); err != nil {
+		return pipeline.MainResponseHeader{}, err
 	}
 	if candidate != nil && s.afterSave != nil {
-		return s.afterSave(ctx, candidate)
+		if err := s.afterSave(ctx, candidate); err != nil {
+			return pipeline.MainResponseHeader{}, err
+		}
 	}
-	return nil
+	return s.roundStore.ResponseHeader(ctx, key.RequestID)
 }
 
 func (s *rubyPipelineFaultStore) Commit(ctx context.Context, candidate *pipeline.Candidate, result pipeline.TranslatedSegment) (pipeline.CommitOutcome, error) {

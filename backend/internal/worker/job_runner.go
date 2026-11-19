@@ -410,7 +410,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 					savedBusinessHeader = &copy
 				}
 				inventoryMembers += int64(header.MemberCount - header.Cursor)
-				for _, n := range []int64{header.FreezeBytes, header.ResponseBytes, header.CorrectedBytes, backend.RequestMetadataBytes} {
+				for _, n := range []int64{header.InputMemberBytes, header.CaptureBytes, header.OutputMemberBytes, backend.RequestMetadataBytes} {
 					if n < 0 || n > math.MaxInt64-inventoryHandoff {
 						return backend.ErrPipelineCapacity
 					}
@@ -500,10 +500,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 			if err := requestRuntime.Admission.RestoreRequestMetadata(header.RequestID, header.MemberCount, header.MetadataBytes); err != nil {
 				return err
 			}
-			if err := requestRuntime.Admission.RestoreResponseOwner(header.RequestID, rowToRound[header.Scope.RoundID], header.Scope.ResourceID, header.FreezeBytes, header.ResponseBytes, header.BusinessBound); err != nil {
-				return err
-			}
-			if err := requestRuntime.Admission.RestoreResponseBusiness(header.RequestID, header.CorrectedBytes); err != nil {
+			if err := requestRuntime.Admission.RestoreResponseOwnership(header.RequestID, rowToRound[header.Scope.RoundID], header.Scope.ResourceID, header.Facts(), header.Phase, false); err != nil {
 				return err
 			}
 			if err := requestRuntime.Window.RestoreRaw(header.RequestID, header.MemberCount-header.Cursor, header.Scope.ResourceID, header.Scope.RoundID, nil); err != nil {

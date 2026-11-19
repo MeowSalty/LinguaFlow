@@ -80,6 +80,7 @@ func (m *persistenceTranslationModel) sizeDistribution() map[int]int {
 }
 
 type persistenceTranslationObserver struct {
+	collector                          persistence.Collector
 	timings                            *persistenceTimings
 	mu                                 sync.Mutex
 	commits, committedMembers, missing int
@@ -90,6 +91,7 @@ type persistenceTranslationObserver struct {
 
 func (o *persistenceTranslationObserver) Observe(v persistence.Observation) {
 	o.timings.Observe(v)
+	o.collector.Observe(v)
 	if v.Metadata.Operation != "commit" || v.Phase != "save_execution" {
 		return
 	}
@@ -389,11 +391,31 @@ func persistenceTranslationLoad(t *testing.T, resources, batches, ms int, sample
 	if correlations["events"] != wantSegments || correlations["missing"] != 0 || correlations["request_count"] != requests {
 		t.Fatalf("commit identity attribution incomplete: %v", correlations)
 	}
-	for _, operation := range []string{"reserve", "sent", "response_handoff", "member_promotion", "commit", "stage_initialize"} {
+	for _, operation := range []string{"reserve", "sent", string(persistence.ResponseCapture), string(persistence.OutputArchive), string(persistence.BusinessPublication), string(persistence.MemberPromotion), "commit", "stage_initialize"} {
 		for _, phase := range []string{"save_queue", "transaction", "query", "exec"} {
 			if _, ok := extra["timings"].(map[string]any)[operation+"."+phase]; !ok {
 				t.Fatalf("missing %s.%s timing", operation, phase)
 			}
+		}
+	}
+	observed := map[string]persistence.OperationSnapshot{}
+	for _, row := range observer.collector.Snapshot().Operations {
+		observed[row.Operation] = row
+	}
+	saved := runtime.Saver.Snapshot()
+	schedulerOperations := map[string]bool{}
+	for _, row := range saved.Aggregates {
+		if row.Attempts > 0 && row.SQLCalls > 0 {
+			schedulerOperations[row.Operation] = true
+		}
+	}
+	for _, op := range []persistence.Operation{persistence.ResponseCapture, persistence.OutputArchive, persistence.BusinessPublication, persistence.MemberPromotion} {
+		row := observed[string(op)]
+		if row.Queue == 0 || row.Executions == 0 || row.Calls == 0 || row.Transactions == 0 {
+			t.Fatalf("real member operation missing Collector queue/execution/SQL: %s %+v", op, row)
+		}
+		if !schedulerOperations[string(op)] {
+			t.Fatalf("real member operation missing Scheduler: %s", op)
 		}
 	}
 	for key, cap := range map[string]int{"pending_owner_peak": 16, "coordinator_intent_peak": 16, "normal_queue_peak": 16, "reliable_queue_peak": 32, "completion_peak": 16} {

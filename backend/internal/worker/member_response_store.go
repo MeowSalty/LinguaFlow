@@ -2,17 +2,37 @@ package worker
 
 import (
 	"context"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 func (s *roundStore) CaptureEpoch() int64 { return s.scope.RetryEpoch }
-func (s *roundStore) PublishBusiness(ctx context.Context, id string, out glossary.ResponseBusiness, install func()) error {
-	if install != nil {
-		return permanentStoreError{workstate.ErrManifest}
+func (s *roundStore) ResponseHeader(ctx context.Context, id string) (pipeline.MainResponseHeader, error) {
+	h, e := s.store.ResponseHeader(ctx, id)
+	if e != nil {
+		return pipeline.MainResponseHeader{}, s.classify(e)
 	}
-	return s.classify(s.store.PublishMemberBusiness(ctx, id, out.Receipt))
+	// A job-wide adapter leaves resource and round unset; a round adapter
+	// must match both. Check the job before dropping it from the public header.
+	if h.Scope.JobID != s.scope.JobID || s.scope.ResourceID != 0 && h.Scope.ResourceID != s.scope.ResourceID || s.scope.RoundID != 0 && h.Scope.RoundID != s.scope.RoundID || h.SnapshotDigest != s.digest {
+		return pipeline.MainResponseHeader{}, permanentStoreError{workstate.ErrManifest}
+	}
+	return pipelineResponseHeader(h), nil
+}
+func (s *roundStore) PublicationDomain() responsecontract.PublicationDomain {
+	return responsecontract.PublicationDomain{Medium: responsecontract.PublicationSQL, Authority: responsecontract.RegisterPublicationAuthority(s.client), JobID: s.scope.JobID, ProjectID: s.publicationProjectID}
+}
+func (s *roundStore) PublishBusiness(ctx context.Context, id string, out glossary.ResponseBusiness, install func()) (pipeline.MainResponseHeader, error) {
+	if install != nil {
+		return pipeline.MainResponseHeader{}, permanentStoreError{workstate.ErrManifest}
+	}
+	err := s.store.PublishMemberBusiness(ctx, id, out.Receipt)
+	if err != nil {
+		return pipeline.MainResponseHeader{}, s.classify(err)
+	}
+	return s.ResponseHeader(ctx, id)
 }
 func (s *roundStore) AbortMemberBusiness(ctx context.Context, id string) error {
 	return s.store.AbortMemberBusiness(ctx, id)
@@ -50,8 +70,9 @@ func (s *roundStore) LoadOutputMember(ctx context.Context, k pipeline.MemberKey,
 	}
 	return pipeline.OutputMemberFrame{StoredBytes: m.StoredBytes, Key: k, Payload: m.Payload, Bytes: m.Bytes, Digest: m.Digest, Release: m.Release}, nil
 }
-func (s *roundStore) CaptureResponse(ctx context.Context, in pipeline.CapturedResponse) error {
-	return s.classify(s.store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: in.ID, Scope: s.scope, Truncated: in.Truncated}, Payload: in.Payload, Result: workstate.RequestResult{UsageKnown: in.Record.UsageKnown, InputTokens: in.Record.Usage.PromptTokens, OutputTokens: in.Record.Usage.CompletionTokens, DurationMS: in.Record.Duration.Milliseconds(), LastError: in.Record.Error}}))
+func (s *roundStore) CaptureResponse(ctx context.Context, in pipeline.CapturedResponse) (pipeline.MainResponseHeader, error) {
+	h, err := s.store.CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: in.ID, Scope: s.scope, Truncated: in.Truncated}, Payload: in.Payload, Result: workstate.RequestResult{UsageKnown: in.Record.UsageKnown, InputTokens: in.Record.Usage.PromptTokens, OutputTokens: in.Record.Usage.CompletionTokens, DurationMS: in.Record.Duration.Milliseconds(), LastError: in.Record.Error}})
+	return pipelineResponseHeader(h), s.classify(err)
 }
 func (s *roundStore) LoadCapture(ctx context.Context, id string, limit int64) (pipeline.CapturedResponse, error) {
 	m, err := s.store.LoadCapture(ctx, id, limit)
@@ -60,10 +81,11 @@ func (s *roundStore) LoadCapture(ctx context.Context, id string, limit int64) (p
 	}
 	return pipeline.CapturedResponse{MainResponseHeader: pipelineResponseHeader(m.ResponseHeader), Payload: m.Payload, Release: m.Release}, nil
 }
-func (s *roundStore) PublishOutputs(ctx context.Context, in pipeline.OutputPublication) error {
+func (s *roundStore) PublishOutputs(ctx context.Context, in pipeline.OutputPublication) (pipeline.MainResponseHeader, error) {
 	out := workstate.OutputPublication{Key: storageMemberKey(in.Key), Next: in.Next, Digest: in.Digest, Glossary: in.Glossary, Complete: in.Complete}
 	for _, m := range in.Members {
 		out.Members = append(out.Members, workstate.OutputMember{Key: storageMemberKey(m.Key), Payload: m.Payload, Bytes: m.Bytes, Digest: m.Digest})
 	}
-	return s.classify(s.store.PublishOutputs(ctx, out))
+	h, err := s.store.PublishOutputs(ctx, out)
+	return pipelineResponseHeader(h), s.classify(err)
 }

@@ -8,7 +8,7 @@ import (
 )
 
 func pipelineResponseHeader(h workstate.ResponseHeader) pipeline.MainResponseHeader {
-	return pipeline.MainResponseHeader{FrozenContext: pipeline.FrozenContext{Pool: h.MemberPool, MainAttempt: h.MemberAttempt, Mode: h.MemberMode, Format: h.MemberFormat, SourceLang: h.SourceLang, TargetLang: h.TargetLang, TextMode: h.TextMode}, CaptureEpoch: h.Scope.RetryEpoch, FormatVersion: h.FormatVersion, ArchiveCursor: h.ArchiveCursor, ArchiveDigest: h.ArchiveDigest, InputMemberBytes: h.InputMemberBytes, OutputMemberBytes: h.OutputMemberBytes, PublicBytes: h.PublicBytes, MetadataBytes: h.MetadataBytes, ID: h.RequestID, DatabaseID: h.DatabaseID, ResourceID: h.Scope.ResourceID, RoundID: h.Scope.RoundID, SnapshotDigest: h.SnapshotDigest, FreezeDigest: h.FreezeDigest, ResponseDigest: h.ResponseDigest, FreezeBytes: h.FreezeBytes, ResponseBytes: h.ResponseBytes, CorrectedBytes: h.CorrectedBytes, BusinessBound: h.BusinessBound, MemberCount: h.MemberCount, Cursor: h.Cursor, Phase: h.Phase, Truncated: h.Truncated}
+	return pipeline.MainResponseHeader{FrozenContext: pipeline.FrozenContext{Pool: h.MemberPool, MainAttempt: h.MemberAttempt, Mode: h.MemberMode, Format: h.MemberFormat, SourceLang: h.SourceLang, TargetLang: h.TargetLang, TextMode: h.TextMode}, CaptureEpoch: h.Scope.RetryEpoch, FormatVersion: h.FormatVersion, ArchiveCursor: h.ArchiveCursor, ArchiveDigest: h.ArchiveDigest, InputMemberBytes: h.InputMemberBytes, OutputMemberBytes: h.OutputMemberBytes, PublicBytes: h.PublicBytes, MetadataBytes: h.MetadataBytes, ID: h.RequestID, DatabaseID: h.DatabaseID, ResourceID: h.Scope.ResourceID, RoundID: h.Scope.RoundID, SnapshotDigest: h.SnapshotDigest, FreezeDigest: h.FreezeDigest, ResponseDigest: h.ResponseDigest, CaptureBytes: h.CaptureBytes, ModelOutputBytes: h.ModelOutputBytes, CorrectionBytes: h.CorrectionBytes, PublicKind: h.PublicKind, BusinessBound: h.BusinessBound, MemberCount: h.MemberCount, Cursor: h.Cursor, Phase: h.Phase, Truncated: h.Truncated}
 }
 
 func (s *roundStore) ResponseHeaders(ctx context.Context, after, limit int) ([]pipeline.MainResponseHeader, int, error) {
@@ -33,7 +33,7 @@ func (s *roundStore) ResponseHeaders(ctx context.Context, after, limit int) ([]p
 	}
 }
 
-func (s *roundStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, c *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
+func (s *roundStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, c *pipeline.Candidate, next pipeline.WorkCursor, failure pipeline.MemberOutcome) (pipeline.MainResponseHeader, error) {
 	id, cursor := key.RequestID, key.Ordinal
 	var candidate *workstate.Candidate
 	var idx int
@@ -41,12 +41,12 @@ func (s *roundStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, 
 		idx = c.Index
 		payload, err := c.Encode()
 		if err != nil {
-			return permanentStoreError{err}
+			return pipeline.MainResponseHeader{}, permanentStoreError{err}
 		}
 		c.StoredBytes = int64(len(payload))
 		header, err := c.EncodeHeader()
 		if err != nil {
-			return permanentStoreError{err}
+			return pipeline.MainResponseHeader{}, permanentStoreError{err}
 		}
 		state := "pending_alignment"
 		if c.Ready {
@@ -60,7 +60,7 @@ func (s *roundStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, 
 	} else {
 		member, err := s.store.InputMemberIdentity(ctx, id, cursor)
 		if err != nil {
-			return s.classify(err)
+			return pipeline.MainResponseHeader{}, s.classify(err)
 		}
 		defer func() {
 			release := member.ReleaseOwned
@@ -72,21 +72,21 @@ func (s *roundStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, 
 		var ok bool
 		idx, ok = s.segmentIndex(member.SegmentID)
 		if !ok {
-			return permanentStoreError{workstate.ErrManifest}
+			return pipeline.MainResponseHeader{}, permanentStoreError{workstate.ErrManifest}
 		}
 	}
 	cur, err := s.current(ctx, idx)
 	if err != nil {
-		return s.classify(err)
+		return pipeline.MainResponseHeader{}, s.classify(err)
 	}
 	cur, err = cursorTransition(cur, next)
 	if err != nil {
-		return s.classify(err)
+		return pipeline.MainResponseHeader{}, s.classify(err)
 	}
-	cur.LastError = failure
-	err = s.store.PromoteMember(ctx, workstate.MemberPromotion{Scope: s.scope, Key: storageMemberKey(key), Candidate: candidate, Next: cur, Failure: failure})
+	cur.LastError = failure.String()
+	confirmed, err := s.store.PromoteMember(ctx, workstate.MemberPromotion{Scope: s.scope, Key: storageMemberKey(key), Candidate: candidate, Next: cur, Outcome: failure})
 	if err == nil && c != nil {
 		c.StoredBytes = int64(len(candidate.Payload))
 	}
-	return s.classify(err)
+	return pipelineResponseHeader(confirmed), s.classify(err)
 }

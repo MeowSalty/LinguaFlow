@@ -24,25 +24,29 @@ import (
 )
 
 type roundStore struct {
-	client     *ent.Client
-	store      *workstate.Store
-	scope      workstate.Scope
-	indexToID  map[int]int
-	canonical  *pipeline.Document
-	snapshot   *service.JobExecutionSnapshot
-	round      int
-	digest     string
-	qa         *qa.Engine
-	autoReject bool
-	driver     string
-	memory     tm.TranslationMemory
-	onCommit   func()
+	publicationProjectID int
+	client               *ent.Client
+	store                *workstate.Store
+	scope                workstate.Scope
+	indexToID            map[int]int
+	canonical            *pipeline.Document
+	snapshot             *service.JobExecutionSnapshot
+	round                int
+	digest               string
+	qa                   *qa.Engine
+	autoReject           bool
+	driver               string
+	memory               tm.TranslationMemory
+	onCommit             func()
 }
 
 func newRoundStore(client *ent.Client, scope workstate.Scope, indices map[int]int, snapshot *service.JobExecutionSnapshot, round int, qaEngine *qa.Engine, autoReject bool, driver string, memory tm.TranslationMemory, onCommit func()) *roundStore {
 	data, _ := json.Marshal(snapshot)
 	hash := sha256.Sum256(data)
 	s := &roundStore{client: client, store: workstate.NewStore(client), scope: scope, indexToID: indices, snapshot: snapshot, round: round, digest: hex.EncodeToString(hash[:]), qa: qaEngine, autoReject: autoReject, driver: driver, memory: memory, onCommit: onCommit}
+	if j, err := client.Job.Get(context.Background(), scope.JobID); err == nil {
+		s.publicationProjectID = j.ProjectID
+	}
 	return s
 }
 func (s *roundStore) ResourceIdentity() int { return s.scope.ResourceID }

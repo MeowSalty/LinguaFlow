@@ -112,8 +112,8 @@ func TestRubyOperationsVisibleThroughHTTPAndExitDrain(t *testing.T) {
 		t.Fatalf("saved but not yet paused=%+v err=%v", stages, err)
 	}
 	raw := f.client.WorkRequest.Query().OnlyX(ctx)
-	if raw.State != "completed" || raw.PromotionState != "business_ready" || raw.PromotionCursor != 0 || (raw.CaptureBytes+raw.OutputMemberBytes) == 0 || raw.InputMemberBytes == 0 {
-		t.Fatalf("pause drain did not leave reliable unpromoted work: %+v", raw)
+	if raw.State != "completed" || raw.PromotionState != "capture_pending" || raw.PromotionCursor != 0 || raw.ArchiveCursor != 0 || raw.CaptureBytes == 0 || raw.OutputMemberBytes != 0 || raw.InputMemberBytes == 0 {
+		t.Fatalf("pause drain did not leave reliable unpromoted capture: state=%s phase=%s cursor=%d archive=%d capture=%d input=%d output=%d", raw.State, raw.PromotionState, raw.PromotionCursor, raw.ArchiveCursor, raw.CaptureBytes, raw.InputMemberBytes, raw.OutputMemberBytes)
 	}
 	if err := checkRubyOperation(ctx, f, service.JobStatusPausing); err != nil {
 		t.Fatal(err)
