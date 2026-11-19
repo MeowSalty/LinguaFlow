@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 )
@@ -76,15 +77,41 @@ type SQLSnapshot struct {
 	Calls                 uint64
 	Duration              time.Duration
 	Transactions, Unknown uint64
+	Operations            []OperationSnapshot
+}
+type OperationSnapshot struct {
+	Operation                                       string
+	Queue, Executions, Calls, Transactions, Unknown uint64
 }
 type Collector struct {
-	mu    sync.Mutex
-	stats SQLSnapshot
+	mu         sync.Mutex
+	stats      SQLSnapshot
+	operations map[string]OperationSnapshot
 }
 
 func (c *Collector) Observe(o Observation) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	operation := aggregateOperation(o.Metadata.Operation)
+	if c.operations == nil {
+		c.operations = make(map[string]OperationSnapshot)
+	}
+	row := c.operations[operation]
+	row.Operation = operation
+	switch o.Phase {
+	case "save_queue":
+		row.Queue++
+	case "save_execution":
+		row.Executions++
+	case "query", "exec":
+		row.Calls++
+	case "transaction":
+		row.Transactions++
+		if o.Outcome == "unknown" {
+			row.Unknown++
+		}
+	}
+	c.operations[operation] = row
 	if o.Phase == "query" || o.Phase == "exec" {
 		if o.Dialect != "" {
 			c.stats.Dialect = o.Dialect
@@ -99,4 +126,14 @@ func (c *Collector) Observe(o Observation) {
 		}
 	}
 }
-func (c *Collector) Snapshot() SQLSnapshot { c.mu.Lock(); defer c.mu.Unlock(); return c.stats }
+func (c *Collector) Snapshot() SQLSnapshot {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := c.stats
+	out.Operations = make([]OperationSnapshot, 0, len(c.operations))
+	for _, row := range c.operations {
+		out.Operations = append(out.Operations, row)
+	}
+	sort.Slice(out.Operations, func(i, j int) bool { return out.Operations[i].Operation < out.Operations[j].Operation })
+	return out
+}
