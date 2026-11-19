@@ -31,14 +31,14 @@ func (a *RequestAdmission) ClaimBuildBounded(owner string, neededBytes, allocati
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if !validBuildOwner(owner) || neededBytes < 0 || allocationLimit < 0 {
-		return ErrBuildCapacity
+		return a.rejectLocked(ErrBuildCapacity, "build_claim_invalid", "claim_build", RejectionEvidence{SourceOwner: owner})
 	}
 	next, err := CheckedAdd(a.buildAllocations[owner], neededBytes)
 	if err != nil {
 		return err
 	}
 	if allocationLimit > 0 && next > allocationLimit {
-		return &AllocationCapacityError{a.buildAllocations[owner], neededBytes, allocationLimit}
+		return a.rejectLocked(&AllocationCapacityError{a.buildAllocations[owner], neededBytes, allocationLimit}, "build_allocation_limit", "claim_build", RejectionEvidence{SourceOwner: owner})
 	}
 	return a.classifyRootCapacityLocked(a.resizeBuildLocked(owner, next))
 }
@@ -91,7 +91,7 @@ func (a *RequestAdmission) TransferBuild(owner string, retainedBytes int64, targ
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if !validBuildOwner(owner) || !validBuildOwner(targetOwner) || retainedBytes < 0 || retainedBytes > a.buildAllocations[owner] {
-		return ErrBuildCapacity
+		return a.rejectLocked(ErrBuildCapacity, "build_transfer_source_invalid", "transfer_build", RejectionEvidence{SourceOwner: owner, TargetOwner: targetOwner, SourceBytesKnown: true, SourceBytes: a.buildAllocations[owner], InventoryKnown: true, RequestedBytes: retainedBytes})
 	}
 	if owner == targetOwner {
 		return a.resizeBuildLocked(owner, retainedBytes)
@@ -132,8 +132,12 @@ func (a *RequestAdmission) ReleaseBuild(owner string) error { return a.ResizeBui
 func (a *RequestAdmission) MoveBuildBytes(owner, target string, bytes int64) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return a.moveBuildBytesLocked(owner, target, bytes)
+}
+
+func (a *RequestAdmission) moveBuildBytesLocked(owner, target string, bytes int64) error {
 	if !validBuildOwner(owner) || !validBuildOwner(target) || owner == target || bytes < 0 || bytes > a.buildAllocations[owner] {
-		return ErrBuildCapacity
+		return a.rejectLocked(ErrBuildCapacity, "build_move_source_invalid", "move_build_bytes", RejectionEvidence{SourceOwner: owner, TargetOwner: target, SourceBytesKnown: true, SourceBytes: a.buildAllocations[owner], InventoryKnown: true, RequestedBytes: bytes})
 	}
 	oldSource, oldTarget := a.buildAllocations[owner], a.buildAllocations[target]
 	next, err := CheckedAdd(oldTarget, bytes)

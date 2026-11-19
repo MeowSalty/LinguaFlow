@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-func emitRawBatchEvent(ctx context.Context, session *requestSession, req backend.Request, response MainResponse, name string) error {
+func emitRawBatchEvent(ctx context.Context, session *requestSession, req backend.Request, response CapturedResponse, name string) error {
 	observer, ok := session.reporter.(progress.BatchObserver)
 	if !ok {
 		return nil
@@ -19,7 +19,7 @@ func emitRawBatchEvent(ctx context.Context, session *requestSession, req backend
 		bounds.CloseRetired()
 	}()
 	err := session.runtime.Run(ctx, func() error {
-		b, err := backend.NewBuildBoundsFromContext(ctx, 32<<10, response.FreezeBytes+response.ResponseBytes)
+		b, err := backend.NewBuildBoundsFromContext(ctx, 32<<10, response.InputMemberBytes+response.CaptureBytes)
 		if err != nil {
 			return err
 		}
@@ -38,19 +38,19 @@ func emitRawBatchEvent(ctx context.Context, session *requestSession, req backend
 		if err != nil {
 			return err
 		}
-		rawCredit, err := b.OwnAllocation(int64(len(response.Raw)), 1)
+		rawCredit, err := b.OwnAllocation(int64(len(response.Payload)), 1)
 		if err != nil {
 			return err
 		}
-		raw := string(response.Raw)
+		raw := string(response.Payload)
 		received, err := preview(raw)
 		raw = ""
 		rawCredit.Release()
 		if err != nil {
 			return err
 		}
-		ids := make([]string, len(response.Members))
-		for i, m := range response.Members {
+		ids := make([]string, len(session.intent.InputMembers))
+		for i, m := range session.intent.InputMembers {
 			ids[i] = strconv.Itoa(m.SegmentID)
 		}
 		stage := session.mode

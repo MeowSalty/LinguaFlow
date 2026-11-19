@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -20,95 +23,139 @@ import (
 
 var _ glossary.ResponseProcessor = (*DatabaseGlossary)(nil)
 
-func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.ResponseProcess) (glossary.ResponseBusiness, error) {
-	var out glossary.ResponseBusiness
-	encoded := in.EntriesPayload != nil
-	var addedMask []byte
-	if encoded {
-		count, err := responseGlossaryEntryCount(ctx, in)
-		if err != nil {
-			return out, err
-		}
-		bytes := count / 8
-		if count%8 != 0 {
-			bytes++
-		}
-		credit, err := backend.AllocationBytes(int64(bytes), 1)
-		if err != nil {
-			return out, err
-		}
-		if err = checkExecutionAllocationPlan(ctx, credit, "glossary_mask"); err != nil {
-			return out, err
-		}
-		if bytes > 0 {
-			if source, _ := backend.BuildOwnership(ctx); source != nil {
-				b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
-				if err != nil {
-					return out, err
-				}
-				allocation, err := b.OwnAllocation(credit, 1)
-				if err != nil {
-					b.CloseRetired()
-					return out, err
-				}
-				defer func() { clear(addedMask); addedMask = nil; allocation.Release(); b.CloseRetired() }()
-				addedMask = make([]byte, bytes)
-			} else {
-				lease, err := newExecutionInputLease(ctx, credit, false)
-				if err != nil {
-					return out, err
-				}
-				defer lease.Close()
-				addedMask = make([]byte, bytes)
-				_ = lease.RetainBacking(func() { clear(addedMask); addedMask = nil })
+type pendingGlossaryCache struct {
+	proof      responseBusinessProof
+	entries    []glossary.Entry
+	head       *glossary.EntrySnapshot
+	settlement glossaryCacheSettlement
+}
+
+type responseBusinessProof struct {
+	identity                  workstate.ResponseIdentityProof
+	projectID                 int
+	inputDigest, publicDigest string
+	publicBytes               int64
+}
+
+func (p responseBusinessProof) matches(req *ent.WorkRequest) bool {
+	var receipt glossary.ResponseReceipt
+	return p.identity.Matches(req) && int64(len(req.GlossaryReceipt)) == p.publicBytes && req.PublicDigest == p.publicDigest && responseReceiptMatches(req, glossary.ResponseProcess{RequestID: p.identity.RequestID, InputDigest: p.inputDigest, CaptureEpoch: p.identity.CaptureEpoch}, &receipt)
+}
+
+func (p responseBusinessProof) exists(ctx context.Context, tx *ent.Client) (bool, error) {
+	req, err := responseBusinessRequest(ctx, tx, p.identity.RequestID, p.projectID)
+	if err != nil {
+		return false, err
+	}
+	if !p.identity.Matches(req) || req.ResponseDigest != p.inputDigest {
+		return false, workstate.ErrManifest
+	}
+	if len(req.GlossaryReceipt) == 0 && req.PromotionState == "outputs_ready" {
+		return false, nil
+	}
+	if !p.matches(req) {
+		return false, workstate.ErrManifest
+	}
+	return true, nil
+}
+
+// An unknown COMMIT keeps its unpublished copy and reversible ownership until
+// a later authoritative receipt proves commit or its absence proves rollback.
+func (g *DatabaseGlossary) resolvePendingCache(ctx context.Context) error {
+	p := g.pendingCache
+	if p == nil {
+		return nil
+	}
+	confirmed, err := workstate.VerifyCommitConfirmation(ctx, g.client, p.proof.identity.JobID, p.proof.exists)
+	if err != nil {
+		return err
+	}
+	if confirmed {
+		if p.settlement.commit != nil {
+			if err := p.settlement.commit(); err != nil {
+				return err
 			}
 		}
+		g.entries = p.entries
+		g.entrySnapshot.Store(p.head)
+		g.revision++
+		clear(g.lookupCache)
+	} else if p.settlement.rollback != nil {
+		if err := p.settlement.rollback(); err != nil {
+			return err
+		}
 	}
+	g.pendingCache = nil
+	return nil
+}
+
+func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.ResponseProcess) (out glossary.ResponseBusiness, resultErr error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if err := g.resolvePendingCache(ctx); err != nil {
+		return out, err
+	}
+	current, err := responseBusinessRequest(ctx, g.client, in.RequestID, g.projectID)
+	if err != nil {
+		return out, err
+	}
+	proof := responseBusinessProof{identity: workstate.ResponseIdentityFromRow(current), projectID: g.projectID, inputDigest: in.InputDigest, publicBytes: current.PublicBytes, publicDigest: current.PublicDigest}
+	if proof.identity.CaptureEpoch != in.CaptureEpoch || g.executionJobID > 0 && proof.identity.JobID != g.executionJobID {
+		return out, workstate.ErrManifest
+	}
+	// This callback observes the scalar result filled before COMMIT. Neither
+	// the response process nor receipt/candidate buffers survive in the proof.
+	ctx = workstate.WithCommitConfirmation(ctx, g.client, proof.identity.JobID, func(factCtx context.Context, tx *ent.Client) (bool, error) { return proof.exists(factCtx, tx) })
 	var added []glossary.Entry
 	var cachedEntries []glossary.Entry
 	var cachedHead *glossary.EntrySnapshot
-	var rollbackCache func()
+	var cacheSettlement glossaryCacheSettlement
 	installed := false
 	defer func() {
-		if !installed && rollbackCache != nil {
+		if !installed && cacheSettlement.rollback != nil {
 			cachedEntries = nil
 			cachedHead = nil
-			rollbackCache()
+			resultErr = errors.Join(resultErr, cacheSettlement.rollback())
 		}
 	}()
-	// One bit per actual entry records the committed subset. Its finite backing
-	// was claimed before make and survives through the final dictionary adoption.
-	err := workstate.Transaction(ctx, g.client, func(tx *ent.Client) error {
+	// Public decisions survive through member rewrites and cache preparation;
+	// each transaction attempt retires its private copy before retrying.
+	err = workstate.Transaction(ctx, g.client, func(tx *ent.Client) error {
 		// A proved-not-committed attempt can retry. Its private dictionary copy
 		// must retire before the next attempt prepares another actual copy.
-		if rollbackCache != nil {
+		if cacheSettlement.rollback != nil {
 			cachedEntries = nil
 			cachedHead = nil
-			rollbackCache()
-			rollbackCache = nil
+			if err := cacheSettlement.rollback(); err != nil {
+				return err
+			}
+			cacheSettlement = glossaryCacheSettlement{}
 		}
 		added = nil
-		clear(addedMask)
 		out.Release()
-		req, err := tx.WorkRequest.Query().Where(workrequest.IdentityEQ(in.RequestID), workrequest.HasJobWith(job.ProjectIDEQ(g.projectID))).Only(ctx)
+		req, err := responseBusinessRequest(ctx, tx, in.RequestID, g.projectID)
 		if err != nil {
 			return err
 		}
 		if err := workstate.LockJob(ctx, tx, req.JobID); err != nil {
 			return err
 		}
-		req, err = tx.WorkRequest.Get(ctx, req.ID)
+		req, err = responseBusinessRequest(ctx, tx, in.RequestID, g.projectID)
 		if err != nil {
 			return err
 		}
+		if !proof.identity.Matches(req) {
+			return workstate.ErrManifest
+		}
+		if req.ResponseFormatVersion != 2 || req.ResponseDigest != in.InputDigest {
+			return workstate.ErrManifest
+		}
 		if len(req.GlossaryReceipt) > 0 {
 			var r glossary.ResponseReceipt
-			if err := json.Unmarshal(req.GlossaryReceipt, &r); err != nil || r.Version != 2 || r.RequestID != in.RequestID || r.InputDigest != in.InputDigest {
+			if !responseReceiptMatches(req, in, &r) {
 				return workstate.ErrManifest
 			}
-			out = glossary.ResponseBusiness{Body: req.CorrectedTargets, Index: req.CorrectedTargetIndex, Receipt: req.GlossaryReceipt}
+			out = glossary.ResponseBusiness{Receipt: req.GlossaryReceipt}
 			return nil
 		}
 		j, err := tx.Job.Get(ctx, req.JobID)
@@ -136,75 +183,75 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 		if err := guardJobResourceSource(ctx, tx, jr); err != nil {
 			return err
 		}
-		if req.ResponseFormatVersion != 1 || req.State != "completed" || req.PromotionState != "response_pending" || req.PromotionCursor != 0 {
+		if req.ResponseFormatVersion != 2 || req.State != "completed" || req.PromotionState != "outputs_ready" || req.PromotionCursor != 0 {
 			return workstate.ErrManifest
 		}
-		// Existing rows are projected to identity and target; notes/source bodies are
-		// never copied into the receipt or response working set.
-		if encoded {
-			var a, s int
-			a, s, err = absorbResponseEncodedGlossary(ctx, tx, g.projectID, in, addedMask)
-			if err != nil {
-				return err
-			}
-			out, err = glossary.BuildResponseBusinessCounts(ctx, in, a, s)
-		} else {
-			result, e := absorbResponseGlossary(ctx, tx, g.projectID, in.Entries, in.ItemLimit)
-			if e != nil {
-				return e
-			}
-			added = result.Added
-			out, err = glossary.BuildResponseBusiness(ctx, in, result)
-		}
+		businessCtx := workstate.WithBusinessTransaction(ctx, tx)
+		publicBounds, err := backend.NewBuildBoundsFromContext(businessCtx, 0, int64(len(in.EntriesPayload)))
 		if err != nil {
 			return err
 		}
-		if encoded {
-			added = nil
-			if err := glossary.VisitResponseEntries(ctx, in, func(i int, e glossary.Entry) error {
-				if i < 0 || i/8 >= len(addedMask) {
-					return workstate.ErrManifest
-				}
-				if addedMask[i/8]&(1<<uint(i%8)) == 0 {
-					return nil
-				}
-				input, err := normalizeGlossaryEntryInput(GlossaryEntryInput{Source: e.Source, Target: e.Target, Notes: e.Notes, CaseSensitive: e.CaseSensitive, Forbidden: e.Forbidden, Mandatory: &e.Mandatory})
-				if err != nil {
-					return err
-				}
-				added = append(added, glossary.Entry{Source: input.Source, Target: input.Target, Notes: input.Notes, CaseSensitive: input.CaseSensitive, Forbidden: input.Forbidden, Mandatory: *input.Mandatory})
-				return nil
-			}); err != nil {
-				return err
-			}
-		}
-		cachedEntries, cachedHead, rollbackCache, err = g.prepareCachedEntries(ctx, added)
+		defer func() { added = nil; publicBounds.CloseRetired() }()
+		result, err := absorbResponseEntries(businessCtx, tx, g.projectID, in, publicBounds)
 		if err != nil {
 			return err
 		}
-		return workstate.SaveResponseBusinessTx(ctx, tx, req, out.Body, out.Index, out.Receipt)
+		added = result.Added
+		out, err = glossary.BuildResponseBusiness(businessCtx, in, result)
+		if err != nil {
+			return err
+		}
+		proof.publicBytes = int64(len(out.Receipt))
+		receiptDigest := sha256.Sum256(out.Receipt)
+		proof.publicDigest = hex.EncodeToString(receiptDigest[:])
+		cachedEntries, cachedHead, cacheSettlement, err = g.prepareCachedEntries(ctx, added)
+		if err != nil {
+			return err
+		}
+		if in.Publish == nil {
+			return fmt.Errorf("missing response business publisher")
+		}
+		return in.Publish(businessCtx, out, &responsecontract.PreparedPublication{Install: func() {}, Rollback: cacheSettlement.rollback, Park: cacheSettlement.park})
 	})
 	var transactionErr *workstate.TransactionError
+	uncertain := errors.As(err, &transactionErr) && transactionErr.Uncertain()
 	if err != nil && (ctx.Err() == nil || errors.As(err, &transactionErr) && transactionErr.Uncertain()) {
 		// COMMIT can succeed while its acknowledgement or caller context is lost.
 		// Publish the prepared cache only after the durable identity proves it.
 		factCtx, finish := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer finish()
-		req, lookup := g.client.WorkRequest.Query().Where(workrequest.IdentityEQ(in.RequestID), workrequest.HasJobWith(job.ProjectIDEQ(g.projectID))).Only(factCtx)
+		req, lookup := responseBusinessRequest(factCtx, g.client, in.RequestID, g.projectID)
 		if lookup == nil && len(req.GlossaryReceipt) > 0 {
-			var r glossary.ResponseReceipt
-			if json.Unmarshal(req.GlossaryReceipt, &r) == nil && r.Version == 2 && r.RequestID == in.RequestID && r.InputDigest == in.InputDigest {
+			if proof.matches(req) {
 				out.Release()
-				out = glossary.ResponseBusiness{Body: req.CorrectedTargets, Index: req.CorrectedTargetIndex, Receipt: req.GlossaryReceipt}
+				out = glossary.ResponseBusiness{Receipt: req.GlossaryReceipt}
 				err = nil
 			}
 		}
 	}
 	if err != nil {
+		if uncertain && cachedEntries != nil {
+			if cacheSettlement.park != nil {
+				cacheSettlement.park()
+			}
+			g.pendingCache = &pendingGlossaryCache{proof: proof, entries: cachedEntries, head: cachedHead, settlement: cacheSettlement}
+			installed = true // The pending owner, rather than the visible cache, retains it.
+		}
 		out.Release()
 		return glossary.ResponseBusiness{}, err
 	}
 	if cachedEntries != nil {
+		if cacheSettlement.commit != nil {
+			if err := cacheSettlement.commit(); err != nil {
+				if cacheSettlement.park != nil {
+					cacheSettlement.park()
+				}
+				g.pendingCache = &pendingGlossaryCache{proof: proof, entries: cachedEntries, head: cachedHead, settlement: cacheSettlement}
+				installed = true
+				out.Release()
+				return glossary.ResponseBusiness{}, err
+			}
+		}
 		g.entries = cachedEntries
 		g.entrySnapshot.Store(cachedHead)
 	}
@@ -214,67 +261,43 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 	return out, nil
 }
 
-func absorbResponseEncodedGlossary(ctx context.Context, tx *ent.Client, project int, in glossary.ResponseProcess, mask []byte) (added, skipped int, err error) {
-	err = glossary.VisitResponseEntries(ctx, in, func(i int, e glossary.Entry) error {
-		if i < 0 || i/8 >= len(mask) {
-			return workstate.ErrManifest
+func absorbResponseEntries(ctx context.Context, tx *ent.Client, projectID int, in glossary.ResponseProcess, b *backend.BuildBounds) (result glossary.AddResult, err error) {
+	err = glossary.VisitResponseEntries(ctx, in, func(_ int, entry glossary.Entry) error {
+		input, e := normalizeGlossaryEntryInput(GlossaryEntryInput{Source: entry.Source, Target: entry.Target, Notes: entry.Notes, CaseSensitive: entry.CaseSensitive, Forbidden: entry.Forbidden, Mandatory: &entry.Mandatory})
+		if e != nil {
+			result.Skipped, e = backend.AppendNode(b, result.Skipped, glossary.SkippedEntry{Reason: glossary.SkipReasonEmpty})
+			return e
 		}
-		input, err := normalizeGlossaryEntryInput(GlossaryEntryInput{Source: e.Source, Target: e.Target, Notes: e.Notes, CaseSensitive: e.CaseSensitive, Forbidden: e.Forbidden, Mandatory: &e.Mandatory})
-		if err != nil {
-			skipped++
-			return nil
-		}
-		existing, err := requestGlossaryEntryProjected(ctx, tx, project, input, in.ItemLimit)
-		if err == nil {
-			if existing.Target != input.Target {
-				skipped++
-				return glossary.ApplyResponseConflict(ctx, in, input.Target, existing.Target)
+		existing, e := requestGlossaryEntryProjected(ctx, tx, projectID, input, in.ItemLimit)
+		if e == nil {
+			if existing.Target == input.Target {
+				return nil
 			}
-			return nil
+			var decision glossary.SkippedEntry
+			if e = b.CloneInto(glossary.SkippedEntry{Proposed: glossary.Entry{Target: input.Target}, Existing: glossary.Entry{Target: existing.Target}, Reason: glossary.SkipReasonExists}, &decision); e != nil {
+				return e
+			}
+			result.Skipped, e = backend.AppendNode(b, result.Skipped, decision)
+			return e
 		}
-		if !ent.IsNotFound(err) {
-			return err
+		if !ent.IsNotFound(e) {
+			return e
 		}
-		if _, err = createGlossaryEntry(ctx, tx, project, input); err != nil {
-			return err
+		if _, e = createGlossaryEntry(ctx, tx, projectID, input); e != nil {
+			return e
 		}
-		added++
-		mask[i/8] |= 1 << uint(i%8)
-		return nil
+		var owned glossary.Entry
+		if e = b.CloneInto(glossary.Entry{Source: input.Source, Target: input.Target, Notes: input.Notes, CaseSensitive: input.CaseSensitive, Forbidden: input.Forbidden, Mandatory: *input.Mandatory}, &owned); e != nil {
+			return e
+		}
+		result.Added, e = backend.AppendNode(b, result.Added, owned)
+		return e
 	})
-	return
+	return result, err
 }
-
 func executionFormatForResponse(j *ent.Job) error {
 	_, err := workstate.ExecutionSnapshotDigest(j.ExecutionConfig)
 	return err
-}
-
-func absorbResponseGlossary(ctx context.Context, tx *ent.Client, projectID int, entries []glossary.Entry, itemLimit int64) (glossary.AddResult, error) {
-	var result glossary.AddResult
-	for _, entry := range entries {
-		input, err := normalizeGlossaryEntryInput(GlossaryEntryInput{Source: entry.Source, Target: entry.Target, Notes: entry.Notes, Mandatory: &entry.Mandatory})
-		if err != nil {
-			result.Skipped = append(result.Skipped, glossary.SkippedEntry{Proposed: entry, Reason: glossary.SkipReasonEmpty})
-			continue
-		}
-		existing, err := requestGlossaryEntryProjected(ctx, tx, projectID, input, itemLimit)
-		if err == nil {
-			if existing.Target != input.Target {
-				result.Skipped = append(result.Skipped, glossary.SkippedEntry{Proposed: entry, Existing: glossary.Entry{Target: existing.Target}, Reason: glossary.SkipReasonExists})
-			}
-			continue
-		}
-		if !ent.IsNotFound(err) {
-			return result, err
-		}
-		created, err := createGlossaryEntry(ctx, tx, projectID, input)
-		if err != nil {
-			return result, err
-		}
-		result.Added = append(result.Added, glossaryEntryFromRow(created))
-	}
-	return result, nil
 }
 
 func requestGlossaryEntryProjected(ctx context.Context, tx *ent.Client, project int, input GlossaryEntryInput, limit int64) (*ent.GlossaryEntry, error) {
@@ -298,4 +321,42 @@ func requestGlossaryEntryProjected(ctx context.Context, tx *ent.Client, project 
 		return nil, fmt.Errorf("%w: existing glossary target exceeds candidate bound", backend.ErrBuildCapacity)
 	}
 	return tx.GlossaryEntry.Query().Where(glossaryentry.IDEQ(size[0].ID)).Select(glossaryentry.FieldID, glossaryentry.FieldTarget).Only(ctx)
+}
+
+// The public transaction reads one small header and its bounded receipt; member
+// bodies remain in the member table and are borrowed individually by the sink.
+func responseBusinessRequest(ctx context.Context, client *ent.Client, id string, project int) (*ent.WorkRequest, error) {
+	q := client.WorkRequest.Query().Where(workrequest.IdentityEQ(id), workrequest.HasJobWith(job.ProjectIDEQ(project)))
+	row, err := q.Clone().Where(func(s *sql.Selector) {
+		s.Where(sql.P(func(b *sql.Builder) {
+			expression := "COALESCE(LENGTH(CAST(" + s.C(workrequest.FieldGlossaryReceipt) + " AS BLOB)),0)"
+			if s.Dialect() == "postgres" {
+				expression = "COALESCE(OCTET_LENGTH(CAST(" + s.C(workrequest.FieldGlossaryReceipt) + " AS TEXT)),0)"
+			}
+			b.WriteString(expression + " <= ").Arg(glossary.ResponseReceiptLimit)
+		}))
+		expression := "COALESCE(LENGTH(CAST(" + s.C(workrequest.FieldGlossaryReceipt) + " AS BLOB)),0)"
+		if s.Dialect() == "postgres" {
+			expression = "COALESCE(OCTET_LENGTH(CAST(" + s.C(workrequest.FieldGlossaryReceipt) + " AS TEXT)),0)"
+		}
+		s.Where(sql.Or(sql.NEQ(s.C(workrequest.FieldPromotionState), "business_ready"), sql.ExprP(expression+" = "+s.C(workrequest.FieldPublicBytes))))
+	}).Select(workrequest.FieldID, workrequest.FieldIdentity, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldPromotionCount, workrequest.FieldFreezeDigest, workrequest.FieldSnapshotDigest, workrequest.FieldResponseDigest, workrequest.FieldResponseFormatVersion, workrequest.FieldState, workrequest.FieldPromotionState, workrequest.FieldPromotionCursor, workrequest.FieldPublicKind, workrequest.FieldPublicBytes, workrequest.FieldPublicDigest, workrequest.FieldGlossaryReceipt).Only(ctx)
+	if ent.IsNotFound(err) {
+		if exists, lookup := q.Exist(ctx); lookup != nil {
+			return nil, lookup
+		} else if exists {
+			return nil, workstate.ErrManifest
+		}
+	}
+	return row, err
+}
+
+func responseReceiptMatches(req *ent.WorkRequest, in glossary.ResponseProcess, r *glossary.ResponseReceipt) bool {
+	sum := sha256.Sum256(req.GlossaryReceipt)
+	businessReady := req.PromotionState == "business_ready" && req.PublicKind == workrequest.PublicKindReceipt && int64(len(req.GlossaryReceipt)) == req.PublicBytes
+	promoted := req.PromotionState == "promoted" && req.PublicKind == workrequest.PublicKindNone && req.PublicBytes == 0
+	if !businessReady && !promoted || hex.EncodeToString(sum[:]) != req.PublicDigest {
+		return false
+	}
+	return req.ResponseFormatVersion == 2 && req.RetryEpoch == in.CaptureEpoch && req.ResponseDigest == in.InputDigest && req.State == "completed" && len(req.GlossaryReceipt) > 0 && len(req.GlossaryReceipt) <= glossary.ResponseReceiptLimit && json.Unmarshal(req.GlossaryReceipt, r) == nil && r.Version == glossary.ResponseReceiptVersion && r.RequestID == in.RequestID && r.InputDigest == in.InputDigest && len(r.OutcomeDigest) == 64 && r.Added >= 0 && r.Skipped >= 0
 }

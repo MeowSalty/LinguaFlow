@@ -1266,21 +1266,33 @@ func loadExecutionGlossary(ctx context.Context, client *ent.Client, project *ent
 	}
 	g := &executionGlossary{lease: l, bytes: st.Bytes}
 	if persist {
-		g.database = &DatabaseGlossary{client: client, projectID: project.ID, lookupCache: make(map[string][]glossary.Entry)}
+		g.database = &DatabaseGlossary{client: client, projectID: project.ID, executionJobID: executionInputState(ctx).scope.JobID, lookupCache: make(map[string][]glossary.Entry)}
 	}
 	l.clear = func() {
+		g.retirement.Lock()
+		defer g.retirement.Unlock()
+		g.mutation.Lock()
 		g.mu.Lock()
-		defer g.mu.Unlock()
+		var rollback func() error
 		clear(g.entries)
 		g.entries = nil
 		g.head = nil
 		if g.database != nil {
 			g.database.mu.Lock()
+			if pending := g.database.pendingCache; pending != nil {
+				rollback = pending.settlement.rollback
+				g.database.pendingCache = nil
+			}
 			clear(g.database.entries)
 			g.database.entries = nil
 			clear(g.database.lookupCache)
 			g.database.entrySnapshot.Store(nil)
 			g.database.mu.Unlock()
+		}
+		g.mu.Unlock()
+		g.mutation.Unlock()
+		if rollback != nil {
+			_ = rollback()
 		}
 	}
 	err = l.RunBuild(ctx, func() error {
@@ -1357,11 +1369,22 @@ func NewMemoryExecutionGlossary(ctx context.Context) (glossary.Glossary, error) 
 		return nil, err
 	}
 	g := &executionGlossary{lease: l}
-	l.clear = func() { g.mu.Lock(); clear(g.entries); g.entries = nil; g.head = nil; g.mu.Unlock() }
+	l.clear = func() {
+		g.retirement.Lock()
+		defer g.retirement.Unlock()
+		g.mutation.Lock()
+		defer g.mutation.Unlock()
+		g.mu.Lock()
+		clear(g.entries)
+		g.entries = nil
+		g.head = nil
+		g.mu.Unlock()
+	}
 	return g, nil
 }
 
 type executionGlossary struct {
+	retirement   sync.Mutex
 	mutation     sync.Mutex // serialize writers without holding reader lock across build permits
 	mu           sync.RWMutex
 	lease        *ExecutionInputLease
@@ -1464,11 +1487,19 @@ func (g *executionGlossary) LookupSourcesBounded(ctx context.Context, text, _, _
 	}
 	return out, err
 }
-func (g *executionGlossary) Add(ctx context.Context, entries ...glossary.Entry) (glossary.AddResult, error) {
+func (g *executionGlossary) Add(ctx context.Context, entries ...glossary.Entry) (out glossary.AddResult, resultErr error) {
+	g.retirement.Lock()
+	defer g.retirement.Unlock()
 	g.mutation.Lock()
-	defer g.mutation.Unlock()
 	g.mu.Lock()
-	defer g.mu.Unlock()
+	var retiredBytes int64
+	defer func() {
+		g.mu.Unlock()
+		g.mutation.Unlock()
+		if retiredBytes > 0 {
+			resultErr = errors.Join(resultErr, g.lease.ReleasePayload(retiredBytes))
+		}
+	}()
 	var result glossary.AddResult
 	if len(entries) > math.MaxInt-len(g.entries) {
 		return result, backend.ErrBuildCapacity
@@ -1506,7 +1537,11 @@ func (g *executionGlossary) Add(ctx context.Context, entries ...glossary.Entry) 
 		r.ReleaseOwned = resultLease.Close
 		_ = resultLease.RetainBacking(func() { clear(r.Added); clear(r.Skipped); r.Added = nil; r.Skipped = nil })
 		if len(g.entries) != oldCount {
-			addErr = errors.Join(addErr, g.retireReplacedBacking(oldBacking))
+			g.entryBacking, err = backend.AllocationBytes(int64(cap(g.entries)), int64(unsafe.Sizeof(glossary.Entry{})))
+			addErr = errors.Join(addErr, err)
+			if err == nil {
+				retiredBytes = oldBacking
+			}
 		}
 		return r, addErr
 	}
@@ -1528,7 +1563,7 @@ func (g *executionGlossary) Add(ctx context.Context, entries ...glossary.Entry) 
 	copy(updated, g.entries)
 	g.entries = updated
 	g.entryBacking = backing
-	_ = g.lease.ReleasePayload(oldBacking)
+	retiredBytes = oldBacking
 	_ = resultLease.RetainBacking(func() { clear(result.Added); clear(result.Skipped); result.Added = nil; result.Skipped = nil })
 	for _, e := range entries {
 		e.Source = strings.TrimSpace(e.Source)

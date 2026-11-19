@@ -39,6 +39,9 @@ func (e *VerificationError) Uncertain() bool { return true }
 // verifyLocked waits for the original transaction to terminate before deciding
 // that an absent identity proves non-commit. A failed/expired read proves nothing.
 func (s *Store) verifyLocked(ctx context.Context, jobID int, check func(context.Context, *ent.Client) (bool, error)) (bool, error) {
+	// This read establishes authority for an unsettled writer. It must not
+	// begin another storage transaction or settle that writer before its proof.
+	ctx = context.WithValue(ctx, storageBudgetKey{}, (*StorageBudget)(nil))
 	var confirmed bool
 	err := Transaction(persistence.WithRetryOwner(ctx), s.client, func(tx *ent.Client) error {
 		if err := LockJob(ctx, tx, jobID); err != nil {

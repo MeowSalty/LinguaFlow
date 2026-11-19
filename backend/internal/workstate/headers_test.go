@@ -4,7 +4,7 @@ import "testing"
 
 func TestRecoveryHeadersAndResourcePriorityAreBounded(t *testing.T) {
 	ctx, c, s, scope, seg := fixture(t)
-	c.Job.UpdateOneID(scope.JobID).SetExecutionConfig(map[string]any{"schema_version": 4, "defaults_version": 4, "response_format_version": 1}).ExecX(ctx)
+	currentExecution(t, ctx, c, scope)
 	first := ready(scope, seg)
 	if err := s.SaveCandidate(ctx, first); err != nil {
 		t.Fatal(err)

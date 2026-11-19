@@ -46,11 +46,21 @@ func ReadStageCounts(ctx context.Context, client *ent.Client, jobID int) (*Stage
 		return nil, ErrManifest
 	}
 	row := facts[0]
-	confirmed, err := client.JobRoundSegment.Query().Where(jobroundsegment.HasJobRoundWith(jobround.JobIDEQ(jobID))).Count(ctx)
+	var confirmed []struct {
+		Count int64 `json:"confirmed_work"`
+	}
+	// A sealed round's count is maintained by Confirm and calibrated when the
+	// manifest is sealed, recovered or deleted. Unsealed compatibility rounds
+	// still use their checkpoint relation. Both branches share one statement
+	// snapshot so a concurrent seal cannot omit or double-count a round.
+	err = client.JobRound.Query().Where(jobround.JobIDEQ(jobID)).Modify(selectStageConfirmedWork).Scan(ctx, &confirmed)
 	if err != nil {
 		return nil, err
 	}
-	counts := &StageCounts{ConfirmedWork: int64(confirmed), AsOf: timeutil.NowUTC()}
+	if len(confirmed) != 1 {
+		return nil, ErrManifest
+	}
+	counts := &StageCounts{ConfirmedWork: confirmed[0].Count, AsOf: timeutil.NowUTC()}
 	requests := client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.RetryEpochEQ(row.RetryEpoch))
 	counts.UnknownRequests, err = requests.Clone().Where(workrequest.StateEQ("unknown")).Count(ctx)
 	if err != nil {
@@ -72,7 +82,7 @@ func ReadStageCounts(ctx context.Context, client *ent.Client, jobID int) (*Stage
 		State string `json:"state"`
 		Count int    `json:"count"`
 	}
-	err = client.WorkCandidate.Query().Where(workcandidate.StateIn("pending_alignment", "ready_to_commit"), workcandidate.HasWorkItemWith(workitem.JobIDEQ(jobID))).GroupBy(workcandidate.FieldState).Aggregate(ent.Count()).Scan(ctx, &candidates)
+	err = client.WorkCandidate.Query().Where(workcandidate.StateIn("pending_alignment", "ready_to_commit"), stageCandidateJob(jobID)).GroupBy(workcandidate.FieldState).Aggregate(ent.Count()).Scan(ctx, &candidates)
 	if err != nil {
 		return nil, err
 	}
@@ -87,4 +97,24 @@ func ReadStageCounts(ctx context.Context, client *ent.Client, jobID int) (*Stage
 		counts.DrainingRequests = counts.MainRequests + counts.AlignmentRequests + counts.SavingRequests
 	}
 	return counts, nil
+}
+
+func selectStageConfirmedWork(s *sql.Selector) {
+	checkpoints := sql.Table(jobroundsegment.Table).As("stage_checkpoint")
+	count, _ := sql.Dialect(s.Dialect()).Select(sql.Count("*")).From(checkpoints).
+		Where(sql.ColumnsEQ(checkpoints.C(jobroundsegment.FieldJobRoundID), s.C(jobround.FieldID))).Query()
+	s.Select(sql.As("COALESCE(SUM(CASE WHEN "+s.C(jobround.FieldManifestSealed)+" THEN "+s.C(jobround.FieldSegmentCompleted)+" ELSE ("+count+") END), 0)", "confirmed_work"))
+}
+
+func stageCandidateJob(jobID int) func(*sql.Selector) {
+	return func(s *sql.Selector) {
+		// Start with the small live-state index, then check each item's primary
+		// key. An IN subquery would rebuild every WorkItem ID in the job after
+		// every member, even when only one candidate remains ready to commit.
+		item := sql.Table(workitem.Table).As("stage_work_item")
+		s.Where(sql.Exists(sql.Dialect(s.Dialect()).Select(item.C(workitem.FieldID)).From(item).Where(sql.And(
+			sql.ColumnsEQ(item.C(workitem.FieldID), s.C(workcandidate.FieldWorkItemID)),
+			sql.EQ(item.C(workitem.FieldJobID), jobID),
+		))))
+	}
 }

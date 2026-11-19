@@ -2529,25 +2529,37 @@ var (
 		{Name: "members", Type: field.TypeJSON, Nullable: true},
 		{Name: "debits", Type: field.TypeJSON, Nullable: true},
 		{Name: "glossary_receipt", Type: field.TypeJSON, Nullable: true},
-		{Name: "freeze_payload", Type: field.TypeBytes, Nullable: true},
-		{Name: "freeze_bytes", Type: field.TypeInt64, Default: 0},
-		{Name: "response_payload", Type: field.TypeBytes, Nullable: true},
-		{Name: "response_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "capture_payload", Type: field.TypeBytes, Nullable: true},
+		{Name: "capture_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "member_mode", Type: field.TypeString, Default: ""},
+		{Name: "member_format", Type: field.TypeString, Default: ""},
+		{Name: "source_lang", Type: field.TypeString, Default: ""},
+		{Name: "target_lang", Type: field.TypeString, Default: ""},
+		{Name: "text_mode", Type: field.TypeBool, Default: false},
+		{Name: "member_pool", Type: field.TypeInt, Default: 0},
+		{Name: "member_attempt", Type: field.TypeInt, Default: 0},
+		{Name: "archive_cursor", Type: field.TypeInt, Default: 0},
+		{Name: "archive_digest", Type: field.TypeString, Default: ""},
+		{Name: "input_member_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "output_member_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "model_output_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "correction_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "public_kind", Type: field.TypeEnum, Enums: []string{"none", "entries", "receipt"}, Default: "none"},
+		{Name: "public_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "member_storage_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "public_digest", Type: field.TypeString, Default: ""},
+		{Name: "request_metadata_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "response_glossary", Type: field.TypeBytes, Nullable: true},
+		{Name: "remaining_members", Type: field.TypeInt, Default: 0},
 		{Name: "response_format_version", Type: field.TypeInt, Default: 0},
 		{Name: "snapshot_digest", Type: field.TypeString, Default: ""},
 		{Name: "freeze_digest", Type: field.TypeString, Default: ""},
 		{Name: "response_digest", Type: field.TypeString, Default: ""},
-		{Name: "corrected_targets", Type: field.TypeBytes, Nullable: true},
-		{Name: "corrected_target_index", Type: field.TypeBytes, Nullable: true},
-		{Name: "corrected_target_bytes", Type: field.TypeInt64, Default: 0},
-		{Name: "corrected_target_digest", Type: field.TypeString, Default: ""},
-		{Name: "promotion_members", Type: field.TypeJSON, Nullable: true},
 		{Name: "promotion_cursor", Type: field.TypeInt, Default: 0},
 		{Name: "promotion_count", Type: field.TypeInt, Default: 0},
 		{Name: "business_bound", Type: field.TypeInt64, Default: 0},
 		{Name: "response_truncated", Type: field.TypeBool, Default: false},
 		{Name: "promotion_state", Type: field.TypeString, Default: ""},
-		{Name: "promotion_status", Type: field.TypeBytes, Nullable: true},
 		{Name: "handoff_at", Type: field.TypeTime, Nullable: true},
 		{Name: "usage_record_id", Type: field.TypeInt, Nullable: true},
 		{Name: "budget_model", Type: field.TypeString},
@@ -2570,19 +2582,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "work_requests_jobs_job",
-				Columns:    []*schema.Column{WorkRequestsColumns[42]},
+				Columns:    []*schema.Column{WorkRequestsColumns[54]},
 				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_requests_resources_resource",
-				Columns:    []*schema.Column{WorkRequestsColumns[43]},
+				Columns:    []*schema.Column{WorkRequestsColumns[55]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_requests_job_rounds_round",
-				Columns:    []*schema.Column{WorkRequestsColumns[44]},
+				Columns:    []*schema.Column{WorkRequestsColumns[56]},
 				RefColumns: []*schema.Column{JobRoundsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -2591,12 +2603,113 @@ var (
 			{
 				Name:    "workrequest_job_id_state_id",
 				Unique:  false,
-				Columns: []*schema.Column{WorkRequestsColumns[42], WorkRequestsColumns[36], WorkRequestsColumns[0]},
+				Columns: []*schema.Column{WorkRequestsColumns[54], WorkRequestsColumns[48], WorkRequestsColumns[0]},
 			},
 			{
 				Name:    "workrequest_job_id_promotion_state_job_round_id_id",
 				Unique:  false,
-				Columns: []*schema.Column{WorkRequestsColumns[42], WorkRequestsColumns[30], WorkRequestsColumns[44], WorkRequestsColumns[0]},
+				Columns: []*schema.Column{WorkRequestsColumns[54], WorkRequestsColumns[43], WorkRequestsColumns[56], WorkRequestsColumns[0]},
+			},
+		},
+	}
+	// WorkRequestInputMembersColumns holds the columns for the "work_request_input_members" table.
+	WorkRequestInputMembersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "ordinal", Type: field.TypeInt},
+		{Name: "prompt_id", Type: field.TypeString},
+		{Name: "segment_id", Type: field.TypeInt},
+		{Name: "segment_index", Type: field.TypeInt},
+		{Name: "work_id", Type: field.TypeString},
+		{Name: "candidate_id", Type: field.TypeString},
+		{Name: "baseline_version", Type: field.TypeInt64},
+		{Name: "baseline_digest", Type: field.TypeString},
+		{Name: "baseline_target_is_null", Type: field.TypeBool},
+		{Name: "baseline_status", Type: field.TypeString},
+		{Name: "source_generation", Type: field.TypeInt64},
+		{Name: "source_revision_id", Type: field.TypeInt, Nullable: true},
+		{Name: "payload", Type: field.TypeBytes, Nullable: true},
+		{Name: "payload_bytes", Type: field.TypeInt64},
+		{Name: "payload_digest", Type: field.TypeString},
+		{Name: "request_id", Type: field.TypeInt},
+	}
+	// WorkRequestInputMembersTable holds the schema information for the "work_request_input_members" table.
+	WorkRequestInputMembersTable = &schema.Table{
+		Name:       "work_request_input_members",
+		Columns:    WorkRequestInputMembersColumns,
+		PrimaryKey: []*schema.Column{WorkRequestInputMembersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "work_request_input_members_work_requests_request",
+				Columns:    []*schema.Column{WorkRequestInputMembersColumns[16]},
+				RefColumns: []*schema.Column{WorkRequestsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "workrequestinputmember_request_id_ordinal",
+				Unique:  true,
+				Columns: []*schema.Column{WorkRequestInputMembersColumns[16], WorkRequestInputMembersColumns[1]},
+			},
+			{
+				Name:    "workrequestinputmember_request_id_prompt_id",
+				Unique:  true,
+				Columns: []*schema.Column{WorkRequestInputMembersColumns[16], WorkRequestInputMembersColumns[2]},
+			},
+			{
+				Name:    "workrequestinputmember_request_id_candidate_id",
+				Unique:  true,
+				Columns: []*schema.Column{WorkRequestInputMembersColumns[16], WorkRequestInputMembersColumns[6]},
+			},
+			{
+				Name:    "workrequestinputmember_request_id_work_id",
+				Unique:  true,
+				Columns: []*schema.Column{WorkRequestInputMembersColumns[16], WorkRequestInputMembersColumns[5]},
+			},
+		},
+	}
+	// WorkResponseMembersColumns holds the columns for the "work_response_members" table.
+	WorkResponseMembersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "ordinal", Type: field.TypeInt},
+		{Name: "payload", Type: field.TypeBytes, Nullable: true},
+		{Name: "payload_bytes", Type: field.TypeInt64},
+		{Name: "payload_digest", Type: field.TypeString},
+		{Name: "corrected_payload", Type: field.TypeBytes, Nullable: true},
+		{Name: "corrected_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "corrected_digest", Type: field.TypeString, Default: ""},
+		{Name: "state", Type: field.TypeString, Default: "pending"},
+		{Name: "failure", Type: field.TypeString, Default: ""},
+		{Name: "outcome_kind", Type: field.TypeInt, Default: 0},
+		{Name: "outcome_limit", Type: field.TypeInt64, Default: 0},
+		{Name: "outcome_observed", Type: field.TypeInt64, Default: 0},
+		{Name: "candidate_digest", Type: field.TypeString, Default: ""},
+		{Name: "candidate_version", Type: field.TypeInt64, Default: 0},
+		{Name: "request_id", Type: field.TypeInt},
+	}
+	// WorkResponseMembersTable holds the schema information for the "work_response_members" table.
+	WorkResponseMembersTable = &schema.Table{
+		Name:       "work_response_members",
+		Columns:    WorkResponseMembersColumns,
+		PrimaryKey: []*schema.Column{WorkResponseMembersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "work_response_members_work_requests_request",
+				Columns:    []*schema.Column{WorkResponseMembersColumns[15]},
+				RefColumns: []*schema.Column{WorkRequestsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "workresponsemember_request_id_ordinal",
+				Unique:  true,
+				Columns: []*schema.Column{WorkResponseMembersColumns[15], WorkResponseMembersColumns[1]},
+			},
+			{
+				Name:    "workresponsemember_request_id_state_ordinal",
+				Unique:  false,
+				Columns: []*schema.Column{WorkResponseMembersColumns[15], WorkResponseMembersColumns[8], WorkResponseMembersColumns[1]},
 			},
 		},
 	}
@@ -2667,6 +2780,8 @@ var (
 		WorkCandidatesTable,
 		WorkItemsTable,
 		WorkRequestsTable,
+		WorkRequestInputMembersTable,
+		WorkResponseMembersTable,
 	}
 )
 
@@ -2832,4 +2947,6 @@ func init() {
 	WorkRequestsTable.ForeignKeys[0].RefTable = JobsTable
 	WorkRequestsTable.ForeignKeys[1].RefTable = ResourcesTable
 	WorkRequestsTable.ForeignKeys[2].RefTable = JobRoundsTable
+	WorkRequestInputMembersTable.ForeignKeys[0].RefTable = WorkRequestsTable
+	WorkResponseMembersTable.ForeignKeys[0].RefTable = WorkRequestsTable
 }

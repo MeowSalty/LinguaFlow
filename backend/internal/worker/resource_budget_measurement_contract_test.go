@@ -27,6 +27,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequestinputmember"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -153,7 +154,7 @@ func measureHeldMain(t *testing.T, f *rubyPipelineFixture, observed actualMainOb
 		t.Fatal(err)
 	}
 	for _, row := range rows {
-		if len(row.FreezePayload) == 0 {
+		if row.InputMemberBytes == 0 {
 			continue
 		}
 		var freeze struct {
@@ -162,8 +163,21 @@ func measureHeldMain(t *testing.T, f *rubyPipelineFixture, observed actualMainOb
 				Segment struct{ Source string }
 			}
 		}
-		if err := json.Unmarshal(row.FreezePayload, &freeze); err != nil {
+		members, err := f.client.WorkRequestInputMember.Query().Where(workrequestinputmember.RequestIDEQ(row.ID)).All(context.Background())
+		if err != nil {
 			t.Fatal(err)
+		}
+		var frozenBytes int64
+		for _, stored := range members {
+			var value struct {
+				Index   int
+				Segment struct{ Source string }
+			}
+			if err = json.Unmarshal(stored.Payload, &value); err != nil {
+				t.Fatal(err)
+			}
+			freeze.Members = append(freeze.Members, value)
+			frozenBytes += int64(len(stored.Payload))
 		}
 		var targets []string
 		var indices []int
@@ -176,12 +190,12 @@ func measureHeldMain(t *testing.T, f *rubyPipelineFixture, observed actualMainOb
 			continue
 		}
 		sort.Ints(indices)
-		if row.FreezeBytes != int64(len(row.FreezePayload)) {
-			t.Fatalf("persisted freeze declared %d differs from actual %d", row.FreezeBytes, len(row.FreezePayload))
+		if row.InputMemberBytes != frozenBytes {
+			t.Fatalf("persisted freeze declared %d differs from actual %d", row.InputMemberBytes, frozenBytes)
 		}
 		result := actualMainFootprint{Indices: indices, Targets: targets, Words: observed.words,
 			ContextMembers: observed.contextMembers, SourceUTF8: observed.sourceUTF8,
-			ContextUTF8: observed.contextUTF8, Freeze: int64(len(row.FreezePayload)),
+			ContextUTF8: observed.contextUTF8, Freeze: int64(row.InputMemberBytes),
 			Wire: int64(len(observed.body)), System: int64(len(observed.system)), User: int64(len(observed.user))}
 		result.B = result.Wire + result.System + result.User
 		result.K = result.Freeze + result.B

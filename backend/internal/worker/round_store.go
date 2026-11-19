@@ -24,25 +24,29 @@ import (
 )
 
 type roundStore struct {
-	client     *ent.Client
-	store      *workstate.Store
-	scope      workstate.Scope
-	indexToID  map[int]int
-	canonical  *pipeline.Document
-	snapshot   *service.JobExecutionSnapshot
-	round      int
-	digest     string
-	qa         *qa.Engine
-	autoReject bool
-	driver     string
-	memory     tm.TranslationMemory
-	onCommit   func()
+	publicationProjectID int
+	client               *ent.Client
+	store                *workstate.Store
+	scope                workstate.Scope
+	indexToID            map[int]int
+	canonical            *pipeline.Document
+	snapshot             *service.JobExecutionSnapshot
+	round                int
+	digest               string
+	qa                   *qa.Engine
+	autoReject           bool
+	driver               string
+	memory               tm.TranslationMemory
+	onCommit             func()
 }
 
 func newRoundStore(client *ent.Client, scope workstate.Scope, indices map[int]int, snapshot *service.JobExecutionSnapshot, round int, qaEngine *qa.Engine, autoReject bool, driver string, memory tm.TranslationMemory, onCommit func()) *roundStore {
 	data, _ := json.Marshal(snapshot)
 	hash := sha256.Sum256(data)
 	s := &roundStore{client: client, store: workstate.NewStore(client), scope: scope, indexToID: indices, snapshot: snapshot, round: round, digest: hex.EncodeToString(hash[:]), qa: qaEngine, autoReject: autoReject, driver: driver, memory: memory, onCommit: onCommit}
+	if j, err := client.Job.Get(context.Background(), scope.JobID); err == nil {
+		s.publicationProjectID = j.ProjectID
+	}
 	return s
 }
 func (s *roundStore) ResourceIdentity() int { return s.scope.ResourceID }
@@ -371,14 +375,15 @@ func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) err
 	req := workstate.Request{ID: in.ID, CandidateID: in.CandidateID, Scope: s.scope, SegmentIDs: ids, Stage: string(in.Stage), BackendID: in.BackendID, BudgetModel: model, InputDigest: in.InputDigest,
 		MainAttempt: in.Stage == backend.RequestStageMain && in.Phase != "prompt_upgrade", AlignmentAttempt: in.Stage == backend.RequestStageAlignment && in.NetworkAttempt == 0,
 		MaxMainAttempts: min(max(1, retry+1), 3), MaxAlignmentAttempts: max(1, rubyBudget)}
-	if len(in.PromotionMembers) > 0 {
-		req.FreezePayload, req.SnapshotDigest, req.BusinessBound = in.FreezePayload, s.digest, in.BusinessBound
-		for _, m := range in.PromotionMembers {
+	if len(in.InputMembers) > 0 {
+		req.MemberContext = workstate.MemberContext{MemberPool: in.FrozenContext.Pool, MemberAttempt: in.MainAttempt, MemberMode: in.Mode, MemberFormat: in.Format, SourceLang: in.SourceLang, TargetLang: in.TargetLang, TextMode: in.TextMode}
+		req.SnapshotDigest, req.BusinessBound = s.digest, in.BusinessBound
+		for _, m := range in.InputMembers {
 			id, ok := s.segmentID(m.Index)
 			if !ok {
 				return permanentStoreError{workstate.ErrManifest}
 			}
-			req.PromotionMembers = append(req.PromotionMembers, workstate.PromotionMember{SegmentID: id, WorkID: s.WorkIdentity(m.Index), CandidateID: m.CandidateID, BaselineVersion: m.BaselineVersion, BaselineTarget: m.BaselineTarget, BaselineStatus: m.BaselineStatus, SourceGeneration: s.scope.SourceGeneration, SourceRevisionID: s.scope.SourceRevisionID})
+			req.InputMembers = append(req.InputMembers, workstate.InputMember{Key: workstate.MemberKey{RequestID: in.ID, Ordinal: m.Key.Ordinal, CaptureEpoch: s.scope.RetryEpoch}, PromotionMember: workstate.PromotionMember{SegmentID: id, WorkID: s.WorkIdentity(m.Index), CandidateID: m.CandidateID, BaselineVersion: m.BaselineVersion, BaselineTarget: m.BaselineTarget, BaselineStatus: m.BaselineStatus, SourceGeneration: s.scope.SourceGeneration, SourceRevisionID: s.scope.SourceRevisionID}, PromptID: m.PromptID, Index: m.Index, Payload: m.Payload, Bytes: m.Bytes, Digest: m.Digest})
 		}
 	}
 	for _, m := range in.Members {

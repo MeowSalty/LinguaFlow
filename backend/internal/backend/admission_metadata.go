@@ -8,6 +8,7 @@ type requestMetadataCredit struct {
 	dispatched bool
 	settled    bool
 	loaned     bool
+	retired    bool
 }
 
 func (a *RequestAdmission) prepareRootMetadataLocked(id string, members int) (bool, error) {
@@ -84,7 +85,38 @@ func (a *RequestAdmission) SetRequestMetadataBytes(id string, members int, actua
 		return nil
 	} // Pure terminal audit owns no P.
 	if credit == nil || credit.members != members && !(members == 0 && actual == 0) || actual < 0 {
-		return ErrPipelineCapacity
+		d := RejectionEvidence{RequestID: id, RequestedMembers: int64(members), RequestedBytes: actual, InventoryKnown: credit != nil}
+		if credit != nil {
+			d.InventoryMembers, d.InventoryBytes = int64(credit.members), credit.actual
+		}
+		return a.rejectLocked(ErrPipelineCapacity, "request_metadata_facts_mismatch", "settle_request_metadata", d)
+	}
+	if credit.retired {
+		if a.closed && actual != credit.actual {
+			return a.rejectLocked(ErrAdmissionClosed, "request_metadata_admission_closed", "settle_request_metadata", RejectionEvidence{RequestID: id, InventoryKnown: true, InventoryMembers: int64(credit.members), RequestedMembers: int64(members), InventoryBytes: credit.actual, RequestedBytes: actual})
+		}
+		attached := false
+		if !a.closed {
+			_, attached = a.root.Usage(a.rootScope, a.rootID)
+		}
+		if !attached && actual != credit.actual {
+			return a.rejectLocked(ErrAdmissionClosed, "request_metadata_root_detached", "settle_request_metadata", RejectionEvidence{RequestID: id, InventoryKnown: true, InventoryMembers: int64(credit.members), RequestedMembers: int64(members), InventoryBytes: credit.actual, RequestedBytes: actual})
+		}
+		next, err := checkedSum(a.rootMetadataBase, actual)
+		if err != nil {
+			return err
+		}
+		oldBase := a.rootMetadataBase
+		a.rootMetadataBase = next
+		delete(a.requestMetadata, id)
+		if attached {
+			if err := a.syncRootLocked(0); err != nil {
+				a.rootMetadataBase = oldBase
+				a.requestMetadata[id] = credit
+				return err
+			}
+		}
+		return nil
 	}
 	credit.actual = actual
 	credit.settled = true
@@ -103,6 +135,13 @@ func (a *RequestAdmission) MarkRequestMetadataUncertain(id string) {
 
 func (a *RequestAdmission) releaseRootMetadataLocked(id string) {
 	if credit := a.requestMetadata[id]; credit != nil {
+		if !credit.settled {
+			// A source can retire while its durable write is still unconfirmed.
+			// Keep only the original slots and last authoritative scalar, so a
+			// later storage settlement can resolve it without rearming that source.
+			credit.retired, credit.loaned = true, false
+			return
+		}
 		// Ended working owners transfer their authoritative retained SQL fact.
 		retained := credit.actual
 		next, err := checkedSum(a.rootMetadataBase, retained)

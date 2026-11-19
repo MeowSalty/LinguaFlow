@@ -19,6 +19,7 @@ type InventorySource struct {
 	Driver    string
 	ItemBytes int64
 	ActorID   int
+	Columns   map[string]bool
 }
 
 type inventoryRow struct {
@@ -131,11 +132,14 @@ func (s InventorySource) length(column string) string {
 }
 
 func storageBinaryColumn(column string) bool {
+	if column == "im.payload" || column == "om.payload" || column == "om.corrected_payload" {
+		return true
+	}
 	if i := strings.LastIndexByte(column, '.'); i >= 0 {
 		column = column[i+1:]
 	}
 	switch column {
-	case "freeze_payload", "response_payload", "corrected_targets", "corrected_target_index", "promotion_status", "pipeline_header", "pipeline_runtime_state":
+	case "capture_payload", "response_glossary", "corrected_payload", "freeze_payload", "response_payload", "corrected_targets", "corrected_target_index", "promotion_status", "pipeline_header", "pipeline_runtime_state":
 		return true
 	default:
 		return false
@@ -144,6 +148,7 @@ func storageBinaryColumn(column string) bool {
 
 // Job counts all paused/failed backing, independent of job status and epoch.
 func (s InventorySource) Job(ctx context.Context, jobID int) (v resourcebudget.Vector, storage int64, err error) {
+	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "inventory", Operation: "job_aggregate", FullJob: true})
 	if s.DB == nil || s.ItemBytes <= 0 {
 		return v, 0, fmt.Errorf("invalid inventory source")
 	}
@@ -166,15 +171,35 @@ func (s InventorySource) Job(ctx context.Context, jobID int) (v resourcebudget.V
 	if err = addInventory(&v.PayloadBytes, metadata); err != nil {
 		return
 	}
-	requestFields := []string{"freeze_payload", "response_payload", "corrected_targets", "corrected_target_index", "glossary_receipt", "promotion_members", "promotion_status", "members", "debits", "segment_ids"}
+	requestFields, fieldErr := s.requestStorageFields(ctx)
+	if fieldErr != nil {
+		err = fieldErr
+		return
+	}
 	var lengths []string
 	for _, c := range requestFields {
 		lengths = append(lengths, s.length(c))
 	}
-	var requestStorage int64
-	err = s.row(ctx, s.bind("SELECT COALESCE(SUM("+strings.Join(lengths, "+")+"),0) FROM work_requests WHERE job_id=?"), jobID).Scan(&requestStorage)
+	var requestStorage, requestRows int64
+	err = s.row(ctx, s.bind("SELECT COALESCE(SUM("+strings.Join(lengths, "+")+"),0),COUNT(*) FROM work_requests WHERE job_id=?"), jobID).Scan(&requestStorage, &requestRows)
 	if err != nil {
 		return
+	}
+	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "inventory", Operation: "inventory_rows", Rows: requestRows})
+	for _, table := range []string{"work_request_input_members", "work_response_members"} {
+		var fields []string
+		for _, field := range storageTableFields(table) {
+			fields = append(fields, s.storageLength(table, "m."+field))
+		}
+		var n, rows int64
+		err = s.row(ctx, s.bind("SELECT COALESCE(SUM("+strings.Join(fields, "+")+"),0),COUNT(*) FROM "+table+" m JOIN work_requests r ON r.id=m.request_id WHERE r.job_id=?"), jobID).Scan(&n, &rows)
+		if err != nil {
+			return
+		}
+		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "inventory", Operation: "inventory_rows", Rows: rows})
+		if err = addInventory(&requestStorage, n); err != nil {
+			return
+		}
 	}
 	var candidateStorage int64
 	err = s.row(ctx, s.bind("SELECT COALESCE(SUM("+s.length("c.payload")+"+"+s.length("c.pipeline_header")+"+"+s.length("c.baseline_target")+"),0) FROM work_candidates c JOIN work_items w ON w.id=c.work_item_id WHERE w.job_id=?"), jobID).Scan(&candidateStorage)
@@ -201,7 +226,7 @@ func (s InventorySource) Metadata(ctx context.Context, jobID int) (int64, error)
 		}
 	}
 	var n int64
-	err := s.row(ctx, s.bind("SELECT COALESCE(SUM("+joinLengths(lengths)+"),0) FROM work_requests WHERE job_id=? AND "+s.metadataBackingPredicate()), jobID).Scan(&n)
+	err := s.row(ctx, s.bind("SELECT COALESCE(SUM("+"CASE WHEN response_format_version=2 THEN request_metadata_bytes ELSE "+joinLengths(lengths)+" END+CASE WHEN remaining_members>0 THEN member_storage_bytes-input_member_bytes-output_member_bytes-capture_bytes-public_bytes ELSE 0 END),0) FROM work_requests WHERE job_id=? AND "+s.metadataBackingPredicate()), jobID).Scan(&n)
 	return n, err
 }
 
@@ -221,12 +246,15 @@ func (s InventorySource) RequestMetadataFacts(ctx context.Context, requestID str
 	if s.Driver == "postgres" {
 		count = "COALESCE(jsonb_array_length(segment_ids),0)"
 	}
-	err = s.row(ctx, s.bind("SELECT "+count+",CASE WHEN "+s.metadataBackingPredicate()+" THEN "+joinLengths(lengths)+" ELSE 0 END FROM work_requests WHERE identity=?"), requestID).Scan(&members, &n)
+	// Metadata credit belongs to the original frozen request cardinality.
+	// Promotion reduces live work, but retains the request's JSON descriptors
+	// and member identities until terminal cleanup; it does not resize that credit.
+	err = s.row(ctx, s.bind("SELECT CASE WHEN response_format_version=2 THEN promotion_count ELSE "+count+" END,CASE WHEN "+s.metadataBackingPredicate()+" THEN CASE WHEN response_format_version=2 THEN request_metadata_bytes ELSE "+joinLengths(lengths)+" END"+"+(member_storage_bytes-input_member_bytes-output_member_bytes-capture_bytes-public_bytes) ELSE 0 END FROM work_requests WHERE identity=?"), requestID).Scan(&members, &n)
 	return
 }
 
 func (s InventorySource) metadataBackingPredicate() string {
-	backing := s.length("freeze_payload") + "+" + s.length("response_payload") + "+" + s.length("corrected_targets")
+	backing := "capture_bytes+input_member_bytes+output_member_bytes+public_bytes"
 	return "((" + backing + ")>0 OR (promotion_state<>'cancelled' AND state IN ('reserved','sent','received','unknown') AND EXISTS (SELECT 1 FROM jobs WHERE id=work_requests.job_id AND status NOT IN ('completed','cancelled'))))"
 }
 
@@ -252,7 +280,7 @@ func (s InventorySource) Runtime(ctx context.Context, jobID int) (segments, cand
 	if err != nil {
 		return
 	}
-	p := s.length("freeze_payload") + "+" + s.length("response_payload") + "+" + s.length("corrected_targets")
+	p := "capture_bytes+input_member_bytes+output_member_bytes+public_bytes"
 	err = s.row(ctx, s.bind("SELECT COALESCE(SUM(CASE WHEN ("+p+")>0 THEN "+p+"+? ELSE 0 END),0) FROM work_requests WHERE job_id=?"), backend.RequestMetadataBytes, jobID).Scan(&handoff)
 	if err != nil {
 		return

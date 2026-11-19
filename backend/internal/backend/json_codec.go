@@ -26,9 +26,10 @@ type decoderField struct {
 	omit  bool
 }
 type decoderFieldCache struct {
-	typeOf reflect.Type
-	fields []decoderField
-	next   *decoderFieldCache
+	typeOf     reflect.Type
+	fields     []decoderField
+	next       *decoderFieldCache
+	allocation *OwnedAllocation
 }
 
 func (b *BuildBounds) fieldsFor(t reflect.Type) ([]decoderField, error) {
@@ -37,8 +38,17 @@ func (b *BuildBounds) fieldsFor(t reflect.Type) ([]decoderField, error) {
 			return cache.fields, nil
 		}
 	}
-	if e := b.ReserveAllocation(int64(t.NumField()), int64(unsafe.Sizeof(decoderField{}))); e != nil {
-		return nil, e
+	fieldBytes, err := AllocationBytes(int64(t.NumField()), int64(unsafe.Sizeof(decoderField{})))
+	if err != nil {
+		return nil, err
+	}
+	bytes, err := CheckedAdd(fieldBytes, int64(unsafe.Sizeof(decoderFieldCache{})))
+	if err != nil {
+		return nil, err
+	}
+	allocation, err := b.OwnAllocation(bytes, 1)
+	if err != nil {
+		return nil, err
 	}
 	fields := make([]decoderField, 0, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
@@ -48,11 +58,26 @@ func (b *BuildBounds) fieldsFor(t reflect.Type) ([]decoderField, error) {
 			fields = append(fields, decoderField{name, i, omit})
 		}
 	}
-	if e := b.ReserveAllocation(1, int64(unsafe.Sizeof(decoderFieldCache{}))); e != nil {
-		return nil, e
-	}
-	b.fieldCache = &decoderFieldCache{t, fields, b.fieldCache}
+	b.fieldCache = &decoderFieldCache{t, fields, b.fieldCache, allocation}
 	return fields, nil
+}
+
+// Reflection fields are workspace for one JSON operation. Its recursive
+// borrowers have joined at the outer return; decoded values and encoded bytes
+// retain their independent backing under the original build and meter.
+func (b *BuildBounds) retireJSONFields() {
+	b.jsonOperations--
+	if b.jsonOperations != 0 {
+		return
+	}
+	cache := b.fieldCache
+	b.fieldCache = nil
+	for cache != nil {
+		next, allocation := cache.next, cache.allocation
+		*cache = decoderFieldCache{}
+		cache = next
+		allocation.Release()
+	}
 }
 
 // WireString emits concatenated string fragments without cloning a large prompt.
@@ -85,6 +110,8 @@ func (b *BuildBounds) MeasureJSON(v any) (int64, error) {
 // MeasureJSONLimited applies the caller's input/output policy while counting a
 // borrowed value. Allocation demand and the eventual output grant are separate.
 func (b *BuildBounds) MeasureJSONLimited(v any, maxBytes int64) (int64, error) {
+	b.jsonOperations++
+	defer b.retireJSONFields()
 	if maxBytes < 0 {
 		return 0, &BuildCapacityError{"JSON measurement byte limit"}
 	}
@@ -102,6 +129,8 @@ func (b *BuildBounds) MeasureJSONLimited(v any, maxBytes int64) (int64, error) {
 }
 
 func (b *BuildBounds) WriteJSON(w io.Writer, v any) error {
+	b.jsonOperations++
+	defer b.retireJSONFields()
 	return b.encodeValue(w, reflect.ValueOf(v), true)
 }
 
@@ -126,6 +155,8 @@ func (b *BuildBounds) EncodeJSON(v any, maxBytes int64) ([]byte, error) {
 // EncodeJSONMeasured encodes an immutable snapshot using its previously
 // measured size. It retains the fixed writer's size-drift check.
 func (b *BuildBounds) EncodeJSONMeasured(v any, n, maxBytes int64) ([]byte, error) {
+	b.jsonOperations++
+	defer b.retireJSONFields()
 	if n > maxBytes || n > int64(math.MaxInt) || n < 0 {
 		return nil, &BuildCapacityError{"encoded JSON bytes"}
 	}
@@ -837,34 +868,7 @@ func (b *BuildBounds) ownedJSONString(d []byte) (string, *OwnedAllocation, error
 	}
 	// Count decoded UTF-8 without allocating so a legal large response cannot
 	// allocate a target above Q first. Escaped input does not inflate capacity.
-	n := 0
-	for i := 1; i < len(d)-1; i++ {
-		if d[i] != '\\' {
-			n++
-			continue
-		}
-		i++
-		if d[i] != 'u' {
-			n++
-			continue
-		}
-		r := hexRune(d[i+1 : i+5])
-		i += 4
-		if utf16.IsSurrogate(r) {
-			if r >= 0xD800 && r <= 0xDBFF && i+6 < len(d)-1 && d[i+1] == '\\' && d[i+2] == 'u' {
-				r2 := hexRune(d[i+3 : i+7])
-				if r2 >= 0xDC00 && r2 <= 0xDFFF {
-					r = utf16.DecodeRune(r, r2)
-					i += 6
-				} else {
-					r = utf8.RuneError
-				}
-			} else {
-				r = utf8.RuneError
-			}
-		}
-		n += utf8.RuneLen(r)
-	}
+	n := int(decodedJSONStringBytes(d))
 	if int64(n) > b.stringLimit {
 		return "", nil, &BuildCapacityError{"decoded string bytes"}
 	}
@@ -922,7 +926,42 @@ func (b *BuildBounds) ownedJSONString(d []byte) (string, *OwnedAllocation, error
 	return string(out), owner, nil
 }
 
+func decodedJSONStringBytes(d []byte) int64 {
+	n := int64(0)
+	for i := 1; i < len(d)-1; i++ {
+		if d[i] != '\\' {
+			n++
+			continue
+		}
+		i++
+		if d[i] != 'u' {
+			n++
+			continue
+		}
+		r := hexRune(d[i+1 : i+5])
+		i += 4
+		if utf16.IsSurrogate(r) {
+			if r >= 0xD800 && r <= 0xDBFF && i+6 < len(d)-1 && d[i+1] == '\\' && d[i+2] == 'u' {
+				r2 := hexRune(d[i+3 : i+7])
+				if r2 >= 0xDC00 && r2 <= 0xDFFF {
+					r = utf16.DecodeRune(r, r2)
+					i += 6
+				} else {
+					r = utf8.RuneError
+				}
+			} else {
+				r = utf8.RuneError
+			}
+		}
+		n += int64(utf8.RuneLen(r))
+	}
+	return n
+}
+
 func (b *BuildBounds) DecodeJSON(data []byte, v any) error {
+	b.jsonOperations++
+	defer b.retireJSONFields()
+	ObserveMemberWork(b.ctx, MemberWorkEvent{Phase: "decode", Operation: "decode", Bytes: int64(len(data))})
 	dst := reflect.ValueOf(v)
 	if !dst.IsValid() || dst.Kind() != reflect.Pointer || dst.IsNil() {
 		return errors.New("bounded JSON destination must be a nonnil pointer")

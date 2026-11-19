@@ -9,6 +9,9 @@ import (
 
 func TestReadStageCountsUsesCurrentEpochAndDurableWork(t *testing.T) {
 	ctx, client, _, scope, seg := fixture(t)
+	// This compatibility fixture writes checkpoints directly, before a sealed
+	// manifest's authoritative writer has calibrated its count.
+	client.JobRound.UpdateOneID(scope.RoundID).SetManifestSealed(false).ExecX(ctx)
 	client.Job.UpdateOneID(scope.JobID).SetRetryEpoch(2).SetStatus("pausing").SetPauseRequested(true).SetProgressCompleted(7).ExecX(ctx)
 	client.JobRoundSegment.Create().SetJobRoundID(scope.RoundID).SetSegmentID(seg.ID).ExecX(ctx)
 	for i, request := range []struct {
@@ -58,6 +61,7 @@ func TestReadStageCountsUsesCurrentEpochAndDurableWork(t *testing.T) {
 
 func TestReadStageCountsConfirmedFactsExcludeClosedUnresolvedWork(t *testing.T) {
 	ctx, client, _, scope, seg := fixture(t)
+	client.JobRound.UpdateOneID(scope.RoundID).SetManifestSealed(false).ExecX(ctx)
 	closed := client.JobRound.Create().SetJobID(scope.JobID).SetJobResourceID(scope.JobResourceID).
 		SetRoundIndex(1).SetMode("translate").SetStatus("completed").SetSegmentTotal(2).SetSegmentCompleted(1).SaveX(ctx)
 	client.JobRoundSegment.Create().SetJobRoundID(closed.ID).SetSegmentID(seg.ID).ExecX(ctx)

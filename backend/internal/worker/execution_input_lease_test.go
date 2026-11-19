@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
@@ -89,7 +91,25 @@ func TestExecutionInputResponsePrepayAndLaterCapacityRetainsUsage(t *testing.T) 
 			}
 			if trigger == 1 {
 				if err != nil || result == nil || result.Status != "success" || result.TargetText != "alpha beta" {
-					t.Fatalf("prepaid response failed under full Root: result=%+v err=%v", result, err)
+					status, targetBytes, targetMatches := "no_result", 0, false
+					var paidCalls, paidIn, paidOut int64
+					if result != nil {
+						status, targetBytes, targetMatches = result.Status, len(result.TargetText), result.TargetText == "alpha beta"
+						for _, metric := range result.Metrics {
+							paidCalls += metric.APICalls
+							paidIn += metric.InputTokens
+							paidOut += metric.OutputTokens
+						}
+					}
+					f.mu.Lock()
+					actualHTTP := len(f.requests)
+					f.mu.Unlock()
+					var rejection *backend.RejectionError
+					if errors.As(err, &rejection) {
+						d := rejection.Evidence
+						t.Logf("prepaid rejection scalars: phase=%s op=%s request=%s origin_owner=%s caller=%s meter=%s live=%d paid=%d wire=%d ledger_paid=%d ledger_wire=%d bounds_live=%d root_used=%d root_requested=%d root_limit=%d", d.Phase, d.Operation, d.RequestID, d.SourceOwner, d.CallerOwner, d.MeterID, d.LiveBytes, d.MeterPaid, d.MeterWire, d.LedgerPaid, d.LedgerWire, d.BoundsLiveBytes, d.Used, d.Requested, d.Limit)
+					}
+					t.Fatalf("prepaid full Root: status=%s target_bytes=%d target_matches=%t HTTP=%d usage=%d/%d/%d capacity=%t err_type=%T err=%v", status, targetBytes, targetMatches, actualHTTP, paidCalls, paidIn, paidOut, isExecutionCapacity(err), err, err)
 				}
 			} else if !isExecutionCapacity(err) {
 				t.Fatalf("expected capacity failure after paid HTTP, got result=%+v err=%v", result, err)

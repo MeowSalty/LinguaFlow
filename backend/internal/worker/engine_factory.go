@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -78,7 +79,7 @@ func (f *EngineFactory) BuildEngineWithConfig(
 	cfg *engine.Config,
 	resources engine.RuntimeResources,
 	reporter progress.Reporter,
-) (*engine.Engine, error) {
+) (built *engine.Engine, returnErr error) {
 	if err := execution.ValidateSpec(snapshot); err != nil {
 		return nil, err
 	}
@@ -101,13 +102,11 @@ func (f *EngineFactory) BuildEngineWithConfig(
 			scope := service.ExecutionScope(ctx)
 			if f.prepareActor != nil {
 				if err := f.prepareActor(ctx, scope.ActorID); err != nil {
-					runtime.Close()
-					return nil, err
+					return nil, errors.Join(err, runtime.Close())
 				}
 			}
 			if err := runtime.Admission.AttachRootBudget(f.rootBudget, scope); err != nil {
-				runtime.Close()
-				return nil, err
+				return nil, errors.Join(err, runtime.Close())
 			}
 		}
 	}
@@ -116,7 +115,7 @@ func (f *EngineFactory) BuildEngineWithConfig(
 	defer func() {
 		if !success {
 			if ownRuntime {
-				runtime.Close()
+				returnErr = errors.Join(returnErr, runtime.Close())
 			}
 			for _, b := range owned {
 				_ = b.Close()

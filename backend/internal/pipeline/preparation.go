@@ -17,10 +17,18 @@ type WorkDeferred struct {
 	Cause error
 }
 
-func (e *WorkDeferred) Error() string      { return "work deferred: " + e.Wait.Reason }
-func (e *WorkDeferred) Unwrap() error      { return e.Cause }
-func (*WorkDeferred) Permanent() bool      { return true }
-func workDeferred(err error) *WorkDeferred { var d *WorkDeferred; errors.As(err, &d); return d }
+func (e *WorkDeferred) Error() string                { return "work deferred: " + e.Wait.Reason }
+func (e *WorkDeferred) Unwrap() error                { return e.Cause }
+func (e *WorkDeferred) DeferredCapacityCause() error { return e.Cause }
+func (*WorkDeferred) Permanent() bool                { return true }
+func workDeferred(err error) *WorkDeferred {
+	if errors.Is(err, backend.ErrNoCapacityDrain) {
+		return nil
+	}
+	var d *WorkDeferred
+	errors.As(err, &d)
+	return d
+}
 func waitPreparation(ctx context.Context, w backend.AdmissionWait) error {
 	var timer *time.Timer
 	var at <-chan time.Time

@@ -39,7 +39,11 @@ func TestRuntimeReporterSavingObservesCheckpointSQLAndLifetime(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := testExecutionRuntime(t, 1)
-	t.Cleanup(runtime.Close)
+	t.Cleanup(func() {
+		if err := runtime.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	worker, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	runtime.Lifetime = worker

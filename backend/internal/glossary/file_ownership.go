@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"slices"
 	"strings"
 	"unicode"
@@ -17,8 +18,15 @@ import (
 // request admission ledger. It is a dictionary lifetime, independent of any
 // promotion build. Close follows all dictionary users and returned borrowers.
 func (g *FileGlossary) BindAllocationOwner(ctx context.Context, a *backend.RequestAdmission) error {
+	g.retirement.Lock()
+	defer g.retirement.Unlock()
+	g.mutation.Lock()
+	defer g.mutation.Unlock()
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.closed {
+		return errors.New("glossary: closed")
+	}
 	if g.allocationAdmission != nil {
 		if g.allocationAdmission != a {
 			return backend.ErrBuildCapacity
@@ -122,13 +130,38 @@ func dictionaryKeyBounded(b *backend.BuildBounds, e Entry) (string, error) {
 	return result.String(), nil
 }
 
+// preparedFileEntries holds all allocations before either business endpoint is
+// visible. Install is called under g.mu and contains only pointer assignments.
+type preparedFileEntries struct {
+	install  func()
+	rollback func() error
+	retire   func() error
+}
+
 func (g *FileGlossary) applyOwnedEntriesLocked(ctx context.Context, entries []Entry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	b, err := g.dictionaryBounds(ctx)
+	p, err := g.prepareOwnedEntriesLocked(ctx, entries)
 	if err != nil {
 		return err
+	}
+	p.install()
+	return p.retire()
+}
+
+func (g *FileGlossary) prepareOwnedEntriesLocked(ctx context.Context, entries []Entry) (preparedFileEntries, error) {
+	if len(entries) == 0 {
+		return preparedFileEntries{install: func() {}, rollback: func() error { return nil }, retire: func() error { return nil }}, nil
+	}
+	sourceAdmission, sourceOwner := backend.BuildOwnership(ctx)
+	fromSource := g.allocationAdmission != nil && sourceAdmission == g.allocationAdmission && sourceOwner != "" && sourceOwner != g.allocationOwner
+	var b *backend.BuildBounds
+	var err error
+	if fromSource {
+		b, err = backend.NewBuildBoundsFromContext(ctx, 0, 0)
+	} else {
+		b, err = g.dictionaryBounds(ctx)
+	}
+	if err != nil {
+		return preparedFileEntries{}, err
 	}
 	before := int64(0)
 	if g.allocationAdmission != nil {
@@ -141,18 +174,20 @@ func (g *FileGlossary) applyOwnedEntriesLocked(ctx context.Context, entries []En
 	defer func() {
 		if !installed {
 			next, keys, head = nil, nil, nil
-			if g.allocationAdmission != nil {
+			if fromSource {
+				b.CloseRetired()
+			} else if g.allocationAdmission != nil {
 				_ = g.allocationAdmission.ResizeBuild(g.allocationOwner, before)
 			}
 		}
 	}()
 	count64, err := backend.CheckedAdd(int64(len(g.entries)), int64(len(entries)))
 	if err != nil {
-		return err
+		return preparedFileEntries{}, err
 	}
 	count := int(count64)
 	if err = backend.ReserveSlice[Entry](b, int64(count)); err != nil {
-		return err
+		return preparedFileEntries{}, err
 	}
 	next = make([]Entry, len(g.entries), count)
 	copy(next, g.entries)
@@ -166,7 +201,7 @@ func (g *FileGlossary) applyOwnedEntriesLocked(ctx context.Context, entries []En
 	}
 	orderCredit, err := b.OwnAllocation(int64(count), int64(unsafe.Sizeof(orderedEntry{})))
 	if err != nil {
-		return err
+		return preparedFileEntries{}, err
 	}
 	order := make([]orderedEntry, count)
 	defer func() { order = nil; orderCredit.Release() }()
@@ -177,14 +212,14 @@ func (g *FileGlossary) applyOwnedEntriesLocked(ctx context.Context, entries []En
 	for _, entry := range entries {
 		var owned Entry
 		if err = b.CloneInto(entry, &owned); err != nil {
-			return err
+			return preparedFileEntries{}, err
 		}
 		key, e := dictionaryKeyBounded(b, owned)
 		if e != nil {
-			return e
+			return preparedFileEntries{}, e
 		}
 		if err = b.ReserveAllocation(1, int64(unsafe.Sizeof(EntrySnapshot{}))); err != nil {
-			return err
+			return preparedFileEntries{}, err
 		}
 		next = append(next, owned)
 		keys[key] = len(next) - 1
@@ -198,25 +233,71 @@ func (g *FileGlossary) applyOwnedEntriesLocked(ctx context.Context, entries []En
 		keys[entry.key] = i
 	}
 	oldEntries := g.entryAllocation
-	g.entries, g.bySource = next, keys
-	g.entrySnapshot.Store(head)
-	g.entryAllocation, err = backend.AllocationBytes(int64(cap(next)), int64(unsafe.Sizeof(Entry{})))
+	nextAllocation, err := backend.AllocationBytes(int64(cap(next)), int64(unsafe.Sizeof(Entry{})))
 	if err != nil {
-		return err
+		return preparedFileEntries{}, err
 	}
-	installed = true
-	if g.allocationAdmission != nil {
-		return g.allocationAdmission.ReleaseBuildBytes(g.allocationOwner, oldEntries)
+	// Retire the sort scratch before identifying the actual persistent backing.
+	order = nil
+	orderCredit.Release()
+	var transfer *backend.PreparedAllocationTransfer
+	var receipt *backend.OwnedAllocation
+	if fromSource {
+		receipt, err = b.RetainedAllocation(b.Snapshot().LiveBytes)
+		if err != nil {
+			return preparedFileEntries{}, err
+		}
+		transfer, err = backend.PrepareBuildAllocationTransfer(ctx, receipt, g.allocationOwner)
+		if err != nil {
+			receipt.Release()
+			return preparedFileEntries{}, err
+		}
 	}
-	return nil
+	prepared := preparedFileEntries{
+		install: func() {
+			g.entries, g.bySource = next, keys
+			g.entrySnapshot.Store(head)
+			g.entryAllocation = nextAllocation
+			g.dirty = true
+		},
+		rollback: func() error {
+			next, keys, head = nil, nil, nil
+			if transfer != nil {
+				if err := transfer.Rollback(); err != nil {
+					return err
+				}
+				receipt.Release()
+				b.CloseRetired()
+			} else if g.allocationAdmission != nil {
+				return g.allocationAdmission.ResizeBuild(g.allocationOwner, before)
+			}
+			return nil
+		},
+		retire: func() error {
+			if transfer != nil {
+				transfer.Commit()
+				b.CloseRetired()
+			}
+			if g.allocationAdmission != nil {
+				return g.allocationAdmission.ReleaseBuildBytes(g.allocationOwner, oldEntries)
+			}
+			return nil
+		},
+	}
+	installed = true // Ownership belongs to prepared until Install or Rollback.
+	return prepared, nil
 }
-
 func (g *FileGlossary) Close() error {
+	g.retirement.Lock()
+	defer g.retirement.Unlock()
+	g.mutation.Lock()
 	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.closed = true
 	g.entries = nil
 	g.bySource = nil
 	g.entrySnapshot.Store(nil)
+	g.mu.Unlock()
+	g.mutation.Unlock()
 	if g.allocationAdmission == nil {
 		return nil
 	}

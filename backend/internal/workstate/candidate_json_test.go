@@ -105,24 +105,25 @@ func TestBudgetIntegrationJSONBPromotionAndCandidateReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	members := client.WorkRequest.Query().OnlyX(ctx).PromotionMembers
-	normalize("work_requests", "promotion_members", members)
+	debits := client.WorkRequest.Query().OnlyX(ctx).Debits
+	normalize("work_requests", "debits", debits)
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatalf("normalized reservation replay: %v", err)
 	}
-	if err := store.HandoffResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatalf("first handoff over normalized reservation: %v", err)
 	}
-	normalize("work_requests", "promotion_members", members)
-	if err := store.HandoffResponse(ctx, h); err != nil {
+	normalize("work_requests", "debits", debits)
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatalf("normalized handoff ACK/replay: %v", err)
 	}
-	p := MemberPromotion{Scope: scope, RequestID: r.ID, Cursor: 0, Candidate: &c, Next: cursorFromRow(client.WorkItem.Query().OnlyX(ctx))}
-	if err := store.PromoteMember(ctx, p); err != nil {
+	publishFixtureBusiness(t, ctx, store, r)
+	p := MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: cursorFromRow(client.WorkItem.Query().OnlyX(ctx))}
+	if _, err := store.PromoteMember(ctx, fixturePromotion(p)); err != nil {
 		t.Fatal(err)
 	}
 	normalize("work_candidates", "payload", c.Payload)
-	if err := store.PromoteMember(ctx, p); err != nil {
+	if _, err := store.PromoteMember(ctx, fixturePromotion(p)); err != nil {
 		t.Fatalf("normalized promoted candidate ACK/replay: %v", err)
 	}
 }
@@ -136,13 +137,11 @@ func TestBudgetIntegrationResponseMetadataRejectedBeforeBody(t *testing.T) {
 			if err := store.ReserveRequest(ctx, r); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.HandoffResponse(ctx, h); err != nil {
+			if _, err := store.CaptureResponse(ctx, h); err != nil {
 				t.Fatal(err)
 			}
 			var malformed any
 			switch field {
-			case "promotion_status", "corrected_target_index":
-				malformed = bytes.Repeat([]byte{0}, 40000)
 			case "segment_ids":
 				malformed = "[" + strings.Repeat("1,", 65536) + "1]"
 			default:
@@ -151,11 +150,12 @@ func TestBudgetIntegrationResponseMetadataRejectedBeforeBody(t *testing.T) {
 			if _, err := client.ExecContext(ctx, "UPDATE work_requests SET "+field+"=$1 WHERE identity=$2", malformed, r.ID); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := store.LoadResponse(ctx, r.ID, 1<<20, 1<<20, 1<<20); err == nil {
-				t.Fatal("unbounded metadata returned a response body")
+			capture, err := store.LoadCapture(ctx, r.ID, 1<<20)
+			if capture.Release != nil {
+				capture.Release()
 			}
-			if _, err := store.LoadResponseMember(ctx, r.ID, 0); err == nil {
-				t.Fatal("unbounded metadata returned promotion member")
+			if err == nil {
+				t.Fatal("unbounded metadata returned a captured body before archive")
 			}
 		})
 	}
@@ -191,19 +191,19 @@ func TestBudgetIntegrationJSONBReadLengthIndependentOfCanonicalBytes(t *testing.
 
 func TestInventorySQLUsesDeclaredColumnTypes(t *testing.T) {
 	s := InventorySource{Driver: "postgres"}
-	for _, column := range []string{"freeze_payload", "response_payload", "corrected_targets", "corrected_target_index", "promotion_status", "c.pipeline_header"} {
+	for _, column := range []string{"capture_payload", "im.payload", "om.payload", "om.corrected_payload", "c.pipeline_header"} {
 		if got := s.length(column); got != "COALESCE(OCTET_LENGTH("+column+"),0)" {
 			t.Fatalf("bytea %s: %s", column, got)
 		}
 	}
-	for _, column := range []string{"c.payload", "members", "debits", "glossary_receipt", "promotion_members", "segment_ids", "c.baseline_target"} {
+	for _, column := range []string{"c.payload", "members", "debits", "glossary_receipt", "segment_ids", "c.baseline_target"} {
 		got := s.length(column)
 		if !strings.Contains(got, "OCTET_LENGTH(CAST("+column+" AS TEXT))") {
 			t.Fatalf("JSON/text %s: %s", column, got)
 		}
 	}
 	s.Driver = "sqlite"
-	if got := s.length("response_payload"); got != "COALESCE(LENGTH(CAST(response_payload AS BLOB)),0)" {
+	if got := s.length("capture_payload"); got != "COALESCE(LENGTH(CAST(capture_payload AS BLOB)),0)" {
 		t.Fatal(got)
 	}
 }

@@ -27,7 +27,11 @@ func TestEngineFactoryOwnsOnlyLocalRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(shared.Close)
+	t.Cleanup(func() {
+		if err := shared.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	ctx := pipeline.WithExecutionRuntime(context.Background(), shared)
 	e, err := fixture.factory.BuildEngine(ctx, fixture.snapshot, engine.RuntimeResources{}, nil)
 	if err != nil {

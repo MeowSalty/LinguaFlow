@@ -428,6 +428,19 @@ func aggregateCapacity(err error) bool { return errors.Is(err, resourcebudget.Er
 
 type noCapacityDrainError struct{ capacity error }
 
+func withoutCapacityDeferral(err error) error {
+	var deferred interface{ DeferredCapacityCause() error }
+	if !errors.As(err, &deferred) || deferred.DeferredCapacityCause() == nil {
+		return err
+	}
+	cause := deferred.DeferredCapacityCause()
+	var rejection *RejectionError
+	if errors.As(err, &rejection) {
+		cause = AnnotateRejection(cause, rejection.Evidence)
+	}
+	return cause
+}
+
 func (e *noCapacityDrainError) Error() string {
 	return fmt.Sprintf("%s: %v", ErrNoCapacityDrain, e.capacity)
 }
@@ -449,7 +462,34 @@ func (a *RequestAdmission) classifyRootCapacityLocked(err error) error {
 			}
 		}
 	}
-	return &noCapacityDrainError{err}
+	return &noCapacityDrainError{withoutCapacityDeferral(err)}
+}
+
+// ClassifyResponseCapacity excludes the response blocked by this very probe.
+// Its retained main ownership cannot release bytes until the failed work runs.
+// External drain evidence was captured under Root's lock at the failed probe;
+// keep that evidence even when its consumer has already released by now.
+func (a *RequestAdmission) ClassifyResponseCapacity(id string, err error) error {
+	if !aggregateCapacity(err) || resourcebudget.CapacityHasDrain(err) {
+		return err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if b := a.budget; b != nil {
+		if b.auxOwners > 0 {
+			return err
+		}
+		self, exists := b.requests[id]
+		for round, count := range b.mainOwners {
+			if exists && self.responseOwned && self.round == round {
+				count--
+			}
+			if count > 0 {
+				return err
+			}
+		}
+	}
+	return &noCapacityDrainError{withoutCapacityDeferral(err)}
 }
 
 func (a *RequestAdmission) CanDrainAggregate() bool {

@@ -144,6 +144,10 @@ type Tx struct {
 	WorkItem *WorkItemClient
 	// WorkRequest is the client for interacting with the WorkRequest builders.
 	WorkRequest *WorkRequestClient
+	// WorkRequestInputMember is the client for interacting with the WorkRequestInputMember builders.
+	WorkRequestInputMember *WorkRequestInputMemberClient
+	// WorkResponseMember is the client for interacting with the WorkResponseMember builders.
+	WorkResponseMember *WorkResponseMemberClient
 
 	// lazily loaded.
 	client     *Client
@@ -340,6 +344,8 @@ func (tx *Tx) init() {
 	tx.WorkCandidate = NewWorkCandidateClient(tx.config)
 	tx.WorkItem = NewWorkItemClient(tx.config)
 	tx.WorkRequest = NewWorkRequestClient(tx.config)
+	tx.WorkRequestInputMember = NewWorkRequestInputMemberClient(tx.config)
+	tx.WorkResponseMember = NewWorkResponseMemberClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

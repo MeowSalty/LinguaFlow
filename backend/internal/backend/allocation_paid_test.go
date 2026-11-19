@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"errors"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"testing"
 )
@@ -444,6 +445,224 @@ func TestPaidCapacityHandoffRetainsCreditUntilConsumersFinish(t *testing.T) {
 	retainedBacking = nil
 	if err = a.ReleaseBuild("final-result"); err != nil || root.Snapshot(1).Actor.PayloadBytes != 0 {
 		t.Fatal(err, root.Snapshot(1))
+	}
+}
+
+func TestPaidCapacityCanonicalFactsPreserveLiveResponseCredit(t *testing.T) {
+	a, root, ctx, intent := paidCapacityFixture(t, RequestStageMain)
+	a.mu.Lock()
+	a.config.MainConcurrency[0] = 1
+	a.mu.Unlock()
+	raw, err := OwnProviderResponseAllocation(ctx, 10, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ApplyProviderResponseHandoff(ctx, intent.RequestID, 10); err != nil {
+		t.Fatal(err)
+	}
+	before := RejectionEvidenceFromContext(ctx)
+	facts := responsecontract.ResponseFacts{CaptureBytes: 10, PublicKind: responsecontract.PublicNone}
+	if err = a.RestoreResponseOwnership(intent.RequestID, intent.RoundIndex, intent.ResourceID, facts, responsecontract.CapturePending, true); err != nil {
+		t.Fatal(err)
+	}
+	later, err := OwnProviderResponseAllocation(ctx, 900, 1)
+	if err != nil {
+		t.Fatal("canonical archive retired live paid R", err)
+	}
+	after := RejectionEvidenceFromContext(ctx)
+	if after.MeterPaid != before.MeterPaid || after.LedgerPaid != before.LedgerPaid || after.MeterPaid != after.LedgerPaid {
+		t.Fatalf("canonical facts changed live provider credit: before=%+v after=%+v", before, after)
+	}
+	later.Release()
+	raw.Release()
+	finishPaidFixture(t, a, ctx, intent)
+	if root.Snapshot(1).Instance != (resourcebudget.Vector{}) {
+		t.Fatalf("live facts retained paid owner: %+v", root.Snapshot(1))
+	}
+}
+
+func TestPaidCapacityCanonicalAdvancementDoesNotRestoreSpentCredit(t *testing.T) {
+	root, err := resourcebudget.New(resourcebudget.Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newAdmission := func(call string) *RequestAdmission {
+		a, e := NewRequestAdmission(nil, RequestAdmissionConfig{MainConcurrency: map[int]int{0: 1}})
+		if e != nil {
+			t.Fatal(e)
+		}
+		if e = a.ConfigurePipelineBudget(PipelineBudgetLimits{Segments: 4, Candidates: 8192, Item: 4096, Responses: 1024, Handoff: 1 << 20}); e != nil {
+			t.Fatal(e)
+		}
+		if e = a.AttachRootBudget(root, resourcebudget.Scope{ActorID: 1, CallID: call}); e != nil {
+			t.Fatal(e)
+		}
+		t.Cleanup(a.Close)
+		return a
+	}
+	a := newAdmission("canonical-live")
+	if ok, e := a.ReserveMembers("live", 1, 1, 0, false); e != nil || !ok {
+		t.Fatalf("reserve actual member %t %v", ok, e)
+	}
+	if ok, e := a.PrepareMain("live", 0, 1, 0, 0, 0, false, 1); e != nil || !ok {
+		t.Fatalf("prepare %t %v", ok, e)
+	}
+	permit, _, err := a.TryAdmit(t.Context(), RequestAdmissionIntent{RequestID: "live", RoundIndex: 0, ResourceID: 1, Stage: RequestStageMain}, nil)
+	if err != nil || permit == nil {
+		t.Fatal(err)
+	}
+	defer permit.Release()
+	ctx := WithBuildOwnership(t.Context(), a, "response:live")
+	ctx = WithBuildReservation(ctx, func(n int64) error { return a.ClaimBuild("response:live", n) }, func(n int64) {
+		if e := a.ReleaseBuildBytes("response:live", n); e != nil {
+			t.Error(e)
+		}
+	})
+	ctx = WithProviderResponseOwnership(ctx, a, "live", RequestStageMain)
+	ctx, err = WithProviderResponseAllocation(ctx, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := OwnProviderResponseAllocation(ctx, int64(len("capture")), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawBacking := make([]byte, len("capture"), len("capture"))
+	copy(rawBacking, "capture")
+	if err = ApplyProviderResponseHandoff(ctx, "live", int64(len(rawBacking))); err != nil {
+		t.Fatal(err)
+	}
+	facts := responsecontract.ResponseFacts{CaptureBytes: int64(len(rawBacking)), PublicKind: responsecontract.PublicNone}
+	check := func(phase responsecontract.ResponsePhase, want int64) {
+		t.Helper()
+		if e := a.RestoreResponseOwnership("live", 0, 1, facts, phase, true); e != nil {
+			t.Fatal(e)
+		}
+		if _, e := WithProviderResponseAllocation(ctx, 1024); e != nil {
+			t.Fatal("canonical advancement broke provider rebind", e)
+		}
+		observed := RejectionEvidenceFromContext(ctx)
+		a.mu.Lock()
+		saved := a.budget.requests["live"]
+		a.mu.Unlock()
+		if observed.MeterPaid != want || observed.LedgerPaid != want || saved.restored || !saved.liveProvider {
+			t.Fatalf("%s restored spent credit or marked actual live as cold: %+v restored=%t", phase, observed, saved.restored)
+		}
+	}
+	check(responsecontract.CapturePending, 1024)
+	// Inventory was loaded earlier in this same runtime. That global fact cannot
+	// turn a newly dispatched and registered provider into a cold response.
+	a.mu.Lock()
+	a.budget.inventoryRestored = true
+	a.mu.Unlock()
+	canonicalBackings := map[string][]byte{}
+	transfer := func(text, target string) int64 {
+		t.Helper()
+		credit, e := OwnProviderResponseAllocation(ctx, int64(len(text)), 1)
+		if e != nil {
+			t.Fatal(e)
+		}
+		backing := make([]byte, len(text), len(text))
+		copy(backing, text)
+		if e = TransferProviderResponseToBuild(ctx, credit, target); e != nil {
+			t.Fatal(e)
+		}
+		canonicalBackings[target] = backing
+		return int64(cap(backing))
+	}
+	model := transfer("model", "canonical-model")
+	facts.ModelOutputBytes = model
+	facts.OutputMemberBytes = model
+	check(responsecontract.CapturePending, 1024-model) // A partial archive still retains capture.
+	facts.CaptureBytes = 0
+	check(responsecontract.OutputsReady, 1024-model)
+	receipt := transfer("receipt", "canonical-receipt")
+	facts.PublicBytes = receipt
+	facts.PublicKind = responsecontract.PublicReceipt
+	check(responsecontract.BusinessReady, 1024-model-receipt)
+	b, err := NewBuildBoundsFromContext(ctx, 4096, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := b.OwnAllocation(int64(len("candidate")), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateBacking := make([]byte, len("candidate"), len("candidate"))
+	copy(candidateBacking, "candidate")
+	if ok, e := a.BeginPromotionWithAllocation(ctx, "live", "candidate", int64(len(candidateBacking)), false, candidate); e != nil || !ok {
+		t.Fatalf("actual promotion %t %v", ok, e)
+	}
+	facts.ModelOutputBytes = 0
+	facts.OutputMemberBytes = 0
+	facts.PublicBytes = 0
+	facts.PublicKind = responsecontract.PublicNone
+	check(responsecontract.Promoted, 1024-model-receipt-int64(len(candidateBacking)))
+	if err = a.ApplyPromotion("live", "candidate", int64(len(candidateBacking))); err != nil {
+		t.Fatal(err)
+	}
+	b.CloseRetired()
+	rawBacking = nil
+	raw.Release()
+	if err = CloseProviderResponseAllocation(ctx); err != nil {
+		t.Fatal(err)
+	}
+	permit.Release()
+	candidateBacking = nil
+	a.ReleaseBudgetEntry("candidate")
+	delete(canonicalBackings, "canonical-model")
+	if err = a.ReleaseBuild("canonical-model"); err != nil {
+		t.Fatal(err)
+	}
+	delete(canonicalBackings, "canonical-receipt")
+	if err = a.ReleaseBuild("canonical-receipt"); err != nil {
+		t.Fatal(err)
+	}
+	a.Close()
+	if root.Snapshot(1).Instance != (resourcebudget.Vector{}) {
+		t.Fatalf("live close leaked canonical owners: %+v", root.Snapshot(1))
+	}
+	cold := newAdmission("canonical-cold")
+	coldFacts := responsecontract.ResponseFacts{CaptureBytes: 7, PublicKind: responsecontract.PublicNone}
+	if err = cold.RestoreResponseOwnership("cold", 0, 1, coldFacts, responsecontract.CapturePending, false); err != nil {
+		t.Fatal(err)
+	}
+	cold.mu.Lock()
+	saved := cold.budget.requests["cold"]
+	cold.mu.Unlock()
+	if !saved.restored || saved.liveProvider || saved.responseCredit != 7 {
+		t.Fatalf("cold recovery manufactured live provider: %+v", saved)
+	}
+	before := root.Snapshot(1).Instance.PayloadBytes
+	readCtx := WithBuildOwnership(t.Context(), cold, "cold-read")
+	readCtx = WithBuildReservation(readCtx, func(n int64) error { return cold.ClaimBuild("cold-read", n) }, func(n int64) {
+		if e := cold.ReleaseBuildBytes("cold-read", n); e != nil {
+			t.Error(e)
+		}
+	})
+	read, err := NewBuildBoundsFromContext(readCtx, 4096, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned, err := read.OwnAllocation(7, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualCopy := make([]byte, len("capture"), len("capture"))
+	copy(actualCopy, "capture")
+	if root.Snapshot(1).Instance.PayloadBytes != before+int64(cap(actualCopy)) {
+		t.Fatal("cold length was mistaken for actual read backing payment")
+	}
+	actualCopy = nil
+	owned.Release()
+	read.CloseRetired()
+	if root.Snapshot(1).Instance.PayloadBytes != before {
+		t.Fatal("cold read backing did not retire independently")
+	}
+	cold.ReleaseDurableResponse("cold")
+	cold.Close()
+	if root.Snapshot(1).Instance != (resourcebudget.Vector{}) {
+		t.Fatalf("cold last reference leaked: %+v", root.Snapshot(1))
 	}
 }
 

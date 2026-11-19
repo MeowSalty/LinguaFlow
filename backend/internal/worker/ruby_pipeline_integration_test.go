@@ -384,7 +384,7 @@ func (f *rubyPipelineFixture) assertUsage(t *testing.T, expected int) {
 	dispatched := 0
 	for _, request := range requests {
 		if request.State == "cancelled_before_dispatch" {
-			if request.UsageKnown || request.UsageRecordID != nil || request.InputTokens != 0 || request.OutputTokens != 0 || len(request.FreezePayload) != 0 || request.FreezeBytes != 0 || len(request.ResponsePayload) != 0 || request.ResponseBytes != 0 || len(request.CorrectedTargets) != 0 || request.CorrectedTargetBytes != 0 {
+			if request.UsageKnown || request.UsageRecordID != nil || request.InputTokens != 0 || request.OutputTokens != 0 || request.InputMemberBytes != 0 || (request.CaptureBytes+request.OutputMemberBytes) != 0 || request.CaptureBytes != 0 || request.OutputMemberBytes != 0 {
 				t.Fatalf("unsent descriptor acquired usage or retained backing: %+v", request)
 			}
 			continue
@@ -432,19 +432,21 @@ func (s *rubyPipelineFaultStore) Save(ctx context.Context, candidate *pipeline.C
 	return nil
 }
 
-func (s *rubyPipelineFaultStore) PromoteMember(ctx context.Context, id string, cursor int, candidate *pipeline.Candidate, next pipeline.WorkCursor, failure string) error {
+func (s *rubyPipelineFaultStore) PromoteMember(ctx context.Context, key pipeline.MemberKey, candidate *pipeline.Candidate, next pipeline.WorkCursor, failure pipeline.MemberOutcome) (pipeline.MainResponseHeader, error) {
 	if candidate != nil && s.beforeSave != nil {
 		if err := s.beforeSave(ctx, candidate); err != nil {
-			return err
+			return pipeline.MainResponseHeader{}, err
 		}
 	}
-	if err := s.roundStore.PromoteMember(ctx, id, cursor, candidate, next, failure); err != nil {
-		return err
+	if _, err := s.roundStore.PromoteMember(ctx, key, candidate, next, failure); err != nil {
+		return pipeline.MainResponseHeader{}, err
 	}
 	if candidate != nil && s.afterSave != nil {
-		return s.afterSave(ctx, candidate)
+		if err := s.afterSave(ctx, candidate); err != nil {
+			return pipeline.MainResponseHeader{}, err
+		}
 	}
-	return nil
+	return s.roundStore.ResponseHeader(ctx, key.RequestID)
 }
 
 func (s *rubyPipelineFaultStore) Commit(ctx context.Context, candidate *pipeline.Candidate, result pipeline.TranslatedSegment) (pipeline.CommitOutcome, error) {
@@ -621,7 +623,7 @@ func TestRubyPipelineSQLitePartialMainSaveRecoverySkipsSavedSegments(t *testing.
 		t.Fatalf("partial main response saved %d candidates, want 1", len(saved))
 	}
 	request := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).OnlyX(ctx)
-	if request.State != "completed" || !request.UsageKnown || request.PromotionCursor != 1 || request.PromotionState != "response_pending" || len(request.ResponsePayload) == 0 {
+	if request.State != "completed" || !request.UsageKnown || request.PromotionCursor != 1 || request.PromotionState != "business_ready" || (request.CaptureBytes+request.OutputMemberBytes) == 0 {
 		t.Fatalf("failed promotion lost the reliable raw or its cursor: %+v", request)
 	}
 	if err := f.jobs.PrepareRecovery(ctx); err != nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 )
 
 func projectedByteLength(s *sql.Selector, column string) string {
@@ -47,7 +48,7 @@ func projectedLengthPredicate(sel *sql.Selector, field, comparison string, limit
 	})
 }
 
-var requestMetadataFields = []string{workrequest.FieldPromotionMembers, workrequest.FieldPromotionStatus, workrequest.FieldGlossaryReceipt, workrequest.FieldMembers, workrequest.FieldDebits, workrequest.FieldSegmentIds, workrequest.FieldCorrectedTargetIndex}
+var requestMetadataFields = []string{workrequest.FieldGlossaryReceipt, workrequest.FieldMembers, workrequest.FieldDebits, workrequest.FieldSegmentIds}
 
 // Member tables belong to the finite frozen-request slots, separately from
 // the fixed receipt O. Apply their count/actual-byte bounds before SQL returns
@@ -60,7 +61,10 @@ func requestMetadataBounds(sel *sql.Selector) *sql.Predicate {
 	}
 	promotionCount := sel.C(workrequest.FieldPromotionCount)
 	checks := []*sql.Predicate{sql.GTE(promotionCount, 0), sql.ExprP(count + " >= 1"), sql.ExprP(promotionCount + " <= " + count)}
-	for _, limit := range []struct{ field, expression string }{{workrequest.FieldPromotionMembers, "4+" + promotionCount + "*4096"}, {workrequest.FieldPromotionStatus, promotionCount}, {workrequest.FieldCorrectedTargetIndex, promotionCount + "*16"}, {workrequest.FieldMembers, "32+" + count + "*2048"}, {workrequest.FieldDebits, "4+" + count + "*1024"}, {workrequest.FieldSegmentIds, "4+" + count + "*21"}} {
+	// A published member request freezes the cardinality independently of its
+	// JSON audit cells. Corrupt segment_ids cannot enlarge its own read budget.
+	checks = append(checks, sql.Or(sql.NEQ(sel.C(workrequest.FieldResponseFormatVersion), execution.ResponseFormatVersion), sql.ExprP(promotionCount+" = "+count)))
+	for _, limit := range []struct{ field, expression string }{{workrequest.FieldMembers, "32+" + count + "*2048"}, {workrequest.FieldDebits, "4+" + count + "*1024"}, {workrequest.FieldSegmentIds, "4+" + count + "*21"}} {
 		checks = append(checks, sql.ExprP(projectedByteLength(sel, limit.field)+" <= "+limit.expression), projectedLengthPredicate(sel, limit.field, "<=", CandidateReadBytes))
 	}
 	checks = append(checks, projectedLengthPredicate(sel, workrequest.FieldGlossaryReceipt, "<=", responseReceiptReadBytes))

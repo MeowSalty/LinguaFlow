@@ -290,7 +290,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		if err := requestRuntime.ConfigureEpisodeStore(jobCtx, jobID, workstate.NewStore(r.client)); err != nil {
 			return err
 		}
-		defer requestRuntime.Close()
+		defer func() { returnErr = errors.Join(returnErr, requestRuntime.Close()) }()
 		var storageBudget *workstate.StorageBudget
 		defer func() {
 			if storageBudget != nil {
@@ -310,6 +310,19 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 			// retained SQL backing before unloading the runtime attachment.
 			factCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 			defer cancel()
+			if err := requestRuntime.CloseMainOwners(); err != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("joined response owner retirement: %w", err))
+				return
+			}
+			if storageBudget != nil {
+				// Settle pending receipts while their admission metadata still
+				// exists. Settle takes the inventory lock itself, before the
+				// aggregate read below acquires it for joined runtime facts.
+				if err := storageBudget.Settle(factCtx); err != nil {
+					returnErr = errors.Join(returnErr, fmt.Errorf("joined storage reconciliation: %w", err))
+					return
+				}
+			}
 			if r.budgetInventoryLock != nil {
 				r.budgetInventoryLock.Lock()
 				defer r.budgetInventoryLock.Unlock()
@@ -397,7 +410,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 					savedBusinessHeader = &copy
 				}
 				inventoryMembers += int64(header.MemberCount - header.Cursor)
-				for _, n := range []int64{header.FreezeBytes, header.ResponseBytes, header.CorrectedBytes, backend.RequestMetadataBytes} {
+				for _, n := range []int64{header.InputMemberBytes, header.CaptureBytes, header.OutputMemberBytes, backend.RequestMetadataBytes} {
 					if n < 0 || n > math.MaxInt64-inventoryHandoff {
 						return backend.ErrPipelineCapacity
 					}
@@ -487,10 +500,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 			if err := requestRuntime.Admission.RestoreRequestMetadata(header.RequestID, header.MemberCount, header.MetadataBytes); err != nil {
 				return err
 			}
-			if err := requestRuntime.Admission.RestoreResponseOwner(header.RequestID, rowToRound[header.Scope.RoundID], header.Scope.ResourceID, header.FreezeBytes, header.ResponseBytes, header.BusinessBound); err != nil {
-				return err
-			}
-			if err := requestRuntime.Admission.RestoreResponseBusiness(header.RequestID, header.CorrectedBytes); err != nil {
+			if err := requestRuntime.Admission.RestoreResponseOwnership(header.RequestID, rowToRound[header.Scope.RoundID], header.Scope.ResourceID, header.Facts(), header.Phase, false); err != nil {
 				return err
 			}
 			if err := requestRuntime.Window.RestoreRaw(header.RequestID, header.MemberCount-header.Cursor, header.Scope.ResourceID, header.Scope.RoundID, nil); err != nil {
@@ -906,7 +916,7 @@ func (r *JobRunner) processJobResource(
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
-	defer func() { _ = eng.Close() }()
+	defer func() { retErr = errors.Join(retErr, eng.Close()) }()
 
 	var mu sync.Mutex
 	completedCount := 0

@@ -86,14 +86,14 @@ func guardScope(ctx context.Context, tx *ent.Client, scope Scope, dispatch bool)
 		return err
 	}
 	if n != 1 {
-		return ErrStale
+		return fmt.Errorf("%w: guard_scope resource=%d source_generation=%d matched=%d", ErrStale, scope.ResourceID, scope.SourceGeneration, n)
 	}
 	r, err := tx.Resource.Get(ctx, scope.ResourceID)
 	if err != nil {
 		return err
 	}
 	if !sameInt(r.CurrentSourceRevisionID, scope.SourceRevisionID) {
-		return ErrStale
+		return fmt.Errorf("%w: guard_scope source_revision_changed resource=%d", ErrStale, scope.ResourceID)
 	}
 	round, err := tx.JobRound.Get(ctx, scope.RoundID)
 	if err != nil {
@@ -327,14 +327,14 @@ func (s *Store) SavePool(ctx context.Context, scope Scope, pool int) error {
 
 func lockSegment(ctx context.Context, tx *ent.Client, scope Scope, id int, version int64, factsOnly ...bool) (*ent.Segment, error) {
 	if version < 1 {
-		return nil, ErrStale
+		return nil, fmt.Errorf("%w: lock_segment invalid_baseline_version segment=%d version=%d", ErrStale, id, version)
 	}
 	n, err := tx.Segment.Update().Where(segment.IDEQ(id), segment.ResourceIDEQ(scope.ResourceID), segment.ContentVersionEQ(version)).AddContentVersion(0).Save(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if n != 1 {
-		return nil, ErrStale
+		return nil, fmt.Errorf("%w: lock_segment segment=%d resource=%d baseline_version=%d matched=%d", ErrStale, id, scope.ResourceID, version, n)
 	}
 	if len(factsOnly) > 0 && factsOnly[0] {
 		return tx.Segment.Query().Where(segment.IDEQ(id)).Select(segment.FieldID, segment.FieldContentVersion, segment.FieldTargetText, segment.FieldStatus).Only(ctx)
@@ -415,7 +415,7 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 		return err
 	}
 	if w.State == "resolved" {
-		return ErrStale
+		return fmt.Errorf("%w: save_candidate work_already_resolved segment=%d candidate=%s", ErrStale, c.SegmentID, c.ID)
 	}
 	old, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Select(candidateSaveFields...).Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
@@ -435,7 +435,7 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 		return err
 	}
 	if !candidateBaselineMatches(c, row.TargetText) || string(row.Status) != c.BaselineStatus {
-		return ErrStale
+		return fmt.Errorf("%w: save_candidate baseline_changed segment=%d candidate=%s baseline_version=%d expected_null=%t actual_null=%t expected_status=%s actual_status=%s", ErrStale, c.SegmentID, c.ID, c.BaselineVersion, c.BaselineTarget == nil, row.TargetText == nil, c.BaselineStatus, row.Status)
 	}
 	if old != nil {
 		validDTO := old.DtoVersion == c.DTOVersion

@@ -47,33 +47,33 @@ func (s *blockedCommitFailureStore) Commit(ctx context.Context, c *Candidate, re
 	}
 }
 
-func (s *blockedCommitFailureStore) Response(ctx context.Context, id string, freeze, raw, business int64) (MainResponse, error) {
-	response, err := s.MemoryRoundStore.Response(ctx, id, freeze, raw, business)
+func (s *blockedCommitFailureStore) LoadOutputMember(ctx context.Context, key MemberKey, final bool, limit int64) (OutputMemberFrame, error) {
+	response, err := s.MemoryRoundStore.LoadOutputMember(ctx, key, final, limit)
 	release := func() {
-		done := response.ReleaseOwned
-		response = MainResponse{}
+		done := response.Release
+		response = OutputMemberFrame{}
 		if done != nil {
 			done()
 		}
 	}
 	if err != nil {
 		release()
-		return MainResponse{}, err
+		return OutputMemberFrame{}, err
 	}
 	// Wait before promotion acquires the saver slot or a build worker.
 	switch {
-	case response.Cursor == 1:
+	case final && key.Ordinal == 1:
 		select {
 		case <-s.committed:
 		case <-ctx.Done():
 			release()
-			return MainResponse{}, ctx.Err()
+			return OutputMemberFrame{}, ctx.Err()
 		}
-	case response.Cursor >= 2:
+	case final && key.Ordinal >= 2:
 		s.thirdOnce.Do(func() { close(s.thirdBlocked) })
 		<-ctx.Done()
 		release()
-		return MainResponse{}, ctx.Err()
+		return OutputMemberFrame{}, ctx.Err()
 	}
 	return response, nil
 }
@@ -153,9 +153,22 @@ func TestStagedStorageFailureStopsSharedProducerAndPreservesPaidFacts(t *testing
 		t.Fatalf("confirmed fact lost: %+v %v", state, err)
 	}
 	headers, _, err := store.ResponseHeaders(ctx, 0, 16)
-	if err != nil || len(headers) != 1 || headers[0].Cursor != 2 || headers[0].MemberCount != 16 || headers[0].ResponseBytes == 0 {
+	if err != nil || len(headers) != 1 || headers[0].Cursor != 2 || headers[0].MemberCount != 16 || headers[0].InputMemberBytes == 0 || headers[0].OutputMemberBytes == 0 || headers[0].Phase != "business_ready" {
 		t.Fatalf("paid response lost: %+v %v", headers, err)
 	}
+	input, err := store.LoadInputMember(ctx, archiveMemberKey(headers[0], 2), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.Release()
+	output, err := store.LoadOutputMember(ctx, archiveMemberKey(headers[0], 2), false, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.Bytes == 0 || memberFixtureDecode(t, output).Missing {
+		t.Fatal("paid member output was not recoverable")
+	}
+	output.Release()
 	candidates, _, err := store.CandidateHeaders(ctx, 0, 16)
 	if err != nil || len(candidates) != 1 || candidates[0].Index != 1 {
 		t.Fatalf("failed candidate is not recoverable: %+v %v", candidates, err)

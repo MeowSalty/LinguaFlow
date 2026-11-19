@@ -789,6 +789,30 @@ func (f WorkRequestFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkRequestMutation", m)
 }
 
+// The WorkRequestInputMemberFunc type is an adapter to allow the use of ordinary
+// function as WorkRequestInputMember mutator.
+type WorkRequestInputMemberFunc func(context.Context, *ent.WorkRequestInputMemberMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkRequestInputMemberFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkRequestInputMemberMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkRequestInputMemberMutation", m)
+}
+
+// The WorkResponseMemberFunc type is an adapter to allow the use of ordinary
+// function as WorkResponseMember mutator.
+type WorkResponseMemberFunc func(context.Context, *ent.WorkResponseMemberMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkResponseMemberFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkResponseMemberMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkResponseMemberMutation", m)
+}
+
 // Condition is a hook condition function.
 type Condition func(context.Context, ent.Mutation) bool
 

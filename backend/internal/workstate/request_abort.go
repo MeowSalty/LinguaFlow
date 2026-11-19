@@ -9,6 +9,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequestinputmember"
 )
 
 type attemptCounters struct {
@@ -159,9 +160,12 @@ func (s *Store) abortRequest(ctx context.Context, scope *Scope, id string) error
 				}
 			}
 		}
-		n, err := tx.WorkRequest.Update().Where(workrequest.IDEQ(row.ID), workrequest.StateEQ("reserved")).SetState("cancelled_before_dispatch").SetLastError("").ClearFreezePayload().SetFreezeBytes(0).ClearPromotionMembers().SetBusinessBound(0).Save(ctx)
+		n, err := tx.WorkRequest.Update().Where(workrequest.IDEQ(row.ID), workrequest.StateEQ("reserved")).SetState("cancelled_before_dispatch").SetLastError("").ClearCapturePayload().SetCaptureBytes(0).SetInputMemberBytes(0).SetRemainingMembers(0).SetMemberStorageBytes(0).SetBusinessBound(0).Save(ctx)
 		if err != nil {
 			return err
+		}
+		if _, e := tx.WorkRequestInputMember.Delete().Where(workrequestinputmember.RequestIDEQ(row.ID)).Exec(ctx); e != nil {
+			return e
 		}
 		if n != 1 {
 			return ErrStopped

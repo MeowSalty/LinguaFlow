@@ -19,18 +19,18 @@ type handoffStore struct {
 	*MemoryRoundStore
 	onSave      func(context.Context, *Candidate) error
 	onPage      func(int, int)
-	onHandoff   func(context.Context, MainResponse) error
+	onHandoff   func(context.Context, CapturedResponse) error
 	onPromotion func(*Candidate, string)
 	onFrame     func(context.Context, string) error
 }
 
-func (s *handoffStore) HandoffResponse(ctx context.Context, response MainResponse) error {
+func (s *handoffStore) CaptureResponse(ctx context.Context, response CapturedResponse) (MainResponseHeader, error) {
 	if s.onHandoff != nil {
 		if err := s.onHandoff(ctx, response); err != nil {
-			return err
+			return MainResponseHeader{}, err
 		}
 	}
-	return s.MemoryRoundStore.HandoffResponse(ctx, response)
+	return s.MemoryRoundStore.CaptureResponse(ctx, response)
 }
 
 func (s *handoffStore) Save(ctx context.Context, c *Candidate) error {
@@ -58,16 +58,16 @@ func (s *handoffStore) CandidateHeaders(ctx context.Context, after, limit int) (
 	}
 	return s.MemoryRoundStore.CandidateHeaders(ctx, after, limit)
 }
-func (s *handoffStore) PromoteMember(ctx context.Context, id string, cursor int, c *Candidate, next WorkCursor, failure string) error {
+func (s *handoffStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure MemberOutcome) (MainResponseHeader, error) {
 	if s.onPromotion != nil {
-		s.onPromotion(c, failure)
+		s.onPromotion(c, failure.String())
 	}
 	if c != nil && s.onSave != nil {
 		if err := s.onSave(ctx, c); err != nil {
-			return err
+			return MainResponseHeader{}, err
 		}
 	}
-	return s.MemoryRoundStore.PromoteMember(ctx, id, cursor, c, next, failure)
+	return s.MemoryRoundStore.PromoteMember(ctx, key, c, next, failure)
 }
 
 func stagedTestRuntime(t *testing.T, limits CandidateLimits) *ExecutionRuntime {
@@ -78,7 +78,11 @@ func stagedTestRuntime(t *testing.T, limits CandidateLimits) *ExecutionRuntime {
 	}
 	r := NewExecutionRuntime(a, limits, nil)
 	r.Policy.Save.RetryDelay = time.Millisecond
-	t.Cleanup(r.Close)
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	return r
 }
 func stagedTestHandler(t *testing.T, r *ExecutionRuntime, b backend.Backend) *TranslateHandler {
@@ -110,7 +114,7 @@ func TestStagedPauseWaitsForHandoffAndResumeCommitsDraft(t *testing.T) {
 	}}
 	store := &handoffStore{MemoryRoundStore: NewMemoryRoundStore(nil)}
 	saveEntered, saveRelease := make(chan struct{}), make(chan struct{})
-	store.onHandoff = func(ctx context.Context, _ MainResponse) error {
+	store.onHandoff = func(ctx context.Context, _ CapturedResponse) error {
 		close(saveEntered)
 		select {
 		case <-saveRelease:
@@ -170,7 +174,7 @@ func TestStagedPauseWaitsForHandoffAndResumeCommitsDraft(t *testing.T) {
 		t.Fatalf("handoff counted as complete: %+v", state)
 	}
 	header, _, err := store.ResponseHeaders(ctx, 0, 16)
-	if err != nil || len(header) != 1 || header[0].Cursor != 0 || header[0].MemberCount != 1 || header[0].ResponseBytes == 0 {
+	if err != nil || len(header) != 1 || header[0].Cursor != 0 || header[0].MemberCount != 1 || header[0].Phase != "capture_pending" || header[0].CaptureBytes == 0 {
 		t.Fatalf("missing reliable raw pending promotion: %+v %v", header, err)
 	}
 	r2 := stagedTestRuntime(t, DefaultCandidateLimits())
@@ -207,8 +211,8 @@ func TestStagedPartialHandoffFailureRetainsAcceptedDraft(t *testing.T) {
 		t.Fatalf("partial handoff lost: %+v %v", page, err)
 	}
 	header, _, err := store.ResponseHeaders(ctx, 0, 16)
-	if err != nil || len(header) != 1 || header[0].Cursor != 1 || header[0].MemberCount != 2 || header[0].ResponseBytes == 0 {
-		t.Fatalf("partial failure lost remaining raw member: %+v %v", header, err)
+	if err != nil || len(header) != 1 || header[0].Cursor != 1 || header[0].MemberCount != 2 || header[0].Phase != "business_ready" || header[0].ArchiveCursor != 2 || header[0].CaptureBytes != 0 || header[0].InputMemberBytes == 0 || header[0].OutputMemberBytes == 0 {
+		t.Fatalf("partial failure lost published members: %+v %v", header, err)
 	}
 	store.onSave = nil
 	r2 := stagedTestRuntime(t, DefaultCandidateLimits())

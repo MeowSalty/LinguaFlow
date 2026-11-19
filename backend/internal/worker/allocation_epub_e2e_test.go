@@ -177,7 +177,7 @@ func TestAllocationEPUBWorkerEndToEnd(t *testing.T) {
 				if request.State == "cancelled_before_dispatch" {
 					continue
 				}
-				if request.State != "completed" || request.SnapshotDigest == "" || request.PromotionCursor != request.PromotionCount || request.PromotionCount == 0 || len(request.ResponsePayload) != 0 || len(request.FreezePayload) != 0 {
+				if request.State != "completed" || request.SnapshotDigest == "" || request.PromotionCursor != request.PromotionCount || request.PromotionCount == 0 || (request.CaptureBytes+request.OutputMemberBytes) != 0 || request.InputMemberBytes != 0 {
 					t.Fatalf("freeze/response/promotion did not drain: %+v", request)
 				}
 			}

@@ -8,6 +8,7 @@ import (
 )
 
 type buildOwnerKey struct{}
+type responseCapacityKey struct{}
 
 // BuildContext binds capacity to a lifecycle owner rather than a CPU permit.
 // A reserve is an atomic nonblocking Root probe; any retry happens after Run
@@ -33,6 +34,9 @@ func (r *ExecutionRuntime) BuildContext(ctx context.Context, owner string) conte
 		// between the failed probe and its delivery to the coordinator.
 		changed := r.Admission.RootChanged()
 		err := r.Admission.ClaimBuildBounded(owner, bytes, backend.BuildAllocationLimit(ctx))
+		if id, ok := ctx.Value(responseCapacityKey{}).(string); ok {
+			err = r.Admission.ClassifyResponseCapacity(id, err)
+		}
 		if errors.Is(err, backend.ErrAggregateCapacity) {
 			return &WorkDeferred{Wait: backend.AdmissionWait{Reason: "aggregate_build_bytes", CapacityChanged: changed}, Cause: err}
 		}

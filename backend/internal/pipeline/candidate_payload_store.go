@@ -3,12 +3,16 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"sort"
 )
 
 func (s *MemoryRoundStore) CandidateHeaders(_ context.Context, after, limit int) ([]*Candidate, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return nil, after, backend.ErrAdmissionClosed
+	}
 	var out []*Candidate
 	for id, h := range s.headers {
 		if _, active := s.candidates[id]; active && h.Index+1 > after {
@@ -26,6 +30,10 @@ func (s *MemoryRoundStore) CandidateHeaders(_ context.Context, after, limit int)
 }
 func (s *MemoryRoundStore) Candidate(ctx context.Context, id string, maxBytes int64) (*Candidate, error) {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil, backend.ErrAdmissionClosed
+	}
 	payload, ok := s.candidates[id]
 	if !ok || int64(len(payload)) > maxBytes {
 		s.mu.Unlock()
@@ -54,6 +62,9 @@ func (s *MemoryRoundStore) Candidate(ctx context.Context, id string, maxBytes in
 func (s *MemoryRoundStore) CandidateFrame(_ context.Context, id string, maxBytes int64) (CandidateFrame, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return CandidateFrame{}, backend.ErrAdmissionClosed
+	}
 	payload, ok := s.candidates[id]
 	h := s.headers[id]
 	if !ok || int64(len(payload)) > maxBytes {

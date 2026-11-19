@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"errors"
 	"reflect"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -52,13 +53,27 @@ type JSONValue struct {
 	index int
 }
 
+// JSONSyntaxError distinguishes model content from reservation and lifecycle
+// failures without changing the scanner's original diagnostic or cause.
+type JSONSyntaxError struct{ Err error }
+
+func (e *JSONSyntaxError) Error() string { return e.Err.Error() }
+func (e *JSONSyntaxError) Unwrap() error { return e.Err }
+
+func jsonViewScanError(err error) error {
+	if errors.Is(err, ErrBuildCapacity) {
+		return err
+	}
+	return &JSONSyntaxError{Err: err}
+}
+
 func NewJSONView(b *BuildBounds, data []byte) (JSONValue, error) {
 	if int64(len(data)) > b.inputBytes+b.outputBytes {
 		return JSONValue{}, &BuildCapacityError{"JSON input bytes"}
 	}
 	n, e := scanJSON(data, nil, int64(len(data)))
 	if e != nil {
-		return JSONValue{}, e
+		return JSONValue{}, jsonViewScanError(e)
 	}
 	if e = b.ReserveAllocation(int64(n), int64(unsafe.Sizeof(jsonNode{}))); e != nil {
 		return JSONValue{}, e
@@ -68,7 +83,7 @@ func NewJSONView(b *BuildBounds, data []byte) (JSONValue, error) {
 	}
 	nodes := make([]jsonNode, n)
 	if _, e = scanJSON(data, nodes, int64(len(data))); e != nil {
-		return JSONValue{}, e
+		return JSONValue{}, jsonViewScanError(e)
 	}
 	view := &JSONView{b, data, nodes}
 	return JSONValue{view, 0}, nil
@@ -176,18 +191,36 @@ func (v JSONValue) StringLimited(maxBytes int64) (string, error) {
 	if v.Kind() != '"' {
 		return "", &BuildCapacityError{"JSON string kind"}
 	}
-	b := v.view.b
+	return v.StringLimitedBounded(v.view.b, maxBytes)
+}
+
+// StringLimitedBounded materializes a selected token under the consumer's
+// bounds without changing the immutable preparation view.
+func (v JSONValue) StringLimitedBounded(b *BuildBounds, maxBytes int64) (string, error) {
+	if v.Kind() != '"' {
+		return "", &BuildCapacityError{"JSON string kind"}
+	}
 	old := b.stringLimit
 	b.stringLimit = maxBytes
 	defer func() { b.stringLimit = old }()
 	return b.stringValue(v.Raw())
 }
+
+// DecodedStringBytes measures a structurally validated selected token without allocation.
+func (v JSONValue) DecodedStringBytes() int64 { return decodedJSONStringBytes(v.Raw()) }
 func (v JSONValue) DecodeInto(dst any, maxStringBytes int64) error {
+	return v.DecodeIntoBounded(v.view.b, dst, maxStringBytes)
+}
+
+// DecodeIntoBounded decodes only this subtree against independent consumer
+// bounds; the shared offset arena and its preparation owner remain unchanged.
+func (v JSONValue) DecodeIntoBounded(b *BuildBounds, dst any, maxStringBytes int64) error {
+	b.jsonOperations++
+	defer b.retireJSONFields()
 	d := reflect.ValueOf(dst)
 	if !d.IsValid() || d.Kind() != reflect.Pointer || d.IsNil() {
 		return &BuildCapacityError{"JSON view destination"}
 	}
-	b := v.view.b
 	old := b.stringLimit
 	b.stringLimit = maxStringBytes
 	defer func() { b.stringLimit = old }()

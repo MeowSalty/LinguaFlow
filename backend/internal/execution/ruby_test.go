@@ -22,7 +22,7 @@ func TestRubyConcurrencyPresenceAndSnapshotCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SchemaVersion != 4 || s.DefaultsVersion != 4 || s.ResponseFormatVersion != 1 || s.RubyProtocolVersion != 2 || s.RubyValidatorVersion != 1 || s.RubyBatchProtocolVersion != 1 || s.RubyRetry.Concurrency != 1 {
+	if s.SchemaVersion != 4 || s.DefaultsVersion != 4 || s.ResponseFormatVersion != ResponseFormatVersion || s.RubyProtocolVersion != 2 || s.RubyValidatorVersion != 1 || s.RubyBatchProtocolVersion != 1 || s.RubyRetry.Concurrency != 1 {
 		t.Fatalf("missing frozen defaults: %+v", s)
 	}
 	s.RubyRetry.Concurrency = 0

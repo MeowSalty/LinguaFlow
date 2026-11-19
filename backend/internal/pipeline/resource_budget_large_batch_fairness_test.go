@@ -32,9 +32,9 @@ type fairnessSlowHandoffStore struct {
 	once             sync.Once
 }
 
-func (s *fairnessSlowHandoffStore) HandoffResponse(ctx context.Context, response MainResponse) error {
+func (s *fairnessSlowHandoffStore) CaptureResponse(ctx context.Context, response CapturedResponse) (MainResponseHeader, error) {
 	s.once.Do(func() { close(s.entered); <-s.release })
-	return s.windowResourceStore.HandoffResponse(ctx, response)
+	return s.windowResourceStore.CaptureResponse(ctx, response)
 }
 
 func TestResourceBudgetStoppedProducerYieldsTurnBeforePaidWriterJoins(t *testing.T) {

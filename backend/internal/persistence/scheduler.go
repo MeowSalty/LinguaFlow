@@ -136,12 +136,10 @@ type Aggregate struct {
 }
 
 func aggregateOperation(op string) string {
-	switch op {
-	case "reserve", "seal", "handoff", "checkpoint", "stage_initialize", "pool_advance", "abort", "sent", "received", "failed", "completed", "candidate", "commit", "retire":
+	if RegisteredOperation(op) {
 		return op
-	default:
-		return "other"
 	}
+	return "other"
 }
 func aggregateOutcome(err error) string {
 	if err == nil {

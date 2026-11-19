@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -27,6 +28,8 @@ type Engine struct {
 	runtime           *pipeline.ExecutionRuntime
 	ownRuntime        bool
 	closeOnce         sync.Once
+	closeMu           sync.Mutex
+	runtimeClosed     bool
 	closeErr          error
 }
 
@@ -115,16 +118,20 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	return e, nil
 }
 
-// Close releases backend connections and an owned call-scoped runtime once.
+// Close releases backend connections once and retries retirement of an owned runtime.
 // The caller must join execution before closing the Engine.
 func (e *Engine) Close() error {
+	e.closeMu.Lock()
+	defer e.closeMu.Unlock()
+	var runtimeErr error
+	if e.ownRuntime && e.runtime != nil && !e.runtimeClosed {
+		runtimeErr = e.runtime.Close()
+		e.runtimeClosed = runtimeErr == nil
+	}
 	e.closeOnce.Do(func() {
-		if e.ownRuntime && e.runtime != nil {
-			e.runtime.Close()
-		}
 		e.closeErr = e.closeBackends()
 	})
-	return e.closeErr
+	return errors.Join(runtimeErr, e.closeErr)
 }
 
 func (e *Engine) closeBackends() error {

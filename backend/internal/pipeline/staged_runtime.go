@@ -587,6 +587,7 @@ type ExecutionRuntime struct {
 	stopped                     bool
 	ownerMu                     sync.Mutex
 	mainOwners                  map[string]mainBackingOwner
+	responseAttemptDeadlines    map[string]time.Time
 	documentOwners              map[documentSlot][4]string
 	documentPendingRefunds      map[documentSlot][]string
 	ResponseBytes, HandoffBytes int64
@@ -650,19 +651,29 @@ func (r *ExecutionRuntime) SetResponseLimits(response, handoff int64) error {
 }
 
 // Close is called by the Job/call owner after every resource has joined.
-func (r *ExecutionRuntime) Close() {
+func (r *ExecutionRuntime) Close() error {
 	if r != nil {
 		r.stopDispatch()
 	}
 	if r != nil && r.Preparation != nil {
 		r.Preparation.Close()
 	}
-	if r != nil && r.Admission != nil {
-		r.Admission.Close()
-	}
 	if r != nil && r.Saver != nil {
 		r.Saver.Close()
 	}
+	if r == nil {
+		return nil
+	}
+	if err := r.CloseMainOwners(); err != nil {
+		return err
+	}
+	if r.Admission != nil {
+		r.Admission.Close()
+	}
+	r.ownerMu.Lock()
+	r.responseAttemptDeadlines = nil
+	r.ownerMu.Unlock()
+	return nil
 }
 
 func (r *ExecutionRuntime) saveScheduler() *persistence.Scheduler {
@@ -770,6 +781,12 @@ func (r *ExecutionRuntime) SaveNamed(ctx context.Context, meta persistence.Metad
 			ctx = persistence.WithDeadline(ctx, deadline)
 		}
 	}
+	r.ownerMu.Lock()
+	deadline := r.responseAttemptDeadlines[meta.RequestID]
+	r.ownerMu.Unlock()
+	if !deadline.IsZero() {
+		ctx = persistence.WithDeadline(ctx, deadline)
+	}
 	if meta.JobID == 0 {
 		meta.JobID = r.JobID
 	}
@@ -812,7 +829,7 @@ type requestSession struct {
 	lastID            string
 	calls             int
 	err               error
-	rawResponse       *MainResponse
+	rawResponse       *CapturedResponse
 	parsing           bool
 	pending           []string
 	completionCtx     context.Context
@@ -1117,9 +1134,9 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		return nil, inputErr
 	}
 	if intent.Stage == backend.RequestStageMain {
-		ok, prepareErr := b.runtime.Admission.PrepareMain(intent.ID, intent.RoundIndex, intent.ResourceID, int64(len(intent.FreezePayload)), inputBytes, intent.BusinessBound, b.runtime.Window.limits.Segments == 1 || b.runtime.Window.limits.Bytes < b.runtime.Window.limits.ItemBytes || b.runtime.Admission.RuntimeState().ProgressID == intent.ID, len(intent.Indices))
+		ok, prepareErr := b.runtime.Admission.PrepareMain(intent.ID, intent.RoundIndex, intent.ResourceID, inputMemberTotal(intent.InputMembers), inputBytes, intent.BusinessBound, b.runtime.Window.limits.Segments == 1 || b.runtime.Window.limits.Bytes < b.runtime.Window.limits.ItemBytes || b.runtime.Admission.RuntimeState().ProgressID == intent.ID, len(intent.Indices))
 		if prepareErr != nil {
-			return nil, fmt.Errorf("prepare main %s freeze%d/input%d: %w", intent.ID, len(intent.FreezePayload), inputBytes, prepareErr)
+			return nil, fmt.Errorf("prepare main %s freeze%d/input%d: %w", intent.ID, inputMemberTotal(intent.InputMembers), inputBytes, prepareErr)
 		}
 		if !ok {
 			return nil, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "prepared_bytes", CapacityChanged: b.runtime.Admission.Changed()}}
@@ -1174,7 +1191,7 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		if err != nil {
 			// An unfrozen direct-save retry gets a fresh request identity. Its
 			// released prepared K must not leave an old identity in this group.
-			if session != nil && len(intent.FreezePayload) == 0 && workDeferred(err) != nil {
+			if session != nil && len(intent.InputMembers) == 0 && workDeferred(err) != nil {
 				b.forgetPreparation(ctx)
 			}
 			return nil, fmt.Errorf("prepare dispatch %s: %w", intent.ID, err)
@@ -1307,15 +1324,27 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		if len(record.Error) > 2048 {
 			record.Error = record.Error[:2048]
 		}
-		if callErr == nil && len(intent.FreezePayload) > 0 && resp != nil {
+		if callErr == nil && len(intent.InputMembers) > 0 && resp != nil {
+			captureFailure := func(cause error) error {
+				// Content acceptance can be rejected after cancellation while the
+				// provider's known usage remains a necessary reliable fact. Keep
+				// its original response deadline and preserve both save errors.
+				accountingErr := session.record(handoffCtx, intent.ID, record)
+				return session.fail(errors.Join(sentErr, cause, accountingErr))
+			}
 			var raw []byte
 			var rawCredit *backend.OwnedAllocation
-			rawTransferred := false
+			var response CapturedResponse
 			defer func() {
-				if !rawTransferred {
-					raw = nil
-					rawCredit.Release()
-				}
+				// A memory store consumes this receipt into its own backing owner;
+				// SQL persists an independent copy and leaves it with dispatch.
+				// Release is a no-op for a consumed receipt, so both paths retire
+				// the caller's final raw reference after the reliable event joins.
+				raw = nil
+				response.Payload = nil
+				response.Allocation = nil
+				session.runtime.Admission.ObserveOwned("raw", intent.ID, 0)
+				rawCredit.Release()
 			}()
 			copyCtx := handoffCtx
 			if err := session.runtime.Run(copyCtx, func() error {
@@ -1324,47 +1353,43 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 				if err != nil {
 					return err
 				}
-				raw = []byte(resp.Text)
+				raw = make([]byte, len(resp.Text), len(resp.Text))
+				copy(raw, resp.Text)
 				return nil
 			}); err != nil {
-				return nil, session.fail(err)
+				return nil, captureFailure(err)
 			}
-			response := MainResponse{MainResponseHeader: MainResponseHeader{ID: intent.ID, ResourceID: intent.ResourceID, SnapshotDigest: intent.SnapshotDigest, BusinessBound: intent.BusinessBound, Truncated: resp.Truncated}, FreezePayload: intent.FreezePayload, Raw: raw, Members: intent.PromotionMembers, Record: record}
-			session.runtime.Admission.ObserveOwned("raw", intent.ID, int64(cap(response.Raw)))
+			epoch := int64(0)
+			if scope, ok := session.store.(interface{ CaptureEpoch() int64 }); ok {
+				epoch = scope.CaptureEpoch()
+			}
+			response = CapturedResponse{MainResponseHeader: MainResponseHeader{FrozenContext: intent.FrozenContext, FormatVersion: 2, CaptureEpoch: epoch, ID: intent.ID, ResourceID: intent.ResourceID, SnapshotDigest: intent.SnapshotDigest, BusinessBound: intent.BusinessBound, Truncated: resp.Truncated}, Payload: raw, Record: record, Allocation: rawCredit}
+			session.runtime.Admission.ObserveOwned("raw", intent.ID, int64(cap(raw)))
 			resp.Text = ""
 			resp.Raw = nil
 			backend.ReleaseProviderResponseOutput(providerCtx)
-			saveBuildCtx := handoffCtx
-			if err := session.runtime.SaveNamed(saveBuildCtx, persistence.Metadata{Operation: "response_handoff", Class: persistence.Handoff, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error { return session.store.HandoffResponse(saveCtx, response) }); err != nil {
-				return nil, session.fail(errors.Join(sentErr, err))
+			var confirmed MainResponseHeader
+			if err := session.runtime.SaveNamed(handoffCtx, persistence.Metadata{Operation: string(persistence.ResponseCapture), Class: persistence.Handoff, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error {
+				var err error
+				confirmed, err = session.store.CaptureResponse(saveCtx, response)
+				return err
+			}); err != nil {
+				return nil, captureFailure(err)
 			}
-			response.FreezeBytes, response.ResponseBytes = int64(len(response.FreezePayload)), int64(len(response.Raw))
-			response.FreezeDigest = intent.SnapshotDigest
-			digestBounds, err := backend.NewBuildBoundsFromContext(handoffCtx, 0, 0)
-			if err != nil {
+			// Only a small durable header survives dispatch. The store owns raw bytes.
+			saved := CapturedResponse{MainResponseHeader: confirmed, Record: record}
+
+			if err := backend.ApplyProviderResponseHandoff(handoffCtx, intent.ID, saved.CaptureBytes); err != nil {
 				return nil, session.fail(err)
 			}
-			digestCredit, err := digestBounds.OwnAllocation(64, 1)
-			if err != nil {
+			if err := session.runtime.Admission.RestoreResponseOwnership(intent.ID, intent.RoundIndex, intent.ResourceID, saved.Facts(), saved.Phase, true); err != nil {
 				return nil, session.fail(err)
 			}
-			response.ResponseDigest = responseDigest(response.Raw)
-			if err = backend.TransferProviderResponseToBuild(handoffCtx, digestCredit, "raw:"+intent.ID); err != nil {
-				response.ResponseDigest = ""
-				digestCredit.Release()
-				return nil, session.fail(err)
-			}
-			response.MemberCount, response.Phase = len(response.Members), "response_pending"
-			if err := backend.ApplyProviderResponseHandoff(handoffCtx, intent.ID, response.ResponseBytes); err != nil {
-				return nil, session.fail(err)
-			}
-			session.rawResponse = &response
-			// The original R lane now owns the actual immutable raw bytes.
-			// The shared meter holds their explicit allocation until promotion.
+			session.rawResponse = &saved
 			responseTransferred = true
-			session.runtime.retainMainOwner(intent.ID, session.permits, rawCredit, providerCtx)
-			rawTransferred = true
+			session.runtime.retainMainOwner(intent.ID, session.permits, nil, providerCtx)
 			session.permits = nil
+
 			if err := emitRawBatchEvent(handoffCtx, session, req, response, b.inner.Name()); err != nil {
 				return nil, session.fail(err)
 			}

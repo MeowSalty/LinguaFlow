@@ -200,3 +200,9 @@ type WorkItem func(*sql.Selector)
 
 // WorkRequest is the predicate function for workrequest builders.
 type WorkRequest func(*sql.Selector)
+
+// WorkRequestInputMember is the predicate function for workrequestinputmember builders.
+type WorkRequestInputMember func(*sql.Selector)
+
+// WorkResponseMember is the predicate function for workresponsemember builders.
+type WorkResponseMember func(*sql.Selector)

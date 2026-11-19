@@ -88,19 +88,19 @@ type Candidate struct {
 }
 
 type Request struct {
-	ID               string
-	CandidateID      string
-	Scope            Scope
-	SegmentIDs       []int
-	Members          []RequestMember
-	Stage            string
-	BackendID        int
-	BudgetModel      string
-	InputDigest      string
-	FreezePayload    []byte
-	SnapshotDigest   string
-	PromotionMembers []PromotionMember
-	BusinessBound    int64
+	MemberContext
+	InputMembers   []InputMember
+	ID             string
+	CandidateID    string
+	Scope          Scope
+	SegmentIDs     []int
+	Members        []RequestMember
+	Stage          string
+	BackendID      int
+	BudgetModel    string
+	InputDigest    string
+	SnapshotDigest string
+	BusinessBound  int64
 	// Logical attempts are distinct from individual network invocations. The
 	// caller sets these only when opening a new main/alignment logical attempt.
 	MainAttempt          bool

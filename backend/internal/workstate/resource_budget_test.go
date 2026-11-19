@@ -79,7 +79,7 @@ func TestBudgetIntegrationB07UnknownACKChargesConfirmedFact(t *testing.T) {
 		t.Fatal(err)
 	}
 	lose.Store(true)
-	if err := store.HandoffResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	_, actual, err := source.Job(ctx, scope.JobID)
@@ -91,7 +91,7 @@ func TestBudgetIntegrationB07UnknownACKChargesConfirmedFact(t *testing.T) {
 		t.Fatalf("ACK loss storage=%d root=%+v", actual, owned)
 	}
 	before := root.Snapshot(actor.ID).Instance
-	if err := store.HandoffResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	if before != root.Snapshot(actor.ID).Instance {
@@ -243,7 +243,7 @@ func testBudgetIntegrationStorageACKPauseRestart(t *testing.T, root, restarted *
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.HandoffResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	_, actual, err := source.Job(ctx, scope.JobID)
@@ -255,7 +255,7 @@ func testBudgetIntegrationStorageACKPauseRestart(t *testing.T, root, restarted *
 		t.Fatalf("storage actual=%d owned=%+v", actual, owned)
 	}
 	before := root.Snapshot(actor.ActorID).Instance
-	if err := store.HandoffResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	if root.Snapshot(actor.ActorID).Instance != before {
@@ -300,7 +300,7 @@ func TestBudgetIntegrationB11B12MissingActorAndFailedBacking(t *testing.T) {
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.HandoffResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	c.Job.UpdateOneID(scope.JobID).SetStatus("failed").ExecX(ctx)

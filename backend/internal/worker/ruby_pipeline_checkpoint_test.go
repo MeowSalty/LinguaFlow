@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
 
 func TestRubyPipelineSQLiteRoundCloseFailureRetriesWithoutHTTP(t *testing.T) {
@@ -57,12 +58,15 @@ func TestRubyPipelineSQLiteRoundCloseFailureRetriesWithoutHTTP(t *testing.T) {
 func TestRubyPipelineSQLitePausePersistsRawBeforeCandidateCapacityCheck(t *testing.T) {
 	f := newRubyPipelineFixture(t, 1)
 	f.runner.pipeCfg.Candidates.ItemBytes = 4 << 10
+	var pauseOnce atomic.Bool
 	f.respond = func(ctx context.Context, request rubyPipelineRequest) (any, error) {
-		if _, err := f.jobs.PauseJob(ctx, f.ownerID, f.jobID); err != nil {
-			return nil, err
-		}
-		if !f.runner.Pause(f.jobID) {
-			return nil, errors.New("Job gate was not registered")
+		if pauseOnce.CompareAndSwap(false, true) {
+			if _, err := f.jobs.PauseJob(ctx, f.ownerID, f.jobID); err != nil {
+				return nil, err
+			}
+			if !f.runner.Pause(f.jobID) {
+				return nil, errors.New("Job gate was not registered")
+			}
 		}
 		return map[string]any{"translations": map[string]string{"1": strings.Repeat("x", 8<<10)}}, nil
 	}
@@ -79,28 +83,74 @@ func TestRubyPipelineSQLitePausePersistsRawBeforeCandidateCapacityCheck(t *testi
 		t.Fatal("capacity failure produced accepted work")
 	}
 	request := f.client.WorkRequest.Query().OnlyX(ctx)
-	if request.State != "completed" || request.PromotionState != "response_pending" || request.PromotionCursor != 0 || len(request.ResponsePayload) == 0 || len(request.FreezePayload) == 0 {
-		t.Fatalf("pause lost unpromoted reliable raw: %+v", request)
+	if request.State != "completed" || request.PromotionState != "capture_pending" || request.PromotionCursor != 0 || request.ArchiveCursor != 0 || request.CaptureBytes == 0 || request.OutputMemberBytes != 0 || request.InputMemberBytes == 0 {
+		t.Fatalf("pause lost reliable capture: state=%s phase=%s cursor=%d archive=%d capture=%d input=%d output=%d", request.State, request.PromotionState, request.PromotionCursor, request.ArchiveCursor, request.CaptureBytes, request.InputMemberBytes, request.OutputMemberBytes)
 	}
 	f.assertUsage(t, 1)
-	f.respond = nil
 	if _, err := f.jobs.ResumeJob(ctx, f.ownerID, f.jobID); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.runner.processJob(ctx, f.jobID); err != nil && !errors.Is(err, pipeline.ErrCandidateCapacity) {
 		t.Fatalf("candidate capacity cause lost on resume: %v", err)
 	}
-	if main, align, _, _ := f.calls(); main != 1 || align != 0 {
-		t.Fatalf("reliable over-Q response was sent again: main=%d align=%d", main, align)
+	if main, align, _, _ := f.calls(); main != 3 || align != 0 {
+		t.Fatalf("three configured pools did not each reject one bounded member: main=%d align=%d", main, align)
 	}
 	if f.client.WorkCandidate.Query().CountX(ctx) != 0 || f.client.JobRoundSegment.Query().CountX(ctx) != 0 {
 		t.Fatal("over-Q candidate produced accepted work")
 	}
 	item := f.client.WorkItem.Query().OnlyX(ctx)
-	if !strings.Contains(item.LastError, "capacity") {
-		t.Fatalf("over-Q member did not retain a capacity failure: %+v", item)
+	var finalCursor pipeline.WorkCursor
+	// Failed-member promotion preserves the successor's pending state. The
+	// successor is outside the configured pools, so round results project it as
+	// unresolved without inventing a new persistent terminal-state transition.
+	if err := json.Unmarshal(item.Cursor, &finalCursor); err != nil || item.PoolIndex != 3 || item.State != "pending" || finalCursor.Pool != 3 || finalCursor.State != "pending" || finalCursor.Attempt != 0 || finalCursor.LogicalAttempt != 0 || finalCursor.NetworkAttempt != 0 || finalCursor.Phase == "terminal_failure" {
+		t.Fatalf("three local refusals lost their pool successor: item_pool=%d item_state=%s cursor=%+v err=%v", item.PoolIndex, item.State, finalCursor, err)
 	}
-	f.assertUsage(t, 1)
+	canonical, adapter := f.round(t, 0)
+	sealed, total, err := adapter.LoadCanonical(ctx, canonical)
+	if err != nil || !sealed || total != 1 {
+		t.Fatalf("final canonical round unavailable: sealed=%t total=%d err=%v", sealed, total, err)
+	}
+	work := canonical.Segments[0].RoundWork
+	maxPools := max(1, adapter.retryAttempts()+1)
+	// An empty successor phase does not overwrite the old SQL prompt phase.
+	// Eligibility depends on the persisted pool and attempts, not equality of
+	// the retained scalar phase with the new cursor JSON.
+	if maxPools != 3 || !work.Member || work.Completed || work.Cursor.Pool != finalCursor.Pool || work.Cursor.Attempt != 0 || work.Cursor.LogicalAttempt != 0 || work.Cursor.NetworkAttempt != 0 || work.Cursor.State != finalCursor.State || work.Cursor.Pool < maxPools || work.Cursor.Phase == "terminal_failure" {
+		t.Fatalf("canonical unresolved member became eligible or completed: max_pools=%d member=%t completed=%t cursor=%+v", maxPools, work.Member, work.Completed, work.Cursor)
+	}
+	round := f.client.JobRound.GetX(ctx, f.roundIDs[0])
+	counts, err := workstate.ReadStageCounts(ctx, f.client, f.jobID)
+	if err != nil || round.Status != service.JobRoundStatusFailed || round.SegmentTotal != 1 || round.SegmentCompleted != 0 || counts.ConfirmedWork != 0 {
+		t.Fatalf("last translate round abandoned its unresolved debt: status=%s total=%d completed=%d err=%v", round.Status, round.SegmentTotal, round.SegmentCompleted, err)
+	}
+	seenPools := map[int]bool{}
+	for _, completed := range f.client.WorkRequest.Query().AllX(ctx) {
+		if completed.State != "completed" || completed.PromotionState != "promoted" || completed.PromotionCursor != 1 || seenPools[completed.MemberPool] {
+			t.Fatal("a paid request was retried or a business pool was repeated")
+		}
+		seenPools[completed.MemberPool] = true
+	}
+	if len(seenPools) != 3 || !seenPools[0] || !seenPools[1] || !seenPools[2] {
+		t.Fatalf("configured rejection pools lost: %v", seenPools)
+	}
+	for _, outcome := range f.client.WorkResponseMember.Query().AllX(ctx) {
+		if outcome.OutcomeKind != 1 || outcome.OutcomeLimit != 4<<10 || outcome.OutcomeObserved <= outcome.OutcomeLimit || outcome.State != "failed" || item.LastError == "" {
+			t.Fatalf("over-Q member did not retain its typed content limit: state=%s kind=%d limit=%d observed=%d work_error=%s", outcome.State, outcome.OutcomeKind, outcome.OutcomeLimit, outcome.OutcomeObserved, item.LastError)
+		}
+	}
+	if original := f.client.WorkRequest.GetX(ctx, request.ID); original.Identity != request.Identity || original.RetryEpoch != request.RetryEpoch || original.PromotionCursor != 1 {
+		t.Fatal("resume replaced or repeated the original captured invocation")
+	}
+	f.assertUsage(t, 3)
+	if err := f.runner.processJob(ctx, f.jobID); err != nil {
+		t.Fatal("closed unresolved round replay failed", err)
+	}
+	if main, align, _, _ := f.calls(); main != 3 || align != 0 {
+		t.Fatalf("pool successor was eligible without an explicit retry: main=%d align=%d", main, align)
+	}
+	f.assertUsage(t, 3)
 }
 
 func TestRubyPipelineSQLiteConfirmedSelectionResumesOnlyNextRound(t *testing.T) {
