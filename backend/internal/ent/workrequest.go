@@ -77,6 +77,12 @@ type WorkRequest struct {
 	InputMemberBytes int64 `json:"input_member_bytes,omitempty"`
 	// OutputMemberBytes holds the value of the "output_member_bytes" field.
 	OutputMemberBytes int64 `json:"output_member_bytes,omitempty"`
+	// ModelOutputBytes holds the value of the "model_output_bytes" field.
+	ModelOutputBytes int64 `json:"model_output_bytes,omitempty"`
+	// CorrectionBytes holds the value of the "correction_bytes" field.
+	CorrectionBytes int64 `json:"correction_bytes,omitempty"`
+	// PublicKind holds the value of the "public_kind" field.
+	PublicKind workrequest.PublicKind `json:"public_kind,omitempty"`
 	// PublicBytes holds the value of the "public_bytes" field.
 	PublicBytes int64 `json:"public_bytes,omitempty"`
 	// MemberStorageBytes holds the value of the "member_storage_bytes" field.
@@ -188,9 +194,9 @@ func (*WorkRequest) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case workrequest.FieldTextMode, workrequest.FieldResponseTruncated, workrequest.FieldUsageKnown:
 			values[i] = new(sql.NullBool)
-		case workrequest.FieldID, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldBackendID, workrequest.FieldLogicalAttempt, workrequest.FieldCaptureBytes, workrequest.FieldMemberPool, workrequest.FieldMemberAttempt, workrequest.FieldArchiveCursor, workrequest.FieldInputMemberBytes, workrequest.FieldOutputMemberBytes, workrequest.FieldPublicBytes, workrequest.FieldMemberStorageBytes, workrequest.FieldRequestMetadataBytes, workrequest.FieldRemainingMembers, workrequest.FieldResponseFormatVersion, workrequest.FieldPromotionCursor, workrequest.FieldPromotionCount, workrequest.FieldBusinessBound, workrequest.FieldUsageRecordID, workrequest.FieldInputTokens, workrequest.FieldOutputTokens, workrequest.FieldDurationMs:
+		case workrequest.FieldID, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldBackendID, workrequest.FieldLogicalAttempt, workrequest.FieldCaptureBytes, workrequest.FieldMemberPool, workrequest.FieldMemberAttempt, workrequest.FieldArchiveCursor, workrequest.FieldInputMemberBytes, workrequest.FieldOutputMemberBytes, workrequest.FieldModelOutputBytes, workrequest.FieldCorrectionBytes, workrequest.FieldPublicBytes, workrequest.FieldMemberStorageBytes, workrequest.FieldRequestMetadataBytes, workrequest.FieldRemainingMembers, workrequest.FieldResponseFormatVersion, workrequest.FieldPromotionCursor, workrequest.FieldPromotionCount, workrequest.FieldBusinessBound, workrequest.FieldUsageRecordID, workrequest.FieldInputTokens, workrequest.FieldOutputTokens, workrequest.FieldDurationMs:
 			values[i] = new(sql.NullInt64)
-		case workrequest.FieldIdentity, workrequest.FieldStage, workrequest.FieldCandidateID, workrequest.FieldMemberMode, workrequest.FieldMemberFormat, workrequest.FieldSourceLang, workrequest.FieldTargetLang, workrequest.FieldArchiveDigest, workrequest.FieldPublicDigest, workrequest.FieldSnapshotDigest, workrequest.FieldFreezeDigest, workrequest.FieldResponseDigest, workrequest.FieldPromotionState, workrequest.FieldBudgetModel, workrequest.FieldInputDigest, workrequest.FieldState, workrequest.FieldLastError:
+		case workrequest.FieldIdentity, workrequest.FieldStage, workrequest.FieldCandidateID, workrequest.FieldMemberMode, workrequest.FieldMemberFormat, workrequest.FieldSourceLang, workrequest.FieldTargetLang, workrequest.FieldArchiveDigest, workrequest.FieldPublicKind, workrequest.FieldPublicDigest, workrequest.FieldSnapshotDigest, workrequest.FieldFreezeDigest, workrequest.FieldResponseDigest, workrequest.FieldPromotionState, workrequest.FieldBudgetModel, workrequest.FieldInputDigest, workrequest.FieldState, workrequest.FieldLastError:
 			values[i] = new(sql.NullString)
 		case workrequest.FieldCreatedAt, workrequest.FieldUpdatedAt, workrequest.FieldHandoffAt:
 			values[i] = new(sql.NullTime)
@@ -390,6 +396,24 @@ func (_m *WorkRequest) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field output_member_bytes", values[i])
 			} else if value.Valid {
 				_m.OutputMemberBytes = value.Int64
+			}
+		case workrequest.FieldModelOutputBytes:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field model_output_bytes", values[i])
+			} else if value.Valid {
+				_m.ModelOutputBytes = value.Int64
+			}
+		case workrequest.FieldCorrectionBytes:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field correction_bytes", values[i])
+			} else if value.Valid {
+				_m.CorrectionBytes = value.Int64
+			}
+		case workrequest.FieldPublicKind:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field public_kind", values[i])
+			} else if value.Valid {
+				_m.PublicKind = workrequest.PublicKind(value.String)
 			}
 		case workrequest.FieldPublicBytes:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -677,6 +701,15 @@ func (_m *WorkRequest) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("output_member_bytes=")
 	builder.WriteString(fmt.Sprintf("%v", _m.OutputMemberBytes))
+	builder.WriteString(", ")
+	builder.WriteString("model_output_bytes=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ModelOutputBytes))
+	builder.WriteString(", ")
+	builder.WriteString("correction_bytes=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CorrectionBytes))
+	builder.WriteString(", ")
+	builder.WriteString("public_kind=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PublicKind))
 	builder.WriteString(", ")
 	builder.WriteString("public_bytes=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PublicBytes))

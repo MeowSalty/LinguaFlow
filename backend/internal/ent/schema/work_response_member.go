@@ -17,6 +17,7 @@ func (WorkResponseMember) Fields() []ent.Field {
 		field.Bytes("payload").Optional(), field.Int64("payload_bytes").NonNegative(), field.String("payload_digest"),
 		field.Bytes("corrected_payload").Optional(), field.Int64("corrected_bytes").Default(0).NonNegative(), field.String("corrected_digest").Default(""),
 		field.String("state").Default("pending"), field.String("failure").Default(""),
+		field.Int("outcome_kind").Default(0).NonNegative(), field.Int64("outcome_limit").Default(0).NonNegative(), field.Int64("outcome_observed").Default(0).NonNegative(),
 		field.String("candidate_digest").Default(""), field.Int64("candidate_version").Default(0).NonNegative(),
 	}
 }

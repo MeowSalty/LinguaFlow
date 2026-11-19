@@ -112,6 +112,48 @@ func (_c *WorkResponseMemberCreate) SetNillableFailure(v *string) *WorkResponseM
 	return _c
 }
 
+// SetOutcomeKind sets the "outcome_kind" field.
+func (_c *WorkResponseMemberCreate) SetOutcomeKind(v int) *WorkResponseMemberCreate {
+	_c.mutation.SetOutcomeKind(v)
+	return _c
+}
+
+// SetNillableOutcomeKind sets the "outcome_kind" field if the given value is not nil.
+func (_c *WorkResponseMemberCreate) SetNillableOutcomeKind(v *int) *WorkResponseMemberCreate {
+	if v != nil {
+		_c.SetOutcomeKind(*v)
+	}
+	return _c
+}
+
+// SetOutcomeLimit sets the "outcome_limit" field.
+func (_c *WorkResponseMemberCreate) SetOutcomeLimit(v int64) *WorkResponseMemberCreate {
+	_c.mutation.SetOutcomeLimit(v)
+	return _c
+}
+
+// SetNillableOutcomeLimit sets the "outcome_limit" field if the given value is not nil.
+func (_c *WorkResponseMemberCreate) SetNillableOutcomeLimit(v *int64) *WorkResponseMemberCreate {
+	if v != nil {
+		_c.SetOutcomeLimit(*v)
+	}
+	return _c
+}
+
+// SetOutcomeObserved sets the "outcome_observed" field.
+func (_c *WorkResponseMemberCreate) SetOutcomeObserved(v int64) *WorkResponseMemberCreate {
+	_c.mutation.SetOutcomeObserved(v)
+	return _c
+}
+
+// SetNillableOutcomeObserved sets the "outcome_observed" field if the given value is not nil.
+func (_c *WorkResponseMemberCreate) SetNillableOutcomeObserved(v *int64) *WorkResponseMemberCreate {
+	if v != nil {
+		_c.SetOutcomeObserved(*v)
+	}
+	return _c
+}
+
 // SetCandidateDigest sets the "candidate_digest" field.
 func (_c *WorkResponseMemberCreate) SetCandidateDigest(v string) *WorkResponseMemberCreate {
 	_c.mutation.SetCandidateDigest(v)
@@ -196,6 +238,18 @@ func (_c *WorkResponseMemberCreate) defaults() {
 		v := workresponsemember.DefaultFailure
 		_c.mutation.SetFailure(v)
 	}
+	if _, ok := _c.mutation.OutcomeKind(); !ok {
+		v := workresponsemember.DefaultOutcomeKind
+		_c.mutation.SetOutcomeKind(v)
+	}
+	if _, ok := _c.mutation.OutcomeLimit(); !ok {
+		v := workresponsemember.DefaultOutcomeLimit
+		_c.mutation.SetOutcomeLimit(v)
+	}
+	if _, ok := _c.mutation.OutcomeObserved(); !ok {
+		v := workresponsemember.DefaultOutcomeObserved
+		_c.mutation.SetOutcomeObserved(v)
+	}
 	if _, ok := _c.mutation.CandidateDigest(); !ok {
 		v := workresponsemember.DefaultCandidateDigest
 		_c.mutation.SetCandidateDigest(v)
@@ -251,6 +305,30 @@ func (_c *WorkResponseMemberCreate) check() error {
 	}
 	if _, ok := _c.mutation.Failure(); !ok {
 		return &ValidationError{Name: "failure", err: errors.New(`ent: missing required field "WorkResponseMember.failure"`)}
+	}
+	if _, ok := _c.mutation.OutcomeKind(); !ok {
+		return &ValidationError{Name: "outcome_kind", err: errors.New(`ent: missing required field "WorkResponseMember.outcome_kind"`)}
+	}
+	if v, ok := _c.mutation.OutcomeKind(); ok {
+		if err := workresponsemember.OutcomeKindValidator(v); err != nil {
+			return &ValidationError{Name: "outcome_kind", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.outcome_kind": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.OutcomeLimit(); !ok {
+		return &ValidationError{Name: "outcome_limit", err: errors.New(`ent: missing required field "WorkResponseMember.outcome_limit"`)}
+	}
+	if v, ok := _c.mutation.OutcomeLimit(); ok {
+		if err := workresponsemember.OutcomeLimitValidator(v); err != nil {
+			return &ValidationError{Name: "outcome_limit", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.outcome_limit": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.OutcomeObserved(); !ok {
+		return &ValidationError{Name: "outcome_observed", err: errors.New(`ent: missing required field "WorkResponseMember.outcome_observed"`)}
+	}
+	if v, ok := _c.mutation.OutcomeObserved(); ok {
+		if err := workresponsemember.OutcomeObservedValidator(v); err != nil {
+			return &ValidationError{Name: "outcome_observed", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.outcome_observed": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.CandidateDigest(); !ok {
 		return &ValidationError{Name: "candidate_digest", err: errors.New(`ent: missing required field "WorkResponseMember.candidate_digest"`)}
@@ -327,6 +405,18 @@ func (_c *WorkResponseMemberCreate) createSpec() (*WorkResponseMember, *sqlgraph
 	if value, ok := _c.mutation.Failure(); ok {
 		_spec.SetField(workresponsemember.FieldFailure, field.TypeString, value)
 		_node.Failure = value
+	}
+	if value, ok := _c.mutation.OutcomeKind(); ok {
+		_spec.SetField(workresponsemember.FieldOutcomeKind, field.TypeInt, value)
+		_node.OutcomeKind = value
+	}
+	if value, ok := _c.mutation.OutcomeLimit(); ok {
+		_spec.SetField(workresponsemember.FieldOutcomeLimit, field.TypeInt64, value)
+		_node.OutcomeLimit = value
+	}
+	if value, ok := _c.mutation.OutcomeObserved(); ok {
+		_spec.SetField(workresponsemember.FieldOutcomeObserved, field.TypeInt64, value)
+		_node.OutcomeObserved = value
 	}
 	if value, ok := _c.mutation.CandidateDigest(); ok {
 		_spec.SetField(workresponsemember.FieldCandidateDigest, field.TypeString, value)

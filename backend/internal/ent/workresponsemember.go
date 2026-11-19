@@ -37,6 +37,12 @@ type WorkResponseMember struct {
 	State string `json:"state,omitempty"`
 	// Failure holds the value of the "failure" field.
 	Failure string `json:"failure,omitempty"`
+	// OutcomeKind holds the value of the "outcome_kind" field.
+	OutcomeKind int `json:"outcome_kind,omitempty"`
+	// OutcomeLimit holds the value of the "outcome_limit" field.
+	OutcomeLimit int64 `json:"outcome_limit,omitempty"`
+	// OutcomeObserved holds the value of the "outcome_observed" field.
+	OutcomeObserved int64 `json:"outcome_observed,omitempty"`
 	// CandidateDigest holds the value of the "candidate_digest" field.
 	CandidateDigest string `json:"candidate_digest,omitempty"`
 	// CandidateVersion holds the value of the "candidate_version" field.
@@ -74,7 +80,7 @@ func (*WorkResponseMember) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case workresponsemember.FieldPayload, workresponsemember.FieldCorrectedPayload:
 			values[i] = new([]byte)
-		case workresponsemember.FieldID, workresponsemember.FieldRequestID, workresponsemember.FieldOrdinal, workresponsemember.FieldPayloadBytes, workresponsemember.FieldCorrectedBytes, workresponsemember.FieldCandidateVersion:
+		case workresponsemember.FieldID, workresponsemember.FieldRequestID, workresponsemember.FieldOrdinal, workresponsemember.FieldPayloadBytes, workresponsemember.FieldCorrectedBytes, workresponsemember.FieldOutcomeKind, workresponsemember.FieldOutcomeLimit, workresponsemember.FieldOutcomeObserved, workresponsemember.FieldCandidateVersion:
 			values[i] = new(sql.NullInt64)
 		case workresponsemember.FieldPayloadDigest, workresponsemember.FieldCorrectedDigest, workresponsemember.FieldState, workresponsemember.FieldFailure, workresponsemember.FieldCandidateDigest:
 			values[i] = new(sql.NullString)
@@ -159,6 +165,24 @@ func (_m *WorkResponseMember) assignValues(columns []string, values []any) error
 			} else if value.Valid {
 				_m.Failure = value.String
 			}
+		case workresponsemember.FieldOutcomeKind:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field outcome_kind", values[i])
+			} else if value.Valid {
+				_m.OutcomeKind = int(value.Int64)
+			}
+		case workresponsemember.FieldOutcomeLimit:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field outcome_limit", values[i])
+			} else if value.Valid {
+				_m.OutcomeLimit = value.Int64
+			}
+		case workresponsemember.FieldOutcomeObserved:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field outcome_observed", values[i])
+			} else if value.Valid {
+				_m.OutcomeObserved = value.Int64
+			}
 		case workresponsemember.FieldCandidateDigest:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field candidate_digest", values[i])
@@ -241,6 +265,15 @@ func (_m *WorkResponseMember) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("failure=")
 	builder.WriteString(_m.Failure)
+	builder.WriteString(", ")
+	builder.WriteString("outcome_kind=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OutcomeKind))
+	builder.WriteString(", ")
+	builder.WriteString("outcome_limit=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OutcomeLimit))
+	builder.WriteString(", ")
+	builder.WriteString("outcome_observed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.OutcomeObserved))
 	builder.WriteString(", ")
 	builder.WriteString("candidate_digest=")
 	builder.WriteString(_m.CandidateDigest)

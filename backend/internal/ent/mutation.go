@@ -81671,6 +81671,11 @@ type WorkRequestMutation struct {
 	addinput_member_bytes      *int64
 	output_member_bytes        *int64
 	addoutput_member_bytes     *int64
+	model_output_bytes         *int64
+	addmodel_output_bytes      *int64
+	correction_bytes           *int64
+	addcorrection_bytes        *int64
+	public_kind                *workrequest.PublicKind
 	public_bytes               *int64
 	addpublic_bytes            *int64
 	member_storage_bytes       *int64
@@ -83121,6 +83126,154 @@ func (m *WorkRequestMutation) ResetOutputMemberBytes() {
 	m.addoutput_member_bytes = nil
 }
 
+// SetModelOutputBytes sets the "model_output_bytes" field.
+func (m *WorkRequestMutation) SetModelOutputBytes(i int64) {
+	m.model_output_bytes = &i
+	m.addmodel_output_bytes = nil
+}
+
+// ModelOutputBytes returns the value of the "model_output_bytes" field in the mutation.
+func (m *WorkRequestMutation) ModelOutputBytes() (r int64, exists bool) {
+	v := m.model_output_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldModelOutputBytes returns the old "model_output_bytes" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldModelOutputBytes(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldModelOutputBytes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldModelOutputBytes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldModelOutputBytes: %w", err)
+	}
+	return oldValue.ModelOutputBytes, nil
+}
+
+// AddModelOutputBytes adds i to the "model_output_bytes" field.
+func (m *WorkRequestMutation) AddModelOutputBytes(i int64) {
+	if m.addmodel_output_bytes != nil {
+		*m.addmodel_output_bytes += i
+	} else {
+		m.addmodel_output_bytes = &i
+	}
+}
+
+// AddedModelOutputBytes returns the value that was added to the "model_output_bytes" field in this mutation.
+func (m *WorkRequestMutation) AddedModelOutputBytes() (r int64, exists bool) {
+	v := m.addmodel_output_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetModelOutputBytes resets all changes to the "model_output_bytes" field.
+func (m *WorkRequestMutation) ResetModelOutputBytes() {
+	m.model_output_bytes = nil
+	m.addmodel_output_bytes = nil
+}
+
+// SetCorrectionBytes sets the "correction_bytes" field.
+func (m *WorkRequestMutation) SetCorrectionBytes(i int64) {
+	m.correction_bytes = &i
+	m.addcorrection_bytes = nil
+}
+
+// CorrectionBytes returns the value of the "correction_bytes" field in the mutation.
+func (m *WorkRequestMutation) CorrectionBytes() (r int64, exists bool) {
+	v := m.correction_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCorrectionBytes returns the old "correction_bytes" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldCorrectionBytes(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCorrectionBytes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCorrectionBytes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCorrectionBytes: %w", err)
+	}
+	return oldValue.CorrectionBytes, nil
+}
+
+// AddCorrectionBytes adds i to the "correction_bytes" field.
+func (m *WorkRequestMutation) AddCorrectionBytes(i int64) {
+	if m.addcorrection_bytes != nil {
+		*m.addcorrection_bytes += i
+	} else {
+		m.addcorrection_bytes = &i
+	}
+}
+
+// AddedCorrectionBytes returns the value that was added to the "correction_bytes" field in this mutation.
+func (m *WorkRequestMutation) AddedCorrectionBytes() (r int64, exists bool) {
+	v := m.addcorrection_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCorrectionBytes resets all changes to the "correction_bytes" field.
+func (m *WorkRequestMutation) ResetCorrectionBytes() {
+	m.correction_bytes = nil
+	m.addcorrection_bytes = nil
+}
+
+// SetPublicKind sets the "public_kind" field.
+func (m *WorkRequestMutation) SetPublicKind(wk workrequest.PublicKind) {
+	m.public_kind = &wk
+}
+
+// PublicKind returns the value of the "public_kind" field in the mutation.
+func (m *WorkRequestMutation) PublicKind() (r workrequest.PublicKind, exists bool) {
+	v := m.public_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPublicKind returns the old "public_kind" field's value of the WorkRequest entity.
+// If the WorkRequest object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkRequestMutation) OldPublicKind(ctx context.Context) (v workrequest.PublicKind, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPublicKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPublicKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPublicKind: %w", err)
+	}
+	return oldValue.PublicKind, nil
+}
+
+// ResetPublicKind resets all changes to the "public_kind" field.
+func (m *WorkRequestMutation) ResetPublicKind() {
+	m.public_kind = nil
+}
+
 // SetPublicBytes sets the "public_bytes" field.
 func (m *WorkRequestMutation) SetPublicBytes(i int64) {
 	m.public_bytes = &i
@@ -84429,7 +84582,7 @@ func (m *WorkRequestMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *WorkRequestMutation) Fields() []string {
-	fields := make([]string, 0, 53)
+	fields := make([]string, 0, 56)
 	if m.created_at != nil {
 		fields = append(fields, workrequest.FieldCreatedAt)
 	}
@@ -84513,6 +84666,15 @@ func (m *WorkRequestMutation) Fields() []string {
 	}
 	if m.output_member_bytes != nil {
 		fields = append(fields, workrequest.FieldOutputMemberBytes)
+	}
+	if m.model_output_bytes != nil {
+		fields = append(fields, workrequest.FieldModelOutputBytes)
+	}
+	if m.correction_bytes != nil {
+		fields = append(fields, workrequest.FieldCorrectionBytes)
+	}
+	if m.public_kind != nil {
+		fields = append(fields, workrequest.FieldPublicKind)
 	}
 	if m.public_bytes != nil {
 		fields = append(fields, workrequest.FieldPublicBytes)
@@ -84653,6 +84815,12 @@ func (m *WorkRequestMutation) Field(name string) (ent.Value, bool) {
 		return m.InputMemberBytes()
 	case workrequest.FieldOutputMemberBytes:
 		return m.OutputMemberBytes()
+	case workrequest.FieldModelOutputBytes:
+		return m.ModelOutputBytes()
+	case workrequest.FieldCorrectionBytes:
+		return m.CorrectionBytes()
+	case workrequest.FieldPublicKind:
+		return m.PublicKind()
 	case workrequest.FieldPublicBytes:
 		return m.PublicBytes()
 	case workrequest.FieldMemberStorageBytes:
@@ -84768,6 +84936,12 @@ func (m *WorkRequestMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldInputMemberBytes(ctx)
 	case workrequest.FieldOutputMemberBytes:
 		return m.OldOutputMemberBytes(ctx)
+	case workrequest.FieldModelOutputBytes:
+		return m.OldModelOutputBytes(ctx)
+	case workrequest.FieldCorrectionBytes:
+		return m.OldCorrectionBytes(ctx)
+	case workrequest.FieldPublicKind:
+		return m.OldPublicKind(ctx)
 	case workrequest.FieldPublicBytes:
 		return m.OldPublicBytes(ctx)
 	case workrequest.FieldMemberStorageBytes:
@@ -85023,6 +85197,27 @@ func (m *WorkRequestMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetOutputMemberBytes(v)
 		return nil
+	case workrequest.FieldModelOutputBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetModelOutputBytes(v)
+		return nil
+	case workrequest.FieldCorrectionBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCorrectionBytes(v)
+		return nil
+	case workrequest.FieldPublicKind:
+		v, ok := value.(workrequest.PublicKind)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPublicKind(v)
+		return nil
 	case workrequest.FieldPublicBytes:
 		v, ok := value.(int64)
 		if !ok {
@@ -85233,6 +85428,12 @@ func (m *WorkRequestMutation) AddedFields() []string {
 	if m.addoutput_member_bytes != nil {
 		fields = append(fields, workrequest.FieldOutputMemberBytes)
 	}
+	if m.addmodel_output_bytes != nil {
+		fields = append(fields, workrequest.FieldModelOutputBytes)
+	}
+	if m.addcorrection_bytes != nil {
+		fields = append(fields, workrequest.FieldCorrectionBytes)
+	}
 	if m.addpublic_bytes != nil {
 		fields = append(fields, workrequest.FieldPublicBytes)
 	}
@@ -85295,6 +85496,10 @@ func (m *WorkRequestMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedInputMemberBytes()
 	case workrequest.FieldOutputMemberBytes:
 		return m.AddedOutputMemberBytes()
+	case workrequest.FieldModelOutputBytes:
+		return m.AddedModelOutputBytes()
+	case workrequest.FieldCorrectionBytes:
+		return m.AddedCorrectionBytes()
 	case workrequest.FieldPublicBytes:
 		return m.AddedPublicBytes()
 	case workrequest.FieldMemberStorageBytes:
@@ -85390,6 +85595,20 @@ func (m *WorkRequestMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddOutputMemberBytes(v)
+		return nil
+	case workrequest.FieldModelOutputBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddModelOutputBytes(v)
+		return nil
+	case workrequest.FieldCorrectionBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCorrectionBytes(v)
 		return nil
 	case workrequest.FieldPublicBytes:
 		v, ok := value.(int64)
@@ -85630,6 +85849,15 @@ func (m *WorkRequestMutation) ResetField(name string) error {
 		return nil
 	case workrequest.FieldOutputMemberBytes:
 		m.ResetOutputMemberBytes()
+		return nil
+	case workrequest.FieldModelOutputBytes:
+		m.ResetModelOutputBytes()
+		return nil
+	case workrequest.FieldCorrectionBytes:
+		m.ResetCorrectionBytes()
+		return nil
+	case workrequest.FieldPublicKind:
+		m.ResetPublicKind()
 		return nil
 	case workrequest.FieldPublicBytes:
 		m.ResetPublicBytes()
@@ -87304,6 +87532,12 @@ type WorkResponseMemberMutation struct {
 	corrected_digest     *string
 	state                *string
 	failure              *string
+	outcome_kind         *int
+	addoutcome_kind      *int
+	outcome_limit        *int64
+	addoutcome_limit     *int64
+	outcome_observed     *int64
+	addoutcome_observed  *int64
 	candidate_digest     *string
 	candidate_version    *int64
 	addcandidate_version *int64
@@ -87859,6 +88093,174 @@ func (m *WorkResponseMemberMutation) ResetFailure() {
 	m.failure = nil
 }
 
+// SetOutcomeKind sets the "outcome_kind" field.
+func (m *WorkResponseMemberMutation) SetOutcomeKind(i int) {
+	m.outcome_kind = &i
+	m.addoutcome_kind = nil
+}
+
+// OutcomeKind returns the value of the "outcome_kind" field in the mutation.
+func (m *WorkResponseMemberMutation) OutcomeKind() (r int, exists bool) {
+	v := m.outcome_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOutcomeKind returns the old "outcome_kind" field's value of the WorkResponseMember entity.
+// If the WorkResponseMember object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkResponseMemberMutation) OldOutcomeKind(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOutcomeKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOutcomeKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOutcomeKind: %w", err)
+	}
+	return oldValue.OutcomeKind, nil
+}
+
+// AddOutcomeKind adds i to the "outcome_kind" field.
+func (m *WorkResponseMemberMutation) AddOutcomeKind(i int) {
+	if m.addoutcome_kind != nil {
+		*m.addoutcome_kind += i
+	} else {
+		m.addoutcome_kind = &i
+	}
+}
+
+// AddedOutcomeKind returns the value that was added to the "outcome_kind" field in this mutation.
+func (m *WorkResponseMemberMutation) AddedOutcomeKind() (r int, exists bool) {
+	v := m.addoutcome_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOutcomeKind resets all changes to the "outcome_kind" field.
+func (m *WorkResponseMemberMutation) ResetOutcomeKind() {
+	m.outcome_kind = nil
+	m.addoutcome_kind = nil
+}
+
+// SetOutcomeLimit sets the "outcome_limit" field.
+func (m *WorkResponseMemberMutation) SetOutcomeLimit(i int64) {
+	m.outcome_limit = &i
+	m.addoutcome_limit = nil
+}
+
+// OutcomeLimit returns the value of the "outcome_limit" field in the mutation.
+func (m *WorkResponseMemberMutation) OutcomeLimit() (r int64, exists bool) {
+	v := m.outcome_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOutcomeLimit returns the old "outcome_limit" field's value of the WorkResponseMember entity.
+// If the WorkResponseMember object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkResponseMemberMutation) OldOutcomeLimit(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOutcomeLimit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOutcomeLimit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOutcomeLimit: %w", err)
+	}
+	return oldValue.OutcomeLimit, nil
+}
+
+// AddOutcomeLimit adds i to the "outcome_limit" field.
+func (m *WorkResponseMemberMutation) AddOutcomeLimit(i int64) {
+	if m.addoutcome_limit != nil {
+		*m.addoutcome_limit += i
+	} else {
+		m.addoutcome_limit = &i
+	}
+}
+
+// AddedOutcomeLimit returns the value that was added to the "outcome_limit" field in this mutation.
+func (m *WorkResponseMemberMutation) AddedOutcomeLimit() (r int64, exists bool) {
+	v := m.addoutcome_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOutcomeLimit resets all changes to the "outcome_limit" field.
+func (m *WorkResponseMemberMutation) ResetOutcomeLimit() {
+	m.outcome_limit = nil
+	m.addoutcome_limit = nil
+}
+
+// SetOutcomeObserved sets the "outcome_observed" field.
+func (m *WorkResponseMemberMutation) SetOutcomeObserved(i int64) {
+	m.outcome_observed = &i
+	m.addoutcome_observed = nil
+}
+
+// OutcomeObserved returns the value of the "outcome_observed" field in the mutation.
+func (m *WorkResponseMemberMutation) OutcomeObserved() (r int64, exists bool) {
+	v := m.outcome_observed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOutcomeObserved returns the old "outcome_observed" field's value of the WorkResponseMember entity.
+// If the WorkResponseMember object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkResponseMemberMutation) OldOutcomeObserved(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOutcomeObserved is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOutcomeObserved requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOutcomeObserved: %w", err)
+	}
+	return oldValue.OutcomeObserved, nil
+}
+
+// AddOutcomeObserved adds i to the "outcome_observed" field.
+func (m *WorkResponseMemberMutation) AddOutcomeObserved(i int64) {
+	if m.addoutcome_observed != nil {
+		*m.addoutcome_observed += i
+	} else {
+		m.addoutcome_observed = &i
+	}
+}
+
+// AddedOutcomeObserved returns the value that was added to the "outcome_observed" field in this mutation.
+func (m *WorkResponseMemberMutation) AddedOutcomeObserved() (r int64, exists bool) {
+	v := m.addoutcome_observed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOutcomeObserved resets all changes to the "outcome_observed" field.
+func (m *WorkResponseMemberMutation) ResetOutcomeObserved() {
+	m.outcome_observed = nil
+	m.addoutcome_observed = nil
+}
+
 // SetCandidateDigest sets the "candidate_digest" field.
 func (m *WorkResponseMemberMutation) SetCandidateDigest(s string) {
 	m.candidate_digest = &s
@@ -88012,7 +88414,7 @@ func (m *WorkResponseMemberMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *WorkResponseMemberMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 15)
 	if m.request != nil {
 		fields = append(fields, workresponsemember.FieldRequestID)
 	}
@@ -88042,6 +88444,15 @@ func (m *WorkResponseMemberMutation) Fields() []string {
 	}
 	if m.failure != nil {
 		fields = append(fields, workresponsemember.FieldFailure)
+	}
+	if m.outcome_kind != nil {
+		fields = append(fields, workresponsemember.FieldOutcomeKind)
+	}
+	if m.outcome_limit != nil {
+		fields = append(fields, workresponsemember.FieldOutcomeLimit)
+	}
+	if m.outcome_observed != nil {
+		fields = append(fields, workresponsemember.FieldOutcomeObserved)
 	}
 	if m.candidate_digest != nil {
 		fields = append(fields, workresponsemember.FieldCandidateDigest)
@@ -88077,6 +88488,12 @@ func (m *WorkResponseMemberMutation) Field(name string) (ent.Value, bool) {
 		return m.State()
 	case workresponsemember.FieldFailure:
 		return m.Failure()
+	case workresponsemember.FieldOutcomeKind:
+		return m.OutcomeKind()
+	case workresponsemember.FieldOutcomeLimit:
+		return m.OutcomeLimit()
+	case workresponsemember.FieldOutcomeObserved:
+		return m.OutcomeObserved()
 	case workresponsemember.FieldCandidateDigest:
 		return m.CandidateDigest()
 	case workresponsemember.FieldCandidateVersion:
@@ -88110,6 +88527,12 @@ func (m *WorkResponseMemberMutation) OldField(ctx context.Context, name string) 
 		return m.OldState(ctx)
 	case workresponsemember.FieldFailure:
 		return m.OldFailure(ctx)
+	case workresponsemember.FieldOutcomeKind:
+		return m.OldOutcomeKind(ctx)
+	case workresponsemember.FieldOutcomeLimit:
+		return m.OldOutcomeLimit(ctx)
+	case workresponsemember.FieldOutcomeObserved:
+		return m.OldOutcomeObserved(ctx)
 	case workresponsemember.FieldCandidateDigest:
 		return m.OldCandidateDigest(ctx)
 	case workresponsemember.FieldCandidateVersion:
@@ -88193,6 +88616,27 @@ func (m *WorkResponseMemberMutation) SetField(name string, value ent.Value) erro
 		}
 		m.SetFailure(v)
 		return nil
+	case workresponsemember.FieldOutcomeKind:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOutcomeKind(v)
+		return nil
+	case workresponsemember.FieldOutcomeLimit:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOutcomeLimit(v)
+		return nil
+	case workresponsemember.FieldOutcomeObserved:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOutcomeObserved(v)
+		return nil
 	case workresponsemember.FieldCandidateDigest:
 		v, ok := value.(string)
 		if !ok {
@@ -88224,6 +88668,15 @@ func (m *WorkResponseMemberMutation) AddedFields() []string {
 	if m.addcorrected_bytes != nil {
 		fields = append(fields, workresponsemember.FieldCorrectedBytes)
 	}
+	if m.addoutcome_kind != nil {
+		fields = append(fields, workresponsemember.FieldOutcomeKind)
+	}
+	if m.addoutcome_limit != nil {
+		fields = append(fields, workresponsemember.FieldOutcomeLimit)
+	}
+	if m.addoutcome_observed != nil {
+		fields = append(fields, workresponsemember.FieldOutcomeObserved)
+	}
 	if m.addcandidate_version != nil {
 		fields = append(fields, workresponsemember.FieldCandidateVersion)
 	}
@@ -88241,6 +88694,12 @@ func (m *WorkResponseMemberMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedPayloadBytes()
 	case workresponsemember.FieldCorrectedBytes:
 		return m.AddedCorrectedBytes()
+	case workresponsemember.FieldOutcomeKind:
+		return m.AddedOutcomeKind()
+	case workresponsemember.FieldOutcomeLimit:
+		return m.AddedOutcomeLimit()
+	case workresponsemember.FieldOutcomeObserved:
+		return m.AddedOutcomeObserved()
 	case workresponsemember.FieldCandidateVersion:
 		return m.AddedCandidateVersion()
 	}
@@ -88272,6 +88731,27 @@ func (m *WorkResponseMemberMutation) AddField(name string, value ent.Value) erro
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddCorrectedBytes(v)
+		return nil
+	case workresponsemember.FieldOutcomeKind:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOutcomeKind(v)
+		return nil
+	case workresponsemember.FieldOutcomeLimit:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOutcomeLimit(v)
+		return nil
+	case workresponsemember.FieldOutcomeObserved:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOutcomeObserved(v)
 		return nil
 	case workresponsemember.FieldCandidateVersion:
 		v, ok := value.(int64)
@@ -88351,6 +88831,15 @@ func (m *WorkResponseMemberMutation) ResetField(name string) error {
 		return nil
 	case workresponsemember.FieldFailure:
 		m.ResetFailure()
+		return nil
+	case workresponsemember.FieldOutcomeKind:
+		m.ResetOutcomeKind()
+		return nil
+	case workresponsemember.FieldOutcomeLimit:
+		m.ResetOutcomeLimit()
+		return nil
+	case workresponsemember.FieldOutcomeObserved:
+		m.ResetOutcomeObserved()
 		return nil
 	case workresponsemember.FieldCandidateDigest:
 		m.ResetCandidateDigest()

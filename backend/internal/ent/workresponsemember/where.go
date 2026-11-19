@@ -103,6 +103,21 @@ func Failure(v string) predicate.WorkResponseMember {
 	return predicate.WorkResponseMember(sql.FieldEQ(FieldFailure, v))
 }
 
+// OutcomeKind applies equality check predicate on the "outcome_kind" field. It's identical to OutcomeKindEQ.
+func OutcomeKind(v int) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldEQ(FieldOutcomeKind, v))
+}
+
+// OutcomeLimit applies equality check predicate on the "outcome_limit" field. It's identical to OutcomeLimitEQ.
+func OutcomeLimit(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldEQ(FieldOutcomeLimit, v))
+}
+
+// OutcomeObserved applies equality check predicate on the "outcome_observed" field. It's identical to OutcomeObservedEQ.
+func OutcomeObserved(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldEQ(FieldOutcomeObserved, v))
+}
+
 // CandidateDigest applies equality check predicate on the "candidate_digest" field. It's identical to CandidateDigestEQ.
 func CandidateDigest(v string) predicate.WorkResponseMember {
 	return predicate.WorkResponseMember(sql.FieldEQ(FieldCandidateDigest, v))
@@ -611,6 +626,126 @@ func FailureEqualFold(v string) predicate.WorkResponseMember {
 // FailureContainsFold applies the ContainsFold predicate on the "failure" field.
 func FailureContainsFold(v string) predicate.WorkResponseMember {
 	return predicate.WorkResponseMember(sql.FieldContainsFold(FieldFailure, v))
+}
+
+// OutcomeKindEQ applies the EQ predicate on the "outcome_kind" field.
+func OutcomeKindEQ(v int) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldEQ(FieldOutcomeKind, v))
+}
+
+// OutcomeKindNEQ applies the NEQ predicate on the "outcome_kind" field.
+func OutcomeKindNEQ(v int) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldNEQ(FieldOutcomeKind, v))
+}
+
+// OutcomeKindIn applies the In predicate on the "outcome_kind" field.
+func OutcomeKindIn(vs ...int) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldIn(FieldOutcomeKind, vs...))
+}
+
+// OutcomeKindNotIn applies the NotIn predicate on the "outcome_kind" field.
+func OutcomeKindNotIn(vs ...int) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldNotIn(FieldOutcomeKind, vs...))
+}
+
+// OutcomeKindGT applies the GT predicate on the "outcome_kind" field.
+func OutcomeKindGT(v int) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldGT(FieldOutcomeKind, v))
+}
+
+// OutcomeKindGTE applies the GTE predicate on the "outcome_kind" field.
+func OutcomeKindGTE(v int) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldGTE(FieldOutcomeKind, v))
+}
+
+// OutcomeKindLT applies the LT predicate on the "outcome_kind" field.
+func OutcomeKindLT(v int) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldLT(FieldOutcomeKind, v))
+}
+
+// OutcomeKindLTE applies the LTE predicate on the "outcome_kind" field.
+func OutcomeKindLTE(v int) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldLTE(FieldOutcomeKind, v))
+}
+
+// OutcomeLimitEQ applies the EQ predicate on the "outcome_limit" field.
+func OutcomeLimitEQ(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldEQ(FieldOutcomeLimit, v))
+}
+
+// OutcomeLimitNEQ applies the NEQ predicate on the "outcome_limit" field.
+func OutcomeLimitNEQ(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldNEQ(FieldOutcomeLimit, v))
+}
+
+// OutcomeLimitIn applies the In predicate on the "outcome_limit" field.
+func OutcomeLimitIn(vs ...int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldIn(FieldOutcomeLimit, vs...))
+}
+
+// OutcomeLimitNotIn applies the NotIn predicate on the "outcome_limit" field.
+func OutcomeLimitNotIn(vs ...int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldNotIn(FieldOutcomeLimit, vs...))
+}
+
+// OutcomeLimitGT applies the GT predicate on the "outcome_limit" field.
+func OutcomeLimitGT(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldGT(FieldOutcomeLimit, v))
+}
+
+// OutcomeLimitGTE applies the GTE predicate on the "outcome_limit" field.
+func OutcomeLimitGTE(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldGTE(FieldOutcomeLimit, v))
+}
+
+// OutcomeLimitLT applies the LT predicate on the "outcome_limit" field.
+func OutcomeLimitLT(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldLT(FieldOutcomeLimit, v))
+}
+
+// OutcomeLimitLTE applies the LTE predicate on the "outcome_limit" field.
+func OutcomeLimitLTE(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldLTE(FieldOutcomeLimit, v))
+}
+
+// OutcomeObservedEQ applies the EQ predicate on the "outcome_observed" field.
+func OutcomeObservedEQ(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldEQ(FieldOutcomeObserved, v))
+}
+
+// OutcomeObservedNEQ applies the NEQ predicate on the "outcome_observed" field.
+func OutcomeObservedNEQ(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldNEQ(FieldOutcomeObserved, v))
+}
+
+// OutcomeObservedIn applies the In predicate on the "outcome_observed" field.
+func OutcomeObservedIn(vs ...int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldIn(FieldOutcomeObserved, vs...))
+}
+
+// OutcomeObservedNotIn applies the NotIn predicate on the "outcome_observed" field.
+func OutcomeObservedNotIn(vs ...int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldNotIn(FieldOutcomeObserved, vs...))
+}
+
+// OutcomeObservedGT applies the GT predicate on the "outcome_observed" field.
+func OutcomeObservedGT(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldGT(FieldOutcomeObserved, v))
+}
+
+// OutcomeObservedGTE applies the GTE predicate on the "outcome_observed" field.
+func OutcomeObservedGTE(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldGTE(FieldOutcomeObserved, v))
+}
+
+// OutcomeObservedLT applies the LT predicate on the "outcome_observed" field.
+func OutcomeObservedLT(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldLT(FieldOutcomeObserved, v))
+}
+
+// OutcomeObservedLTE applies the LTE predicate on the "outcome_observed" field.
+func OutcomeObservedLTE(v int64) predicate.WorkResponseMember {
+	return predicate.WorkResponseMember(sql.FieldLTE(FieldOutcomeObserved, v))
 }
 
 // CandidateDigestEQ applies the EQ predicate on the "candidate_digest" field.

@@ -2542,6 +2542,9 @@ var (
 		{Name: "archive_digest", Type: field.TypeString, Default: ""},
 		{Name: "input_member_bytes", Type: field.TypeInt64, Default: 0},
 		{Name: "output_member_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "model_output_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "correction_bytes", Type: field.TypeInt64, Default: 0},
+		{Name: "public_kind", Type: field.TypeEnum, Enums: []string{"none", "entries", "receipt"}, Default: "none"},
 		{Name: "public_bytes", Type: field.TypeInt64, Default: 0},
 		{Name: "member_storage_bytes", Type: field.TypeInt64, Default: 0},
 		{Name: "public_digest", Type: field.TypeString, Default: ""},
@@ -2579,19 +2582,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "work_requests_jobs_job",
-				Columns:    []*schema.Column{WorkRequestsColumns[51]},
+				Columns:    []*schema.Column{WorkRequestsColumns[54]},
 				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_requests_resources_resource",
-				Columns:    []*schema.Column{WorkRequestsColumns[52]},
+				Columns:    []*schema.Column{WorkRequestsColumns[55]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "work_requests_job_rounds_round",
-				Columns:    []*schema.Column{WorkRequestsColumns[53]},
+				Columns:    []*schema.Column{WorkRequestsColumns[56]},
 				RefColumns: []*schema.Column{JobRoundsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -2600,12 +2603,12 @@ var (
 			{
 				Name:    "workrequest_job_id_state_id",
 				Unique:  false,
-				Columns: []*schema.Column{WorkRequestsColumns[51], WorkRequestsColumns[45], WorkRequestsColumns[0]},
+				Columns: []*schema.Column{WorkRequestsColumns[54], WorkRequestsColumns[48], WorkRequestsColumns[0]},
 			},
 			{
 				Name:    "workrequest_job_id_promotion_state_job_round_id_id",
 				Unique:  false,
-				Columns: []*schema.Column{WorkRequestsColumns[51], WorkRequestsColumns[40], WorkRequestsColumns[53], WorkRequestsColumns[0]},
+				Columns: []*schema.Column{WorkRequestsColumns[54], WorkRequestsColumns[43], WorkRequestsColumns[56], WorkRequestsColumns[0]},
 			},
 		},
 	}
@@ -2677,6 +2680,9 @@ var (
 		{Name: "corrected_digest", Type: field.TypeString, Default: ""},
 		{Name: "state", Type: field.TypeString, Default: "pending"},
 		{Name: "failure", Type: field.TypeString, Default: ""},
+		{Name: "outcome_kind", Type: field.TypeInt, Default: 0},
+		{Name: "outcome_limit", Type: field.TypeInt64, Default: 0},
+		{Name: "outcome_observed", Type: field.TypeInt64, Default: 0},
 		{Name: "candidate_digest", Type: field.TypeString, Default: ""},
 		{Name: "candidate_version", Type: field.TypeInt64, Default: 0},
 		{Name: "request_id", Type: field.TypeInt},
@@ -2689,7 +2695,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "work_response_members_work_requests_request",
-				Columns:    []*schema.Column{WorkResponseMembersColumns[12]},
+				Columns:    []*schema.Column{WorkResponseMembersColumns[15]},
 				RefColumns: []*schema.Column{WorkRequestsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -2698,12 +2704,12 @@ var (
 			{
 				Name:    "workresponsemember_request_id_ordinal",
 				Unique:  true,
-				Columns: []*schema.Column{WorkResponseMembersColumns[12], WorkResponseMembersColumns[1]},
+				Columns: []*schema.Column{WorkResponseMembersColumns[15], WorkResponseMembersColumns[1]},
 			},
 			{
 				Name:    "workresponsemember_request_id_state_ordinal",
 				Unique:  false,
-				Columns: []*schema.Column{WorkResponseMembersColumns[12], WorkResponseMembersColumns[8], WorkResponseMembersColumns[1]},
+				Columns: []*schema.Column{WorkResponseMembersColumns[15], WorkResponseMembersColumns[8], WorkResponseMembersColumns[1]},
 			},
 		},
 	}

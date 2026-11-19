@@ -186,6 +186,69 @@ func (_u *WorkResponseMemberUpdate) SetNillableFailure(v *string) *WorkResponseM
 	return _u
 }
 
+// SetOutcomeKind sets the "outcome_kind" field.
+func (_u *WorkResponseMemberUpdate) SetOutcomeKind(v int) *WorkResponseMemberUpdate {
+	_u.mutation.ResetOutcomeKind()
+	_u.mutation.SetOutcomeKind(v)
+	return _u
+}
+
+// SetNillableOutcomeKind sets the "outcome_kind" field if the given value is not nil.
+func (_u *WorkResponseMemberUpdate) SetNillableOutcomeKind(v *int) *WorkResponseMemberUpdate {
+	if v != nil {
+		_u.SetOutcomeKind(*v)
+	}
+	return _u
+}
+
+// AddOutcomeKind adds value to the "outcome_kind" field.
+func (_u *WorkResponseMemberUpdate) AddOutcomeKind(v int) *WorkResponseMemberUpdate {
+	_u.mutation.AddOutcomeKind(v)
+	return _u
+}
+
+// SetOutcomeLimit sets the "outcome_limit" field.
+func (_u *WorkResponseMemberUpdate) SetOutcomeLimit(v int64) *WorkResponseMemberUpdate {
+	_u.mutation.ResetOutcomeLimit()
+	_u.mutation.SetOutcomeLimit(v)
+	return _u
+}
+
+// SetNillableOutcomeLimit sets the "outcome_limit" field if the given value is not nil.
+func (_u *WorkResponseMemberUpdate) SetNillableOutcomeLimit(v *int64) *WorkResponseMemberUpdate {
+	if v != nil {
+		_u.SetOutcomeLimit(*v)
+	}
+	return _u
+}
+
+// AddOutcomeLimit adds value to the "outcome_limit" field.
+func (_u *WorkResponseMemberUpdate) AddOutcomeLimit(v int64) *WorkResponseMemberUpdate {
+	_u.mutation.AddOutcomeLimit(v)
+	return _u
+}
+
+// SetOutcomeObserved sets the "outcome_observed" field.
+func (_u *WorkResponseMemberUpdate) SetOutcomeObserved(v int64) *WorkResponseMemberUpdate {
+	_u.mutation.ResetOutcomeObserved()
+	_u.mutation.SetOutcomeObserved(v)
+	return _u
+}
+
+// SetNillableOutcomeObserved sets the "outcome_observed" field if the given value is not nil.
+func (_u *WorkResponseMemberUpdate) SetNillableOutcomeObserved(v *int64) *WorkResponseMemberUpdate {
+	if v != nil {
+		_u.SetOutcomeObserved(*v)
+	}
+	return _u
+}
+
+// AddOutcomeObserved adds value to the "outcome_observed" field.
+func (_u *WorkResponseMemberUpdate) AddOutcomeObserved(v int64) *WorkResponseMemberUpdate {
+	_u.mutation.AddOutcomeObserved(v)
+	return _u
+}
+
 // SetCandidateDigest sets the "candidate_digest" field.
 func (_u *WorkResponseMemberUpdate) SetCandidateDigest(v string) *WorkResponseMemberUpdate {
 	_u.mutation.SetCandidateDigest(v)
@@ -286,6 +349,21 @@ func (_u *WorkResponseMemberUpdate) check() error {
 			return &ValidationError{Name: "corrected_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.corrected_bytes": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.OutcomeKind(); ok {
+		if err := workresponsemember.OutcomeKindValidator(v); err != nil {
+			return &ValidationError{Name: "outcome_kind", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.outcome_kind": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OutcomeLimit(); ok {
+		if err := workresponsemember.OutcomeLimitValidator(v); err != nil {
+			return &ValidationError{Name: "outcome_limit", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.outcome_limit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OutcomeObserved(); ok {
+		if err := workresponsemember.OutcomeObservedValidator(v); err != nil {
+			return &ValidationError{Name: "outcome_observed", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.outcome_observed": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.CandidateVersion(); ok {
 		if err := workresponsemember.CandidateVersionValidator(v); err != nil {
 			return &ValidationError{Name: "candidate_version", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.candidate_version": %w`, err)}
@@ -356,6 +434,24 @@ func (_u *WorkResponseMemberUpdate) sqlSave(ctx context.Context) (_node int, err
 	}
 	if value, ok := _u.mutation.Failure(); ok {
 		_spec.SetField(workresponsemember.FieldFailure, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.OutcomeKind(); ok {
+		_spec.SetField(workresponsemember.FieldOutcomeKind, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedOutcomeKind(); ok {
+		_spec.AddField(workresponsemember.FieldOutcomeKind, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.OutcomeLimit(); ok {
+		_spec.SetField(workresponsemember.FieldOutcomeLimit, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedOutcomeLimit(); ok {
+		_spec.AddField(workresponsemember.FieldOutcomeLimit, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.OutcomeObserved(); ok {
+		_spec.SetField(workresponsemember.FieldOutcomeObserved, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedOutcomeObserved(); ok {
+		_spec.AddField(workresponsemember.FieldOutcomeObserved, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.CandidateDigest(); ok {
 		_spec.SetField(workresponsemember.FieldCandidateDigest, field.TypeString, value)
@@ -574,6 +670,69 @@ func (_u *WorkResponseMemberUpdateOne) SetNillableFailure(v *string) *WorkRespon
 	return _u
 }
 
+// SetOutcomeKind sets the "outcome_kind" field.
+func (_u *WorkResponseMemberUpdateOne) SetOutcomeKind(v int) *WorkResponseMemberUpdateOne {
+	_u.mutation.ResetOutcomeKind()
+	_u.mutation.SetOutcomeKind(v)
+	return _u
+}
+
+// SetNillableOutcomeKind sets the "outcome_kind" field if the given value is not nil.
+func (_u *WorkResponseMemberUpdateOne) SetNillableOutcomeKind(v *int) *WorkResponseMemberUpdateOne {
+	if v != nil {
+		_u.SetOutcomeKind(*v)
+	}
+	return _u
+}
+
+// AddOutcomeKind adds value to the "outcome_kind" field.
+func (_u *WorkResponseMemberUpdateOne) AddOutcomeKind(v int) *WorkResponseMemberUpdateOne {
+	_u.mutation.AddOutcomeKind(v)
+	return _u
+}
+
+// SetOutcomeLimit sets the "outcome_limit" field.
+func (_u *WorkResponseMemberUpdateOne) SetOutcomeLimit(v int64) *WorkResponseMemberUpdateOne {
+	_u.mutation.ResetOutcomeLimit()
+	_u.mutation.SetOutcomeLimit(v)
+	return _u
+}
+
+// SetNillableOutcomeLimit sets the "outcome_limit" field if the given value is not nil.
+func (_u *WorkResponseMemberUpdateOne) SetNillableOutcomeLimit(v *int64) *WorkResponseMemberUpdateOne {
+	if v != nil {
+		_u.SetOutcomeLimit(*v)
+	}
+	return _u
+}
+
+// AddOutcomeLimit adds value to the "outcome_limit" field.
+func (_u *WorkResponseMemberUpdateOne) AddOutcomeLimit(v int64) *WorkResponseMemberUpdateOne {
+	_u.mutation.AddOutcomeLimit(v)
+	return _u
+}
+
+// SetOutcomeObserved sets the "outcome_observed" field.
+func (_u *WorkResponseMemberUpdateOne) SetOutcomeObserved(v int64) *WorkResponseMemberUpdateOne {
+	_u.mutation.ResetOutcomeObserved()
+	_u.mutation.SetOutcomeObserved(v)
+	return _u
+}
+
+// SetNillableOutcomeObserved sets the "outcome_observed" field if the given value is not nil.
+func (_u *WorkResponseMemberUpdateOne) SetNillableOutcomeObserved(v *int64) *WorkResponseMemberUpdateOne {
+	if v != nil {
+		_u.SetOutcomeObserved(*v)
+	}
+	return _u
+}
+
+// AddOutcomeObserved adds value to the "outcome_observed" field.
+func (_u *WorkResponseMemberUpdateOne) AddOutcomeObserved(v int64) *WorkResponseMemberUpdateOne {
+	_u.mutation.AddOutcomeObserved(v)
+	return _u
+}
+
 // SetCandidateDigest sets the "candidate_digest" field.
 func (_u *WorkResponseMemberUpdateOne) SetCandidateDigest(v string) *WorkResponseMemberUpdateOne {
 	_u.mutation.SetCandidateDigest(v)
@@ -687,6 +846,21 @@ func (_u *WorkResponseMemberUpdateOne) check() error {
 			return &ValidationError{Name: "corrected_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.corrected_bytes": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.OutcomeKind(); ok {
+		if err := workresponsemember.OutcomeKindValidator(v); err != nil {
+			return &ValidationError{Name: "outcome_kind", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.outcome_kind": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OutcomeLimit(); ok {
+		if err := workresponsemember.OutcomeLimitValidator(v); err != nil {
+			return &ValidationError{Name: "outcome_limit", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.outcome_limit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OutcomeObserved(); ok {
+		if err := workresponsemember.OutcomeObservedValidator(v); err != nil {
+			return &ValidationError{Name: "outcome_observed", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.outcome_observed": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.CandidateVersion(); ok {
 		if err := workresponsemember.CandidateVersionValidator(v); err != nil {
 			return &ValidationError{Name: "candidate_version", err: fmt.Errorf(`ent: validator failed for field "WorkResponseMember.candidate_version": %w`, err)}
@@ -774,6 +948,24 @@ func (_u *WorkResponseMemberUpdateOne) sqlSave(ctx context.Context) (_node *Work
 	}
 	if value, ok := _u.mutation.Failure(); ok {
 		_spec.SetField(workresponsemember.FieldFailure, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.OutcomeKind(); ok {
+		_spec.SetField(workresponsemember.FieldOutcomeKind, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedOutcomeKind(); ok {
+		_spec.AddField(workresponsemember.FieldOutcomeKind, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.OutcomeLimit(); ok {
+		_spec.SetField(workresponsemember.FieldOutcomeLimit, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedOutcomeLimit(); ok {
+		_spec.AddField(workresponsemember.FieldOutcomeLimit, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.OutcomeObserved(); ok {
+		_spec.SetField(workresponsemember.FieldOutcomeObserved, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedOutcomeObserved(); ok {
+		_spec.AddField(workresponsemember.FieldOutcomeObserved, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.CandidateDigest(); ok {
 		_spec.SetField(workresponsemember.FieldCandidateDigest, field.TypeString, value)

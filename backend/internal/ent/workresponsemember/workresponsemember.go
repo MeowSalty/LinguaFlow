@@ -32,6 +32,12 @@ const (
 	FieldState = "state"
 	// FieldFailure holds the string denoting the failure field in the database.
 	FieldFailure = "failure"
+	// FieldOutcomeKind holds the string denoting the outcome_kind field in the database.
+	FieldOutcomeKind = "outcome_kind"
+	// FieldOutcomeLimit holds the string denoting the outcome_limit field in the database.
+	FieldOutcomeLimit = "outcome_limit"
+	// FieldOutcomeObserved holds the string denoting the outcome_observed field in the database.
+	FieldOutcomeObserved = "outcome_observed"
 	// FieldCandidateDigest holds the string denoting the candidate_digest field in the database.
 	FieldCandidateDigest = "candidate_digest"
 	// FieldCandidateVersion holds the string denoting the candidate_version field in the database.
@@ -62,6 +68,9 @@ var Columns = []string{
 	FieldCorrectedDigest,
 	FieldState,
 	FieldFailure,
+	FieldOutcomeKind,
+	FieldOutcomeLimit,
+	FieldOutcomeObserved,
 	FieldCandidateDigest,
 	FieldCandidateVersion,
 }
@@ -93,6 +102,18 @@ var (
 	DefaultState string
 	// DefaultFailure holds the default value on creation for the "failure" field.
 	DefaultFailure string
+	// DefaultOutcomeKind holds the default value on creation for the "outcome_kind" field.
+	DefaultOutcomeKind int
+	// OutcomeKindValidator is a validator for the "outcome_kind" field. It is called by the builders before save.
+	OutcomeKindValidator func(int) error
+	// DefaultOutcomeLimit holds the default value on creation for the "outcome_limit" field.
+	DefaultOutcomeLimit int64
+	// OutcomeLimitValidator is a validator for the "outcome_limit" field. It is called by the builders before save.
+	OutcomeLimitValidator func(int64) error
+	// DefaultOutcomeObserved holds the default value on creation for the "outcome_observed" field.
+	DefaultOutcomeObserved int64
+	// OutcomeObservedValidator is a validator for the "outcome_observed" field. It is called by the builders before save.
+	OutcomeObservedValidator func(int64) error
 	// DefaultCandidateDigest holds the default value on creation for the "candidate_digest" field.
 	DefaultCandidateDigest string
 	// DefaultCandidateVersion holds the default value on creation for the "candidate_version" field.
@@ -147,6 +168,21 @@ func ByState(opts ...sql.OrderTermOption) OrderOption {
 // ByFailure orders the results by the failure field.
 func ByFailure(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFailure, opts...).ToFunc()
+}
+
+// ByOutcomeKind orders the results by the outcome_kind field.
+func ByOutcomeKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOutcomeKind, opts...).ToFunc()
+}
+
+// ByOutcomeLimit orders the results by the outcome_limit field.
+func ByOutcomeLimit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOutcomeLimit, opts...).ToFunc()
+}
+
+// ByOutcomeObserved orders the results by the outcome_observed field.
+func ByOutcomeObserved(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOutcomeObserved, opts...).ToFunc()
 }
 
 // ByCandidateDigest orders the results by the candidate_digest field.

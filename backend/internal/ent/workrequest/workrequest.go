@@ -3,6 +3,7 @@
 package workrequest
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -70,6 +71,12 @@ const (
 	FieldInputMemberBytes = "input_member_bytes"
 	// FieldOutputMemberBytes holds the string denoting the output_member_bytes field in the database.
 	FieldOutputMemberBytes = "output_member_bytes"
+	// FieldModelOutputBytes holds the string denoting the model_output_bytes field in the database.
+	FieldModelOutputBytes = "model_output_bytes"
+	// FieldCorrectionBytes holds the string denoting the correction_bytes field in the database.
+	FieldCorrectionBytes = "correction_bytes"
+	// FieldPublicKind holds the string denoting the public_kind field in the database.
+	FieldPublicKind = "public_kind"
 	// FieldPublicBytes holds the string denoting the public_bytes field in the database.
 	FieldPublicBytes = "public_bytes"
 	// FieldMemberStorageBytes holds the string denoting the member_storage_bytes field in the database.
@@ -182,6 +189,9 @@ var Columns = []string{
 	FieldArchiveDigest,
 	FieldInputMemberBytes,
 	FieldOutputMemberBytes,
+	FieldModelOutputBytes,
+	FieldCorrectionBytes,
+	FieldPublicKind,
 	FieldPublicBytes,
 	FieldMemberStorageBytes,
 	FieldPublicDigest,
@@ -282,6 +292,14 @@ var (
 	DefaultOutputMemberBytes int64
 	// OutputMemberBytesValidator is a validator for the "output_member_bytes" field. It is called by the builders before save.
 	OutputMemberBytesValidator func(int64) error
+	// DefaultModelOutputBytes holds the default value on creation for the "model_output_bytes" field.
+	DefaultModelOutputBytes int64
+	// ModelOutputBytesValidator is a validator for the "model_output_bytes" field. It is called by the builders before save.
+	ModelOutputBytesValidator func(int64) error
+	// DefaultCorrectionBytes holds the default value on creation for the "correction_bytes" field.
+	DefaultCorrectionBytes int64
+	// CorrectionBytesValidator is a validator for the "correction_bytes" field. It is called by the builders before save.
+	CorrectionBytesValidator func(int64) error
 	// DefaultPublicBytes holds the default value on creation for the "public_bytes" field.
 	DefaultPublicBytes int64
 	// PublicBytesValidator is a validator for the "public_bytes" field. It is called by the builders before save.
@@ -351,6 +369,33 @@ var (
 	// DefaultLastError holds the default value on creation for the "last_error" field.
 	DefaultLastError string
 )
+
+// PublicKind defines the type for the "public_kind" enum field.
+type PublicKind string
+
+// PublicKindNone is the default value of the PublicKind enum.
+const DefaultPublicKind = PublicKindNone
+
+// PublicKind values.
+const (
+	PublicKindNone    PublicKind = "none"
+	PublicKindEntries PublicKind = "entries"
+	PublicKindReceipt PublicKind = "receipt"
+)
+
+func (pk PublicKind) String() string {
+	return string(pk)
+}
+
+// PublicKindValidator is a validator for the "public_kind" field enum values. It is called by the builders before save.
+func PublicKindValidator(pk PublicKind) error {
+	switch pk {
+	case PublicKindNone, PublicKindEntries, PublicKindReceipt:
+		return nil
+	default:
+		return fmt.Errorf("workrequest: invalid enum value for public_kind field: %q", pk)
+	}
+}
 
 // OrderOption defines the ordering options for the WorkRequest queries.
 type OrderOption func(*sql.Selector)
@@ -473,6 +518,21 @@ func ByInputMemberBytes(opts ...sql.OrderTermOption) OrderOption {
 // ByOutputMemberBytes orders the results by the output_member_bytes field.
 func ByOutputMemberBytes(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOutputMemberBytes, opts...).ToFunc()
+}
+
+// ByModelOutputBytes orders the results by the model_output_bytes field.
+func ByModelOutputBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldModelOutputBytes, opts...).ToFunc()
+}
+
+// ByCorrectionBytes orders the results by the correction_bytes field.
+func ByCorrectionBytes(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCorrectionBytes, opts...).ToFunc()
+}
+
+// ByPublicKind orders the results by the public_kind field.
+func ByPublicKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPublicKind, opts...).ToFunc()
 }
 
 // ByPublicBytes orders the results by the public_bytes field.

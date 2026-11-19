@@ -30,6 +30,8 @@ func (WorkRequest) Fields() []ent.Field {
 		field.Int("member_pool").Default(0).NonNegative(), field.Int("member_attempt").Default(0).NonNegative(),
 		field.Int("archive_cursor").Default(0).NonNegative(), field.String("archive_digest").Default(""),
 		field.Int64("input_member_bytes").Default(0).NonNegative(), field.Int64("output_member_bytes").Default(0).NonNegative(),
+		field.Int64("model_output_bytes").Default(0).NonNegative(), field.Int64("correction_bytes").Default(0).NonNegative(),
+		field.Enum("public_kind").Values("none", "entries", "receipt").Default("none"),
 		field.Int64("public_bytes").Default(0).NonNegative(), field.Int64("member_storage_bytes").Default(0).NonNegative(),
 		field.String("public_digest").Default(""),
 		field.Int64("request_metadata_bytes").Default(0).NonNegative(),

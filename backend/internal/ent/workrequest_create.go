@@ -320,6 +320,48 @@ func (_c *WorkRequestCreate) SetNillableOutputMemberBytes(v *int64) *WorkRequest
 	return _c
 }
 
+// SetModelOutputBytes sets the "model_output_bytes" field.
+func (_c *WorkRequestCreate) SetModelOutputBytes(v int64) *WorkRequestCreate {
+	_c.mutation.SetModelOutputBytes(v)
+	return _c
+}
+
+// SetNillableModelOutputBytes sets the "model_output_bytes" field if the given value is not nil.
+func (_c *WorkRequestCreate) SetNillableModelOutputBytes(v *int64) *WorkRequestCreate {
+	if v != nil {
+		_c.SetModelOutputBytes(*v)
+	}
+	return _c
+}
+
+// SetCorrectionBytes sets the "correction_bytes" field.
+func (_c *WorkRequestCreate) SetCorrectionBytes(v int64) *WorkRequestCreate {
+	_c.mutation.SetCorrectionBytes(v)
+	return _c
+}
+
+// SetNillableCorrectionBytes sets the "correction_bytes" field if the given value is not nil.
+func (_c *WorkRequestCreate) SetNillableCorrectionBytes(v *int64) *WorkRequestCreate {
+	if v != nil {
+		_c.SetCorrectionBytes(*v)
+	}
+	return _c
+}
+
+// SetPublicKind sets the "public_kind" field.
+func (_c *WorkRequestCreate) SetPublicKind(v workrequest.PublicKind) *WorkRequestCreate {
+	_c.mutation.SetPublicKind(v)
+	return _c
+}
+
+// SetNillablePublicKind sets the "public_kind" field if the given value is not nil.
+func (_c *WorkRequestCreate) SetNillablePublicKind(v *workrequest.PublicKind) *WorkRequestCreate {
+	if v != nil {
+		_c.SetPublicKind(*v)
+	}
+	return _c
+}
+
 // SetPublicBytes sets the "public_bytes" field.
 func (_c *WorkRequestCreate) SetPublicBytes(v int64) *WorkRequestCreate {
 	_c.mutation.SetPublicBytes(v)
@@ -766,6 +808,18 @@ func (_c *WorkRequestCreate) defaults() {
 		v := workrequest.DefaultOutputMemberBytes
 		_c.mutation.SetOutputMemberBytes(v)
 	}
+	if _, ok := _c.mutation.ModelOutputBytes(); !ok {
+		v := workrequest.DefaultModelOutputBytes
+		_c.mutation.SetModelOutputBytes(v)
+	}
+	if _, ok := _c.mutation.CorrectionBytes(); !ok {
+		v := workrequest.DefaultCorrectionBytes
+		_c.mutation.SetCorrectionBytes(v)
+	}
+	if _, ok := _c.mutation.PublicKind(); !ok {
+		v := workrequest.DefaultPublicKind
+		_c.mutation.SetPublicKind(v)
+	}
 	if _, ok := _c.mutation.PublicBytes(); !ok {
 		v := workrequest.DefaultPublicBytes
 		_c.mutation.SetPublicBytes(v)
@@ -990,6 +1044,30 @@ func (_c *WorkRequestCreate) check() error {
 	if v, ok := _c.mutation.OutputMemberBytes(); ok {
 		if err := workrequest.OutputMemberBytesValidator(v); err != nil {
 			return &ValidationError{Name: "output_member_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.output_member_bytes": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ModelOutputBytes(); !ok {
+		return &ValidationError{Name: "model_output_bytes", err: errors.New(`ent: missing required field "WorkRequest.model_output_bytes"`)}
+	}
+	if v, ok := _c.mutation.ModelOutputBytes(); ok {
+		if err := workrequest.ModelOutputBytesValidator(v); err != nil {
+			return &ValidationError{Name: "model_output_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.model_output_bytes": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CorrectionBytes(); !ok {
+		return &ValidationError{Name: "correction_bytes", err: errors.New(`ent: missing required field "WorkRequest.correction_bytes"`)}
+	}
+	if v, ok := _c.mutation.CorrectionBytes(); ok {
+		if err := workrequest.CorrectionBytesValidator(v); err != nil {
+			return &ValidationError{Name: "correction_bytes", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.correction_bytes": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.PublicKind(); !ok {
+		return &ValidationError{Name: "public_kind", err: errors.New(`ent: missing required field "WorkRequest.public_kind"`)}
+	}
+	if v, ok := _c.mutation.PublicKind(); ok {
+		if err := workrequest.PublicKindValidator(v); err != nil {
+			return &ValidationError{Name: "public_kind", err: fmt.Errorf(`ent: validator failed for field "WorkRequest.public_kind": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.PublicBytes(); !ok {
@@ -1262,6 +1340,18 @@ func (_c *WorkRequestCreate) createSpec() (*WorkRequest, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.OutputMemberBytes(); ok {
 		_spec.SetField(workrequest.FieldOutputMemberBytes, field.TypeInt64, value)
 		_node.OutputMemberBytes = value
+	}
+	if value, ok := _c.mutation.ModelOutputBytes(); ok {
+		_spec.SetField(workrequest.FieldModelOutputBytes, field.TypeInt64, value)
+		_node.ModelOutputBytes = value
+	}
+	if value, ok := _c.mutation.CorrectionBytes(); ok {
+		_spec.SetField(workrequest.FieldCorrectionBytes, field.TypeInt64, value)
+		_node.CorrectionBytes = value
+	}
+	if value, ok := _c.mutation.PublicKind(); ok {
+		_spec.SetField(workrequest.FieldPublicKind, field.TypeEnum, value)
+		_node.PublicKind = value
 	}
 	if value, ok := _c.mutation.PublicBytes(); ok {
 		_spec.SetField(workrequest.FieldPublicBytes, field.TypeInt64, value)

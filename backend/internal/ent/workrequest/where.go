@@ -175,6 +175,16 @@ func OutputMemberBytes(v int64) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldEQ(FieldOutputMemberBytes, v))
 }
 
+// ModelOutputBytes applies equality check predicate on the "model_output_bytes" field. It's identical to ModelOutputBytesEQ.
+func ModelOutputBytes(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldModelOutputBytes, v))
+}
+
+// CorrectionBytes applies equality check predicate on the "correction_bytes" field. It's identical to CorrectionBytesEQ.
+func CorrectionBytes(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectionBytes, v))
+}
+
 // PublicBytes applies equality check predicate on the "public_bytes" field. It's identical to PublicBytesEQ.
 func PublicBytes(v int64) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldEQ(FieldPublicBytes, v))
@@ -1408,6 +1418,106 @@ func OutputMemberBytesLT(v int64) predicate.WorkRequest {
 // OutputMemberBytesLTE applies the LTE predicate on the "output_member_bytes" field.
 func OutputMemberBytesLTE(v int64) predicate.WorkRequest {
 	return predicate.WorkRequest(sql.FieldLTE(FieldOutputMemberBytes, v))
+}
+
+// ModelOutputBytesEQ applies the EQ predicate on the "model_output_bytes" field.
+func ModelOutputBytesEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldModelOutputBytes, v))
+}
+
+// ModelOutputBytesNEQ applies the NEQ predicate on the "model_output_bytes" field.
+func ModelOutputBytesNEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldModelOutputBytes, v))
+}
+
+// ModelOutputBytesIn applies the In predicate on the "model_output_bytes" field.
+func ModelOutputBytesIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldModelOutputBytes, vs...))
+}
+
+// ModelOutputBytesNotIn applies the NotIn predicate on the "model_output_bytes" field.
+func ModelOutputBytesNotIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldModelOutputBytes, vs...))
+}
+
+// ModelOutputBytesGT applies the GT predicate on the "model_output_bytes" field.
+func ModelOutputBytesGT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldModelOutputBytes, v))
+}
+
+// ModelOutputBytesGTE applies the GTE predicate on the "model_output_bytes" field.
+func ModelOutputBytesGTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldModelOutputBytes, v))
+}
+
+// ModelOutputBytesLT applies the LT predicate on the "model_output_bytes" field.
+func ModelOutputBytesLT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldModelOutputBytes, v))
+}
+
+// ModelOutputBytesLTE applies the LTE predicate on the "model_output_bytes" field.
+func ModelOutputBytesLTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldModelOutputBytes, v))
+}
+
+// CorrectionBytesEQ applies the EQ predicate on the "correction_bytes" field.
+func CorrectionBytesEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldCorrectionBytes, v))
+}
+
+// CorrectionBytesNEQ applies the NEQ predicate on the "correction_bytes" field.
+func CorrectionBytesNEQ(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldCorrectionBytes, v))
+}
+
+// CorrectionBytesIn applies the In predicate on the "correction_bytes" field.
+func CorrectionBytesIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldCorrectionBytes, vs...))
+}
+
+// CorrectionBytesNotIn applies the NotIn predicate on the "correction_bytes" field.
+func CorrectionBytesNotIn(vs ...int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldCorrectionBytes, vs...))
+}
+
+// CorrectionBytesGT applies the GT predicate on the "correction_bytes" field.
+func CorrectionBytesGT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGT(FieldCorrectionBytes, v))
+}
+
+// CorrectionBytesGTE applies the GTE predicate on the "correction_bytes" field.
+func CorrectionBytesGTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldGTE(FieldCorrectionBytes, v))
+}
+
+// CorrectionBytesLT applies the LT predicate on the "correction_bytes" field.
+func CorrectionBytesLT(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLT(FieldCorrectionBytes, v))
+}
+
+// CorrectionBytesLTE applies the LTE predicate on the "correction_bytes" field.
+func CorrectionBytesLTE(v int64) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldLTE(FieldCorrectionBytes, v))
+}
+
+// PublicKindEQ applies the EQ predicate on the "public_kind" field.
+func PublicKindEQ(v PublicKind) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldEQ(FieldPublicKind, v))
+}
+
+// PublicKindNEQ applies the NEQ predicate on the "public_kind" field.
+func PublicKindNEQ(v PublicKind) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNEQ(FieldPublicKind, v))
+}
+
+// PublicKindIn applies the In predicate on the "public_kind" field.
+func PublicKindIn(vs ...PublicKind) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldIn(FieldPublicKind, vs...))
+}
+
+// PublicKindNotIn applies the NotIn predicate on the "public_kind" field.
+func PublicKindNotIn(vs ...PublicKind) predicate.WorkRequest {
+	return predicate.WorkRequest(sql.FieldNotIn(FieldPublicKind, vs...))
 }
 
 // PublicBytesEQ applies the EQ predicate on the "public_bytes" field.
