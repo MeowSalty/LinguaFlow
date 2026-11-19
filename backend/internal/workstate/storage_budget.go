@@ -16,6 +16,7 @@ import (
 )
 
 type storageBudgetKey struct{}
+type storageConfirmationKey struct{}
 
 // StorageBudget owns only the active invocation's storage attachment. Its
 // scalar backing remains charged when that invocation unloads.
@@ -38,7 +39,10 @@ type StorageBudget struct {
 	// until authority returns; a duplicate ACK must not replace that baseline.
 	pending    bool
 	pendingErr error
-	closed     bool
+	// An unknown member write keeps only its scalar identity proof. Physical
+	// lengths cannot authorize a refund before the canonical result is verified.
+	pendingConfirmation func(context.Context) (bool, error)
+	closed              bool
 }
 type storageRowKey struct {
 	table string
@@ -383,6 +387,9 @@ func (b *StorageBudget) finish(ctx context.Context, transactionErr error) error 
 		defer b.InventoryLock.Unlock()
 	}
 	b.pending, b.pendingErr = true, transactionErr
+	if unknownCommit(transactionErr) {
+		b.pendingConfirmation, _ = ctx.Value(storageConfirmationKey{}).(func(context.Context) (bool, error))
+	}
 	return b.settlePendingLocked(ctx)
 }
 
@@ -392,15 +399,34 @@ func (b *StorageBudget) settlePendingLocked(ctx context.Context) error {
 	if !b.pending {
 		return nil
 	}
+	if b.pendingConfirmation != nil {
+		confirmed, err := b.pendingConfirmation(ctx)
+		if err != nil {
+			return fmt.Errorf("pending canonical confirmation: %w", err)
+		}
+		if !confirmed && !storageRollbackKnown(b.pendingErr) {
+			b.pendingErr = &NotCommittedError{Cause: b.pendingErr}
+		}
+	}
 	if err := b.settleLocked(ctx, b.pendingErr); err != nil {
 		return fmt.Errorf("pending storage settlement: %w", err)
 	}
 	b.pending, b.pendingErr = false, nil
+	b.pendingConfirmation = nil
 	return nil
 }
 
 func (b *StorageBudget) settleLocked(ctx context.Context, transactionErr error) error {
-	actual, err := b.actualChangedStorage(ctx)
+	var actual int64
+	var err error
+	if b.pendingConfirmation != nil && unknownCommit(transactionErr) {
+		// Another proved writer may have advanced the same durable response
+		// while this ACK was unresolved. Reconcile current SQL byte totals;
+		// the original touched-row delta cannot describe that later writer.
+		_, actual, err = b.Source.Job(ctx, b.Scope.JobID)
+	} else {
+		actual, err = b.actualChangedStorage(ctx)
+	}
 	if err != nil {
 		return err
 	}

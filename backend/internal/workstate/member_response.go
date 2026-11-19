@@ -3,23 +3,22 @@ package workstate
 import (
 	"context"
 	"entgo.io/ent/dialect/sql"
+	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"sync"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequestinputmember"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workresponsemember"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 )
 
-type MemberKey struct {
-	RequestID    string
-	Ordinal      int
-	CaptureEpoch int64
-}
+type MemberKey = responsecontract.MemberKey
 
 func memberPayloadDigest(ctx context.Context, payload []byte) string {
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "hash", Bytes: int64(len(payload))})
@@ -79,7 +78,7 @@ type OutputPublication struct {
 func memberHeaderQuery(q *ent.WorkRequestQuery) *ent.WorkRequestQuery {
 	return q.Select(workrequest.FieldID, workrequest.FieldIdentity, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch,
 		workrequest.FieldRequestMetadataBytes, workrequest.FieldState, workrequest.FieldResponseFormatVersion, workrequest.FieldSnapshotDigest, workrequest.FieldFreezeDigest, workrequest.FieldResponseDigest, workrequest.FieldPromotionCount, workrequest.FieldPromotionCursor, workrequest.FieldPromotionState,
-		workrequest.FieldBusinessBound, workrequest.FieldResponseTruncated, workrequest.FieldArchiveCursor, workrequest.FieldArchiveDigest, workrequest.FieldCaptureBytes, workrequest.FieldInputMemberBytes, workrequest.FieldOutputMemberBytes, workrequest.FieldPublicBytes, workrequest.FieldPublicDigest, workrequest.FieldMemberStorageBytes, workrequest.FieldRemainingMembers,
+		workrequest.FieldBusinessBound, workrequest.FieldResponseTruncated, workrequest.FieldArchiveCursor, workrequest.FieldArchiveDigest, workrequest.FieldCaptureBytes, workrequest.FieldModelOutputBytes, workrequest.FieldCorrectionBytes, workrequest.FieldPublicKind, workrequest.FieldInputMemberBytes, workrequest.FieldOutputMemberBytes, workrequest.FieldPublicBytes, workrequest.FieldPublicDigest, workrequest.FieldMemberStorageBytes, workrequest.FieldRemainingMembers,
 		workrequest.FieldMemberMode, workrequest.FieldMemberFormat, workrequest.FieldSourceLang, workrequest.FieldTargetLang, workrequest.FieldTextMode, workrequest.FieldMemberPool, workrequest.FieldMemberAttempt).WorkRequestQuery
 }
 func memberRequest(ctx context.Context, tx *ent.Client, key MemberKey) (*ent.WorkRequest, error) {
@@ -234,23 +233,64 @@ func (s *Store) LoadOutputMember(ctx context.Context, key MemberKey, final bool,
 	installed = true
 	return OutputMember{StoredBytes: row.PayloadBytes + row.CorrectedBytes, Key: key, Payload: p, Bytes: n, Digest: d, Release: release}, nil
 }
-func (s *Store) CaptureResponse(ctx context.Context, in CapturedResponse) error {
+func (s *Store) captureResponse(ctx context.Context, in CapturedResponse) error {
 	if len(in.Payload) == 0 {
 		return ErrManifest
 	}
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "capture", Operation: "capture_write", Bytes: int64(len(in.Payload)), Rows: 1})
 	digest := memberPayloadDigest(ctx, in.Payload)
-	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
+	key := MemberKey{RequestID: in.RequestID, CaptureEpoch: in.Scope.RetryEpoch}
+	// Cancelled audit rows can predate the member format. Observe only the
+	// active attempt coordinates before decoding that format, so their stopped
+	// scope remains the rejection. Supported canonical requests still enter the
+	// original transaction/proof path, including pending reliable ACK settlement.
+	active, err := memberClient(ctx, s.client).Job.Query().Where(job.IDEQ(in.Scope.JobID)).Select(job.FieldStatus, job.FieldRetryEpoch).Only(ctx)
+	if err != nil {
+		return err
+	}
+	stopped := active.RetryEpoch != in.Scope.RetryEpoch || active.Status != "running" && active.Status != "pausing" && active.Status != "pending"
+	current, err := memberRequest(ctx, s.client, key)
+	if err != nil {
+		if stopped && errors.Is(err, ErrManifest) {
+			return errors.Join(ErrStopped, err)
+		}
+		return err
+	}
+	identity := ResponseIdentityFromRow(current)
+	if identity.JobID != in.Scope.JobID || identity.ResourceID != in.Scope.ResourceID || identity.RoundID != in.Scope.RoundID {
+		return ErrManifest
+	}
+	captureBytes := int64(len(in.Payload))
+	check := func(factCtx context.Context, tx *ent.Client) (bool, error) {
+		r, e := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(identity.RequestID))).Only(factCtx)
+		if e != nil {
+			return false, e
+		}
+		if !identity.Matches(r) {
+			return false, ErrManifest
+		}
+		if r.ResponseDigest == "" && r.PromotionState == "inputs_ready" {
+			return false, nil
+		}
+		if r.ResponseDigest != digest || r.State != "completed" || r.PromotionState == "capture_pending" && r.CaptureBytes != captureBytes {
+			return false, ErrManifest
+		}
+		return true, nil
+	}
+	ctx = WithCommitConfirmation(ctx, s.client, identity.JobID, check)
+	err = Transaction(ctx, s.client, func(tx *ent.Client) error {
 		if err := guardScope(ctx, tx, in.Scope, false); err != nil {
 			return err
 		}
 		if err := guardExecution(ctx, tx, in.Scope.JobID); err != nil {
 			return err
 		}
-		key := MemberKey{RequestID: in.RequestID, CaptureEpoch: in.Scope.RetryEpoch}
 		r, err := memberRequest(ctx, tx, key)
 		if err != nil {
 			return err
+		}
+		if !identity.Matches(r) {
+			return ErrManifest
 		}
 		if r.ResponseDigest != "" {
 			if r.ResponseDigest != digest {
@@ -290,13 +330,7 @@ func (s *Store) CaptureResponse(ctx context.Context, in CapturedResponse) error 
 		}
 		return tx.WorkRequest.UpdateOneID(r.ID).SetCapturePayload(in.Payload).SetCaptureBytes(int64(len(in.Payload))).SetResponseDigest(digest).SetResponseTruncated(in.Truncated).SetPromotionState("capture_pending").SetHandoffAt(time.Now().UTC()).AddMemberStorageBytes(int64(len(in.Payload))).Exec(ctx)
 	})
-	return s.finishUnknown(ctx, in.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
-		r, e := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(in.RequestID))).Only(ctx)
-		if e != nil {
-			return false, e
-		}
-		return r.ResponseDigest == digest && r.State == "completed", nil
-	})
+	return s.finishUnknown(ctx, identity.JobID, err, check)
 }
 func (s *Store) LoadCapture(ctx context.Context, id string, limit int64) (CapturedResponse, error) {
 	h, err := memberHeaderQuery(s.client.WorkRequest.Query().Where(workrequest.IdentityEQ(id), func(sel *sql.Selector) { sel.Where(requestMetadataBounds(sel)) })).Only(ctx)
@@ -330,24 +364,62 @@ func (s *Store) LoadCapture(ctx context.Context, id string, limit int64) (Captur
 	installed = true
 	return CapturedResponse{ResponseHeader: responseHeader(h), Payload: row.CapturePayload, Release: reservation.release}, nil
 }
-func (s *Store) PublishOutputs(ctx context.Context, in OutputPublication) error {
+func (s *Store) publishOutputs(ctx context.Context, in OutputPublication) error {
 	if len(in.Members) > 16 {
 		return ErrManifest
 	}
-	var jobID int
-	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
+	current, err := memberRequest(ctx, s.client, in.Key)
+	if err != nil {
+		return err
+	}
+	identity := ResponseIdentityFromRow(current)
+	next, archiveDigest, complete := in.Next, in.Digest, in.Complete
+	responseDigest := current.ResponseDigest
+	publicBytes, publicDigest := int64(len(in.Glossary)), memberPayloadDigest(ctx, in.Glossary)
+	check := func(factCtx context.Context, tx *ent.Client) (bool, error) {
+		r, e := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(identity.RequestID))).Only(factCtx)
+		if e != nil {
+			return false, e
+		}
+		if !identity.Matches(r) || r.ResponseDigest != responseDigest {
+			return false, ErrManifest
+		}
+		if r.ArchiveCursor < next && r.PromotionState == "capture_pending" {
+			return false, nil
+		}
+		if r.ArchiveCursor != next || r.ArchiveDigest != archiveDigest {
+			if r.ArchiveCursor > next {
+				return false, errUnverifiable
+			}
+			return false, ErrManifest
+		}
+		if complete && (r.CaptureBytes != 0 || r.PromotionState != "outputs_ready" && r.PromotionState != "business_ready" && r.PromotionState != "promoted") {
+			return false, ErrManifest
+		}
+		if complete && r.PromotionState == "outputs_ready" && (r.PublicKind != workrequest.PublicKindEntries || r.PublicBytes != publicBytes || r.PublicDigest != publicDigest) {
+			return false, ErrManifest
+		}
+		if complete && r.PromotionState == "promoted" && (r.PublicKind != workrequest.PublicKindNone || r.PublicBytes != 0) {
+			return false, ErrManifest
+		}
+		return true, nil
+	}
+	ctx = WithCommitConfirmation(ctx, s.client, identity.JobID, check)
+	err = Transaction(ctx, s.client, func(tx *ent.Client) error {
 		r, err := memberRequest(ctx, tx, in.Key)
 		if err != nil {
 			return err
 		}
-		jobID = r.JobID
+		if !identity.Matches(r) || r.ResponseDigest != responseDigest {
+			return ErrManifest
+		}
 		if err := LockJob(ctx, tx, r.JobID); err != nil {
 			return err
 		}
 		if err := guardExecution(ctx, tx, r.JobID); err != nil {
 			return err
 		}
-		if r.PromotionState == "outputs_ready" || r.PromotionState == "business_ready" {
+		if r.PromotionState == "outputs_ready" || r.PromotionState == "business_ready" || r.PromotionState == "promoted" {
 			if !in.Complete || r.ArchiveDigest != in.Digest {
 				return ErrManifest
 			}
@@ -377,35 +449,79 @@ func (s *Store) PublishOutputs(ctx context.Context, in OutputPublication) error 
 			backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "output_write", Bytes: m.Bytes, Rows: 1})
 			storage += m.Bytes + int64(len(m.Digest))
 		}
-		u := tx.WorkRequest.UpdateOneID(r.ID).SetArchiveCursor(in.Next).SetArchiveDigest(in.Digest).AddOutputMemberBytes(added).AddMemberStorageBytes(storage)
+		u := tx.WorkRequest.UpdateOneID(r.ID).SetArchiveCursor(in.Next).SetArchiveDigest(in.Digest).AddOutputMemberBytes(added).AddModelOutputBytes(added).AddMemberStorageBytes(storage)
 		if in.Complete {
 			if in.Next != r.PromotionCount {
 				return ErrManifest
 			}
-			u.SetPromotionState("outputs_ready").ClearCapturePayload().SetCaptureBytes(0).SetResponseGlossary(in.Glossary).SetPublicDigest(memberPayloadDigest(ctx, in.Glossary)).AddPublicBytes(int64(len(in.Glossary))).AddMemberStorageBytes(int64(len(in.Glossary)) - r.CaptureBytes)
+			u.SetPromotionState("outputs_ready").SetPublicKind(workrequest.PublicKindEntries).ClearCapturePayload().SetCaptureBytes(0).SetResponseGlossary(in.Glossary).SetPublicDigest(memberPayloadDigest(ctx, in.Glossary)).AddPublicBytes(int64(len(in.Glossary))).AddMemberStorageBytes(int64(len(in.Glossary)) - r.CaptureBytes)
 		}
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "checkpoint_write", Rows: 1})
 		return u.Exec(ctx)
 	})
-	return s.finishUnknown(ctx, jobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
-		r, e := memberRequest(ctx, tx, in.Key)
+	return s.finishUnknown(ctx, identity.JobID, err, check)
+}
+func (s *Store) PublishMemberBusiness(ctx context.Context, id string, receipt []byte) error {
+	current, err := memberHeaderQuery(memberClient(ctx, s.client).WorkRequest.Query().Where(workrequest.IdentityEQ(id))).Only(ctx)
+	if err != nil {
+		return err
+	}
+	identity := ResponseIdentityFromRow(current)
+	responseDigest := current.ResponseDigest
+	receiptBytes, receiptDigest := int64(len(receipt)), memberPayloadDigest(ctx, receipt)
+	check := func(factCtx context.Context, tx *ent.Client) (bool, error) {
+		r, e := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(identity.RequestID))).Only(factCtx)
 		if e != nil {
 			return false, e
 		}
-		return r.ArchiveCursor == in.Next && r.ArchiveDigest == in.Digest && (!in.Complete || r.PromotionState == "outputs_ready" || r.PromotionState == "business_ready"), nil
-	})
-}
-func (s *Store) PublishMemberBusiness(ctx context.Context, id string, receipt []byte) error {
-	return memberTransaction(ctx, s.client, func(tx *ent.Client) error {
+		if !identity.Matches(r) || r.ResponseDigest != responseDigest {
+			return false, ErrManifest
+		}
+		if r.PromotionState == "outputs_ready" {
+			return false, nil
+		}
+		if r.PromotionState == "promoted" && r.PublicKind == workrequest.PublicKindNone && r.PublicBytes == 0 {
+			row, e := tx.WorkRequest.Query().Where(workrequest.IDEQ(r.ID), memberPayloadBound(workrequest.FieldGlossaryReceipt, responseReceiptReadBytes)).Select(workrequest.FieldID, workrequest.FieldGlossaryReceipt).Only(factCtx)
+			if e != nil {
+				return false, e
+			}
+			if int64(len(row.GlossaryReceipt)) != receiptBytes || memberPayloadDigest(factCtx, row.GlossaryReceipt) != receiptDigest || r.PublicDigest != receiptDigest {
+				return false, ErrManifest
+			}
+			return true, nil
+		}
+		if r.PromotionState != "business_ready" || r.PublicKind != workrequest.PublicKindReceipt || r.PublicBytes != receiptBytes || r.PublicDigest != receiptDigest {
+			return false, ErrManifest
+		}
+		return true, nil
+	}
+	ctx = WithCommitConfirmation(ctx, s.client, identity.JobID, check)
+	err = memberTransaction(ctx, s.client, func(tx *ent.Client) error {
 		r, e := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(id))).Only(ctx)
 		if e != nil {
 			return e
 		}
+		if !identity.Matches(r) || r.ResponseDigest != responseDigest {
+			return ErrManifest
+		}
 		if e = guardExecution(ctx, tx, r.JobID); e != nil {
 			return e
 		}
-		if r.PromotionState == "business_ready" {
+		if r.PromotionState == "promoted" {
+			confirmed, e := check(ctx, tx)
+			if e != nil {
+				return e
+			}
+			if !confirmed {
+				return ErrManifest
+			}
 			return nil
+		}
+		if r.PromotionState == "business_ready" {
+			if r.PublicBytes == receiptBytes && r.PublicDigest == receiptDigest && r.PublicKind == workrequest.PublicKindReceipt {
+				return nil
+			}
+			return ErrManifest
 		}
 		if r.PromotionState != "outputs_ready" {
 			return ErrManifest
@@ -421,7 +537,7 @@ func (s *Store) PublishMemberBusiness(ctx context.Context, id string, receipt []
 			}
 		}
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "business_write", Bytes: int64(len(receipt)), Rows: 1})
-		update := tx.WorkRequest.UpdateOneID(r.ID).SetPromotionState("business_ready").ClearResponseGlossary().SetPublicDigest(memberPayloadDigest(ctx, receipt)).SetPublicBytes(int64(len(receipt))).AddMemberStorageBytes(int64(len(receipt)) - r.PublicBytes)
+		update := tx.WorkRequest.UpdateOneID(r.ID).SetPromotionState("business_ready").SetPublicKind(workrequest.PublicKindReceipt).ClearResponseGlossary().SetPublicDigest(memberPayloadDigest(ctx, receipt)).SetPublicBytes(int64(len(receipt))).AddMemberStorageBytes(int64(len(receipt)) - r.PublicBytes)
 		if len(receipt) == 0 {
 			update.ClearGlossaryReceipt()
 		} else {
@@ -429,6 +545,10 @@ func (s *Store) PublishMemberBusiness(ctx context.Context, id string, receipt []
 		}
 		return update.Exec(ctx)
 	})
+	if _, inside := ctx.Value(businessTransactionKey{}).(*ent.Client); inside {
+		return err
+	}
+	return s.finishUnknown(ctx, identity.JobID, err, check)
 }
 func saveInputMembersTx(ctx context.Context, tx *ent.Client, r *ent.WorkRequest, in Request) error {
 	if len(in.InputMembers) == 0 {

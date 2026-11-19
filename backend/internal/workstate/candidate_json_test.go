@@ -110,20 +110,20 @@ func TestBudgetIntegrationJSONBPromotionAndCandidateReplay(t *testing.T) {
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatalf("normalized reservation replay: %v", err)
 	}
-	if err := store.CaptureResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatalf("first handoff over normalized reservation: %v", err)
 	}
 	normalize("work_requests", "debits", debits)
-	if err := store.CaptureResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatalf("normalized handoff ACK/replay: %v", err)
 	}
 	publishFixtureBusiness(t, ctx, store, r)
 	p := MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: cursorFromRow(client.WorkItem.Query().OnlyX(ctx))}
-	if err := store.PromoteMember(ctx, p); err != nil {
+	if _, err := store.PromoteMember(ctx, fixturePromotion(p)); err != nil {
 		t.Fatal(err)
 	}
 	normalize("work_candidates", "payload", c.Payload)
-	if err := store.PromoteMember(ctx, p); err != nil {
+	if _, err := store.PromoteMember(ctx, fixturePromotion(p)); err != nil {
 		t.Fatalf("normalized promoted candidate ACK/replay: %v", err)
 	}
 }
@@ -137,7 +137,7 @@ func TestBudgetIntegrationResponseMetadataRejectedBeforeBody(t *testing.T) {
 			if err := store.ReserveRequest(ctx, r); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.CaptureResponse(ctx, h); err != nil {
+			if _, err := store.CaptureResponse(ctx, h); err != nil {
 				t.Fatal(err)
 			}
 			var malformed any

@@ -45,13 +45,13 @@ func TestMemberSQLPayloadAdmissionPrecedesSelect(t *testing.T) {
 			if err := store.ReserveRequest(ctx, r); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.CaptureResponse(ctx, capture); err != nil {
+			if _, err := store.CaptureResponse(ctx, capture); err != nil {
 				t.Fatal(err)
 			}
 			if kind == "output" || kind == "public" {
 				publication := integrityPublication(r, 0, 2, true)
 				publication.Glossary = []byte(`[{"source":"aa","target":"bb"}]`)
-				if err := store.PublishOutputs(ctx, publication); err != nil {
+				if _, err := store.PublishOutputs(ctx, publication); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -126,12 +126,12 @@ func TestMemberSQLPublicIntegrityRejectsLengthAndSameLengthDamage(t *testing.T) 
 			if err := store.ReserveRequest(ctx, r); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.CaptureResponse(ctx, capture); err != nil {
+			if _, err := store.CaptureResponse(ctx, capture); err != nil {
 				t.Fatal(err)
 			}
 			publication := integrityPublication(r, 0, 2, true)
 			publication.Glossary = []byte(`[{"source":"aa","target":"bb"}]`)
-			if err := store.PublishOutputs(ctx, publication); err != nil {
+			if _, err := store.PublishOutputs(ctx, publication); err != nil {
 				t.Fatal(err)
 			}
 			bad := []byte(`[{"source":"aa","target":"cc"}]`)

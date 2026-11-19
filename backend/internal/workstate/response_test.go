@@ -3,6 +3,7 @@ package workstate
 import (
 	"context"
 	"database/sql"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -50,10 +51,10 @@ func TestRawHandoffAndPromotionLostAcknowledgements(t *testing.T) {
 		t.Fatal(err)
 	}
 	lose.Store(true)
-	if err := store.CaptureResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CaptureResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	row := client.WorkRequest.Query().Where(workrequest.IdentityEQ(r.ID)).OnlyX(ctx)
@@ -68,10 +69,10 @@ func TestRawHandoffAndPromotionLostAcknowledgements(t *testing.T) {
 	publishFixtureBusiness(t, ctx, store, r)
 	p := MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: cur}
 	lose.Store(true)
-	if err := store.PromoteMember(ctx, p); err != nil {
+	if _, err := store.PromoteMember(ctx, fixturePromotion(p)); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.PromoteMember(ctx, p); err != nil {
+	if _, err := store.PromoteMember(ctx, fixturePromotion(p)); err != nil {
 		t.Fatal(err)
 	}
 	row = client.WorkRequest.GetX(ctx, row.ID)
@@ -89,7 +90,7 @@ func TestReliableRawSurvivesRetryEpochAndPause(t *testing.T) {
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CaptureResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	w := client.WorkItem.Query().Where(workitem.SegmentIDEQ(seg.ID)).OnlyX(ctx)
@@ -105,7 +106,7 @@ func TestReliableRawSurvivesRetryEpochAndPause(t *testing.T) {
 	if err != nil || len(headers) != 1 || headers[0].Scope.RetryEpoch != 0 {
 		t.Fatalf("cross epoch header omitted: %+v %v", headers, err)
 	}
-	if err := store.PromoteMember(ctx, MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: Cursor{State: "candidate"}}); err != nil {
+	if _, err := store.PromoteMember(ctx, fixturePromotion(MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: Cursor{State: "candidate"}})); err != nil {
 		t.Fatal(err)
 	}
 	if row := client.WorkRequest.Query().Where(workrequest.IdentityEQ(r.ID)).OnlyX(ctx); row.RetryEpoch != 0 {
@@ -123,7 +124,7 @@ func TestPromotionFailureKeepsRawUntilExplicitFailure(t *testing.T) {
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CaptureResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	c.BaselineVersion++
@@ -132,7 +133,7 @@ func TestPromotionFailureKeepsRawUntilExplicitFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.PromoteMember(ctx, MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: cur}); err == nil {
+	if _, err := store.PromoteMember(ctx, fixturePromotion(MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: cur})); err == nil {
 		t.Fatal("changed baseline accepted")
 	}
 	row := client.WorkRequest.Query().Where(workrequest.IdentityEQ(r.ID)).OnlyX(ctx)
@@ -141,10 +142,11 @@ func TestPromotionFailureKeepsRawUntilExplicitFailure(t *testing.T) {
 		t.Fatal("failed promotion was not atomic")
 	}
 	cur.State = "rejected"
-	if err := store.PromoteMember(ctx, MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Next: cur, Failure: "capacity"}); err != nil {
+	if _, err := store.PromoteMember(ctx, fixturePromotion(MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Next: cur, Outcome: responsecontract.MemberOutcome{Reason: responsecontract.MemberInvalid}})); err != nil {
 		t.Fatal(err)
 	}
-	if output := client.WorkResponseMember.GetX(ctx, output.ID); output.State != "failed" || output.Failure != "capacity" || len(output.Payload) != 0 {
+	wantFailure := (responsecontract.MemberOutcome{Key: requestMemberKey(r, 0), Reason: responsecontract.MemberInvalid}).String()
+	if output := client.WorkResponseMember.GetX(ctx, output.ID); output.State != "failed" || output.Failure != wantFailure || output.OutcomeKind != 2 || len(output.Payload) != 0 {
 		t.Fatal("explicit failure did not retire raw")
 	}
 }

@@ -263,17 +263,17 @@ func TestMemberInventoryDeltaConcurrentCorrectionsAndLateConfirmation(t *testing
 	if err := store.ReserveRequest(owned, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CaptureResponse(owned, capture); err != nil {
+	if _, err := store.CaptureResponse(owned, capture); err != nil {
 		t.Fatal(err)
 	}
 	faults.loseACK.Store(true)
 	publication := integrityPublication(r, 0, 2, true)
-	if err := store.PublishOutputs(owned, publication); err != nil {
+	if _, err := store.PublishOutputs(owned, publication); err != nil {
 		t.Fatal(err)
 	}
 	memberDeltaAudit(t, ctx, b)
 	before := b.Root.Snapshot(b.Scope.ActorID).Instance
-	if err := store.PublishOutputs(owned, publication); err != nil {
+	if _, err := store.PublishOutputs(owned, publication); err != nil {
 		t.Fatal(err)
 	}
 	if b.Root.Snapshot(b.Scope.ActorID).Instance != before {
@@ -334,7 +334,7 @@ func TestMemberInventoryDeltaConcurrentCorrectionsAndLateConfirmation(t *testing
 		if next.MainAttempts != 1 {
 			t.Fatalf("reservation has unexpected main debit: %+v", next)
 		}
-		if err := store.PromoteMember(owned, MemberPromotion{Scope: scope, Key: requestMemberKey(r, ordinal), Candidate: &candidate, Next: next}); err != nil {
+		if _, err := store.PromoteMember(owned, fixturePromotion(MemberPromotion{Scope: scope, Key: requestMemberKey(r, ordinal), Candidate: &candidate, Next: next})); err != nil {
 			t.Fatalf("promotion ordinal=%d preserving reserved cursor: %v", ordinal, err)
 		}
 		memberDeltaAudit(t, ctx, b)
@@ -379,14 +379,14 @@ func memberDeltaUnknownACKRecovery(t *testing.T, sameAttempt bool) {
 	if err := store.ReserveRequest(owned, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CaptureResponse(owned, capture); err != nil {
+	if _, err := store.CaptureResponse(owned, capture); err != nil {
 		t.Fatal(err)
 	}
 	memberDeltaAudit(t, ctx, b)
 	faults.loseACK.Store(true)
 	faults.failAfterCommit.Store(true)
 	publication := integrityPublication(r, 0, 2, true)
-	err := store.PublishOutputs(owned, publication)
+	_, err := store.PublishOutputs(owned, publication)
 	var unknown *VerificationError
 	if !errors.As(err, &unknown) || !errors.Is(err, memberDeltaLookupFailure) || faults.lookupFailures.Load() == 0 {
 		t.Fatalf("unavailable authority was treated as known: %v", err)
@@ -411,7 +411,7 @@ func memberDeltaUnknownACKRecovery(t *testing.T, sameAttempt bool) {
 		// The fact read is available again in the very same live attempt. Its
 		// already committed touched-row delta must settle before a duplicate
 		// publication can discard the attempt's pending inventory evidence.
-		if err := store.PublishOutputs(owned, publication); err != nil {
+		if _, err := store.PublishOutputs(owned, publication); err != nil {
 			t.Fatal(err)
 		}
 		settled := memberDeltaAudit(t, ctx, b)
@@ -419,7 +419,7 @@ func memberDeltaUnknownACKRecovery(t *testing.T, sameAttempt bool) {
 			t.Fatalf("same-attempt confirmation changed durable bytes: before=%d after=%d", actual, settled)
 		}
 		before := b.Root.Snapshot(b.Scope.ActorID).Instance
-		if err := store.PublishOutputs(owned, publication); err != nil {
+		if _, err := store.PublishOutputs(owned, publication); err != nil {
 			t.Fatal(err)
 		}
 		memberDeltaAudit(t, ctx, b)
@@ -443,7 +443,7 @@ func memberDeltaUnknownACKRecovery(t *testing.T, sameAttempt bool) {
 	recovered := &StorageBudget{Root: restarted, Source: b.Source, Scope: b.Scope}
 	t.Cleanup(func() { _ = recovered.Close() })
 	before := restarted.Snapshot(b.Scope.ActorID).Instance
-	if err := NewStore(client).PublishOutputs(WithStorageBudget(ctx, recovered), publication); err != nil {
+	if _, err := NewStore(client).PublishOutputs(WithStorageBudget(ctx, recovered), publication); err != nil {
 		t.Fatal(err)
 	}
 	memberDeltaAudit(t, ctx, recovered)
@@ -539,10 +539,10 @@ func TestMemberInventoryDeltaCountsLegacyPhysicalColumnsWithoutExecution(t *test
 			hotFullJob.Add(1)
 		}
 	})
-	if err := store.CaptureResponse(recorded, capture); err != nil {
+	if _, err := store.CaptureResponse(recorded, capture); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.PublishOutputs(recorded, integrityPublication(r, 0, 1, true)); err != nil {
+	if _, err := store.PublishOutputs(recorded, integrityPublication(r, 0, 1, true)); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.PublishMemberBusiness(recorded, r.ID, nil); err != nil {
@@ -552,7 +552,7 @@ func TestMemberInventoryDeltaCountsLegacyPhysicalColumnsWithoutExecution(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.PromoteMember(recorded, MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &candidate, Next: next}); err != nil {
+	if _, err := store.PromoteMember(recorded, fixturePromotion(MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &candidate, Next: next})); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Commit(recorded, input(candidate)); err != nil {
@@ -581,14 +581,14 @@ func TestMemberInventoryDeltaClosedWriterCannotReviveDurableOwner(t *testing.T) 
 			if err := store.ReserveRequest(owned, r); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.CaptureResponse(owned, capture); err != nil {
+			if _, err := store.CaptureResponse(owned, capture); err != nil {
 				t.Fatal(err)
 			}
 			publication := integrityPublication(r, 0, 2, true)
 			if mode == "failed_pending_close_then_retry" {
 				faults.loseACK.Store(true)
 				faults.failAfterCommit.Store(true)
-				if err := store.PublishOutputs(owned, publication); !errors.Is(err, memberDeltaLookupFailure) {
+				if _, err := store.PublishOutputs(owned, publication); !errors.Is(err, memberDeltaLookupFailure) {
 					t.Fatalf("missing pending query failure: %v", err)
 				}
 				before := b.Root.Snapshot(b.Scope.ActorID).Instance
@@ -599,7 +599,7 @@ func TestMemberInventoryDeltaClosedWriterCannotReviveDurableOwner(t *testing.T) 
 					t.Fatal("failed pending close detached or refunded uncertain backing")
 				}
 				faults.failLookup.Store(false)
-			} else if err := store.PublishOutputs(owned, publication); err != nil {
+			} else if _, err := store.PublishOutputs(owned, publication); err != nil {
 				t.Fatal(err)
 			}
 			if err := b.Close(); err != nil {
@@ -612,7 +612,7 @@ func TestMemberInventoryDeltaClosedWriterCannotReviveDurableOwner(t *testing.T) 
 			if err := b.Close(); err != nil || b.Root.Snapshot(b.Scope.ActorID).Instance != before {
 				t.Fatalf("repeated close changed durable ownership: %v", err)
 			}
-			err := store.PublishOutputs(owned, publication)
+			_, err := store.PublishOutputs(owned, publication)
 			var rejected *backend.RejectionError
 			if !errors.Is(err, resourcebudget.ErrIdentity) || !errors.As(err, &rejected) || rejected.Evidence.Branch != "storage_budget_closed" {
 				t.Fatalf("closed writer lost typed rejection: %v", err)
@@ -622,7 +622,7 @@ func TestMemberInventoryDeltaClosedWriterCannotReviveDurableOwner(t *testing.T) 
 			}
 			fresh := &StorageBudget{Root: b.Root, Source: b.Source, Scope: b.Scope}
 			t.Cleanup(func() { _ = fresh.Close() })
-			if err := NewStore(client).PublishOutputs(WithStorageBudget(ctx, fresh), publication); err != nil {
+			if _, err := NewStore(client).PublishOutputs(WithStorageBudget(ctx, fresh), publication); err != nil {
 				t.Fatalf("fresh writer could not adopt unchanged durable facts: %v", err)
 			}
 			memberDeltaAudit(t, ctx, fresh)

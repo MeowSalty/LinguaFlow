@@ -296,7 +296,7 @@ func (s *Store) CleanupCancelledPayloads(ctx context.Context, jobID int) error {
 			if _, err = tx.WorkResponseMember.Update().Where(workresponsemember.RequestIDIn(page...)).ClearPayload().SetPayloadBytes(0).ClearCorrectedPayload().SetCorrectedBytes(0).SetState("cancelled").Save(ctx); err != nil {
 				return err
 			}
-			if _, err = tx.WorkRequest.Update().Where(workrequest.IDIn(page...)).SetPromotionState("cancelled").ClearCapturePayload().SetCaptureBytes(0).ClearResponseGlossary().SetPublicBytes(0).SetInputMemberBytes(0).SetOutputMemberBytes(0).SetRemainingMembers(0).SetBusinessBound(0).Save(ctx); err != nil {
+			if _, err = tx.WorkRequest.Update().Where(workrequest.IDIn(page...)).SetPromotionState("cancelled").ClearCapturePayload().SetCaptureBytes(0).ClearResponseGlossary().SetPublicKind(workrequest.PublicKindNone).SetPublicBytes(0).SetInputMemberBytes(0).SetOutputMemberBytes(0).SetModelOutputBytes(0).SetCorrectionBytes(0).SetRemainingMembers(0).SetBusinessBound(0).Save(ctx); err != nil {
 				return err
 			}
 		}

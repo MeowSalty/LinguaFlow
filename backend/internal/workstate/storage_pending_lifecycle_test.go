@@ -65,7 +65,7 @@ func TestStoragePendingMetadataSuccessSurvivesLaterRefundFailure(t *testing.T) {
 	if err = store.ReserveRequest(owned, r); err != nil {
 		t.Fatal(err)
 	}
-	if err = store.CaptureResponse(owned, capture); err != nil {
+	if _, err = store.CaptureResponse(owned, capture); err != nil {
 		t.Fatal(err)
 	}
 	before := memberDeltaAudit(t, ctx, b)
@@ -124,7 +124,7 @@ func TestStoragePendingKnownRollbackAfterReceiptRetirementReleasesSurplus(t *tes
 	if err = store.ReserveRequest(owned, r); err != nil {
 		t.Fatal(err)
 	}
-	if err = store.CaptureResponse(owned, capture); err != nil {
+	if _, err = store.CaptureResponse(owned, capture); err != nil {
 		t.Fatal(err)
 	}
 	before := memberDeltaAudit(t, ctx, b)
@@ -182,13 +182,13 @@ func TestStoragePendingNetZeroUnknownACKDoesNotRefundCommittedCredit(t *testing.
 	if err := store.ReserveRequest(owned, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CaptureResponse(owned, capture); err != nil {
+	if _, err := store.CaptureResponse(owned, capture); err != nil {
 		t.Fatal(err)
 	}
 	before := memberDeltaAudit(t, ctx, b)
 	consumed, refunded := credit.consumed, credit.refunded
 	faults.loseACK.Store(true)
-	if err := store.PublishOutputs(owned, publication); err != nil {
+	if _, err := store.PublishOutputs(owned, publication); err != nil {
 		t.Fatal(err)
 	}
 	if after := memberDeltaAudit(t, ctx, b); after != before {
@@ -201,7 +201,7 @@ func TestStoragePendingNetZeroUnknownACKDoesNotRefundCommittedCredit(t *testing.
 	if row.ArchiveCursor != 2 || row.PromotionState != "outputs_ready" || row.CaptureBytes != 0 || client.WorkResponseMember.Query().CountX(ctx) != 2 || client.UsageRecord.Query().CountX(ctx) != 1 {
 		t.Fatal("unknown ACK did not preserve committed output identity")
 	}
-	if err := store.PublishOutputs(owned, publication); err != nil {
+	if _, err := store.PublishOutputs(owned, publication); err != nil {
 		t.Fatal(err)
 	}
 	if credit.consumed != consumed+written || credit.refunded != refunded {
@@ -231,12 +231,12 @@ func TestStoragePendingSettlesBeforeJoinedMetadataReset(t *testing.T) {
 	if err = store.ReserveRequest(owned, r); err != nil {
 		t.Fatal(err)
 	}
-	if err = store.CaptureResponse(owned, capture); err != nil {
+	if _, err = store.CaptureResponse(owned, capture); err != nil {
 		t.Fatal(err)
 	}
 	faults.loseACK.Store(true)
 	faults.failAfterCommit.Store(true)
-	if err = store.PublishOutputs(owned, integrityPublication(r, 0, 2, true)); err == nil {
+	if _, err = store.PublishOutputs(owned, integrityPublication(r, 0, 2, true)); err == nil {
 		t.Fatal("missing authoritative query failure")
 	}
 	// The completion permit can retire before joined reconciliation. The

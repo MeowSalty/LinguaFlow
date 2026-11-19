@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"entgo.io/ent/dialect/sql"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -45,13 +46,13 @@ type ResponseHeader struct {
 	SnapshotDigest                                   string
 	FreezeDigest                                     string
 	ResponseDigest                                   string
-	FreezeBytes                                      int64
-	ResponseBytes                                    int64
-	CorrectedBytes                                   int64
+	CaptureBytes                                     int64
+	ModelOutputBytes, CorrectionBytes                int64
+	PublicKind                                       responsecontract.PublicKind
 	BusinessBound                                    int64
 	MemberCount                                      int
 	Cursor                                           int
-	Phase                                            string
+	Phase                                            responsecontract.ResponsePhase
 	Truncated                                        bool
 }
 
@@ -60,7 +61,7 @@ type MemberPromotion struct {
 	Key       MemberKey
 	Candidate *Candidate
 	Next      Cursor
-	Failure   string
+	Outcome   responsecontract.MemberOutcome
 }
 
 func payloadDigest(b []byte) string { sum := sha256.Sum256(b); return hex.EncodeToString(sum[:]) }
@@ -70,7 +71,7 @@ func guardExecution(ctx context.Context, tx *ent.Client, jobID int) error {
 }
 
 func responseHeader(row *ent.WorkRequest) ResponseHeader {
-	return ResponseHeader{MemberContext: MemberContext{MemberPool: row.MemberPool, MemberAttempt: row.MemberAttempt, MemberMode: row.MemberMode, MemberFormat: row.MemberFormat, SourceLang: row.SourceLang, TargetLang: row.TargetLang, TextMode: row.TextMode}, FormatVersion: row.ResponseFormatVersion, ArchiveCursor: row.ArchiveCursor, ArchiveDigest: row.ArchiveDigest, InputMemberBytes: row.InputMemberBytes, OutputMemberBytes: row.OutputMemberBytes, PublicBytes: row.PublicBytes, MetadataBytes: row.RequestMetadataBytes + row.MemberStorageBytes - row.InputMemberBytes - row.OutputMemberBytes - row.CaptureBytes - row.PublicBytes, DatabaseID: row.ID, RequestID: row.Identity, Scope: Scope{JobID: row.JobID, ResourceID: row.ResourceID, RoundID: row.JobRoundID, RetryEpoch: row.RetryEpoch}, SnapshotDigest: row.SnapshotDigest, FreezeDigest: row.FreezeDigest, ResponseDigest: row.ResponseDigest, FreezeBytes: row.InputMemberBytes, ResponseBytes: row.CaptureBytes, CorrectedBytes: row.OutputMemberBytes, BusinessBound: row.BusinessBound, MemberCount: row.PromotionCount, Cursor: row.PromotionCursor, Phase: row.PromotionState, Truncated: row.ResponseTruncated}
+	return ResponseHeader{MemberContext: MemberContext{MemberPool: row.MemberPool, MemberAttempt: row.MemberAttempt, MemberMode: row.MemberMode, MemberFormat: row.MemberFormat, SourceLang: row.SourceLang, TargetLang: row.TargetLang, TextMode: row.TextMode}, FormatVersion: row.ResponseFormatVersion, ArchiveCursor: row.ArchiveCursor, ArchiveDigest: row.ArchiveDigest, InputMemberBytes: row.InputMemberBytes, OutputMemberBytes: row.OutputMemberBytes, PublicBytes: row.PublicBytes, MetadataBytes: row.RequestMetadataBytes + row.MemberStorageBytes - row.InputMemberBytes - row.OutputMemberBytes - row.CaptureBytes - row.PublicBytes, DatabaseID: row.ID, RequestID: row.Identity, Scope: Scope{JobID: row.JobID, ResourceID: row.ResourceID, RoundID: row.JobRoundID, RetryEpoch: row.RetryEpoch}, SnapshotDigest: row.SnapshotDigest, FreezeDigest: row.FreezeDigest, ResponseDigest: row.ResponseDigest, CaptureBytes: row.CaptureBytes, ModelOutputBytes: row.ModelOutputBytes, CorrectionBytes: row.CorrectionBytes, PublicKind: responsecontract.PublicKind(row.PublicKind), BusinessBound: row.BusinessBound, MemberCount: row.PromotionCount, Cursor: row.PromotionCursor, Phase: responsecontract.ResponsePhase(row.PromotionState), Truncated: row.ResponseTruncated}
 }
 
 // Headers deliberately include earlier retry epochs. Only reliable responses
@@ -79,7 +80,7 @@ func (s *Store) LoadResponseHeaders(ctx context.Context, jobID, after, limit int
 	if limit < 1 || limit > 256 {
 		return nil, after, ErrManifest
 	}
-	rows, err := memberHeaderQuery(s.client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.IDGT(after), workrequest.StateEQ("completed"), workrequest.PromotionStateIn("capture_pending", "outputs_ready", "business_ready", "response_pending", "glossary_processed")).Order(ent.Asc(workrequest.FieldID)).Limit(limit)).All(ctx)
+	rows, err := memberHeaderQuery(s.client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.IDGT(after), workrequest.StateEQ("completed"), workrequest.PromotionStateIn("capture_pending", "outputs_ready", "business_ready")).Order(ent.Asc(workrequest.FieldID)).Limit(limit)).All(ctx)
 	if err != nil {
 		return nil, after, err
 	}
@@ -89,9 +90,6 @@ func (s *Store) LoadResponseHeaders(ctx context.Context, jobID, after, limit int
 			return nil, after, ErrManifest
 		}
 		h := responseHeader(r)
-		h.FreezeBytes = r.InputMemberBytes
-		h.ResponseBytes = r.CaptureBytes
-		h.CorrectedBytes = r.OutputMemberBytes
 		out = append(out, h)
 		after = r.ID
 	}
@@ -123,11 +121,30 @@ func ExecutionSnapshotDigest(config map[string]any) (string, error) {
 
 // PromoteMember transfers one raw member to the existing candidate contract.
 // The candidate, retry cursor, request cursor and target cleanup commit together.
-func (s *Store) PromoteMember(ctx context.Context, in MemberPromotion) error {
+func (s *Store) promoteMember(ctx context.Context, in MemberPromotion) error {
 	if in.Key.Ordinal < 0 || in.Key.RequestID == "" {
 		return ErrManifest
 	}
-	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
+	if _, err := in.Outcome.Resolve(in.Key, in.Candidate != nil); err != nil {
+		return ErrManifest
+	}
+	failure := in.Outcome.String()
+	current, err := memberRequest(ctx, s.client, in.Key)
+	if err != nil {
+		return err
+	}
+	identity := ResponseIdentityFromRow(current)
+	if identity.JobID != in.Scope.JobID || identity.ResourceID != in.Scope.ResourceID || identity.RoundID != in.Scope.RoundID {
+		return ErrManifest
+	}
+	proof := memberPromotionProof{Identity: identity, Key: in.Key, ResponseDigest: current.ResponseDigest, Outcome: in.Outcome}
+	if in.Candidate != nil {
+		proof.CandidateID, proof.CandidateVersion, proof.CandidateDigest = in.Candidate.ID, in.Candidate.Version, memberPayloadDigest(ctx, in.Candidate.Payload)
+	}
+	// The pending callback captures scalar proof and the store, never the
+	// candidate encoding or an expired transaction/build context.
+	ctx = WithCommitConfirmation(ctx, s.client, proof.Identity.JobID, proof.exists)
+	err = Transaction(ctx, s.client, func(tx *ent.Client) error {
 		if err := guardScope(ctx, tx, in.Scope, false); err != nil {
 			return err
 		}
@@ -138,19 +155,19 @@ func (s *Store) PromoteMember(ctx context.Context, in MemberPromotion) error {
 		if err != nil {
 			return err
 		}
-		if r.ResponseFormatVersion != execution.ResponseFormatVersion || r.RetryEpoch != in.Key.CaptureEpoch || r.JobID != in.Scope.JobID || r.ResourceID != in.Scope.ResourceID || r.JobRoundID != in.Scope.RoundID || in.Key.Ordinal >= r.PromotionCount {
+		if !proof.headerMatches(r) {
 			return ErrManifest
 		}
 		input, err := tx.WorkRequestInputMember.Query().Where(workrequestinputmember.RequestIDEQ(r.ID), workrequestinputmember.OrdinalEQ(in.Key.Ordinal)).Select(workrequestinputmember.FieldID, workrequestinputmember.FieldSegmentID, workrequestinputmember.FieldWorkID, workrequestinputmember.FieldCandidateID, workrequestinputmember.FieldBaselineVersion, workrequestinputmember.FieldBaselineDigest, workrequestinputmember.FieldBaselineTargetIsNull, workrequestinputmember.FieldBaselineStatus, workrequestinputmember.FieldSourceGeneration, workrequestinputmember.FieldSourceRevisionID, workrequestinputmember.FieldPayloadBytes).Only(ctx)
 		if err != nil {
 			return err
 		}
-		output, err := tx.WorkResponseMember.Query().Where(workresponsemember.RequestIDEQ(r.ID), workresponsemember.OrdinalEQ(in.Key.Ordinal)).Select(workresponsemember.FieldID, workresponsemember.FieldState, workresponsemember.FieldPayloadBytes, workresponsemember.FieldCorrectedBytes, workresponsemember.FieldCandidateDigest, workresponsemember.FieldCandidateVersion).Only(ctx)
+		output, err := tx.WorkResponseMember.Query().Where(workresponsemember.RequestIDEQ(r.ID), workresponsemember.OrdinalEQ(in.Key.Ordinal)).Select(workresponsemember.FieldID, workresponsemember.FieldState, workresponsemember.FieldPayloadBytes, workresponsemember.FieldCorrectedBytes, workresponsemember.FieldCandidateDigest, workresponsemember.FieldCandidateVersion, workresponsemember.FieldOutcomeKind, workresponsemember.FieldOutcomeLimit, workresponsemember.FieldOutcomeObserved).Only(ctx)
 		if err != nil {
 			return err
 		}
 		if output.State != "pending" {
-			return verifyMemberOutcome(ctx, tx, r, input, output, in)
+			return proof.verify(ctx, tx, r, input, output)
 		}
 		if r.PromotionCursor != in.Key.Ordinal || r.PromotionState != "business_ready" {
 			return ErrCandidateVersion
@@ -200,16 +217,17 @@ func (s *Store) PromoteMember(ctx context.Context, in MemberPromotion) error {
 			candidateBytes = int64(len(in.Candidate.Payload))
 		}
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "promotion_write", Bytes: candidateBytes, Rows: 3})
-		if err := tx.WorkResponseMember.UpdateOneID(output.ID).SetState(state).SetFailure(in.Failure).SetCandidateDigest(candidateDigest).SetCandidateVersion(version).ClearPayload().SetPayloadBytes(0).ClearCorrectedPayload().SetCorrectedBytes(0).Exec(ctx); err != nil {
+		if err := tx.WorkResponseMember.UpdateOneID(output.ID).SetState(state).SetFailure(failure).SetOutcomeKind(in.Outcome.Code()).SetOutcomeLimit(in.Outcome.Limit).SetOutcomeObserved(in.Outcome.Observed).SetCandidateDigest(candidateDigest).SetCandidateVersion(version).ClearPayload().SetPayloadBytes(0).ClearCorrectedPayload().SetCorrectedBytes(0).Exec(ctx); err != nil {
 			return err
 		}
 		if err := tx.WorkRequestInputMember.UpdateOneID(input.ID).ClearPayload().SetPayloadBytes(0).Exec(ctx); err != nil {
 			return err
 		}
 		retired := input.PayloadBytes + output.PayloadBytes + output.CorrectedBytes
-		u := tx.WorkRequest.UpdateOneID(r.ID).SetPromotionCursor(in.Key.Ordinal + 1).AddRemainingMembers(-1).AddInputMemberBytes(-input.PayloadBytes).AddOutputMemberBytes(-output.PayloadBytes - output.CorrectedBytes).AddMemberStorageBytes(-retired + int64(len(candidateDigest)+len(in.Failure)))
+		u := tx.WorkRequest.UpdateOneID(r.ID).SetPromotionCursor(in.Key.Ordinal + 1).AddRemainingMembers(-1).AddInputMemberBytes(-input.PayloadBytes).AddOutputMemberBytes(-output.PayloadBytes - output.CorrectedBytes).AddModelOutputBytes(-output.PayloadBytes).AddCorrectionBytes(-output.CorrectedBytes).AddMemberStorageBytes(-retired + int64(len(candidateDigest)+len(failure)))
 		if in.Key.Ordinal+1 == r.PromotionCount {
-			u.SetPromotionState("promoted").ClearResponseGlossary().SetPublicBytes(0).AddMemberStorageBytes(-r.PublicBytes).SetBusinessBound(0)
+			// Receipt is retained as audit data in member_storage_bytes.
+			u.SetPromotionState("promoted").SetPublicKind(workrequest.PublicKindNone).ClearResponseGlossary().SetPublicBytes(0).SetBusinessBound(0)
 		}
 		if err := u.Exec(ctx); err != nil {
 			return err
@@ -219,45 +237,67 @@ func (s *Store) PromoteMember(ctx context.Context, in MemberPromotion) error {
 		}
 		return nil
 	})
-	return s.finishUnknown(ctx, in.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
-		r, e := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(in.Key.RequestID))).Only(ctx)
-		if e != nil {
-			return false, e
-		}
-		m, e := tx.WorkRequestInputMember.Query().Where(workrequestinputmember.RequestIDEQ(r.ID), workrequestinputmember.OrdinalEQ(in.Key.Ordinal)).Select(workrequestinputmember.FieldID, workrequestinputmember.FieldCandidateID).Only(ctx)
-		if e != nil {
-			return false, e
-		}
-		o, e := tx.WorkResponseMember.Query().Where(workresponsemember.RequestIDEQ(r.ID), workresponsemember.OrdinalEQ(in.Key.Ordinal)).Select(workresponsemember.FieldID, workresponsemember.FieldState, workresponsemember.FieldCandidateDigest, workresponsemember.FieldCandidateVersion).Only(ctx)
-		if e != nil {
-			return false, e
-		}
-		if o.State == "pending" {
-			return false, nil
-		}
-		e = verifyMemberOutcome(ctx, tx, r, m, o, in)
-		return e == nil, e
-	})
+	return s.finishUnknown(ctx, in.Scope.JobID, err, proof.exists)
 }
-func verifyMemberOutcome(ctx context.Context, tx *ent.Client, r *ent.WorkRequest, m *ent.WorkRequestInputMember, o *ent.WorkResponseMember, in MemberPromotion) error {
-	if r.PromotionCursor <= in.Key.Ordinal {
+
+type memberPromotionProof struct {
+	Key                          MemberKey
+	Identity                     ResponseIdentityProof
+	ResponseDigest               string
+	Outcome                      responsecontract.MemberOutcome
+	CandidateID, CandidateDigest string
+	CandidateVersion             int64
+}
+
+func (p memberPromotionProof) exists(ctx context.Context, tx *ent.Client) (bool, error) {
+	r, e := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(p.Key.RequestID))).Only(ctx)
+	if e != nil {
+		return false, e
+	}
+	if !p.headerMatches(r) {
+		return false, ErrManifest
+	}
+	m, e := tx.WorkRequestInputMember.Query().Where(workrequestinputmember.RequestIDEQ(r.ID), workrequestinputmember.OrdinalEQ(p.Key.Ordinal)).Select(workrequestinputmember.FieldID, workrequestinputmember.FieldCandidateID).Only(ctx)
+	if e != nil {
+		return false, e
+	}
+	o, e := tx.WorkResponseMember.Query().Where(workresponsemember.RequestIDEQ(r.ID), workresponsemember.OrdinalEQ(p.Key.Ordinal)).Select(workresponsemember.FieldID, workresponsemember.FieldState, workresponsemember.FieldCandidateDigest, workresponsemember.FieldCandidateVersion, workresponsemember.FieldOutcomeKind, workresponsemember.FieldOutcomeLimit, workresponsemember.FieldOutcomeObserved).Only(ctx)
+	if e != nil {
+		return false, e
+	}
+	if o.State == "pending" {
+		return false, nil
+	}
+	e = p.verify(ctx, tx, r, m, o)
+	return e == nil, e
+}
+func (p memberPromotionProof) headerMatches(r *ent.WorkRequest) bool {
+	return p.Identity.Matches(r) && r.Identity == p.Key.RequestID && r.RetryEpoch == p.Key.CaptureEpoch && r.ResponseDigest == p.ResponseDigest && p.Key.Ordinal >= 0 && p.Key.Ordinal < r.PromotionCount
+}
+func (p memberPromotionProof) verify(ctx context.Context, tx *ent.Client, r *ent.WorkRequest, m *ent.WorkRequestInputMember, o *ent.WorkResponseMember) error {
+	if !p.headerMatches(r) {
+		return ErrManifest
+	}
+	if o.OutcomeKind != p.Outcome.Code() || o.OutcomeLimit != p.Outcome.Limit || o.OutcomeObserved != p.Outcome.Observed {
+		return ErrManifest
+	}
+	if r.PromotionCursor <= p.Key.Ordinal {
 		return ErrCandidateVersion
 	}
-	if in.Candidate == nil {
+	if !p.Outcome.Accepted {
 		if o.State != "failed" {
 			return ErrManifest
 		}
 		return nil
 	}
-	c := in.Candidate
-	if o.State != "candidate" || m.CandidateID != c.ID || o.CandidateVersion != c.Version || o.CandidateDigest != memberPayloadDigest(ctx, c.Payload) {
+	if o.State != "candidate" || m.CandidateID != p.CandidateID || o.CandidateVersion != p.CandidateVersion || o.CandidateDigest != p.CandidateDigest {
 		return ErrManifest
 	}
-	row, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(c.ID)).Select(workcandidate.FieldID, workcandidate.FieldVersion, workcandidate.FieldState, workcandidate.FieldParentRequestID).Only(ctx)
+	row, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(p.CandidateID)).Select(workcandidate.FieldID, workcandidate.FieldVersion, workcandidate.FieldState, workcandidate.FieldParentRequestID).Only(ctx)
 	if err != nil {
 		return err
 	}
-	if row.ParentRequestID != r.Identity || row.Version < c.Version {
+	if row.ParentRequestID != r.Identity || row.Version < p.CandidateVersion {
 		return ErrManifest
 	}
 	return nil

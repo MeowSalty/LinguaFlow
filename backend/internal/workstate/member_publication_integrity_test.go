@@ -56,10 +56,10 @@ func integrityPublish(t *testing.T, ctx context.Context, store *Store, r Request
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CaptureResponse(ctx, capture); err != nil {
+	if _, err := store.CaptureResponse(ctx, capture); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.PublishOutputs(ctx, integrityPublication(r, 0, 2, true)); err != nil {
+	if _, err := store.PublishOutputs(ctx, integrityPublication(r, 0, 2, true)); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.PublishMemberBusiness(ctx, r.ID, nil); err != nil {
@@ -105,7 +105,7 @@ func TestMemberPublicationHeadersRejectBeforePayloadRead(t *testing.T) {
 			if err := store.ReserveRequest(ctx, r); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.CaptureResponse(ctx, capture); err != nil {
+			if _, err := store.CaptureResponse(ctx, capture); err != nil {
 				t.Fatal(err)
 			}
 			row := client.WorkRequest.Query().OnlyX(ctx)
@@ -156,16 +156,16 @@ func TestMemberPublicationCheckpointUnknownACKAndFinalVisibility(t *testing.T) {
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CaptureResponse(ctx, capture); err != nil {
+	if _, err := store.CaptureResponse(ctx, capture); err != nil {
 		t.Fatal(err)
 	}
 	firstPage := integrityPublication(r, 0, 1, false)
 	faults.loseACK.Store(true)
-	if err := store.PublishOutputs(ctx, firstPage); err != nil {
+	if _, err := store.PublishOutputs(ctx, firstPage); err != nil {
 		t.Fatal(err)
 	}
 	store = NewStore(client)
-	if err := store.PublishOutputs(ctx, firstPage); err != nil {
+	if _, err := store.PublishOutputs(ctx, firstPage); err != nil {
 		t.Fatal(err)
 	}
 	row := client.WorkRequest.Query().OnlyX(ctx)
@@ -177,17 +177,17 @@ func TestMemberPublicationCheckpointUnknownACKAndFinalVisibility(t *testing.T) {
 	}
 	bad := integrityPublication(r, 1, 2, true)
 	bad.Members[0].Key.CaptureEpoch++
-	if err := store.PublishOutputs(ctx, bad); !errors.Is(err, ErrManifest) {
+	if _, err := store.PublishOutputs(ctx, bad); !errors.Is(err, ErrManifest) {
 		t.Fatalf("wrong epoch accepted: %v", err)
 	}
 	if client.WorkResponseMember.Query().CountX(ctx) != 1 || client.WorkRequest.GetX(ctx, row.ID).ArchiveCursor != 1 {
 		t.Fatal("failed final page was partially published")
 	}
 	faults.loseACK.Store(true)
-	if err := store.PublishOutputs(ctx, integrityPublication(r, 1, 2, true)); err != nil {
+	if _, err := store.PublishOutputs(ctx, integrityPublication(r, 1, 2, true)); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.PublishOutputs(ctx, integrityPublication(r, 1, 2, true)); err != nil {
+	if _, err := store.PublishOutputs(ctx, integrityPublication(r, 1, 2, true)); err != nil {
 		t.Fatal(err)
 	}
 	row = client.WorkRequest.GetX(ctx, row.ID)
@@ -228,10 +228,10 @@ func TestMemberPublicationDamageKeepsValidSibling(t *testing.T) {
 			if err := store.ReserveRequest(ctx, r); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.CaptureResponse(ctx, capture); err != nil {
+			if _, err := store.CaptureResponse(ctx, capture); err != nil {
 				t.Fatal(err)
 			}
-			if err := store.PublishOutputs(ctx, integrityPublication(r, 0, 2, true)); err != nil {
+			if _, err := store.PublishOutputs(ctx, integrityPublication(r, 0, 2, true)); err != nil {
 				t.Fatal(err)
 			}
 			if err := store.StageCorrectedMember(ctx, integrityOutput(r, 0, "corrected")); err != nil {
@@ -286,7 +286,7 @@ func TestMemberPublicationDamageKeepsValidSibling(t *testing.T) {
 				if fault == "candidate_identity" {
 					candidate.WorkID = "other-member"
 				}
-				err = store.PromoteMember(ctx, MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &candidate})
+				_, err = store.PromoteMember(ctx, fixturePromotion(MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &candidate}))
 			}
 			if err == nil {
 				t.Fatalf("damaged %s accepted", fault)

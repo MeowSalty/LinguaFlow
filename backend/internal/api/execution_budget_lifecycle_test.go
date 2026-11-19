@@ -125,7 +125,7 @@ func TestBudgetIntegrationCancelUnknownAuxRetryAttach(t *testing.T) {
 					}
 					// Retry keeps the old attempt identity and epoch; an old response
 					// cannot create new reliable backing under the new Job epoch.
-					err = workstate.NewStore(c).CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: old.Identity, Scope: workstate.Scope{JobID: j.ID, ResourceID: r.ID, RoundID: round.ID, RetryEpoch: 0}, SnapshotDigest: "late"}, Payload: []byte("late")})
+					_, err = workstate.NewStore(c).CaptureResponse(ctx, workstate.CapturedResponse{ResponseHeader: workstate.ResponseHeader{RequestID: old.Identity, Scope: workstate.Scope{JobID: j.ID, ResourceID: r.ID, RoundID: round.ID, RetryEpoch: 0}, SnapshotDigest: "late"}, Payload: []byte("late")})
 					if err == nil || !errors.Is(err, workstate.ErrStopped) {
 						t.Fatalf("late old-epoch response: %v", err)
 					}

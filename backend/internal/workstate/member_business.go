@@ -92,7 +92,7 @@ func (s *Store) StageCorrectedMember(ctx context.Context, in OutputMember) error
 		if e = tx.WorkResponseMember.UpdateOneID(row.ID).SetCorrectedPayload(in.Payload).SetCorrectedBytes(in.Bytes).SetCorrectedDigest(in.Digest).Exec(ctx); e != nil {
 			return e
 		}
-		return tx.WorkRequest.UpdateOneID(r.ID).AddOutputMemberBytes(in.Bytes).AddMemberStorageBytes(in.Bytes + int64(len(in.Digest))).Exec(ctx)
+		return tx.WorkRequest.UpdateOneID(r.ID).AddOutputMemberBytes(in.Bytes).AddCorrectionBytes(in.Bytes).AddMemberStorageBytes(in.Bytes + int64(len(in.Digest))).Exec(ctx)
 	})
 }
 func (s *Store) AbortMemberBusiness(ctx context.Context, id string) error {
@@ -122,6 +122,6 @@ func (s *Store) AbortMemberBusiness(ctx context.Context, id string) error {
 			return nil
 		}
 		// Payload and digest have distinct actual storage costs.
-		return tx.WorkRequest.UpdateOneID(r.ID).AddOutputMemberBytes(-payload).AddMemberStorageBytes(-retired).Exec(ctx)
+		return tx.WorkRequest.UpdateOneID(r.ID).AddOutputMemberBytes(-payload).AddCorrectionBytes(-payload).AddMemberStorageBytes(-retired).Exec(ctx)
 	})
 }

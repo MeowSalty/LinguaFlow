@@ -248,7 +248,7 @@ func runHandoffPersistedBorrower(t *testing.T, lowered bool) {
 	if err := store.ReserveRequest(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CaptureResponse(ctx, h); err != nil {
+	if _, err := store.CaptureResponse(ctx, h); err != nil {
 		t.Fatal(err)
 	}
 	publishFixtureBusiness(t, ctx, store, r)
@@ -256,7 +256,7 @@ func runHandoffPersistedBorrower(t *testing.T, lowered bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.PromoteMember(ctx, MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: cursor}); err != nil {
+	if _, err := store.PromoteMember(ctx, fixturePromotion(MemberPromotion{Scope: scope, Key: requestMemberKey(r, 0), Candidate: &c, Next: cursor})); err != nil {
 		t.Fatal(err)
 	}
 	if lowered {
