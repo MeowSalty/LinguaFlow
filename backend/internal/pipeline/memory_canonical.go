@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
 // Memory persistence keeps its durable records; execution reads them directly
@@ -10,6 +11,9 @@ import (
 func (s *MemoryRoundStore) LoadCanonical(_ context.Context, doc *Document) (bool, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return false, 0, backend.ErrAdmissionClosed
+	}
 	for i := range doc.Segments {
 		doc.Segments[i].RoundWork.Member = false
 		doc.Segments[i].RoundWork.Completed = false
@@ -33,6 +37,9 @@ func (s *MemoryRoundStore) LoadCanonical(_ context.Context, doc *Document) (bool
 func (s *MemoryRoundStore) SealCanonical(_ context.Context, doc *Document) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return backend.ErrAdmissionClosed
+	}
 	if s.state.Sealed {
 		return nil
 	}

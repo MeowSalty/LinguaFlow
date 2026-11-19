@@ -60,7 +60,7 @@ func TestRubyHandoffGlossaryValidationRestoresSeparateRubyIntoNilMetadata(t *tes
 	frozen := frozenMainMember{Index: 0, PromptID: "1", CandidateID: "nil-meta", Segment: Segment{Source: "source", Status: "pending", TargetIsNull: true}, RubyItems: []ruby.Item{{ID: "1", SourceBase: "source", SourceText: "reading"}}}
 	header := memberFixtureReserve(t, ctx, store, "nil-meta", 1<<20, []frozenMainMember{frozen})
 	header = memberFixtureOutputs(t, ctx, store, header, []archivedOutput{{Target: "候选"}}, []glossary.Entry{{Source: "thread pool", Target: "候选"}})
-	if err := runtime.Admission.RestoreResponseOwner(header.ID, 0, 0, header.InputMemberBytes, header.ResponseBytes, header.BusinessBound); err != nil {
+	if err := runtime.Admission.RestoreResponseOwnership(header.ID, 0, 0, header.Facts(), header.Phase, false); err != nil {
 		t.Fatal(err)
 	}
 	defer runtime.Admission.ReleaseDurableResponse(header.ID)

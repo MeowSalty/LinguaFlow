@@ -47,17 +47,17 @@ func (s *recoveryBeforePromotionStore) CandidateHeaders(ctx context.Context, aft
 	return page, next, err
 }
 
-func (s *recoveryBeforePromotionStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure string) error {
+func (s *recoveryBeforePromotionStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure MemberOutcome) (MainResponseHeader, error) {
 	if c != nil && c.Index == 1 {
 		if !s.resume {
-			return terminalRuntimeStoreError{errors.New("disk unavailable")}
+			return MainResponseHeader{}, terminalRuntimeStoreError{errors.New("disk unavailable")}
 		}
 		if !s.recoveryComplete.Load() {
-			return terminalRuntimeStoreError{errors.New("promotion wrote before discovery completed")}
+			return MainResponseHeader{}, terminalRuntimeStoreError{errors.New("promotion wrote before discovery completed")}
 		}
 	}
-	if err := s.MemoryRoundStore.PromoteMember(ctx, key, c, next, failure); err != nil {
-		return err
+	if _, err := s.MemoryRoundStore.PromoteMember(ctx, key, c, next, failure); err != nil {
+		return MainResponseHeader{}, err
 	}
 	if s.resume && c != nil && c.Index == 1 {
 		runtime := ExecutionRuntimeFromContext(ctx)
@@ -70,10 +70,10 @@ func (s *recoveryBeforePromotionStore) PromoteMember(ctx context.Context, key Me
 		select {
 		case <-s.releaseACK:
 		case <-ctx.Done():
-			return ctx.Err()
+			return MainResponseHeader{}, ctx.Err()
 		}
 	}
-	return nil
+	return s.MemoryRoundStore.ResponseHeader(ctx, key.RequestID)
 }
 
 func TestMemberRecoveryCompletesBeforePromotion(t *testing.T) {

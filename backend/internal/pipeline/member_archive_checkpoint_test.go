@@ -19,7 +19,7 @@ type memberCheckpointFaultStore struct {
 	writes  atomic.Int64
 }
 
-func (s *memberCheckpointFaultStore) PublishOutputs(ctx context.Context, in OutputPublication) error {
+func (s *memberCheckpointFaultStore) PublishOutputs(ctx context.Context, in OutputPublication) (MainResponseHeader, error) {
 	s.writes.Add(1)
 	boundary := in.Next == 16
 	if s.mode == "last_checkpoint_ack" {
@@ -27,15 +27,15 @@ func (s *memberCheckpointFaultStore) PublishOutputs(ctx context.Context, in Outp
 	}
 	if boundary && s.faulted.CompareAndSwap(false, true) {
 		if s.mode == "before_checkpoint" {
-			return terminalRuntimeStoreError{errors.New("archive checkpoint before write")}
+			return MainResponseHeader{}, terminalRuntimeStoreError{errors.New("archive checkpoint before write")}
 		}
-		if err := s.MemoryRoundStore.PublishOutputs(ctx, in); err != nil {
-			return err
+		if _, err := s.MemoryRoundStore.PublishOutputs(ctx, in); err != nil {
+			return MainResponseHeader{}, err
 		}
 		if s.mode == "retry_checkpoint_ack" {
-			return errors.New("archive checkpoint ACK lost")
+			return MainResponseHeader{}, errors.New("archive checkpoint ACK lost")
 		}
-		return terminalRuntimeStoreError{errors.New("archive checkpoint ACK lost before restart")}
+		return MainResponseHeader{}, terminalRuntimeStoreError{errors.New("archive checkpoint ACK lost before restart")}
 	}
 	return s.MemoryRoundStore.PublishOutputs(ctx, in)
 }
@@ -86,13 +86,13 @@ func TestMemberArchiveCheckpointRecovery(t *testing.T) {
 					t.Fatalf("checkpoint lost: %+v calls=%d", header, main.calls.Load())
 				}
 				if want < n {
-					if header.Phase != "capture_pending" || header.ResponseBytes == 0 {
+					if header.Phase != "capture_pending" || header.CaptureBytes == 0 {
 						t.Fatalf("capture retired before complete publication: %+v", header)
 					}
 					if _, e := store.LoadOutputMember(t.Context(), MemberKey{RequestID: header.ID, CaptureEpoch: header.CaptureEpoch}, false, 1<<20); e == nil {
 						t.Fatal("incomplete collection became consumable")
 					}
-				} else if header.Phase != "outputs_ready" || header.ResponseBytes != 0 {
+				} else if header.Phase != "outputs_ready" || header.CaptureBytes != 0 {
 					t.Fatalf("complete publication kept raw: %+v", header)
 				}
 				paidInput, paidOutput := doc.InputTokens, doc.OutputTokens

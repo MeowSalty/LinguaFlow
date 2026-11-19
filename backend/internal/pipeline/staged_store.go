@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"reflect"
 	"sort"
 	"sync"
@@ -87,6 +88,8 @@ const (
 // RoundStore is the persistence boundary consumed by the staged executor.
 // The database adapter owns identity mapping and all transactional acceptance.
 type RoundStore interface {
+	ResponseHeader(context.Context, string) (MainResponseHeader, error)
+	PublicationDomain() responsecontract.PublicationDomain
 	MemberResponseStore
 	CanonicalRoundStore
 	CandidatePayloadStore
@@ -100,7 +103,7 @@ type RoundStore interface {
 	Reserve(context.Context, RequestIntent) error
 	Record(context.Context, string, RequestRecord) error
 	ResponseHeaders(context.Context, int, int) ([]MainResponseHeader, int, error)
-	PromoteMember(context.Context, MemberKey, *Candidate, WorkCursor, string) error
+	PromoteMember(context.Context, MemberKey, *Candidate, WorkCursor, MemberOutcome) (MainResponseHeader, error)
 }
 
 // Committer confirms one candidate atomically. Infrastructure owns version
@@ -122,6 +125,9 @@ type memoryCandidateOwner struct {
 	Window    *CandidateWindow
 }
 type MemoryRoundStore struct {
+	publication         responsecontract.PublicationDomain
+	mutation            sync.Mutex
+	retirement          sync.Mutex
 	mu                  sync.Mutex
 	state               RoundRecovery
 	candidates          map[string][]byte
@@ -130,6 +136,7 @@ type MemoryRoundStore struct {
 	apply               func(context.Context, BatchResult) error
 	identity            string
 	requests            map[string]*memoryResponse
+	retiredResponses    *memoryResponse
 	nextRequest         int
 	closed              bool
 	candidateOwners     map[string]map[memoryCandidateOwner]struct{}
@@ -144,50 +151,78 @@ func (s *MemoryRoundStore) MemoryStore() *MemoryRoundStore { return s }
 // Close is called after all store users and response borrowers have joined.
 // Runtime.Close alone cannot refund these retained audit records.
 func (s *MemoryRoundStore) Close() error {
+	s.retirement.Lock()
+	s.mutation.Lock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.closed = true
 	s.state = RoundRecovery{}
 	s.apply = nil
+	// No new borrower may enter after this point. Destroy candidate payload and
+	// header backing before their conservative inventory/refund is released.
+	for _, candidate := range s.promotionCandidates {
+		if candidate != nil {
+			*candidate = Candidate{}
+		}
+	}
+	s.candidates, s.headers, s.confirmed, s.promotionCandidates, s.promotionActive = nil, nil, nil, nil, nil
+	for _, record := range s.requests {
+		for _, backings := range []map[int]*memberBacking{record.memberBackings, record.outputBackings, record.correctionBackings, record.stagedCorrectionBackings, record.archiveStaging} {
+			for _, backing := range backings {
+				record.retireBacking(backing)
+			}
+		}
+		record.retireBacking(record.capture)
+		record.retireBacking(record.publicBacking)
+		// Keep only authority scalars and retryable retirement rights.
+		*record = memoryResponse{response: memoryResponseRecord{MainResponseHeader: record.response.MainResponseHeader}, historyAdmission: record.historyAdmission, historyOwner: record.historyOwner, retiredBackings: record.retiredBackings}
+	}
+	s.mu.Unlock()
+	s.mutation.Unlock()
 	var result error
 	// This store has no durable candidate destination after Close. Every user
 	// has joined; retire each actual payload before its matching inventory.
-	s.candidates, s.headers, s.confirmed, s.promotionCandidates = nil, nil, nil, nil
-	s.promotionActive = nil
 	for id, runtimes := range s.candidateOwners {
+		var candidateErr error
 		for runtime := range runtimes {
 			runtime.Admission.ReleaseMemoryPromotion(id)
 			runtime.Window.Release(id)
-			result = errors.Join(result, runtime.Admission.ReleaseBuild("candidate:"+id))
-			result = errors.Join(result, runtime.Admission.ReleaseBuild(s.promotionOwner(id)))
+			candidateErr = errors.Join(candidateErr, runtime.Admission.ReleaseBuild("candidate:"+id), runtime.Admission.ReleaseBuild(s.promotionOwner(id)))
+		}
+		result = errors.Join(result, candidateErr)
+		if candidateErr == nil {
+			s.mu.Lock()
+			delete(s.candidateOwners, id)
+			s.mu.Unlock()
 		}
 	}
-	s.candidateOwners = nil
 	// Keep each record's owned identity and audit backing until the table is
 	// gone. The record pointer avoids allocating another table during Close.
-	var retired *memoryResponse
-	for _, record := range s.requests {
-		record.retiredNext = retired
-		retired = record
-	}
-	s.requests = nil
-	for retired != nil {
-		record := retired
-		retired = record.retiredNext
-		admission, owner := record.historyAdmission, record.historyOwner
-		for _, backings := range []map[int]*memberBacking{record.memberBackings, record.outputBackings, record.correctionBackings, record.stagedCorrectionBackings, record.archiveStaging} {
-			for _, backing := range backings {
-				result = errors.Join(result, backing.drop())
-			}
+	for id, record := range s.requests {
+		retireErr := record.retryRetiredBackings()
+		if record.retiredBackings != nil && retireErr == nil {
+			retireErr = fmt.Errorf("response %s still has borrowed retirement backing", id)
 		}
-		record.capture.drop()
-		record.publicBacking.drop()
-		*record = memoryResponse{}
-		record = nil
-		if admission != nil {
-			result = errors.Join(result, admission.ReleaseBuild(owner))
+		if retireErr == nil && record.historyAdmission != nil {
+			retireErr = record.historyAdmission.ReleaseBuild(record.historyOwner)
+		}
+		result = errors.Join(result, retireErr)
+		if retireErr == nil {
+			s.mu.Lock()
+			delete(s.requests, id)
+			*record = memoryResponse{}
+			s.mu.Unlock()
 		}
 	}
+	s.mu.Lock()
+	if len(s.requests) == 0 {
+		s.requests = nil
+	}
+	if len(s.candidateOwners) == 0 {
+		s.candidates, s.headers, s.confirmed, s.promotionCandidates, s.promotionActive, s.candidateOwners = nil, nil, nil, nil, nil, nil
+	}
+	s.mu.Unlock()
+	s.retirement.Unlock()
+	result = errors.Join(result, s.retryFailedReservations())
 	return result
 }
 
@@ -201,11 +236,17 @@ func (s *MemoryRoundStore) WorkIdentity(index int) string {
 func (s *MemoryRoundStore) Load(context.Context) (RoundRecovery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return RoundRecovery{}, backend.ErrAdmissionClosed
+	}
 	return copyRoundRecovery(s.state), nil
 }
 func (s *MemoryRoundStore) Seal(_ context.Context, ids []int) (RoundRecovery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return RoundRecovery{}, backend.ErrAdmissionClosed
+	}
 	if !s.state.Sealed {
 		s.state.Members = append([]int(nil), ids...)
 		s.state.Sealed = true
@@ -222,6 +263,9 @@ func copyRoundRecovery(in RoundRecovery) RoundRecovery {
 func (s *MemoryRoundStore) Candidates(_ context.Context, after, limit int) ([]*Candidate, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return nil, after, backend.ErrAdmissionClosed
+	}
 	var page []*Candidate
 	for _, payload := range s.candidates {
 		c, err := DecodeCandidate(payload)
@@ -245,6 +289,9 @@ func (s *MemoryRoundStore) Candidates(_ context.Context, after, limit int) ([]*C
 func (s *MemoryRoundStore) Save(ctx context.Context, c *Candidate) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return backend.ErrAdmissionClosed
+	}
 	payload, err := c.Encode()
 	if err != nil {
 		return err
@@ -376,6 +423,9 @@ func (s *MemoryRoundStore) dropPromotionPayload(id string) {
 func (s *MemoryRoundStore) Cursors(_ context.Context, transitions []CursorTransition) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return backend.ErrAdmissionClosed
+	}
 	for _, t := range transitions {
 		s.state.Cursors[t.Index] = t.Cursor
 	}
@@ -384,6 +434,9 @@ func (s *MemoryRoundStore) Cursors(_ context.Context, transitions []CursorTransi
 func (s *MemoryRoundStore) Commit(ctx context.Context, c *Candidate, result TranslatedSegment) (CommitOutcome, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return CommitStale, backend.ErrAdmissionClosed
+	}
 	if s.confirmed[c.ID] {
 		return CommitExisting, nil
 	}
@@ -401,6 +454,9 @@ func (s *MemoryRoundStore) Commit(ctx context.Context, c *Candidate, result Tran
 func (s *MemoryRoundStore) Retire(_ context.Context, c *Candidate, cursor WorkCursor) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return backend.ErrAdmissionClosed
+	}
 	delete(s.candidates, c.ID)
 	s.dropPromotionPayload(c.ID)
 	s.state.Cursors[c.Index] = cursor
@@ -409,8 +465,15 @@ func (s *MemoryRoundStore) Retire(_ context.Context, c *Candidate, cursor WorkCu
 
 // ApplyConfirmed runs on the serial resource path, never on a worker.
 func (s *MemoryRoundStore) ApplyConfirmed(ctx context.Context, c *Candidate, result TranslatedSegment) (bool, error) {
-	if s.apply == nil {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return false, backend.ErrAdmissionClosed
+	}
+	apply := s.apply
+	s.mu.Unlock()
+	if apply == nil {
 		return false, nil
 	}
-	return true, s.apply(ctx, BatchResult{Segments: []TranslatedSegment{result}})
+	return true, apply(ctx, BatchResult{Segments: []TranslatedSegment{result}})
 }

@@ -29,26 +29,26 @@ func (s *finiteRecoveryStore) note(ctx context.Context) {
 	defer s.mu.Unlock()
 	s.deadlines = append(s.deadlines, persistence.Deadline(ctx))
 }
-func (s *finiteRecoveryStore) PublishOutputs(ctx context.Context, in OutputPublication) error {
+func (s *finiteRecoveryStore) PublishOutputs(ctx context.Context, in OutputPublication) (MainResponseHeader, error) {
 	if s.seed {
-		return terminalRuntimeStoreError{errors.New("fixture capture saved before restart")}
+		return MainResponseHeader{}, terminalRuntimeStoreError{errors.New("fixture capture saved before restart")}
 	}
 	s.note(ctx)
 	if s.mode == "checkpoint" && in.Complete {
 		<-ctx.Done()
-		return ctx.Err()
+		return MainResponseHeader{}, ctx.Err()
 	}
 	return s.MemoryRoundStore.PublishOutputs(ctx, in)
 }
-func (s *finiteRecoveryStore) PublishBusiness(ctx context.Context, id string, out glossary.ResponseBusiness, install func()) error {
+func (s *finiteRecoveryStore) PublishBusiness(ctx context.Context, id string, out glossary.ResponseBusiness, install func()) (MainResponseHeader, error) {
 	s.note(ctx)
 	return s.MemoryRoundStore.PublishBusiness(ctx, id, out, install)
 }
-func (s *finiteRecoveryStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure string) error {
+func (s *finiteRecoveryStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure MemberOutcome) (MainResponseHeader, error) {
 	s.note(ctx)
 	if s.mode == "promotion" && key.Ordinal == 1 {
 		<-ctx.Done()
-		return ctx.Err()
+		return MainResponseHeader{}, ctx.Err()
 	}
 	return s.MemoryRoundStore.PromoteMember(ctx, key, c, next, failure)
 }
@@ -198,15 +198,15 @@ type closeBorrowingStore struct {
 	bounds     *backend.BuildBounds
 }
 
-func (s *closeBorrowingStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure string) error {
+func (s *closeBorrowingStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure MemberOutcome) (MainResponseHeader, error) {
 	var err error
 	s.bounds, err = backend.NewBuildBoundsFromContext(ctx, 0, 0)
 	if err != nil {
-		return err
+		return MainResponseHeader{}, err
 	}
 	s.allocation, err = s.bounds.OwnAllocation(1, 1)
 	if err != nil {
-		return err
+		return MainResponseHeader{}, err
 	}
 	s.borrower = make([]byte, 1)
 	return s.memoryPromotionBoundaryStore.PromoteMember(ctx, key, c, next, failure)
@@ -383,7 +383,7 @@ func TestMemberMemoryPublicIntegrityRejectsLengthAndSameLengthDamage(t *testing.
 			if err == nil || len(m.Payload) != 0 || m.Release != nil {
 				t.Fatal("damaged public payload became visible")
 			}
-			if err := store.PublishBusiness(t.Context(), header.ID, glossary.ResponseBusiness{}, func() { t.Fatal("corrupt public facts installed dictionary") }); err == nil {
+			if _, err := store.PublishBusiness(t.Context(), header.ID, glossary.ResponseBusiness{}, func() { t.Fatal("corrupt public facts installed dictionary") }); err == nil {
 				t.Fatal("corrupt public facts published business")
 			}
 			if r.response.Phase != "outputs_ready" || len(r.outputs) != 2 {

@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"sort"
 	"strings"
 	"unsafe"
@@ -37,14 +39,14 @@ type MainResponseHeader struct {
 	SnapshotDigest                                   string
 	FreezeDigest                                     string
 	ResponseDigest                                   string
-	FreezeBytes                                      int64
-	ResponseBytes                                    int64
-	CorrectedBytes                                   int64
+	CaptureBytes                                     int64
+	ModelOutputBytes, CorrectionBytes                int64
+	PublicKind                                       responsecontract.PublicKind
 	MetadataBytes                                    int64
 	BusinessBound                                    int64
 	MemberCount                                      int
 	Cursor                                           int
-	Phase                                            string
+	Phase                                            responsecontract.ResponsePhase
 	Truncated                                        bool
 }
 
@@ -69,17 +71,25 @@ type memoryResponse struct {
 	historyAdmission         *backend.RequestAdmission
 	historyOwner             string
 	retiredNext              *memoryResponse
+	retiredBackings          *memberBacking
 	intent                   RequestIntent
 	response                 memoryResponseRecord
 	record                   RequestRecord
 }
 
 func responseDigest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
-func (s *MemoryRoundStore) Reserve(ctx context.Context, intent RequestIntent) error {
+func (s *MemoryRoundStore) Reserve(ctx context.Context, intent RequestIntent) (result error) {
+	s.mutation.Lock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer func() {
+		s.mu.Unlock()
+		s.mutation.Unlock()
+		if !errors.Is(result, backend.ErrAdmissionClosed) {
+			result = errors.Join(result, s.retryFailedReservations())
+		}
+	}()
 	if s.closed {
-		return fmt.Errorf("round store closed")
+		return backend.ErrAdmissionClosed
 	}
 	if len(intent.InputMembers) > 0 {
 		return s.reserveMembers(ctx, intent)
@@ -118,10 +128,20 @@ func (s *MemoryRoundStore) Reserve(ctx context.Context, intent RequestIntent) er
 	}
 	return nil
 }
-func (s *MemoryRoundStore) Record(ctx context.Context, id string, record RequestRecord) error {
+func (s *MemoryRoundStore) Record(ctx context.Context, id string, record RequestRecord) (result error) {
+	s.mutation.Lock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	r := s.requests[id]
+	defer func() {
+		s.mu.Unlock()
+		s.mutation.Unlock()
+		if !errors.Is(result, backend.ErrAdmissionClosed) {
+			result = errors.Join(result, s.RetireResponse(ctx, id))
+		}
+	}()
+	if s.closed {
+		return backend.ErrAdmissionClosed
+	}
 	if r == nil {
 		return fmt.Errorf("missing request")
 	}
@@ -183,10 +203,20 @@ func (s *MemoryRoundStore) Record(ctx context.Context, id string, record Request
 	return nil
 }
 
-func (s *MemoryRoundStore) AbortRequest(_ context.Context, id string) error {
+func (s *MemoryRoundStore) AbortRequest(ctx context.Context, id string) (result error) {
+	s.mutation.Lock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	r := s.requests[id]
+	defer func() {
+		s.mu.Unlock()
+		s.mutation.Unlock()
+		if !errors.Is(result, backend.ErrAdmissionClosed) {
+			result = errors.Join(result, s.RetireResponse(ctx, id))
+		}
+	}()
+	if s.closed {
+		return backend.ErrAdmissionClosed
+	}
 	if r == nil || r.record.State == "cancelled_before_dispatch" {
 		return nil
 	}
@@ -227,7 +257,14 @@ func (s *MemoryRoundStore) ResponseHeaders(_ context.Context, after, limit int) 
 	return headers, after, nil
 }
 
-func (s *MemoryRoundStore) PromoteMember(ctx context.Context, key MemberKey, candidate *Candidate, next WorkCursor, failure string) error {
+func (s *MemoryRoundStore) promoteMember(ctx context.Context, key MemberKey, candidate *Candidate, next WorkCursor, failure MemberOutcome) (result error) {
+	s.mu.Lock()
+	r, err := s.memberLocked(key)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	defer s.mu.Unlock()
 	var payload []byte
 	if candidate != nil {
 		var err error
@@ -236,22 +273,16 @@ func (s *MemoryRoundStore) PromoteMember(ctx context.Context, key MemberKey, can
 			return err
 		}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	r, err := s.memberLocked(key)
-	if err != nil {
-		return err
-	}
 	return s.promoteMemberLocked(ctx, r, key.Ordinal, candidate, next, failure, payload)
 }
 func (r *memoryResponse) dropRequestBacking() {
 	for _, backings := range []map[int]*memberBacking{r.memberBackings, r.outputBackings, r.correctionBackings, r.stagedCorrectionBackings} {
 		for id, b := range backings {
-			b.drop()
+			r.retireBacking(b)
 			delete(backings, id)
 		}
 	}
-	r.capture.drop()
+	r.retireBacking(r.capture)
 	r.capture = nil
 	r.inputs = nil
 	r.outputs = nil

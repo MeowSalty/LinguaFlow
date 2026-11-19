@@ -15,17 +15,17 @@ type memoryPromotionBoundaryStore struct {
 	cause    error
 }
 
-func (s *memoryPromotionBoundaryStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure string) error {
+func (s *memoryPromotionBoundaryStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure MemberOutcome) (MainResponseHeader, error) {
 	if s.boundary == "before_write" {
-		return s.cause
+		return MainResponseHeader{}, s.cause
 	}
-	if err := s.MemoryRoundStore.PromoteMember(ctx, key, c, next, failure); err != nil {
-		return err
+	if _, err := s.MemoryRoundStore.PromoteMember(ctx, key, c, next, failure); err != nil {
+		return MainResponseHeader{}, err
 	}
 	if s.boundary == "after_write" {
-		return s.cause
+		return MainResponseHeader{}, s.cause
 	}
-	return nil
+	return s.MemoryRoundStore.ResponseHeader(ctx, key.RequestID)
 }
 
 func (s *memoryPromotionBoundaryStore) Commit(ctx context.Context, c *Candidate, result TranslatedSegment) (CommitOutcome, error) {

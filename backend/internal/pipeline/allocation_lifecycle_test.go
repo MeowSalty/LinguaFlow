@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"strings"
 	"testing"
 
@@ -26,11 +27,11 @@ func TestAllocationMemoryHistorySurvivesPayloadUntilClose(t *testing.T) {
 		t.Fatal("unfunded history")
 	}
 	header = memberFixtureOutputs(t, ctx, s, header, []archivedOutput{{Missing: true}}, nil)
-	if err := s.PublishBusiness(ctx, header.ID, glossary.ResponseBusiness{}, nil); err != nil {
+	if _, err := s.PublishBusiness(ctx, header.ID, glossary.ResponseBusiness{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	before = r.Admission.BuildBytes(history)
-	if err := s.PromoteMember(ctx, archiveMemberKey(header, 0), nil, WorkCursor{}, "missing response member"); err != nil {
+	if _, err := s.PromoteMember(ctx, archiveMemberKey(header, 0), nil, WorkCursor{}, MemberOutcome{Key: archiveMemberKey(header, 0), Reason: responsecontract.MemberMissing}); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.Admission.ReleaseBuild("build:request"); err != nil {
@@ -572,7 +573,7 @@ func TestAllocationMemoryBusinessRetirementKeepsImmutableSibling(t *testing.T) {
 	first := memberFixtureCorrection(t, ctx, s, header, 0, "first")
 	sibling := memberFixtureCorrection(t, ctx, s, header, 1, "sibling")
 	receipt, receiptAllocation := memberFixturePayload(t, ctx, glossary.ResponseReceipt{Version: glossary.ResponseReceiptVersion, RequestID: header.ID})
-	if err := s.PublishBusiness(ctx, header.ID, glossary.ResponseBusiness{Receipt: receipt, ReceiptAllocation: receiptAllocation}, nil); err != nil {
+	if _, err := s.PublishBusiness(ctx, header.ID, glossary.ResponseBusiness{Receipt: receipt, ReceiptAllocation: receiptAllocation}, nil); err != nil {
 		t.Fatal(err)
 	}
 	borrowed, err := s.LoadOutputMember(ctx, archiveMemberKey(header, 0), true, 1024)
@@ -588,7 +589,7 @@ func TestAllocationMemoryBusinessRetirementKeepsImmutableSibling(t *testing.T) {
 	if got := r.Admission.BuildBytes(originalOwner); got != originalBytes {
 		t.Fatalf("original content owner=%d want=%d", got, originalBytes)
 	}
-	if err = s.PromoteMember(ctx, archiveMemberKey(header, 0), nil, WorkCursor{}, "fixture retirement"); err != nil {
+	if _, err = s.PromoteMember(ctx, archiveMemberKey(header, 0), nil, WorkCursor{}, MemberOutcome{Key: archiveMemberKey(header, 0), Reason: responsecontract.MemberInvalid}); err != nil {
 		t.Fatal(err)
 	}
 	current, err := s.LoadOutputMember(ctx, archiveMemberKey(header, 1), true, 1024)
@@ -624,7 +625,7 @@ func TestAllocationMemoryBusinessRetirementKeepsImmutableSibling(t *testing.T) {
 	if got := r.Admission.BuildBytes(originalOwner); got != 0 {
 		t.Fatalf("last reader retained content: %d", got)
 	}
-	if err = s.PromoteMember(ctx, archiveMemberKey(header, 1), nil, WorkCursor{}, "fixture retirement"); err != nil {
+	if _, err = s.PromoteMember(ctx, archiveMemberKey(header, 1), nil, WorkCursor{}, MemberOutcome{Key: archiveMemberKey(header, 1), Reason: responsecontract.MemberInvalid}); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.requests[header.ID].corrections) != 0 || len(s.requests[header.ID].outputs) != 0 || r.Admission.BuildBytes(siblingOwner) != 0 || s.requests[header.ID].response.OutputMemberBytes != 0 {
@@ -657,7 +658,7 @@ func TestAllocationMemoryBusinessReceiptFailureDoesNotInstall(t *testing.T) {
 	installed := false
 	// Withholding an actual backing receipt must reject the entire publication,
 	// before its dictionary install callback or staged member becomes visible.
-	err := s.PublishBusiness(ctx, header.ID, glossary.ResponseBusiness{Receipt: receipt}, func() { installed = true })
+	_, err := s.PublishBusiness(ctx, header.ID, glossary.ResponseBusiness{Receipt: receipt}, func() { installed = true })
 	if !errors.Is(err, backend.ErrBuildCapacity) || installed || s.requests[header.ID].response.Phase != "outputs_ready" || len(s.requests[header.ID].corrections) != 0 {
 		t.Fatalf("failed receipt transfer published state: installed=%v phase=%s err=%v", installed, s.requests[header.ID].response.Phase, err)
 	}

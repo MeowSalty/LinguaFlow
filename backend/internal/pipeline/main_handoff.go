@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -645,11 +646,13 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 	return e
 }
 
-func promoteArchivedMember(ctx context.Context, round Round, h stagedHandler, header MainResponseHeader, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger) (e stagedEvent) {
+func advanceArchivedResponse(ctx context.Context, round Round, h stagedHandler, header MainResponseHeader, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger) (e stagedEvent) {
 	buildOwner := "promotion:" + header.ID
+	ctx = context.WithValue(ctx, responseCapacityKey{}, header.ID)
 	ctx = runtime.BuildContext(ctx, buildOwner)
 	defer runtime.Admission.ReleaseBuild(buildOwner)
 	e = stagedEvent{rawPromotion: true, cursors: map[int]WorkCursor{}}
+	defer func() { e.responseAdvance = &header }()
 	var err error
 	ctx, err = runtime.mainResponseBuildContext(ctx, header.ID)
 	if err != nil {
@@ -681,6 +684,11 @@ func promoteArchivedMember(ctx context.Context, round Round, h stagedHandler, he
 			e.err = err
 			return e
 		}
+	}
+	if header.Phase.Terminal() {
+		runtime.Window.Release(header.ID)
+		e.err = runtime.releaseMainOwner(header.ID)
+		return e
 	}
 	input, err := store.LoadInputMember(ctx, archiveMemberKey(header, header.Cursor), runtime.handoffLimit())
 	if err != nil {
@@ -714,6 +722,7 @@ func promoteArchivedMember(ctx context.Context, round Round, h stagedHandler, he
 	}()
 	var parseErr error
 	next := WorkCursor{Pool: header.Pool + 1, State: "pending"}
+	operation := "build_candidate"
 	err = runtime.Run(ctx, func() error {
 		b, e := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, input.Bytes+output.Bytes)
 		if e != nil {
@@ -722,9 +731,11 @@ func promoteArchivedMember(ctx context.Context, round Round, h stagedHandler, he
 		candidateBounds = b
 		var frozen frozenMainMember
 		var selected archivedOutput
+		operation = "decode_input_member"
 		if e = b.DecodeJSON(input.Payload, &frozen); e != nil {
 			return e
 		}
+		operation = "decode_output_member"
 		if e = b.DecodeJSON(output.Payload, &selected); e != nil {
 			return e
 		}
@@ -734,23 +745,47 @@ func promoteArchivedMember(ctx context.Context, round Round, h stagedHandler, he
 		if e = restoreMetadataTypes(&frozen.Segment, frozen.MetaTypes, b); e != nil {
 			return e
 		}
+		operation = "prepare_candidate"
 		c, parseErr = prepareArchivedCandidate(b, h, header, frozen, selected, logger)
+		if parseErr != nil {
+			var content *responsecontract.MemberContentError
+			if !errors.As(parseErr, &content) {
+				return parseErr
+			}
+			content.Ordinal = header.Cursor
+		}
 		if c != nil && parseErr == nil {
+			operation = "candidate_work_id"
 			if e = b.ReserveAllocation(int64(len(input.WorkID)), 1); e != nil {
 				return e
 			}
 			c.WorkID = strings.Clone(input.WorkID)
-			if e = c.SealAndCompact(b, runtime.Window.limits.ItemBytes); e != nil {
-				parseErr = e
+			measured, measureErr := b.MeasureJSON(c)
+			if measureErr != nil {
+				return measureErr
+			}
+			if measured > runtime.Window.limits.ItemBytes {
+				parseErr = &responsecontract.MemberContentError{Ordinal: header.Cursor, Kind: responsecontract.MemberTooLarge, Limit: runtime.Window.limits.ItemBytes, Observed: measured}
 				c = nil
 			} else {
+				operation = "seal_candidate"
+				if e = c.SealAndCompact(b, runtime.Window.limits.ItemBytes); e != nil {
+					return e
+				}
 				next = WorkCursor{Pool: c.PoolIndex, Attempt: c.MainAttempt, State: "candidate"}
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		e.err = err
+		detail := backend.RejectionEvidenceFromContext(ctx)
+		detail.Phase, detail.Operation = "promotion/"+operation, operation
+		detail.MemberKnown, detail.Ordinal, detail.Cursor = true, header.Cursor, header.Cursor
+		if candidateBounds != nil {
+			snapshot := candidateBounds.Snapshot()
+			detail.BoundsBytesKnown, detail.BoundsLiveBytes = true, snapshot.LiveBytes
+		}
+		e.err = backend.AnnotateRejection(err, detail)
 		return e
 	}
 	releaseResponse()
@@ -793,14 +828,16 @@ func promoteArchivedMember(ctx context.Context, round Round, h stagedHandler, he
 		pendingPromotion = c.ID
 		inventoryPayload = true
 	}
-	failure := ""
+	failure := MemberOutcome{Key: archiveMemberKey(header, header.Cursor), Accepted: c != nil}
 	if parseErr != nil {
-		failure = parseErr.Error()
-		if len(failure) > 2048 {
-			failure = failure[:2048]
+		var content *responsecontract.MemberContentError
+		if !errors.As(parseErr, &content) {
+			e.err = parseErr
+			return e
 		}
+		failure.Reason, failure.Limit, failure.Observed = content.Kind, content.Limit, content.Observed
 	}
-	if err = runtime.SaveNamed(ctx, persistence.Metadata{Operation: "member_promotion", Class: persistence.Reliable, ResourceID: storeResourceID(store), RequestID: header.ID}, func(saveCtx context.Context) error {
+	if err = runtime.SaveNamed(ctx, persistence.Metadata{Operation: string(persistence.MemberPromotion), Class: persistence.Reliable, ResourceID: storeResourceID(store), RequestID: header.ID}, func(saveCtx context.Context) error {
 		if c != nil {
 			if memory, ok := store.(interface{ MemoryStore() *MemoryRoundStore }); ok {
 				promotionMemory, promotionCandidate = memory.MemoryStore(), c
@@ -814,8 +851,16 @@ func promoteArchivedMember(ctx context.Context, round Round, h stagedHandler, he
 				}
 			}
 		}
-		return store.PromoteMember(saveCtx, archiveMemberKey(header, header.Cursor), c, next, failure)
+		confirmed, confirmationErr := store.PromoteMember(saveCtx, archiveMemberKey(header, header.Cursor), c, next, failure)
+		if confirmationErr == nil {
+			header = confirmed
+		}
+		return confirmationErr
 	}); err != nil {
+		e.err = err
+		return e
+	}
+	if err = runtime.Admission.RestoreResponseOwnership(header.ID, prepareIntent(h, store, backend.RequestStageMain).RoundIndex, storeResourceID(store), header.Facts(), header.Phase, true); err != nil {
 		e.err = err
 		return e
 	}
@@ -857,11 +902,6 @@ func promoteArchivedMember(ctx context.Context, round Round, h stagedHandler, he
 		}
 	}
 	e.cursors[m.Index] = next
-	header.InputMemberBytes -= input.Bytes
-	header.OutputMemberBytes -= output.StoredBytes
-	header.FreezeBytes = header.InputMemberBytes
-	header.CorrectedBytes = header.OutputMemberBytes
-	header.Cursor++
 	e.responseAdvance = &header
 	if header.Cursor == header.MemberCount {
 		releaseResponse()

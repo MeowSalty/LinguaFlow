@@ -2,24 +2,36 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"log/slog"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 )
 
-func processArchivedGlossary(ctx context.Context, h stagedHandler, header MainResponseHeader, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger) (MainResponseHeader, error) {
+func processArchivedGlossary(ctx context.Context, h stagedHandler, header MainResponseHeader, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger) (confirmed MainResponseHeader, resultErr error) {
 	handler, inline := h.(*TranslateHandler)
 	if !inline || !handler.InlineBootstrap || handler.Glossary == nil {
-		err := runtime.SaveNamed(ctx, persistence.Metadata{Operation: "business_publish", Class: persistence.Reliable, RequestID: header.ID, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
-			return store.PublishBusiness(saveCtx, header.ID, glossary.ResponseBusiness{}, nil)
+		err := runtime.SaveNamed(ctx, persistence.Metadata{Operation: string(persistence.BusinessPublication), Class: persistence.Reliable, RequestID: header.ID, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
+			confirmed, confirmationErr := store.PublishBusiness(saveCtx, header.ID, glossary.ResponseBusiness{}, nil)
+			if confirmationErr == nil {
+				header = confirmed
+			}
+			return confirmationErr
 		})
 		if err != nil {
 			return header, err
 		}
-		header.Phase = "business_ready"
+		if err = retireResponsePublication(ctx, store, header.ID); err != nil {
+			return header, err
+		}
+		if err = runtime.Admission.RestoreResponseOwnership(header.ID, prepareIntent(h, store, backend.RequestStageMain).RoundIndex, storeResourceID(store), header.Facts(), header.Phase, true); err != nil {
+			return header, err
+		}
 		return header, nil
 	}
 	granted, err := runtime.Admission.TryBusinessOwner(header.ID)
@@ -44,13 +56,21 @@ func processArchivedGlossary(ctx context.Context, h stagedHandler, header MainRe
 			return header, err
 		}
 	}
-	defer store.AbortMemberBusiness(ctx, header.ID)
+	defer func() {
+		if header.Phase == responsecontract.OutputsReady {
+			resultErr = errors.Join(resultErr, store.AbortMemberBusiness(ctx, header.ID))
+		}
+	}()
 	public, err := store.LoadResponsePublic(ctx, header.ID, runtime.responseLimit())
 	if err != nil {
 		return header, err
 	}
-	defer public.Release()
-	in := glossary.ResponseProcess{RequestID: header.ID, InputDigest: header.ResponseDigest, TargetLang: header.TargetLang, EntriesPayload: public.Payload, Rewrite: handler.InlineConflictStrategy == InlineConflictRewriteLocal, ItemLimit: runtime.Window.limits.ItemBytes, BusinessLimit: header.BusinessBound, Build: runtime.Run}
+	defer func() {
+		if public.Release != nil {
+			public.Release()
+		}
+	}()
+	in := glossary.ResponseProcess{RequestID: header.ID, CaptureEpoch: header.CaptureEpoch, InputDigest: header.ResponseDigest, TargetLang: header.TargetLang, EntriesPayload: public.Payload, Rewrite: handler.InlineConflictStrategy == InlineConflictRewriteLocal, ItemLimit: runtime.Window.limits.ItemBytes, BusinessLimit: header.BusinessBound, Build: runtime.Run}
 	var correctedBytes int64
 	in.VisitTargets = func(memberCtx context.Context, yield func(glossary.ResponseTarget) error) error {
 		correctedBytes = 0
@@ -74,7 +94,7 @@ func processArchivedGlossary(ctx context.Context, h stagedHandler, header MainRe
 			var selected archivedOutput
 			e = b.DecodeJSON(output.Payload, &selected)
 			if e == nil {
-				e = yield(glossary.ResponseTarget{Ordinal: ordinal, ID: input.PromptID, Text: selected.Target, Failure: selected.Failure})
+				e = yield(glossary.ResponseTarget{Ordinal: ordinal, ID: input.PromptID, Text: selected.Target, Failure: selected.Failure, Outcome: selected.Outcome})
 			}
 			selected = archivedOutput{}
 			input.Release()
@@ -118,9 +138,18 @@ func processArchivedGlossary(ctx context.Context, h stagedHandler, header MainRe
 		if e = restoreMetadataTypes(&frozen.Segment, frozen.MetaTypes, b); e != nil {
 			return e
 		}
-		candidate, e := prepareArchivedCandidate(b, h, header, frozen, selected, logger)
+		memberHeader := header
+		memberHeader.Cursor = target.Ordinal
+		candidate, e := prepareArchivedCandidate(b, h, memberHeader, frozen, selected, logger)
 		if e != nil {
 			return e
+		}
+		measured, e := b.MeasureJSON(candidate)
+		if e != nil {
+			return e
+		}
+		if measured > in.ItemLimit {
+			return &responsecontract.MemberContentError{Ordinal: target.Ordinal, Kind: responsecontract.MemberTooLarge, Limit: in.ItemLimit, Observed: measured}
 		}
 		return candidate.SealAndCompact(b, in.ItemLimit)
 	}
@@ -144,6 +173,7 @@ func processArchivedGlossary(ctx context.Context, h stagedHandler, header MainRe
 			return e
 		}
 		selected.Target, selected.Failure = target.Text, target.Failure
+		selected.Outcome = target.Outcome
 		payload, e := b.EncodeJSON(selected, in.ItemLimit)
 		if e != nil {
 			return e
@@ -163,27 +193,76 @@ func processArchivedGlossary(ctx context.Context, h stagedHandler, header MainRe
 		correctedBytes += int64(len(payload))
 		return nil
 	}
-	in.Publish = func(memberCtx context.Context, out glossary.ResponseBusiness, install func()) error {
-		return store.PublishBusiness(memberCtx, header.ID, out, install)
+	in.Publish = func(memberCtx context.Context, out glossary.ResponseBusiness, prepared *responsecontract.PreparedPublication) error {
+		if prepared == nil || prepared.Install == nil {
+			return fmt.Errorf("missing publication preparation")
+		}
+		var install func()
+		if store.PublicationDomain().Medium == responsecontract.PublicationMemory {
+			install = func() { _ = prepared.InstallOnce() }
+		}
+		confirmed, confirmationErr := store.PublishBusiness(memberCtx, header.ID, out, install)
+		if confirmationErr == nil && store.PublicationDomain().Medium == responsecontract.PublicationMemory {
+			header = confirmed
+		}
+		return confirmationErr
 	}
 	if !in.Rewrite {
 		in.VisitTargets, in.Validate, in.WriteTarget = nil, nil, nil
 	}
 	var business glossary.ResponseBusiness
-	err = runtime.SaveNamed(ctx, persistence.Metadata{Operation: "glossary_publish", Class: persistence.Reliable, RequestID: header.ID, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
+	err = runtime.SaveNamed(ctx, persistence.Metadata{Operation: string(persistence.BusinessPublication), Class: persistence.Reliable, RequestID: header.ID, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
 		var e error
 		business, e = processor.ProcessResponse(saveCtx, in)
 		return e
 	})
 	defer business.Release()
+	in.EntriesPayload, in.Entries = nil, nil
+	public.Payload = nil
+	public.Release()
+	public = OutputMemberFrame{}
+	// ProcessResponse has exited every dictionary and store publication lock.
+	// An installed receipt remains authoritative even if old ownership retires
+	// with an error; pending refund rights stay in the store for the next retry.
+	err = errors.Join(err, retireResponsePublication(ctx, store, header.ID))
+	if store.PublicationDomain().Medium == responsecontract.PublicationSQL {
+		// The publisher executes inside the glossary transaction. Its header is
+		// provisional until COMMIT or an authoritative unknown-ACK lookup succeeds.
+		// A receipt replay can succeed without invoking the publisher again.
+		confirmationDeadline := time.Now().Add(5 * time.Second)
+		if deadline := persistence.Deadline(ctx); !deadline.IsZero() && deadline.Before(confirmationDeadline) {
+			confirmationDeadline = deadline
+		}
+		factCtx, finish := context.WithDeadline(context.WithoutCancel(ctx), confirmationDeadline)
+		confirmed, confirmationErr := store.ResponseHeader(factCtx, header.ID)
+		finish()
+		if confirmationErr != nil {
+			return header, errors.Join(err, confirmationErr)
+		}
+		identityMatches := confirmed.DatabaseID == header.DatabaseID && confirmed.ID == header.ID && confirmed.ResourceID == header.ResourceID && confirmed.RoundID == header.RoundID && confirmed.FormatVersion == header.FormatVersion && confirmed.MemberCount == header.MemberCount && confirmed.CaptureEpoch == header.CaptureEpoch && confirmed.ResponseDigest == header.ResponseDigest && confirmed.SnapshotDigest == header.SnapshotDigest && confirmed.FreezeDigest == header.FreezeDigest
+		if !identityMatches {
+			return header, errors.Join(err, fmt.Errorf("business publication confirmation identity changed"))
+		}
+		if confirmed.Phase == responsecontract.BusinessReady || confirmed.Phase == responsecontract.Promoted {
+			header = confirmed
+		} else if err == nil {
+			return header, fmt.Errorf("business publication confirmation phase changed")
+		}
+	}
 	if err != nil {
 		return header, err
 	}
-	if err = runtime.Admission.RestoreResponseBusiness(header.ID, correctedBytes); err != nil {
+	if err = runtime.Admission.RestoreResponseOwnership(header.ID, prepareIntent(h, store, backend.RequestStageMain).RoundIndex, storeResourceID(store), header.Facts(), header.Phase, true); err != nil {
 		return header, err
 	}
-	header.Phase = "business_ready"
-	header.OutputMemberBytes += correctedBytes
-	header.CorrectedBytes = header.OutputMemberBytes
 	return header, nil
+}
+
+func retireResponsePublication(ctx context.Context, store RoundStore, id string) error {
+	if retirement, ok := store.(interface {
+		RetireResponse(context.Context, string) error
+	}); ok {
+		return retirement.RetireResponse(ctx, id)
+	}
+	return nil
 }

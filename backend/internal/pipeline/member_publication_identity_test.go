@@ -49,7 +49,7 @@ func TestMemberMemoryIntegrityKeepsValidSibling(t *testing.T) {
 			defer store.Close()
 			head := memberFixtureReserve(t, t.Context(), store, "integrity", 4096, memberFixtureInputs(2))
 			head = memberFixtureOutputs(t, t.Context(), store, head, []archivedOutput{{Target: "first"}, {Target: "second"}}, nil)
-			if err := store.PublishBusiness(t.Context(), head.ID, glossary.ResponseBusiness{}, nil); err != nil {
+			if _, err := store.PublishBusiness(t.Context(), head.ID, glossary.ResponseBusiness{}, nil); err != nil {
 				t.Fatal(err)
 			}
 			r := store.requests[head.ID]

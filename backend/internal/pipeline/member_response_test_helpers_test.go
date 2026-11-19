@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 )
 
@@ -55,11 +56,18 @@ func memberFixtureOutputs(t *testing.T, ctx context.Context, s *MemoryRoundStore
 	// Capture is an independent reliable fact, even when the fixture directly
 	// supplies the subsequent normalized member publication.
 	raw, rawAllocation := memberFixturePayload(t, ctx, map[string]string{"capture": "fixture"})
-	if err := s.CaptureResponse(ctx, CapturedResponse{MainResponseHeader: header, Payload: raw, Allocation: rawAllocation}); err != nil {
+	if _, err := s.CaptureResponse(ctx, CapturedResponse{MainResponseHeader: header, Payload: raw, Allocation: rawAllocation}); err != nil {
 		t.Fatal(err)
 	}
 	publication := OutputPublication{Key: archiveMemberKey(header, 0), Next: len(selected), Complete: true}
 	for ordinal, out := range selected {
+		out.Outcome = MemberOutcome{Key: archiveMemberKey(header, ordinal), Accepted: out.Failure == "" && !out.Missing}
+		if !out.Outcome.Accepted {
+			out.Outcome.Reason = responsecontract.MemberInvalid
+			if out.Missing {
+				out.Outcome.Reason = responsecontract.MemberMissing
+			}
+		}
 		payload, allocation := memberFixturePayload(t, ctx, out)
 		digest := responseDigest(payload)
 		publication.Digest = archiveDigest(publication.Digest, digest)
@@ -70,7 +78,7 @@ func memberFixtureOutputs(t *testing.T, ctx context.Context, s *MemoryRoundStore
 		publication.Glossary = payload
 		publication.PublicAllocation = allocation
 	}
-	if err := s.PublishOutputs(ctx, publication); err != nil {
+	if _, err := s.PublishOutputs(ctx, publication); err != nil {
 		t.Fatal(err)
 	}
 	return s.requests[header.ID].response.MainResponseHeader
@@ -78,7 +86,7 @@ func memberFixtureOutputs(t *testing.T, ctx context.Context, s *MemoryRoundStore
 
 func memberFixtureCorrection(t *testing.T, ctx context.Context, s *MemoryRoundStore, header MainResponseHeader, ordinal int, target string) OutputMemberFrame {
 	t.Helper()
-	payload, allocation := memberFixturePayload(t, ctx, archivedOutput{Target: target})
+	payload, allocation := memberFixturePayload(t, ctx, archivedOutput{Target: target, Outcome: MemberOutcome{Key: archiveMemberKey(header, ordinal), Accepted: true}})
 	frame := OutputMemberFrame{Key: archiveMemberKey(header, ordinal), Payload: payload, Bytes: int64(len(payload)), Digest: responseDigest(payload), Allocation: allocation}
 	if err := s.StageCorrectedMember(ctx, frame); err != nil {
 		t.Fatal(err)

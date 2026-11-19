@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"unicode/utf8"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -29,10 +30,19 @@ func archiveDigest(previous, digest string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainResponseHeader, store RoundStore, runtime *ExecutionRuntime) (MainResponseHeader, error) {
+func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainResponseHeader, store RoundStore, runtime *ExecutionRuntime) (confirmed MainResponseHeader, resultErr error) {
+	operation := "load_capture"
+	defer func() {
+		if resultErr != nil {
+			detail := backend.RejectionEvidenceFromContext(ctx)
+			detail.Phase, detail.Operation = "archive/"+operation, operation
+			detail.MemberKnown, detail.Ordinal, detail.Cursor = true, header.ArchiveCursor, header.Cursor
+			resultErr = backend.AnnotateRejection(resultErr, detail)
+		}
+	}()
 	capture, err := store.LoadCapture(ctx, header.ID, runtime.responseLimit())
 	if err != nil {
-		return header, err
+		return header, backend.AnnotateRejection(err, backend.RejectionEvidence{Branch: "response_capture_read", Operation: "load_capture", Phase: string(header.Phase), RequestID: header.ID})
 	}
 	defer capture.Release()
 	b, err := backend.NewBuildBoundsFromContext(ctx, runtime.responseLimit(), int64(len(capture.Payload)))
@@ -66,6 +76,7 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 	defer rawCredit.Release()
 	raw := string(capture.Payload)
 	defer func() { raw = "" }()
+	operation = "prepare_archive"
 	view, err := repair.PrepareArchive(b, raw, header.TextMode, h.ModeName() == "revise", ids, opt)
 	contentFailure := ""
 	if err != nil {
@@ -134,12 +145,35 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 			bounds = append(bounds, mb)
 			selected := archivedOutput{Failure: contentFailure}
 			if view != nil {
+				operation = "select_archive_member"
 				selected, e = view.Member(mb, start+i)
 				if e != nil {
-					finish()
-					return header, e
+					var content *responsecontract.MemberContentError
+					if !errors.As(e, &content) {
+						finish()
+						return header, e
+					}
+					selected = archivedOutput{Failure: content.Error(), Outcome: MemberOutcome{Reason: content.Kind, Limit: content.Limit, Observed: content.Observed}}
 				}
 			}
+			selected.Outcome.Key = archiveMemberKey(header, start+i)
+			selected.Outcome.Accepted = selected.Failure == "" && !selected.Missing
+			if !selected.Outcome.Accepted && selected.Outcome.Reason == "" {
+				selected.Outcome.Reason = responsecontract.MemberInvalid
+				if selected.Missing {
+					selected.Outcome.Reason = responsecontract.MemberMissing
+				}
+			}
+			measured, e := mb.MeasureJSON(selected)
+			if e != nil {
+				finish()
+				return header, e
+			}
+			if measured > runtime.Window.limits.ItemBytes {
+				outcome := MemberOutcome{Key: archiveMemberKey(header, start+i), Reason: responsecontract.MemberTooLarge, Limit: runtime.Window.limits.ItemBytes, Observed: measured}
+				selected = archivedOutput{Failure: outcome.String(), Outcome: outcome}
+			}
+			operation = "encode_archive_member"
 			payload, e := mb.EncodeJSON(selected, runtime.Window.limits.ItemBytes)
 			if e != nil {
 				finish()
@@ -160,24 +194,23 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 		}
 		next := start + count
 		complete := next == header.MemberCount
-		e := runtime.SaveNamed(ctx, persistence.Metadata{Operation: "output_archive", Class: persistence.Reliable, RequestID: header.ID, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
-			return store.PublishOutputs(saveCtx, OutputPublication{Key: archiveMemberKey(header, start), Members: members, Next: next, Digest: digest, Glossary: public, PublicAllocation: publicAllocation, Complete: complete})
+		e := runtime.SaveNamed(ctx, persistence.Metadata{Operation: string(persistence.OutputArchive), Class: persistence.Reliable, RequestID: header.ID, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
+			confirmed, confirmationErr := store.PublishOutputs(saveCtx, OutputPublication{Key: archiveMemberKey(header, start), Members: members, Next: next, Digest: digest, Glossary: public, PublicAllocation: publicAllocation, Complete: complete})
+			if confirmationErr == nil {
+				header = confirmed
+			}
+			return confirmationErr
 		})
 		finish()
 		if e != nil {
 			return header, e
 		}
-		for _, member := range members {
-			header.OutputMemberBytes += member.Bytes
+		if e = runtime.Admission.RestoreResponseOwnership(header.ID, prepareIntent(h, store, backend.RequestStageMain).RoundIndex, storeResourceID(store), header.Facts(), header.Phase, true); e != nil {
+			return header, e
 		}
-		header.CorrectedBytes = header.OutputMemberBytes
-		header.ArchiveCursor, header.ArchiveDigest = next, digest
 	}
 	if header.ArchiveCursor != header.MemberCount {
 		return header, fmt.Errorf("incomplete output archive")
 	}
-	header.Phase = "outputs_ready"
-	header.ResponseBytes = 0
-	header.PublicBytes = int64(len(public))
 	return header, nil
 }

@@ -19,7 +19,7 @@ func emitRawBatchEvent(ctx context.Context, session *requestSession, req backend
 		bounds.CloseRetired()
 	}()
 	err := session.runtime.Run(ctx, func() error {
-		b, err := backend.NewBuildBoundsFromContext(ctx, 32<<10, response.FreezeBytes+response.ResponseBytes)
+		b, err := backend.NewBuildBoundsFromContext(ctx, 32<<10, response.InputMemberBytes+response.CaptureBytes)
 		if err != nil {
 			return err
 		}

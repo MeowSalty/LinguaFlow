@@ -1,17 +1,20 @@
 package pipeline
 
 import (
-	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 func prepareArchivedCandidate(b *backend.BuildBounds, h stagedHandler, header MainResponseHeader, m frozenMainMember, out archivedOutput, logger *slog.Logger) (*Candidate, error) {
+	if _, err := out.Outcome.Resolve(archiveMemberKey(header, header.Cursor), out.Failure == "" && !out.Missing); err != nil {
+		return nil, err
+	}
 	if out.Failure != "" {
-		return nil, fmt.Errorf("response member: %s", out.Failure)
+		return nil, &responsecontract.MemberContentError{Ordinal: out.Outcome.Key.Ordinal, Kind: out.Outcome.Reason, Limit: out.Outcome.Limit, Observed: out.Outcome.Observed}
 	}
 	var c *Candidate
 	outputs := map[string][]ruby.OutputEntry{m.PromptID: out.RubyOutput}
@@ -24,7 +27,7 @@ func prepareArchivedCandidate(b *backend.BuildBounds, h stagedHandler, header Ma
 			m.Segment.Meta["ruby_items"] = m.RubyItems
 		}
 		if out.Missing || strings.TrimSpace(out.Target) == "" {
-			return nil, fmt.Errorf("missing response member")
+			return nil, &responsecontract.MemberContentError{Kind: responsecontract.MemberMissing}
 		}
 		copy := *handler
 		copy.buildBounds = b
@@ -34,12 +37,12 @@ func prepareArchivedCandidate(b *backend.BuildBounds, h stagedHandler, header Ma
 			return nil, result.err
 		}
 		if len(result.candidates) == 0 {
-			return nil, fmt.Errorf("invalid response member")
+			return nil, &responsecontract.MemberContentError{Kind: responsecontract.MemberInvalid}
 		}
 		c = result.candidates[0]
 	case *ReviseHandler:
 		if out.Revision == nil {
-			return nil, fmt.Errorf("missing or invalid revision member")
+			return nil, &responsecontract.MemberContentError{Kind: responsecontract.MemberInvalid}
 		}
 		copy := *handler
 		copy.buildBounds = b
@@ -51,7 +54,7 @@ func prepareArchivedCandidate(b *backend.BuildBounds, h stagedHandler, header Ma
 		}
 	}
 	if c == nil {
-		return nil, fmt.Errorf("invalid archived candidate")
+		return nil, &responsecontract.MemberContentError{Kind: responsecontract.MemberInvalid}
 	}
 	c.Index, c.ID = m.Index, m.CandidateID
 	if err := b.ReserveAllocation(int64(len(header.ID)), 1); err != nil {

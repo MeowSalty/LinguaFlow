@@ -32,7 +32,7 @@ type fairnessSlowHandoffStore struct {
 	once             sync.Once
 }
 
-func (s *fairnessSlowHandoffStore) CaptureResponse(ctx context.Context, response CapturedResponse) error {
+func (s *fairnessSlowHandoffStore) CaptureResponse(ctx context.Context, response CapturedResponse) (MainResponseHeader, error) {
 	s.once.Do(func() { close(s.entered); <-s.release })
 	return s.windowResourceStore.CaptureResponse(ctx, response)
 }

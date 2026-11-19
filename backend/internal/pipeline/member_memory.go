@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"sync"
 	"unsafe"
 
@@ -16,8 +17,12 @@ import (
 type memberBacking struct {
 	mu            sync.Mutex
 	refs          int
+	storeRetired  bool
+	refundPending bool
+	releasing     bool
 	payload       []byte
-	release       func()
+	release       func() error
+	retiredNext   *memberBacking
 	prepared      *backend.PreparedAllocationTransfer
 	source        *backend.OwnedAllocation
 	clearObserved func()
@@ -25,6 +30,7 @@ type memberBacking struct {
 type memoryMemberOutcome struct {
 	CandidateID, Digest string
 	Failed              bool
+	Outcome             responsecontract.MemberOutcome
 }
 
 func (b *memberBacking) borrow() ([]byte, func()) {
@@ -39,6 +45,10 @@ func (b *memberBacking) drop() error {
 		return nil
 	}
 	b.mu.Lock()
+	if b.refs == 0 {
+		b.mu.Unlock()
+		return nil
+	}
 	b.refs--
 	if b.refs > 0 {
 		b.mu.Unlock()
@@ -46,32 +56,43 @@ func (b *memberBacking) drop() error {
 	}
 	prepared, source := b.prepared, b.source
 	release := b.release
+	clearObserved := b.clearObserved
+	b.clearObserved = nil
+	b.refundPending = false
+	b.releasing = true
+	// The final borrower has joined. Retire physical backing before any refund
+	// can wake another allocator; failures retain only conservative refund rights.
+	b.payload = nil
 	b.mu.Unlock()
+	if clearObserved != nil {
+		clearObserved()
+	}
 	if prepared != nil {
 		if err := prepared.Rollback(); err != nil {
 			b.mu.Lock()
 			b.refs = 1
+			b.refundPending = true
+			b.releasing = false
 			b.mu.Unlock()
 			return err
 		}
-		b.mu.Lock()
-		b.payload = nil
-		b.mu.Unlock()
 		source.Release()
 	} else if release != nil {
-		b.mu.Lock()
-		b.payload = nil
-		b.mu.Unlock()
-		release()
-	}
-	if b.clearObserved != nil {
-		b.clearObserved()
+		if err := release(); err != nil {
+			b.mu.Lock()
+			b.refs = 1
+			b.refundPending = true
+			b.releasing = false
+			b.mu.Unlock()
+			return err
+		}
 	}
 	b.mu.Lock()
 	b.payload = nil
 	b.prepared = nil
 	b.source = nil
 	b.release = nil
+	b.releasing = false
 	b.mu.Unlock()
 	return nil
 }
@@ -99,7 +120,7 @@ func prepareMemberBacking(ctx context.Context, p []byte, a *backend.OwnedAllocat
 		return nil, err
 	}
 	admission.ObserveOwned("durable_member", owner, int64(cap(p)))
-	return &memberBacking{refs: 1, payload: p, source: a, prepared: plan, clearObserved: func() { admission.ObserveOwned("durable_member", owner, 0) }, release: func() { admission.ObserveOwned("durable_member", owner, 0); _ = admission.ReleaseBuild(owner) }}, nil
+	return &memberBacking{refs: 1, payload: p, source: a, prepared: plan, clearObserved: func() { admission.ObserveOwned("durable_member", owner, 0) }, release: func() error { return admission.ReleaseBuild(owner) }}, nil
 }
 func adoptMemberBacking(ctx context.Context, p []byte, a *backend.OwnedAllocation, owner string) (*memberBacking, error) {
 	if a == nil {
@@ -111,17 +132,91 @@ func adoptMemberBacking(ctx context.Context, p []byte, a *backend.OwnedAllocatio
 			return nil, err
 		}
 		admission.ObserveOwned("durable_member", owner, int64(cap(p)))
-		return &memberBacking{refs: 1, payload: p, release: func() { admission.ObserveOwned("durable_member", owner, 0); _ = admission.ReleaseBuild(owner) }}, nil
+		return &memberBacking{refs: 1, payload: p, clearObserved: func() { admission.ObserveOwned("durable_member", owner, 0) }, release: func() error { return admission.ReleaseBuild(owner) }}, nil
 	}
 	transferred := a.Transfer()
 	if transferred == nil {
 		return nil, backend.ErrBuildCapacity
 	}
-	return &memberBacking{refs: 1, payload: p, release: transferred.Release}, nil
+	return &memberBacking{refs: 1, payload: p, release: func() error { transferred.Release(); return nil }}, nil
+}
+
+// Retired store ownership stays reachable until every borrower has joined and
+// its refund succeeds. A failed retirement never undoes published facts.
+func (r *memoryResponse) retireBacking(b *memberBacking) {
+	if b != nil {
+		b.retiredNext = r.retiredBackings
+		r.retiredBackings = b
+	}
+}
+func (r *memoryResponse) retryRetiredBackings() error {
+	var result error
+	for link := &r.retiredBackings; *link != nil; {
+		b := *link
+		b.mu.Lock()
+		retireStore := !b.storeRetired
+		if retireStore {
+			b.storeRetired = true
+		}
+		retryRefund := b.refundPending && !b.releasing
+		b.mu.Unlock()
+		if retireStore || retryRefund {
+			if err := b.drop(); err != nil {
+				result = errors.Join(result, err)
+				link = &b.retiredNext
+				continue
+			}
+		}
+		b.mu.Lock()
+		done := b.refs == 0 && !b.releasing && !b.refundPending
+		b.mu.Unlock()
+		if !done {
+			link = &b.retiredNext
+			continue
+		}
+		*link = b.retiredNext
+		b.retiredNext = nil
+	}
+	return result
+}
+
+func (s *MemoryRoundStore) retryFailedReservations() error {
+	s.retirement.Lock()
+	defer s.retirement.Unlock()
+	s.mu.Lock()
+	failed := s.retiredResponses
+	s.retiredResponses = nil
+	s.mu.Unlock()
+	var result error
+	for link := &failed; *link != nil; {
+		r := *link
+		err := r.retryRetiredBackings()
+		if err == nil && r.retiredBackings == nil && r.historyAdmission != nil {
+			err = r.historyAdmission.ReleaseBuild(r.historyOwner)
+		}
+		result = errors.Join(result, err)
+		if err != nil || r.retiredBackings != nil {
+			link = &r.retiredNext
+			continue
+		}
+		*link = r.retiredNext
+		*r = memoryResponse{}
+	}
+	s.mu.Lock()
+	if failed != nil {
+		tail := failed
+		for tail.retiredNext != nil {
+			tail = tail.retiredNext
+		}
+		tail.retiredNext = s.retiredResponses
+		s.retiredResponses = failed
+	}
+	s.mu.Unlock()
+	return result
 }
 func (s *MemoryRoundStore) reserveMembers(ctx context.Context, in RequestIntent) error {
 	if s.closed {
-		return fmt.Errorf("round store closed")
+		return backend.ErrAdmissionClosed
 	}
 	if old := s.requests[in.ID]; old != nil {
 		if old.intent.InputDigest != in.InputDigest {
@@ -152,12 +247,14 @@ func (s *MemoryRoundStore) reserveMembers(ctx context.Context, in RequestIntent)
 	}
 	defer func() {
 		if !installed {
-			if admission != nil {
-				_ = admission.ReleaseBuild(r.historyOwner)
-			}
 			for _, b := range r.memberBackings {
-				b.drop()
+				r.retireBacking(b)
 			}
+			r.inputs, r.memberBackings = nil, nil
+			r.intent = RequestIntent{}
+			r.record = RequestRecord{}
+			r.retiredNext = s.retiredResponses
+			s.retiredResponses = r
 		}
 	}()
 	var n int64
@@ -187,7 +284,7 @@ func (s *MemoryRoundStore) reserveMembers(ctx context.Context, in RequestIntent)
 	}
 	s.nextRequest++
 	r.intent.InputMembers = nil
-	r.response.MainResponseHeader = MainResponseHeader{CaptureEpoch: epoch, FrozenContext: in.FrozenContext, ID: in.ID, DatabaseID: s.nextRequest, MemberCount: len(in.InputMembers), FormatVersion: execution.ResponseFormatVersion, SnapshotDigest: in.SnapshotDigest, FreezeDigest: in.InputDigest, InputMemberBytes: n, FreezeBytes: n, Phase: "inputs_ready", BusinessBound: in.BusinessBound}
+	r.response.MainResponseHeader = MainResponseHeader{CaptureEpoch: epoch, FrozenContext: in.FrozenContext, ID: in.ID, DatabaseID: s.nextRequest, MemberCount: len(in.InputMembers), PublicKind: responsecontract.PublicNone, FormatVersion: execution.ResponseFormatVersion, SnapshotDigest: in.SnapshotDigest, FreezeDigest: in.InputDigest, InputMemberBytes: n, Phase: "inputs_ready", BusinessBound: in.BusinessBound}
 	s.requests[in.ID] = r
 	for _, backing := range r.memberBackings {
 		backing.commit()
@@ -203,6 +300,9 @@ func (s *MemoryRoundStore) reserveMembers(ctx context.Context, in RequestIntent)
 	return nil
 }
 func (s *MemoryRoundStore) memberLocked(key MemberKey) (*memoryResponse, error) {
+	if s.closed {
+		return nil, backend.ErrAdmissionClosed
+	}
 	r := s.requests[key.RequestID]
 	if r == nil || r.response.FormatVersion != execution.ResponseFormatVersion || key.CaptureEpoch != r.response.CaptureEpoch || key.Ordinal < 0 || key.Ordinal >= r.response.MemberCount {
 		return nil, fmt.Errorf("invalid response member")
@@ -261,9 +361,12 @@ func (s *MemoryRoundStore) LoadOutputMember(ctx context.Context, key MemberKey, 
 	m.Release = backend.TrackMemberFrame(ctx, m.Bytes, m.Release)
 	return m, nil
 }
-func (s *MemoryRoundStore) CaptureResponse(ctx context.Context, in CapturedResponse) error {
+func (s *MemoryRoundStore) captureResponse(ctx context.Context, in CapturedResponse) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return backend.ErrAdmissionClosed
+	}
 	r := s.requests[in.ID]
 	if r == nil || len(in.Payload) == 0 {
 		return fmt.Errorf("invalid capture")
@@ -285,7 +388,7 @@ func (s *MemoryRoundStore) CaptureResponse(ctx context.Context, in CapturedRespo
 	}
 	r.capture = backing
 	r.response.ResponseDigest = digest
-	r.response.ResponseBytes = int64(len(in.Payload))
+	r.response.CaptureBytes = int64(len(in.Payload))
 	r.response.Phase = "capture_pending"
 	r.response.Truncated = in.Truncated
 	r.record = in.Record
@@ -300,32 +403,36 @@ func (s *MemoryRoundStore) CaptureResponse(ctx context.Context, in CapturedRespo
 func (s *MemoryRoundStore) LoadCapture(ctx context.Context, id string, limit int64) (CapturedResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return CapturedResponse{}, backend.ErrAdmissionClosed
+	}
 	r := s.requests[id]
-	if r == nil || r.response.Phase != "capture_pending" || r.response.ResponseBytes > limit {
+	if r == nil || r.response.Phase != "capture_pending" || r.response.CaptureBytes > limit {
 		return CapturedResponse{}, fmt.Errorf("capture unavailable")
 	}
 	p, release := r.capture.borrow()
-	if int64(len(p)) != r.response.ResponseBytes || memberResponseDigest(ctx, p) != r.response.ResponseDigest {
+	if int64(len(p)) != r.response.CaptureBytes || memberResponseDigest(ctx, p) != r.response.ResponseDigest {
 		release()
 		return CapturedResponse{}, fmt.Errorf("capture integrity mismatch")
 	}
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "capture", Operation: "capture_read", Bytes: int64(len(p)), Rows: 1})
 	return CapturedResponse{MainResponseHeader: r.response.MainResponseHeader, Payload: p, Record: r.record, Release: release}, nil
 }
-func (s *MemoryRoundStore) PublishOutputs(ctx context.Context, in OutputPublication) (result error) {
+func (s *MemoryRoundStore) publishOutputs(ctx context.Context, in OutputPublication) (result error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	r, err := s.memberLocked(in.Key)
 	if err != nil {
+		s.mu.Unlock()
 		return err
 	}
+	defer func() {
+		s.mu.Unlock()
+	}()
 	if len(in.Members) > 16 {
 		return fmt.Errorf("archive page exceeds bound")
 	}
 	for ordinal, backing := range r.archiveStaging {
-		if err := backing.drop(); err != nil {
-			return err
-		}
+		r.retireBacking(backing)
 		delete(r.archiveStaging, ordinal)
 	}
 	if r.response.ArchiveCursor == in.Next && r.response.ArchiveDigest == in.Digest {
@@ -341,14 +448,9 @@ func (s *MemoryRoundStore) PublishOutputs(ctx context.Context, in OutputPublicat
 	installed := false
 	defer func() {
 		if !installed {
-			for ordinal, b := range staged {
-				if err := b.drop(); err != nil {
-					result = errors.Join(result, err)
-				} else {
-					delete(staged, ordinal)
-				}
+			for _, b := range staged {
+				r.retireBacking(b)
 			}
-			r.archiveStaging = staged
 		}
 	}()
 	for i, m := range in.Members {
@@ -375,6 +477,7 @@ func (s *MemoryRoundStore) PublishOutputs(ctx context.Context, in OutputPublicat
 		r.outputs[m.Key.Ordinal] = m
 		r.outputBackings[m.Key.Ordinal] = staged[m.Key.Ordinal]
 		r.response.OutputMemberBytes += m.Bytes
+		r.response.ModelOutputBytes += m.Bytes
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "output_write", Bytes: m.Bytes, Rows: 1})
 	}
 	r.response.ArchiveCursor, r.response.ArchiveDigest = in.Next, in.Digest
@@ -385,24 +488,32 @@ func (s *MemoryRoundStore) PublishOutputs(ctx context.Context, in OutputPublicat
 			return fmt.Errorf("incomplete archive")
 		}
 		r.response.Phase = "outputs_ready"
-		r.response.ResponseBytes = 0
+		r.response.CaptureBytes = 0
 		r.response.Receipt = in.Glossary
 		r.publicBacking = public
 		r.response.PublicBytes = int64(len(in.Glossary))
+		r.response.PublicKind = responsecontract.PublicEntries
 		r.publicDigest = sha256.Sum256(in.Glossary)
-		r.capture.drop()
+		r.retireBacking(r.capture)
 		r.capture = nil
 	}
 	installed = true
 	return nil
 }
-func (s *MemoryRoundStore) PublishBusiness(ctx context.Context, id string, out glossary.ResponseBusiness, install func()) error {
+func (s *MemoryRoundStore) publishBusiness(ctx context.Context, id string, out glossary.ResponseBusiness, install func()) (result error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	if s.closed {
+		s.mu.Unlock()
+		return backend.ErrAdmissionClosed
+	}
 	r := s.requests[id]
 	if r == nil {
+		s.mu.Unlock()
 		return fmt.Errorf("missing response")
 	}
+	defer func() {
+		s.mu.Unlock()
+	}()
 	if r.response.Phase == "business_ready" {
 		return nil
 	}
@@ -425,6 +536,7 @@ func (s *MemoryRoundStore) PublishBusiness(ctx context.Context, id string, out g
 		r.corrections[ordinal] = m
 		r.correctionBackings[ordinal] = r.stagedCorrectionBackings[ordinal]
 		r.response.OutputMemberBytes += m.Bytes
+		r.response.CorrectionBytes += m.Bytes
 	}
 	r.stagedCorrections = map[int]OutputMemberFrame{}
 	r.stagedCorrectionBackings = map[int]*memberBacking{}
@@ -433,18 +545,22 @@ func (s *MemoryRoundStore) PublishBusiness(ctx context.Context, id string, out g
 	receipt.commit()
 	r.response.Receipt = out.Receipt
 	r.response.PublicBytes = int64(len(out.Receipt))
+	r.response.PublicKind = responsecontract.PublicReceipt
 	r.publicDigest = sha256.Sum256(out.Receipt)
 	r.response.Phase = "business_ready"
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "business_write", Bytes: int64(len(out.Receipt)), Rows: 1})
 	if install != nil {
 		install()
 	}
-	old.drop()
+	r.retireBacking(old)
 	return nil
 }
 func (s *MemoryRoundStore) LoadResponsePublic(ctx context.Context, id string, limit int64) (OutputMemberFrame, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return OutputMemberFrame{}, backend.ErrAdmissionClosed
+	}
 	r := s.requests[id]
 	if r == nil || r.response.PublicBytes > limit {
 		return OutputMemberFrame{}, fmt.Errorf("invalid response public facts")
@@ -466,6 +582,8 @@ func (s *MemoryRoundStore) StageCorrectedMember(ctx context.Context, in OutputMe
 	if in.Bytes <= 0 || int64(len(in.Payload)) != in.Bytes || memberResponseDigest(ctx, in.Payload) != in.Digest {
 		return fmt.Errorf("invalid corrected member")
 	}
+	s.mutation.Lock()
+	defer s.mutation.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r, err := s.memberLocked(in.Key)
@@ -491,29 +609,42 @@ func (s *MemoryRoundStore) StageCorrectedMember(ctx context.Context, in OutputMe
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "correction_write", Bytes: in.Bytes, Rows: 1})
 	return nil
 }
-func (s *MemoryRoundStore) AbortMemberBusiness(_ context.Context, id string) error {
+func (s *MemoryRoundStore) AbortMemberBusiness(ctx context.Context, id string) (result error) {
+	s.mutation.Lock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if r := s.requests[id]; r != nil && r.response.Phase != "business_ready" {
-		var result error
+	r := s.requests[id]
+	defer func() {
+		s.mu.Unlock()
+		s.mutation.Unlock()
+		if !errors.Is(result, backend.ErrAdmissionClosed) {
+			result = errors.Join(result, s.RetireResponse(ctx, id))
+		}
+	}()
+	if s.closed {
+		return backend.ErrAdmissionClosed
+	}
+	if r != nil && r.response.Phase != "business_ready" {
 		for ordinal, b := range r.stagedCorrectionBackings {
-			if err := b.drop(); err != nil {
-				result = errors.Join(result, err)
-				continue
-			}
+			r.retireBacking(b)
 			delete(r.stagedCorrectionBackings, ordinal)
 			delete(r.stagedCorrections, ordinal)
 		}
-		return result
+		return nil
 	}
 	return nil
 }
 
-func (s *MemoryRoundStore) promoteMemberLocked(ctx context.Context, r *memoryResponse, cursor int, c *Candidate, next WorkCursor, failure string, payload []byte) error {
+func (s *MemoryRoundStore) promoteMemberLocked(ctx context.Context, r *memoryResponse, cursor int, c *Candidate, next WorkCursor, failure MemberOutcome, payload []byte) error {
 	if cursor < 0 || cursor >= r.response.MemberCount {
 		return fmt.Errorf("invalid promotion")
 	}
+	if _, err := failure.Resolve(MemberKey{RequestID: r.response.ID, Ordinal: cursor, CaptureEpoch: r.response.CaptureEpoch}, c != nil); err != nil {
+		return err
+	}
 	if outcome, ok := r.memberOutcomes[cursor]; ok {
+		if outcome.Outcome != failure {
+			return fmt.Errorf("promotion outcome identity reused")
+		}
 		if c == nil && outcome.Failed {
 			return nil
 		}
@@ -526,7 +657,7 @@ func (s *MemoryRoundStore) promoteMemberLocked(ctx context.Context, r *memoryRes
 		return fmt.Errorf("promotion cursor mismatch")
 	}
 	m := r.inputs[cursor]
-	outcome := memoryMemberOutcome{Failed: c == nil}
+	outcome := memoryMemberOutcome{Failed: c == nil, Outcome: failure}
 	if c != nil {
 		if c.ID != m.CandidateID || c.Index != m.Index || c.ParentRequestID != r.intent.ID {
 			return fmt.Errorf("promotion member mismatch")
@@ -542,21 +673,27 @@ func (s *MemoryRoundStore) promoteMemberLocked(ctx context.Context, r *memoryRes
 	s.state.Cursors[m.Index] = next
 	r.response.InputMemberBytes -= m.Bytes
 	r.response.OutputMemberBytes -= r.outputs[cursor].Bytes + r.corrections[cursor].Bytes
-	r.correctionBackings[cursor].drop()
+	r.response.ModelOutputBytes -= r.outputs[cursor].Bytes
+	r.response.CorrectionBytes -= r.corrections[cursor].Bytes
+	r.retireBacking(r.correctionBackings[cursor])
 	delete(r.correctionBackings, cursor)
 	delete(r.corrections, cursor)
 	delete(r.inputs, cursor)
 	delete(r.outputs, cursor)
-	r.memberBackings[cursor].drop()
-	r.outputBackings[cursor].drop()
+	r.retireBacking(r.memberBackings[cursor])
+	r.retireBacking(r.outputBackings[cursor])
 	delete(r.memberBackings, cursor)
 	delete(r.outputBackings, cursor)
 	r.response.Cursor++
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "promotion_write", Bytes: int64(len(payload)), Rows: 3})
-	r.response.FreezeBytes = r.response.InputMemberBytes
-	r.response.CorrectedBytes = r.response.OutputMemberBytes
 	if r.response.Cursor == r.response.MemberCount {
 		r.response.Phase = "promoted"
+		// Receipt remains an audit borrower until store retirement; processing
+		// ownership no longer includes public payload or business reservation.
+		r.response.MetadataBytes += r.response.PublicBytes
+		r.response.PublicBytes = 0
+		r.response.PublicKind = responsecontract.PublicNone
+		r.response.BusinessBound = 0
 		r.intent.Indices = nil
 	}
 	return nil

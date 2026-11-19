@@ -86,18 +86,18 @@ type memberCloseBorrowingStore struct {
 	cause      error
 }
 
-func (s *memberCloseBorrowingStore) PromoteMember(ctx context.Context, _ pipeline.MemberKey, _ *pipeline.Candidate, _ pipeline.WorkCursor, _ string) error {
+func (s *memberCloseBorrowingStore) PromoteMember(ctx context.Context, _ pipeline.MemberKey, _ *pipeline.Candidate, _ pipeline.WorkCursor, _ pipeline.MemberOutcome) (pipeline.MainResponseHeader, error) {
 	var err error
 	s.bounds, err = backend.NewBuildBoundsFromContext(ctx, 0, 0)
 	if err != nil {
-		return err
+		return pipeline.MainResponseHeader{}, err
 	}
 	s.allocation, err = s.bounds.OwnAllocation(1, 1)
 	if err != nil {
-		return err
+		return pipeline.MainResponseHeader{}, err
 	}
 	s.borrower = make([]byte, 1)
-	return s.cause
+	return pipeline.MainResponseHeader{}, s.cause
 }
 
 func TestEngineCloseRetriesOwnedRuntimeAfterBorrowerJoins(t *testing.T) {

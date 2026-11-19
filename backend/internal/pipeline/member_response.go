@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -15,11 +16,8 @@ func memberResponseDigest(ctx context.Context, payload []byte) string {
 }
 
 // CaptureEpoch belongs to the invocation; recovery's current scope is separate.
-type MemberKey struct {
-	RequestID    string
-	Ordinal      int
-	CaptureEpoch int64
-}
+type MemberKey = responsecontract.MemberKey
+type MemberOutcome = responsecontract.MemberOutcome
 type FrozenContext struct {
 	Pool, MainAttempt                    int
 	Mode, Format, SourceLang, TargetLang string
@@ -65,12 +63,12 @@ type OutputPublication struct {
 type MemberResponseStore interface {
 	LoadInputMember(context.Context, MemberKey, int64) (InputMemberFrame, error)
 	LoadOutputMember(context.Context, MemberKey, bool, int64) (OutputMemberFrame, error)
-	CaptureResponse(context.Context, CapturedResponse) error
+	CaptureResponse(context.Context, CapturedResponse) (MainResponseHeader, error)
 	LoadCapture(context.Context, string, int64) (CapturedResponse, error)
-	PublishOutputs(context.Context, OutputPublication) error
+	PublishOutputs(context.Context, OutputPublication) (MainResponseHeader, error)
 	LoadResponsePublic(context.Context, string, int64) (OutputMemberFrame, error)
 	StageCorrectedMember(context.Context, OutputMemberFrame) error
-	PublishBusiness(context.Context, string, glossary.ResponseBusiness, func()) error
+	PublishBusiness(context.Context, string, glossary.ResponseBusiness, func()) (MainResponseHeader, error)
 	AbortMemberBusiness(context.Context, string) error
 }
 

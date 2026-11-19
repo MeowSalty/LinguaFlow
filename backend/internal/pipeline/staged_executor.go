@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"log/slog"
 	"sort"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
@@ -90,6 +92,19 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		memory := NewMemoryRoundStore(nil)
 		defer memory.Close()
 		store = memory
+	}
+	if handler, ok := h.(*TranslateHandler); ok && handler.InlineBootstrap && handler.Glossary != nil {
+		processor, ok := handler.Glossary.(glossary.ResponseProcessor)
+		if !ok {
+			return RunRoundResult{}, responsecontract.ErrPublicationDomain
+		}
+		domain, err := processor.ResponsePublicationDomain(store.PublicationDomain())
+		if err != nil {
+			return RunRoundResult{}, err
+		}
+		if err = responsecontract.ValidatePublication(store.PublicationDomain(), domain); err != nil {
+			return RunRoundResult{}, err
+		}
 	}
 	payloadStore, ok := store.(CandidatePayloadStore)
 	if !ok {
@@ -413,7 +428,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					for _, header := range headers {
 						if err == nil {
 							i := prepareIntent(round.Handler, store, backend.RequestStageMain)
-							err = runtime.Admission.RestoreResponseOwner(header.ID, i.RoundIndex, storeResourceID(store), header.FreezeBytes, header.ResponseBytes, header.BusinessBound)
+							err = runtime.Admission.RestoreResponseOwnership(header.ID, i.RoundIndex, storeResourceID(store), header.Facts(), header.Phase, false)
 							if err == nil && header.MetadataBytes > 0 {
 								err = runtime.Admission.RestoreRequestMetadata(header.ID, header.MemberCount, header.MetadataBytes)
 							}
@@ -464,7 +479,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					wg.Add(1)
 					go func(header MainResponseHeader) {
 						defer wg.Done()
-						events <- promoteArchivedMember(runCtx, round, h, header, store, runtime, logger)
+						advance, err := AdvanceResponse(runCtx, round, h, header, store, runtime, logger)
+						e := advance.event
+						e.err = err
+						e.responseAdvance = &advance.Header
+						events <- e
 					}(header)
 				}
 			}

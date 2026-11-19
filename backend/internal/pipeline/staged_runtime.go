@@ -1353,7 +1353,8 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 				if err != nil {
 					return err
 				}
-				raw = []byte(resp.Text)
+				raw = make([]byte, len(resp.Text), len(resp.Text))
+				copy(raw, resp.Text)
 				return nil
 			}); err != nil {
 				return nil, captureFailure(err)
@@ -1367,22 +1368,21 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 			resp.Text = ""
 			resp.Raw = nil
 			backend.ReleaseProviderResponseOutput(providerCtx)
-			if err := session.runtime.SaveNamed(handoffCtx, persistence.Metadata{Operation: "response_capture", Class: persistence.Handoff, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error { return session.store.CaptureResponse(saveCtx, response) }); err != nil {
+			var confirmed MainResponseHeader
+			if err := session.runtime.SaveNamed(handoffCtx, persistence.Metadata{Operation: string(persistence.ResponseCapture), Class: persistence.Handoff, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error {
+				var err error
+				confirmed, err = session.store.CaptureResponse(saveCtx, response)
+				return err
+			}); err != nil {
 				return nil, captureFailure(err)
 			}
 			// Only a small durable header survives dispatch. The store owns raw bytes.
-			saved := CapturedResponse{MainResponseHeader: response.MainResponseHeader, Record: record}
-			for _, m := range intent.InputMembers {
-				saved.FreezeBytes += m.Bytes
-			}
-			saved.InputMemberBytes = saved.FreezeBytes
-			saved.ResponseBytes = int64(len(raw))
-			saved.FreezeDigest = intent.SnapshotDigest
-			saved.ResponseDigest = responseDigest(raw)
-			saved.MemberCount = len(intent.InputMembers)
-			saved.Phase = "capture_pending"
+			saved := CapturedResponse{MainResponseHeader: confirmed, Record: record}
 
-			if err := backend.ApplyProviderResponseHandoff(handoffCtx, intent.ID, saved.ResponseBytes); err != nil {
+			if err := backend.ApplyProviderResponseHandoff(handoffCtx, intent.ID, saved.CaptureBytes); err != nil {
+				return nil, session.fail(err)
+			}
+			if err := session.runtime.Admission.RestoreResponseOwnership(intent.ID, intent.RoundIndex, intent.ResourceID, saved.Facts(), saved.Phase, true); err != nil {
 				return nil, session.fail(err)
 			}
 			session.rawResponse = &saved

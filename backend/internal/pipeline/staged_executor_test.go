@@ -24,10 +24,10 @@ type handoffStore struct {
 	onFrame     func(context.Context, string) error
 }
 
-func (s *handoffStore) CaptureResponse(ctx context.Context, response CapturedResponse) error {
+func (s *handoffStore) CaptureResponse(ctx context.Context, response CapturedResponse) (MainResponseHeader, error) {
 	if s.onHandoff != nil {
 		if err := s.onHandoff(ctx, response); err != nil {
-			return err
+			return MainResponseHeader{}, err
 		}
 	}
 	return s.MemoryRoundStore.CaptureResponse(ctx, response)
@@ -58,13 +58,13 @@ func (s *handoffStore) CandidateHeaders(ctx context.Context, after, limit int) (
 	}
 	return s.MemoryRoundStore.CandidateHeaders(ctx, after, limit)
 }
-func (s *handoffStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure string) error {
+func (s *handoffStore) PromoteMember(ctx context.Context, key MemberKey, c *Candidate, next WorkCursor, failure MemberOutcome) (MainResponseHeader, error) {
 	if s.onPromotion != nil {
-		s.onPromotion(c, failure)
+		s.onPromotion(c, failure.String())
 	}
 	if c != nil && s.onSave != nil {
 		if err := s.onSave(ctx, c); err != nil {
-			return err
+			return MainResponseHeader{}, err
 		}
 	}
 	return s.MemoryRoundStore.PromoteMember(ctx, key, c, next, failure)
@@ -174,7 +174,7 @@ func TestStagedPauseWaitsForHandoffAndResumeCommitsDraft(t *testing.T) {
 		t.Fatalf("handoff counted as complete: %+v", state)
 	}
 	header, _, err := store.ResponseHeaders(ctx, 0, 16)
-	if err != nil || len(header) != 1 || header[0].Cursor != 0 || header[0].MemberCount != 1 || header[0].ResponseBytes == 0 {
+	if err != nil || len(header) != 1 || header[0].Cursor != 0 || header[0].MemberCount != 1 || header[0].Phase != "capture_pending" || header[0].CaptureBytes == 0 {
 		t.Fatalf("missing reliable raw pending promotion: %+v %v", header, err)
 	}
 	r2 := stagedTestRuntime(t, DefaultCandidateLimits())
@@ -211,7 +211,7 @@ func TestStagedPartialHandoffFailureRetainsAcceptedDraft(t *testing.T) {
 		t.Fatalf("partial handoff lost: %+v %v", page, err)
 	}
 	header, _, err := store.ResponseHeaders(ctx, 0, 16)
-	if err != nil || len(header) != 1 || header[0].Cursor != 1 || header[0].MemberCount != 2 || header[0].Phase != "business_ready" || header[0].ArchiveCursor != 2 || header[0].ResponseBytes != 0 || header[0].InputMemberBytes == 0 || header[0].OutputMemberBytes == 0 {
+	if err != nil || len(header) != 1 || header[0].Cursor != 1 || header[0].MemberCount != 2 || header[0].Phase != "business_ready" || header[0].ArchiveCursor != 2 || header[0].CaptureBytes != 0 || header[0].InputMemberBytes == 0 || header[0].OutputMemberBytes == 0 {
 		t.Fatalf("partial failure lost published members: %+v %v", header, err)
 	}
 	store.onSave = nil
