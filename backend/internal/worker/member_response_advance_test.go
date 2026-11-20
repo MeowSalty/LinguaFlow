@@ -66,9 +66,10 @@ func TestMemberResponseHeaderAdapterScope(t *testing.T) {
 				t.Fatalf("original SQL header unavailable: %v", err)
 			}
 			if mode == "job_scope_zero" {
-				jobScope := *adapter
-				jobScope.scope.ResourceID, jobScope.scope.RoundID, jobScope.scope.JobResourceID = 0, 0, 0
-				actual, err := jobScope.ResponseHeader(ctx, row.Identity)
+				jobScope := adapter.scope
+				jobScope.ResourceID, jobScope.RoundID, jobScope.JobResourceID = 0, 0, 0
+				jobAdapter := newRoundStore(adapter.client, jobScope, adapter.indexToID, adapter.snapshot, adapter.round, adapter.qa, adapter.autoReject, adapter.driver, adapter.memory, adapter.onCommit)
+				actual, err := jobAdapter.ResponseHeader(ctx, row.Identity)
 				if err != nil || actual != confirmed || actual.ResourceID == 0 || actual.RoundID == 0 {
 					t.Fatalf("job adapter rejected its actual scoped SQL header: %v", err)
 				}
@@ -171,6 +172,19 @@ func testResponseAdvanceSQL(t *testing.T, mode string) {
 	if e != nil || !gate.Paused() {
 		t.Fatalf("reliable capture barrier: %v", e)
 	}
+	if base.canonicalIndexBounds != nil || len(base.canonicalIndex) != 0 || r.Admission.OwnedPayloadSnapshot().Current["worker_index"] != 0 {
+		t.Fatal("seed round retained its canonical index after join")
+	}
+	// Direct response advancement is a new consumer after the seed scope joined.
+	if err := base.prepareCanonicalIndex(pipeline.WithExecutionRuntime(executionCtx, r), doc); err != nil {
+		t.Fatal("prepare direct response consumer index", err)
+	}
+	defer func() {
+		base.CloseCanonicalIndex()
+		if r.Admission.OwnedPayloadSnapshot().Current["worker_index"] != 0 {
+			t.Error("direct response consumer retained its joined canonical index")
+		}
+	}()
 	headers, _, e := base.ResponseHeaders(t.Context(), 0, 16)
 	if e != nil || len(headers) != 1 || headers[0].Phase != responsecontract.CapturePending {
 		t.Fatalf("paid capture missing: %+v %v", headers, e)

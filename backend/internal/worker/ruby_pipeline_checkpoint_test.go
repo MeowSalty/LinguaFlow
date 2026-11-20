@@ -108,6 +108,7 @@ func TestRubyPipelineSQLitePausePersistsRawBeforeCandidateCapacityCheck(t *testi
 		t.Fatalf("three local refusals lost their pool successor: item_pool=%d item_state=%s cursor=%+v err=%v", item.PoolIndex, item.State, finalCursor, err)
 	}
 	canonical, adapter := f.round(t, 0)
+	defer adapter.CloseCanonicalIndex()
 	sealed, total, err := adapter.LoadCanonical(ctx, canonical)
 	if err != nil || !sealed || total != 1 {
 		t.Fatalf("final canonical round unavailable: sealed=%t total=%d err=%v", sealed, total, err)

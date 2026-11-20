@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/bits"
 	"strings"
 	"sync"
 	"testing"
@@ -31,11 +32,14 @@ const memberWorkRowsPerMember int64 = 64
 type memberWorkTotals struct {
 	mu                                                     sync.Mutex
 	bytes, rows, sourceScans, hotFullJob, startupFullJob   int64
+	linearRows, indexRows, deadlineRows                    int64
+	lookupIndexRows, buildIndexRows                        int64
 	liveFrames, liveFrameBytes, peakFrames, peakFrameBytes int64
 	peakRoot                                               int64
 	started                                                bool
 	invalid                                                bool
 	operations                                             map[string]int64
+	operationRows                                          map[string]int64
 	root                                                   *resourcebudget.RootBudget
 	rootActor                                              int
 }
@@ -48,8 +52,10 @@ func (m *memberWorkTotals) observe(e backend.MemberWorkEvent) {
 	}
 	if m.operations == nil {
 		m.operations = make(map[string]int64)
+		m.operationRows = make(map[string]int64)
 	}
 	m.operations[e.Phase+"/"+e.Operation]++
+	m.operationRows[e.Phase+"/"+e.Operation] += e.Rows
 	if e.Phase == "capture" || e.Phase == "prepare" || e.Phase == "member" {
 		m.started = true
 	}
@@ -75,6 +81,19 @@ func (m *memberWorkTotals) observe(e backend.MemberWorkEvent) {
 	default:
 		m.bytes += e.Bytes
 		m.rows += e.Rows
+		switch {
+		case e.Phase == "scheduler" && e.Operation == "index_visit":
+			m.indexRows += e.Rows
+		case e.Phase == "scheduler" && e.Operation == "deadline_probe":
+			m.deadlineRows += e.Rows
+		case e.Phase == "worker_index_lookup" && e.Operation == "index_visit":
+			m.lookupIndexRows += e.Rows
+		case e.Phase == "worker_index_build" && e.Operation == "index_visit":
+			m.buildIndexRows += e.Rows
+		default:
+			// Unknown/new phases still belong to the original strict data bound.
+			m.linearRows += e.Rows
+		}
 	}
 	if e.Operation == "source_scan" {
 		m.sourceScans += e.Bytes
@@ -84,7 +103,7 @@ func (m *memberWorkTotals) observe(e backend.MemberWorkEvent) {
 	}
 }
 
-func (m *memberWorkTotals) check(t *testing.T, n int, payload, raw int64) {
+func (m *memberWorkTotals) check(t *testing.T, n int, payload, raw int64, loadPasses int64) {
 	t.Helper()
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -92,8 +111,32 @@ func (m *memberWorkTotals) check(t *testing.T, n int, payload, raw int64) {
 		t.Fatalf("invalid event/whole-job query during hot work: invalid=%t hot=%d ops=%v", m.invalid, m.hotFullJob, m.operations)
 	}
 	byteBound := memberWorkBytePasses*payload + memberWorkMetadataBytes*int64(n)
-	if m.bytes <= 0 || m.bytes > byteBound || m.rows > memberWorkRowsPerMember*int64(n)+128 {
-		t.Fatalf("work grew beyond fixed stage bounds: n=%d bytes=%d/%d rows=%d/%d ops=%v", n, m.bytes, byteBound, m.rows, memberWorkRowsPerMember*int64(n)+128, m.operations)
+	linearBound := memberWorkRowsPerMember*int64(n) + 128
+	if m.bytes <= 0 || m.bytes > byteBound || m.linearRows > linearBound {
+		t.Fatalf("work grew beyond fixed stage bounds: n=%d bytes=%d/%d linear_rows=%d/%d total_rows=%d operation_rows=%v", n, m.bytes, byteBound, m.linearRows, linearBound, m.rows, m.operationRows)
+	}
+	rows := m.operationRows
+	updates := rows["scheduler/ready_update"]
+	base := int64(uint(1) << bits.Len(uint(n-1)))
+	if rows["canonical_load/doc_member_visit"] != loadPasses*int64(n) || rows["canonical_prepare/doc_member_visit"] != int64(n) || rows["canonical_seal/doc_member_visit"] != 2*int64(n) ||
+		updates <= 0 || updates > 8*int64(n) || rows["scheduler/doc_member_visit"] != updates+4*int64(n) || rows["scheduler/index_build_visit"] != 2*base ||
+		rows["scheduler/word_input"] != int64(n) || rows["scheduler/plan_build"] != 1 || rows["response_budget/start"] != 1 || rows["response_budget/end"] != 1 {
+		t.Fatalf("cold/touched/word/response work escaped fixed passes: n%d operation_rows=%v", n, rows)
+	}
+	// E includes cold initialization and each actual touched-member refresh.
+	// K is real heap-top probes, with constant ready-root work per wake. Keep
+	// organic K observable rather than deriving it from unrelated frame events.
+	indexBound := updates*int64(8*bits.Len(uint(n))+8) + 3*m.deadlineRows + 4*rows["scheduler/plan_build"]
+	if m.indexRows > indexBound || m.deadlineRows != m.operations["scheduler/deadline_probe"] {
+		t.Fatalf("typed index/probe work escaped (E+B)logN+K: n%d index=%d/%d K=%d operation_rows=%v", n, m.indexRows, indexBound, m.deadlineRows, rows)
+	}
+	queries, builds := rows["worker_index_lookup/lookup"], rows["worker_index_build/build"]
+	lookupBound := queries * int64(bits.Len(uint(n))+1)
+	buildBound := builds * int64(n) * int64(8*bits.Len(uint(n))+8)
+	if queries <= 0 || queries > 3*int64(n) || builds <= 0 || builds > loadPasses || rows["worker_index_lookup/doc_member_visit"] != queries ||
+		rows["worker_index_build/doc_member_visit"] != builds*int64(n) || rows["worker_index_build/index_build_visit"] != builds*int64(n) ||
+		m.lookupIndexRows > lookupBound || m.buildIndexRows > buildBound {
+		t.Fatalf("canonical reverse lookup escaped cold NlogN/hot QlogN: n%d Q%d lookup=%d/%d build=%d/%d operation_rows=%v", n, queries, m.lookupIndexRows, lookupBound, m.buildIndexRows, buildBound, rows)
 	}
 	if m.sourceScans <= 0 || m.sourceScans > 2*raw {
 		t.Fatalf("archive source scans=%d raw=%d", m.sourceScans, raw)
@@ -127,6 +170,8 @@ func (m *memberWorkTotals) check(t *testing.T, n int, payload, raw int64) {
 		}
 	}
 	t.Logf("N=%d work_bytes=%d bound=%d rows=%d startup_full_job=%d hot_full_job=%d source_scans=%d raw=%d peak_frames=%d peak_frame_bytes=%d peak_root=%d operations=%v", n, m.bytes, byteBound, m.rows, m.startupFullJob, m.hotFullJob, m.sourceScans, raw, m.peakFrames, m.peakFrameBytes, m.peakRoot, m.operations)
+	t.Logf("linear_rows=%d/%d index_rows=%d/%d actual_K=%d operation_rows=%v", m.linearRows, linearBound, m.indexRows, indexBound, m.deadlineRows, rows)
+	t.Logf("lookup_calls=%d lookup_index_rows=%d/%d cold_builds=%d cold_index_rows=%d/%d", queries, m.lookupIndexRows, lookupBound, builds, m.buildIndexRows, buildBound)
 }
 
 func TestMemberResponseWorkSQLite(t *testing.T) {
@@ -247,7 +292,7 @@ func TestMemberResponseWorkSQLite(t *testing.T) {
 					t.Fatalf("member identity/baseline lost: %+v", m)
 				}
 			}
-			totals.check(t, n, int64(n*(len(sourceText)+len(target)))+rawTotal, rawTotal)
+			totals.check(t, n, int64(n*(len(sourceText)+len(target)))+rawTotal, rawTotal, 2)
 			observed.mu.Lock()
 			admission := observed.admission
 			observed.mu.Unlock()
@@ -258,7 +303,10 @@ func TestMemberResponseWorkSQLite(t *testing.T) {
 			if owned.TotalPeak <= 0 || owned.TotalPeak > memberWorkBytePasses*(int64(n*(len(sourceText)+len(target)))+rawTotal)+memberWorkMetadataBytes*int64(n) {
 				t.Fatalf("actual backing peak exceeds fixed bound: %+v", owned)
 			}
-			if err := verifyHandoffOwnedTerminal(owned, "freeze", "raw", "wire", "candidate"); err != nil {
+			if owned.Peak["worker_index"] <= 0 {
+				t.Fatal("real canonical reverse-index backing was not observed")
+			}
+			if err := verifyHandoffOwnedTerminal(owned, "freeze", "raw", "wire", "candidate", "worker_index"); err != nil {
 				t.Fatal(err)
 			}
 			t.Logf("actual_backing_peak=%d terminal_categories=%v", owned.TotalPeak, owned.Current)

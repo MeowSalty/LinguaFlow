@@ -311,6 +311,15 @@ func mainContextWordsScalar(doc *Document, candidate []int, window int) int {
 // membership retains the rest for subsequent planning. Live window occupancy
 // and concurrency do not change this prefix.
 func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Document, visit func(func(int) bool), pool, memberLimit int) ([]int, error) {
+	return planNextMainBatchBounded(b, h, doc, visit, pool, memberLimit, func(index int, target bool) int {
+		if target {
+			return CountWords(doc.Segments[index].Target)
+		}
+		return CountWords(doc.Segments[index].Source)
+	}, func(indices []int, window int) int { return mainContextWordsScalar(doc, indices, window) })
+}
+
+func planNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Document, visit func(func(int) bool), pool, memberLimit int, wordCount func(int, bool) int, contextCount func([]int, int) int) ([]int, error) {
 	if memberLimit < 1 {
 		return nil, backend.ErrPipelineCapacity
 	}
@@ -382,9 +391,9 @@ func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Docu
 			}
 			finishRun()
 		}
-		next := CountWords(doc.Segments[idx].Source)
+		next := wordCount(idx, false)
 		if _, ok := h.(*ReviseHandler); ok {
-			n := CountWords(doc.Segments[idx].Target)
+			n := wordCount(idx, true)
 			if next > math.MaxInt-n {
 				next = math.MaxInt
 			} else {
@@ -405,7 +414,7 @@ func PlanNextMainBatchBounded(b *backend.BuildBounds, h stagedHandler, doc *Docu
 		}
 		if count > 0 && window > 0 && c.MaxWords > 0 && !exceeds {
 			contextIndices := append(current, idx)
-			contextWords := mainContextWordsScalar(doc, contextIndices, window)
+			contextWords := contextCount(contextIndices, window)
 			exceeds = contextWords > c.MaxWords || words > c.MaxWords-contextWords || next > c.MaxWords-contextWords-words
 		}
 		if exceeds {

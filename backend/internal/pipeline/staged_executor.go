@@ -47,6 +47,7 @@ type stagedEvent struct {
 	inputTokens           int64
 	outputTokens          int64
 	members               []stagedEvent
+	mainPlan              *deferredMainPlan
 }
 
 // These counters belong to the coordinator. Workers remain in flight until
@@ -116,6 +117,8 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 	if !ok {
 		return RunRoundResult{}, fmt.Errorf("round store has no canonical membership contract")
 	}
+	ctx, closeCanonicalIndex := withCanonicalIndexLifetime(ctx)
+	defer closeCanonicalIndex()
 	sealed, total, err := canonical.LoadCanonical(ctx, doc)
 	if err != nil {
 		return RunRoundResult{}, err
@@ -136,6 +139,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		// document still contains original source text. Prepare each unfinished
 		// member before fresh dispatch without resetting its durable cursor.
 		for i := range doc.Segments {
+			backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "canonical_prepare", Operation: "doc_member_visit", Rows: 1})
 			seg := &doc.Segments[i]
 			if !seg.RoundWork.Member || seg.RoundWork.Completed {
 				continue
@@ -167,6 +171,39 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 	// aggregate occupancy from small headers before any resource is admitted.
 	pageAfter, pageActive, recoveryDone := 0, false, false
 	maxPools := max(1, round.Retry.MaxAttempts+1)
+	var scheduler *mainScheduler
+	err = runtime.Run(ctx, func() error {
+		var buildErr error
+		scheduler, buildErr = newMainScheduler(ctx, doc, h, runtime, maxPools, "scheduler:"+NewWorkID())
+		return buildErr
+	})
+	if err != nil {
+		if workDeferred(err) != nil {
+			runtime.Admission.YieldMainPriority(storeResourceID(store), prepareIntent(round.Handler, store, backend.RequestStageMain).RoundIndex)
+		}
+		return RunRoundResult{}, err
+	}
+	defer scheduler.close()
+	// Final result collection is one cold document pass per result set. Include
+	// its real visits so diagnostics never hide the retained scalar inventory.
+	remaining = func(yield func(int) bool) {
+		for i := range doc.Segments {
+			scheduler.observe("doc_member_visit", 0, 1)
+			w := doc.Segments[i].RoundWork
+			if w.Member && !w.Completed && !yield(i) {
+				return
+			}
+		}
+	}
+	completed = func(yield func(int) bool) {
+		for i := range doc.Segments {
+			scheduler.observe("doc_member_visit", 0, 1)
+			w := doc.Segments[i].RoundWork
+			if w.Member && w.Completed && !yield(i) {
+				return
+			}
+		}
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	events := make(chan stagedEvent, 32)
@@ -175,13 +212,8 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 	mainActive, candidateActive, promotionActive := 0, 0, 0
 	var firstErr error
 	yielded := false
-	type waitingWindowBatch struct {
-		indices       []int
-		pool, attempt int
-		wake          <-chan struct{}
-		reason        string
-	}
-	var waitingBatch *waitingWindowBatch
+	var waitingBatch *deferredMainPlan
+	defer func() { waitingBatch.close() }()
 	paused := func() bool { return runtime.Gate != nil && runtime.Gate.Paused() }
 	applyMember := func(e stagedEvent) {
 		for _, header := range e.responseHeaders {
@@ -366,6 +398,46 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		}
 	}
 	apply := func(e stagedEvent) {
+		// Workers return only confirmed facts. Refresh touched nodes after the
+		// entire event has been applied, including its active-to-idle transition.
+		defer func() {
+			now := time.Now()
+			// A returning main wait may restore only its own active members.
+			// Other ready changes while it was dispatched must invalidate the
+			// selected public batch instead of laundering its old version.
+			resumePlan := e.mainPlan != nil && e.main && e.waitCapacity != nil && len(e.waitIndices) > 0 && len(e.cursors) == 0 && len(e.candidates) == 0 && e.candidate == nil && len(e.members) == 0 && e.mainPlan.canRestoreWait(scheduler)
+			refresh := func(member stagedEvent) {
+				for _, idx := range member.indices {
+					scheduler.refresh(idx, active[idx], candidates[idx], now)
+				}
+				for idx := range member.cursors {
+					scheduler.refresh(idx, active[idx], candidates[idx], now)
+				}
+				for _, c := range member.candidates {
+					scheduler.refresh(c.Index, active[c.Index], candidates[c.Index], now)
+				}
+				if member.candidate != nil {
+					idx := member.candidate.Index
+					scheduler.refresh(idx, active[idx], candidates[idx], now)
+				}
+			}
+			refresh(e)
+			for _, member := range e.members {
+				refresh(member)
+			}
+			if e.mainPlan != nil {
+				if e.waitCapacity != nil && e.main && len(e.waitIndices) > 0 {
+					waitingBatch.close()
+					waitingBatch = e.mainPlan
+					waitingBatch.deferFor(e.waitCapacity.Wait, runtime.Admission.PolicyChanged())
+					if g := scheduler.selectedGroup(); resumePlan && g >= 0 && scheduler.groups[g].pool == waitingBatch.pool && scheduler.groups[g].attempt == waitingBatch.attempt {
+						waitingBatch.version = scheduler.groups[g].version
+					}
+				} else {
+					e.mainPlan.close()
+				}
+			}
+		}()
 		if e.yield || e.waitCapacity != nil && e.waitCapacity.Yield {
 			yielded = true
 		}
@@ -393,9 +465,6 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			delete(active, idx)
 		}
 		if e.waitCapacity != nil {
-			if e.main && len(e.waitIndices) > 0 {
-				waitingBatch = &waitingWindowBatch{indices: e.waitIndices, pool: e.waitPool, attempt: e.waitAttempt, wake: e.waitCapacity.Wait.CapacityChanged, reason: e.waitCapacity.Wait.Reason}
-			}
 			if e.responseAdvance != nil {
 				applyMember(e)
 				responseBlocked[e.responseAdvance.ID] = e.waitCapacity
@@ -408,6 +477,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		}
 	}
 	for {
+		scheduler.expire(time.Now(), active, candidates)
 		if runCtx.Err() != nil || paused() || yielded || firstErr != nil {
 			runtime.Admission.YieldMainPriority(storeResourceID(store), prepareIntent(round.Handler, store, backend.RequestStageMain).RoundIndex)
 		}
@@ -526,12 +596,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			batchConfig := alignmentBatchSettings(round.Handler)
 			mayProduce := !recoveryDone || mainActive > 0
 			if !mayProduce {
-				for idx := range remaining {
-					if candidates[idx] == nil && doc.Segments[idx].RoundWork.Cursor.Pool < maxPools && doc.Segments[idx].RoundWork.Cursor.State != "unresolved" {
-						mayProduce = true
-						break
-					}
-				}
+				mayProduce = scheduler.tree[1].mainPending > 0
 			}
 			considered := make(map[int]bool)
 			for _, idx := range keys {
@@ -640,7 +705,37 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				}(batch, ticket)
 			}
 			for recoveryDone && responseRecoveryDone && mainActive < max(1, round.Concurrency) {
-				if waitingBatch != nil {
+				if waitingBatch != nil && !waitingBatch.valid(scheduler) {
+					scheduler.observe("plan_invalidate", 0, 1)
+					waitingBatch.close()
+					waitingBatch = nil
+				}
+				if waitingBatch != nil && (waitingBatch.wait.Reason == "prepare_capacity" || waitingBatch.wait.Reason == "main_concurrency") {
+					// Unrelated freeze/read byte claims also signal Admission.Changed.
+					// They do not free a queued preparation group or a full main C.
+					// Check the actual blocking predicate before entering Preparation.
+					hint, hintErr := runtime.Admission.ReadyHint(runCtx, prepareIntent(round.Handler, store, backend.RequestStageMain), runtime.Gate)
+					if hintErr != nil && !errors.Is(hintErr, backend.ErrDispatchPaused) {
+						firstErr = hintErr
+						cancel()
+						break
+					}
+					wait := waitingBatch.wait
+					blocked := wait.Reason == "main_concurrency" && hint.Reason == "main_concurrency"
+					if wait.Reason == "prepare_capacity" {
+						blocked = !mainWaitSignalReady(wait.CapacityChanged) && !mainWaitSignalReady(wait.PolicyChanged) && (wait.AvailableAt.IsZero() || time.Now().Before(wait.AvailableAt))
+					}
+					if blocked {
+						if wait.Reason == "main_concurrency" {
+							waitingBatch.deferFor(hint, globalPolicyChanged)
+							wait = waitingBatch.wait
+						}
+						scheduler.observe("wait_predicate/"+wait.Reason, 0, 1)
+						capacityWaits = append(capacityWaits, &WorkDeferred{Wait: wait})
+						break
+					}
+				}
+				if waitingBatch != nil && waitingBatch.wait.Reason == "candidate_window" {
 					// Policy refresh can cool a retained window waiter before any
 					// stock is released. Recheck RPM so its fairness turn yields to
 					// warm producers instead of monopolizing all main scopes.
@@ -652,85 +747,37 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					}
 					ready := false
 					select {
-					case <-waitingBatch.wake:
+					case <-waitingBatch.wait.CapacityChanged:
 						ready = true
 					default:
 					}
 					if !ready {
-						windowWake = waitingBatch.wake
-						capacityWaits = append(capacityWaits, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "candidate_window", CapacityChanged: windowWake}})
+						windowWake = waitingBatch.wait.CapacityChanged
+						capacityWaits = append(capacityWaits, &WorkDeferred{Wait: waitingBatch.wait})
 						break
 					}
 				}
-				pool := -1
-				attempt := 0
-				for idx := range remaining {
-					cur := doc.Segments[idx].RoundWork.Cursor
-					if active[idx] || candidates[idx] != nil || cur.Pool >= maxPools || cur.State == "unresolved" || cur.State == "candidate" || cur.State == "response_pending" || time.Now().Before(cur.NextAttemptAt) {
-						continue
-					}
-					if pool < 0 || cur.Pool < pool {
-						pool = cur.Pool
-						attempt = cur.Attempt
-					}
-				}
-				if pool < 0 {
+				g := scheduler.selectedGroup()
+				if g < 0 {
 					break
 				}
-				// Pools are resource-local barriers, including drafts and callbacks.
-				blocked := false
-				for idx := range remaining {
-					if doc.Segments[idx].RoundWork.Cursor.Pool < pool && doc.Segments[idx].RoundWork.Cursor.State != "unresolved" {
-						blocked = true
-						break
-					}
-				}
-				if blocked {
-					break
-				}
-				var built [][]int
+				pool, attempt := scheduler.groups[g].pool, scheduler.groups[g].attempt
 				var e error
 				if waitingBatch == nil {
-					e = runtime.Run(runCtx, func() error {
-						b, err := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, runtime.handoffLimit())
-						if err != nil {
-							return err
-						}
-						visit := func(yield func(int) bool) {
-							for idx := range remaining {
-								cur := doc.Segments[idx].RoundWork.Cursor
-								if !active[idx] && candidates[idx] == nil && cur.Pool == pool && cur.Attempt == attempt && cur.State != "unresolved" && cur.State != "candidate" && cur.State != "response_pending" && !time.Now().Before(cur.NextAttemptAt) {
-									if !yield(idx) {
-										return
-									}
-								}
-							}
-						}
-						batch, err := PlanNextMainBatchBounded(b, h, doc, visit, pool, runtime.Window.limits.Segments)
-						if err != nil {
-							return err
-						}
-						if len(batch) > 0 {
-							built = [][]int{batch}
-						}
-						return nil
-					})
+					e = runtime.Run(runCtx, func() error { var err error; waitingBatch, err = scheduler.buildPlan(runCtx, g, store); return err })
+				} else {
+					scheduler.observe("plan_reuse", 0, 1)
 				}
-				if waitingBatch != nil {
-					pool, attempt = waitingBatch.pool, waitingBatch.attempt
-					built = [][]int{waitingBatch.indices}
+				if d := workDeferred(e); d != nil {
+					capacityWaits = append(capacityWaits, d)
+					break
 				}
 				if e != nil {
 					firstErr = e
 					cancel()
 					break
 				}
-				if len(built) == 0 {
-					firstErr = fmt.Errorf("unfinished manifest has no executable batch at pool %d", pool)
-					cancel()
-					break
-				}
-				idxs := built[0]
+				idxs := waitingBatch.indices
 				// Proven fixed recovery inventory can leave no member slot at all.
 				// Decide this before a preparation ticket: aggregate recovery stock
 				// may itself prevent that ticket from ever reaching the window probe.
@@ -747,7 +794,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					// has no restored work to drain the unclaimed aggregate stock.
 					// Give queued resources a chance before a root preparation ticket
 					// hides this member-capacity decision behind its own overage.
-					waitingBatch = &waitingWindowBatch{indices: append([]int(nil), idxs...), pool: pool, attempt: attempt, wake: wake}
+					waitingBatch.deferFor(backend.AdmissionWait{Reason: "candidate_window", CapacityChanged: wake}, globalPolicyChanged)
 					capacityWaits = append(capacityWaits, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "candidate_window", CapacityChanged: wake}})
 					select {
 					case <-wake:
@@ -758,6 +805,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				}
 				ticket, e := runtime.Preparation.Try(runCtx, prepareIntent(round.Handler, store, backend.RequestStageMain), runtime.Gate)
 				if d := workDeferred(e); d != nil {
+					waitingBatch.deferFor(d.Wait, globalPolicyChanged)
 					capacityWaits = append(capacityWaits, d)
 					break
 				}
@@ -769,7 +817,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					break
 				}
 				reservation := NewWorkID()
-				result, wake := runtime.Window.TryPrepareOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
+				result, wake := runtime.Window.TryPrepareOwned(reservation, len(idxs), storeResourceID(store), consumer, waitingBatch.keys[:len(idxs)])
 				for result == WindowPinnedLimit {
 					limit := runtime.Window.fixedBatchLimit(consumer)
 					if limit < 1 {
@@ -779,7 +827,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					// Only authoritative fixed recovery stock can shorten this new
 					// prefix. Ordinary in-flight ownership retains its Busy wait.
 					idxs = idxs[:min(len(idxs), limit)]
-					result, wake = runtime.Window.TryPrepareOwned(reservation, len(idxs), storeResourceID(store), consumer, memberReservationKeys(store, h.ModeName(), idxs))
+					result, wake = runtime.Window.TryPrepareOwned(reservation, len(idxs), storeResourceID(store), consumer, waitingBatch.keys[:len(idxs)])
 				}
 				if result == WindowTooLarge {
 					ticket.Release()
@@ -792,7 +840,8 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					// Ignore the grant/release notification generated by this failed
 					// window probe; actual later preparation changes still wake us.
 					preparationChanged = runtime.Preparation.Changed()
-					waitingBatch = &waitingWindowBatch{indices: append([]int(nil), idxs...), pool: pool, attempt: attempt, wake: wake}
+					waitingBatch.indices = idxs
+					waitingBatch.deferFor(backend.AdmissionWait{Reason: "candidate_window", CapacityChanged: wake}, globalPolicyChanged)
 					windowWake = wake
 					capacityWaits = append(capacityWaits, &WorkDeferred{Wait: backend.AdmissionWait{Reason: "candidate_window", CapacityChanged: wake}})
 					if mainActive+candidateActive+promotionActive == 0 && !pageActive && len(candidates) == 0 && !runtime.Window.CanDrainFor(consumer) {
@@ -807,7 +856,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					}
 					break
 				}
-				waitingBatch = nil
+				waitingBatch.indices = idxs
 				var input *preparedMainDocument
 				snapshotCtx := runtime.BuildContext(runCtx, "build:"+reservation)
 				snapshotErr := runtime.Run(snapshotCtx, func() error {
@@ -821,7 +870,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					runtime.Window.Release(reservation)
 					ticket.Release()
 					if d := workDeferred(snapshotErr); d != nil {
-						waitingBatch = &waitingWindowBatch{indices: idxs, pool: pool, attempt: attempt, wake: d.Wait.CapacityChanged, reason: d.Wait.Reason}
+						waitingBatch.deferFor(d.Wait, globalPolicyChanged)
 						capacityWaits = append(capacityWaits, d)
 						break
 					}
@@ -831,17 +880,22 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				}
 				for _, idx := range idxs {
 					active[idx] = true
+					scheduler.refresh(idx, true, candidates[idx], time.Now())
 				}
+				waitingBatch.captureDispatch(scheduler, g)
+				dispatchedPlan := waitingBatch
+				waitingBatch = nil
 				mainActive++
 				wg.Add(1)
-				go func(idxs []int, pool, attempt int, input *preparedMainDocument, key string, ticket *PreparationTicket) {
+				go func(idxs []int, pool, attempt int, input *preparedMainDocument, key string, ticket *PreparationTicket, plan *deferredMainPlan) {
 					defer wg.Done()
 					e := prepareCapturedMain(withPreparationTicket(withCoordinatorPreparation(runCtx), ticket), round, h, doc, input, idxs, pool, attempt, key, store, runtime, logger, reporter)
+					e.mainPlan = plan
 					if ticket.Active() && e.err == nil {
 						ticket.Release()
 					}
 					events <- e
-				}(idxs, pool, attempt, input, reservation, ticket)
+				}(idxs, pool, attempt, input, reservation, ticket, dispatchedPlan)
 			}
 		}
 		inFlight := stagedInFlight{mainActive, candidateActive, promotionActive, pageActive, responsePageActive}
@@ -849,9 +903,9 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			if firstErr != nil || runCtx.Err() != nil || paused() || yielded {
 				break
 			}
-			if recoveryDone && responseRecoveryDone && waitingBatch != nil && len(candidates) == 0 && !runtime.Window.CanDrainFor(consumer) {
+			if recoveryDone && responseRecoveryDone && waitingBatch != nil && waitingBatch.wait.Reason == "candidate_window" && len(candidates) == 0 && !runtime.Window.CanDrainFor(consumer) {
 				select {
-				case <-waitingBatch.wake:
+				case <-waitingBatch.wait.CapacityChanged:
 				default:
 					yielded = true
 				}
@@ -859,24 +913,12 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					break
 				}
 			}
-			pending := false
-			for idx := range remaining {
-				if candidates[idx] != nil || (doc.Segments[idx].RoundWork.Cursor.Pool < maxPools && doc.Segments[idx].RoundWork.Cursor.State != "unresolved") {
-					pending = true
-					break
-				}
-			}
+			pending := scheduler.tree[1].pending > 0
 			if !pending && recoveryDone {
 				break
 			}
 			if pending && recoveryDone && len(candidates) == 0 {
-				future := false
-				for idx := range remaining {
-					if doc.Segments[idx].RoundWork.Cursor.NextAttemptAt.After(time.Now()) {
-						future = true
-						break
-					}
-				}
+				future := len(scheduler.heap) > 0
 				if !future && len(capacityWaits) == 0 {
 					firstErr = fmt.Errorf("unfinished manifest has no candidate, runnable batch, or retry deadline")
 					break
@@ -893,6 +935,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		var policyChanged <-chan struct{}
 		for _, d := range capacityWaits {
 			w := d.Wait
+			scheduler.observe("wait/"+w.Reason, 0, 1)
 			if policyChanged == nil {
 				policyChanged = w.PolicyChanged
 			}
@@ -900,17 +943,8 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				deadline = w.AvailableAt
 			}
 		}
-		for idx := range remaining {
-			if active[idx] {
-				continue
-			}
-			at := doc.Segments[idx].RoundWork.Cursor.NextAttemptAt
-			if c := candidates[idx]; c != nil {
-				at = c.NextAttemptAt
-			}
-			if at.After(time.Now()) && (deadline.IsZero() || at.Before(deadline)) {
-				deadline = at
-			}
+		if at := scheduler.deadline(); !at.IsZero() && (deadline.IsZero() || at.Before(deadline)) {
+			deadline = at
 		}
 		var timer *time.Timer
 		var timerC <-chan time.Time

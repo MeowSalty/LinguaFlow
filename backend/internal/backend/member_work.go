@@ -10,12 +10,20 @@ import (
 type MemberWorkEvent struct {
 	Phase, Operation string
 	Bytes, Rows      int64
+	DurationNS       int64 // Monotonic elapsed time, only for duration events.
 	FullJob          bool
 }
 type memberWorkKey struct{}
 
 func WithMemberWorkRecorder(ctx context.Context, observe func(MemberWorkEvent)) context.Context {
 	return context.WithValue(ctx, memberWorkKey{}, observe)
+}
+func MemberWorkRecorder(ctx context.Context) func(MemberWorkEvent) {
+	if ctx == nil {
+		return nil
+	}
+	observe, _ := ctx.Value(memberWorkKey{}).(func(MemberWorkEvent))
+	return observe
 }
 func ObserveMemberWork(ctx context.Context, event MemberWorkEvent) {
 	if ctx == nil {

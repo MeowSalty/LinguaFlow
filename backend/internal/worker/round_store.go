@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -30,6 +32,10 @@ type roundStore struct {
 	scope                workstate.Scope
 	indexToID            map[int]int
 	canonical            *pipeline.Document
+	canonicalIndex       []canonicalIndexEntry
+	canonicalIndexKey    canonicalIndexKey
+	canonicalIndexBounds *backend.BuildBounds
+	canonicalIndexTrace  *backend.OwnedTrace
 	snapshot             *service.JobExecutionSnapshot
 	round                int
 	digest               string
@@ -38,6 +44,8 @@ type roundStore struct {
 	driver               string
 	memory               tm.TranslationMemory
 	onCommit             func()
+	workObserver         func(backend.MemberWorkEvent)
+	workObserverMu       sync.Mutex
 }
 
 func newRoundStore(client *ent.Client, scope workstate.Scope, indices map[int]int, snapshot *service.JobExecutionSnapshot, round int, qaEngine *qa.Engine, autoReject bool, driver string, memory tm.TranslationMemory, onCommit func()) *roundStore {
@@ -57,6 +65,27 @@ func (s *roundStore) WorkIdentity(index int) string {
 		return ""
 	}
 	return workstate.WorkIdentity(s.scope, id)
+}
+
+func (s *roundStore) WorkIdentityLength(index int) int {
+	var digits [24]byte
+	id, ok := s.segmentID(index)
+	if !ok {
+		return 0
+	}
+	return len("job:") + len(strconv.AppendInt(digits[:0], int64(s.scope.JobID), 10)) + len("/round:") + len(strconv.AppendInt(digits[:0], int64(s.scope.RoundID), 10)) + len("/segment:") + len(strconv.AppendInt(digits[:0], int64(id), 10))
+}
+func (s *roundStore) AppendWorkIdentity(dst []byte, index int) []byte {
+	id, ok := s.segmentID(index)
+	if !ok {
+		return dst
+	}
+	dst = append(dst, "job:"...)
+	dst = strconv.AppendInt(dst, int64(s.scope.JobID), 10)
+	dst = append(dst, "/round:"...)
+	dst = strconv.AppendInt(dst, int64(s.scope.RoundID), 10)
+	dst = append(dst, "/segment:"...)
+	return strconv.AppendInt(dst, int64(id), 10)
 }
 
 type permanentStoreError struct{ error }

@@ -112,7 +112,39 @@ func TestAllocationEPUBWorkerEndToEnd(t *testing.T) {
 			var batchMembers []int
 			var rootSamples []int64
 			var samplesMu sync.Mutex
+			var workMu sync.Mutex
 			var peakRoot int64
+			workCounts := map[string][3]int64{}
+			var responseCount, responseInFlight, responseMaxNS int64
+			ctx = backend.WithMemberWorkRecorder(ctx, func(event backend.MemberWorkEvent) {
+				workMu.Lock()
+				defer workMu.Unlock()
+				key := event.Phase + "/" + event.Operation
+				v := workCounts[key]
+				v[0]++
+				v[1] += event.Rows
+				v[2] += event.Bytes
+				workCounts[key] = v
+				if event.Phase == "response_budget" {
+					if event.Operation == "start" {
+						responseInFlight++
+					} else if event.Operation == "end" {
+						responseCount++
+						responseInFlight--
+						responseMaxNS = max(responseMaxNS, event.DurationNS)
+					}
+				}
+			})
+			logWork := func() {
+				workMu.Lock()
+				count, inflight, maxNS := responseCount, responseInFlight, responseMaxNS
+				values := make(map[string][3]int64, len(workCounts))
+				for key, value := range workCounts {
+					values[key] = value
+				}
+				workMu.Unlock()
+				t.Logf("response_count=%d response_inflight=%d response_max_ns=%d work[event,row,byte]=%v", count, inflight, maxNS, values)
+			}
 			f.respond = func(_ context.Context, request rubyPipelineRequest) (any, error) {
 				members := 0
 				for _, seg := range request.Segments {
@@ -141,6 +173,7 @@ func TestAllocationEPUBWorkerEndToEnd(t *testing.T) {
 				samplesMu.Lock()
 				t.Logf("failure progress confirmed=%d/%d fact_error=%v HTTP_members=%v root_samples=%v", confirmed, tc.segments, factErr, batchMembers, rootSamples)
 				samplesMu.Unlock()
+				logWork()
 				t.Fatal(err)
 			}
 			samplesMu.Lock()
@@ -150,6 +183,15 @@ func TestAllocationEPUBWorkerEndToEnd(t *testing.T) {
 				t.Fatalf("job status=%s error=%v", job.Status, job.ErrorMessage)
 			}
 			calls := (tc.segments + tc.batch - 1) / tc.batch
+			// The origin is the original provider-return instant that starts the
+			// native 120s handoff budget, before sent join/capture/save. End is the
+			// successful final release of that actual live response owner.
+			workMu.Lock()
+			measuredCount, measuredInFlight, measuredMaxNS := responseCount, responseInFlight, responseMaxNS
+			workMu.Unlock()
+			if measuredCount != int64(calls) || measuredInFlight != 0 || measuredMaxNS <= 0 || measuredMaxNS > int64(90*time.Second) {
+				t.Fatalf("response window count=%d/%d inflight=%d max_ns=%d exceeds original120s margin", measuredCount, calls, measuredInFlight, measuredMaxNS)
+			}
 			if len(batchMembers) != calls {
 				t.Fatalf("HTTP batches=%v want calls=%d", batchMembers, calls)
 			}
@@ -198,7 +240,7 @@ func TestAllocationEPUBWorkerEndToEnd(t *testing.T) {
 			if admission == nil {
 				t.Fatal("real HTTP has no admission observer")
 			}
-			if err := verifyHandoffOwnedTerminal(admission.OwnedPayloadSnapshot(), "freeze", "raw", "wire", "candidate"); err != nil {
+			if err := verifyHandoffOwnedTerminal(admission.OwnedPayloadSnapshot(), "freeze", "raw", "wire", "candidate", "scheduler", "main_plan"); err != nil {
 				t.Fatal(err)
 			}
 
@@ -244,6 +286,7 @@ func TestAllocationEPUBWorkerEndToEnd(t *testing.T) {
 				}
 			}
 			t.Logf("real EPUB parser/SQLite/worker/HTTP/freeze/promotion/commit/output: segments=%d words=%d S=256 batches=%v peak_root_at_HTTP=%d joined_execution_roots=0 durable_audit_bytes=%d owned_backing_peak=%d", tc.segments, tc.segments*tc.words, batchMembers, peakRoot, storage, admission.OwnedPayloadSnapshot().TotalPeak)
+			logWork()
 		})
 	}
 }

@@ -85,6 +85,8 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 	if !ok {
 		return RunRoundResult{}, fmt.Errorf("stored round has no canonical membership contract")
 	}
+	ctx, closeCanonicalIndex := withCanonicalIndexLifetime(ctx)
+	defer closeCanonicalIndex()
 	sealed, total, err := canonical.LoadCanonical(ctx, doc)
 	if err != nil {
 		return RunRoundResult{}, &StorageError{Err: err}
