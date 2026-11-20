@@ -4,11 +4,18 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { epubLeaves, epubTop, modulePath, requiredTests, workerPackage } from './ci-test-contract.mjs';
-import { mergeAtomicProfiles, parseInventory, parseJSONObjects, planShards, resolveTaskBinary, runCI, runProcess, validateRound, validateShard } from './ci-test.mjs';
+import { loadCPUReserve, mergeAtomicProfiles, parseInventory, parseJSONObjects, planShards, resolvePackageParallelism, resolveTaskBinary, runCI as nativeRunCI, runProcess, validateRound, validateShard } from './ci-test.mjs';
 import { terminateOwnedProcess } from './process-cleanup.mjs';
 
 const pipelinePackage = `${modulePath}/internal/pipeline`;
 const emptyPackage = `${modulePath}/internal/empty`;
+// Contract fixtures never launch Go: deterministic resources keep the existing
+// smoke matrix independent of the desktop's shared memory and affinity.
+function runCI(options) {
+  const monitor = { sample: async groups => ({ atMs: Date.now(), availableBytes: 100 * 1024 ** 3, totalBytes: 128 * 1024 ** 3, cpuQuota: 4, allowedIds: [0, 1, 2, 3], cpuLoadKnown: true, sharedBusyCores: 0, busyCores: 0, owned: groups.map(group => ({ id: group.id, rssBytes: 64 * 1024 ** 2, cpuCores: .1, complete: true })), shared: [] }) };
+  const resourceOptions = { monitor, bind: async () => ({ ids: [0, 1, 2, 3], cores: 4, method: 'fixture', restore: async () => {} }), policy: { cpuReserve: 0, stableMs: 0 }, ...options.resourceOptions };
+  return nativeRunCI({ ...options, resourceOptions });
+}
 const id = (pkg, name) => `${pkg}::${name}`;
 const jsonLines = events => events.map(event => JSON.stringify(event)).join('\n') + '\n';
 const event = (pkg, action, name, extra = {}) => ({ Package: pkg, Action: action, ...(name ? { Test: name } : {}), ...extra });
@@ -42,7 +49,7 @@ function inventory() {
     [workerPackage, { name: workerPackage, tops: [epubTop, 'TestWorker'], noTestFiles: false }],
   ]);
 }
-function fakeTask({ failShard, wrongProfile, elapsed = 2 } = {}) {
+function fakeTask({ failShard, failureExitCode = 1, wrongProfile, elapsed = 2 } = {}) {
   const calls = [];
   const execute = async (_binary, args, options) => {
     calls.push(args);
@@ -60,7 +67,7 @@ function fakeTask({ failShard, wrongProfile, elapsed = 2 } = {}) {
       const names = shard === 'worker-remainder' ? ['TestWorker'] : shard === 'dense' ? [epubLeaves[0]] : [epubLeaves[1]];
       const pkg = shard === 'packages' ? pipelinePackage : workerPackage;
       stdout = jsonLines(shard === 'packages' ? [...eventsFor(pkg, ['TestPipeline'], { fail: failShard === shard }), event(emptyPackage, 'start'), event(emptyPackage, 'skip')] : eventsFor(pkg, names, { fail: failShard === shard, elapsed: typeof elapsed === 'object' ? elapsed[shard] ?? 2 : elapsed }));
-      code = failShard === shard ? 1 : 0;
+      code = failShard === shard ? failureExitCode : 0;
       const profile = cli.match(/-coverprofile="([^"]+)"/);
       if (profile) {
         const file = shard === 'packages' ? 'pipeline.go' : 'worker.go';
@@ -108,6 +115,24 @@ test('inventory rejects malformed, missing and repeated package results', () => 
   assert.deepEqual(parseInventory(listed, records).get(pipelinePackage).tops, ['TestPipeline']);
   assert.throws(() => parseInventory('', records), /Missing inventory package/);
   assert.throws(() => parseInventory(listed + jsonLines([event(pipelinePackage, 'pass')]), records), /Repeated/);
+});
+
+test('workspace local CPU reserve reaches runner policy without changing environment or other roots', async t => {
+  const root = temporary(t);
+  fs.mkdirSync(path.join(root, 'backend'));
+  const original = process.env.LINGUAFLOW_CI_CPU_RESERVE;
+  assert.equal(loadCPUReserve(root).source, 'host-default');
+  fs.writeFileSync(path.join(root, 'backend/.ci-resources.local.json'), '{"cpuReserve":0}');
+  assert.equal(loadCPUReserve(root).value, '0');
+  assert.equal(loadCPUReserve(root, { LINGUAFLOW_CI_CPU_RESERVE: '2' }).value, '2');
+  const fake = fakeTask();
+  const summary = await runCI({ root, mode: 'plain', outputDir: 'local-policy', execute: (binary, args, options) => { assert.equal(options.env.LINGUAFLOW_CI_CPU_RESERVE, '0'); return fake.execute(binary, args, options); }, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {}, resourceOptions: { policy: { stableMs: 0 } } });
+  assert.equal(summary.resources.policy.cpuReserve, 0);
+  assert.equal(summary.resources.policy.cpuReserveSource, 'workspace-local-file');
+  assert.equal(process.env.LINGUAFLOW_CI_CPU_RESERVE, original);
+  fs.writeFileSync(path.join(root, 'backend/.ci-resources.local.json'), '{"cpuReserve":-1}');
+  assert.throws(() => loadCPUReserve(root), /nonnegative/);
+  assert.equal(loadCPUReserve(root, { LINGUAFLOW_CI_CPU_RESERVE: '2' }).source, 'environment');
 });
 
 test('native child stdout JSON remains replayable when stderr interrupts a JSON record', async t => {
@@ -237,13 +262,21 @@ test('named PostgreSQL and deployment skips require disabled environments and th
 
 test('split plan preserves precise original selectors and rejects cross-shard terminal duplication', () => {
   const inv = inventory();
-  const plan = planShards('race-atomic', inv);
+  const plan = planShards('race-atomic', inv, resolvePackageParallelism('auto', () => 4));
   assert.equal(plan.length, 4);
-  assert.deepEqual(plan.map(shard => shard.effectiveP), [1, 1, 1, 1]);
+  assert.deepEqual(plan.map(shard => shard.effectiveP), [8, 1, 1, 1]);
+  assert.deepEqual(planShards('race-atomic', inv, 1).map(shard => shard.effectiveP), [1, 1, 1, 1]);
   assert.deepEqual(planShards('race-atomic', inv, 2).map(shard => shard.effectiveP), [2, 1, 1, 1]);
   assert.equal(planShards('race-atomic', inv, 2, 2).length, 6);
   assert.equal(planShards('plain', inv, 2, 3).length, 4);
-  for (const invalid of [0, 3, 2.5, '2']) assert.throws(() => planShards('plain', inv, invalid), /PACKAGE_PARALLELISM/);
+  assert.deepEqual(planShards('race-atomic', inv, 12).map(shard => shard.effectiveP), [12, 1, 1, 1]);
+  for (const [cpus, expected] of [[1, 2], [4, 8], [6, 12]]) assert.equal(resolvePackageParallelism('auto', () => cpus), expected);
+  assert.equal(resolvePackageParallelism('auto', () => 4, 1.5), 6);
+  assert.equal(resolvePackageParallelism('auto', () => 3, 1.5), 5);
+  assert.equal(resolvePackageParallelism(12, () => { throw new Error('Explicit value must bypass CPU detection'); }, 0), 12);
+  for (const factor of [0, -1, NaN, Infinity, '1.5']) assert.throws(() => resolvePackageParallelism('auto', () => 4, factor), /PACKAGE_PARALLELISM_FACTOR/);
+  for (const cpus of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER]) assert.throws(() => resolvePackageParallelism('auto', () => cpus), /CPU|PACKAGE_PARALLELISM/);
+  for (const invalid of [0, -1, 2.5, '2', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => planShards('plain', inv, invalid), /PACKAGE_PARALLELISM/);
   assert.deepEqual(plan[1].extra, ['-skip', `^${epubTop}$`]);
   assert.equal(plan[2].extra[1], `^${epubTop}$/^dense_256_seven_keys_512_words$`);
   assert.equal(plan[2].timeout, '15m');
@@ -298,15 +331,17 @@ test('fake Task smoke produces a complete atomic round and keeps repeat profiles
   const root = temporary(t);
   fs.mkdirSync(path.join(root, 'backend'));
   const fake = fakeTask();
-  const summary = await runCI({ root, mode: 'race-atomic', outputDir: 'evidence', packageParallelism: 2, execute: fake.execute, identity: async () => ({ head: 'fixture-sha', sourceSha256: 'fixture-hash' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves, [pipelinePackage]: ['TestPipeline'] }, rules: [], env: { GOFLAGS: '-tags=fixture -p=4', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
+  const summary = await runCI({ root, mode: 'race-atomic', outputDir: 'evidence', packageParallelism: 12, packageParallelismFactor: 0, availableParallelism: () => { throw new Error('Explicit value must bypass CPU detection'); }, execute: fake.execute, identity: async () => ({ head: 'fixture-sha', sourceSha256: 'fixture-hash' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves, [pipelinePackage]: ['TestPipeline'] }, rules: [], env: { GOFLAGS: '-tags=fixture -p=4', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
   assert.equal(summary.status, 'passed', JSON.stringify(summary.issues));
   assert.equal(summary.shards.length, 6);
   assert.equal(summary.coverage.profiles.length, 4);
-  assert.equal(summary.manifest.bulkPackageParallelism, 2);
+  assert.equal(summary.manifest.bulkPackageParallelism, 12);
+  assert.equal(summary.manifest.bulkPackageParallelismFactor, null);
+  assert.equal(summary.environment.availableCPUCount, null);
   assert.equal(summary.environment.GOFLAGS, '-tags=fixture -p=4 -p=1');
-  assert.deepEqual(summary.manifest.plan.map(shard => shard.effectiveP), [2, 1, 1, 1, 1, 1]);
-  assert.ok(fake.calls.find(args => args[0] === 'backend:test:ci:inventory')[1].includes('-p=2'));
-  assert.ok(fake.calls.find(args => args[1]?.includes('-list'))[1].includes('-p=2'));
+  assert.deepEqual(summary.manifest.plan.map(shard => shard.effectiveP), [12, 1, 1, 1, 1, 1]);
+  assert.ok(fake.calls.find(args => args[0] === 'backend:test:ci:inventory')[1].includes('-p=12'));
+  assert.ok(fake.calls.find(args => args[1]?.includes('-list'))[1].includes('-p=12'));
   for (const shard of summary.shards) assert.ok(shard.cliArgs.includes(`-p=${shard.effectiveP}`), shard.id);
   assert.deepEqual(summary.finalIdentity, summary.identity);
   assert.deepEqual(summary.lastObservedIdentity, summary.identity);
@@ -329,10 +364,12 @@ test('fake Task smoke produces a complete atomic round and keeps repeat profiles
 test('failed first round preserves raw evidence and summary, skips repeats and never creates merged coverage', async t => {
   const root = temporary(t);
   fs.mkdirSync(path.join(root, 'backend'));
-  const fake = fakeTask({ failShard: 'packages' });
-  const summary = await runCI({ root, mode: 'race-atomic', outputDir: 'failed', execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
+  const fake = fakeTask({ failShard: 'packages', failureExitCode: 137 });
+  const summary = await runCI({ root, mode: 'race-atomic', outputDir: 'failed', execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
   assert.equal(summary.status, 'failed');
+  assert.equal(summary.resources.policy.scope, 'github-hosted-job');
   assert.equal(summary.shards.length, 4);
+  assert.equal(summary.shards[0].exitCode, 137, 'OOM-style failure must not become a passing run');
   assert.ok(fs.existsSync(path.join(root, 'backend/failed/round-1/race-atomic/packages/test-results.out')));
   assert.ok(fs.existsSync(path.join(root, 'backend/failed/round-1/race-atomic/packages/test-events.jsonl')));
   assert.ok(fs.existsSync(path.join(root, 'backend/failed/manifest.json')));
@@ -348,20 +385,27 @@ test('invalid package parallelism never starts Task or Go discovery', async t =>
   const root = temporary(t);
   fs.mkdirSync(path.join(root, 'backend'));
   const fake = fakeTask();
-  const summary = await runCI({ root, mode: 'plain', outputDir: 'invalid-parallelism', packageParallelism: 3, execute: fake.execute, taskBinary: process.execPath, env: {} });
+  const summary = await runCI({ root, mode: 'plain', outputDir: 'invalid-parallelism', packageParallelism: 0, execute: fake.execute, taskBinary: process.execPath, env: {} });
   assert.equal(summary.status, 'failed');
-  assert.ok(summary.issues.some(issue => issue.includes('PACKAGE_PARALLELISM must be 1 or 2')));
+  assert.ok(summary.issues.some(issue => issue.includes('PACKAGE_PARALLELISM must be auto or a positive safe integer')));
   assert.equal(fake.calls.length, 0);
 });
 
-test('default CI runs every first-round shard once and only atomic synthetic gets 540s', async t => {
-  for (const mode of ['race', 'race-atomic', 'plain']) {
+test('automatic CI concurrency records CPU and factor while preserving first-round policy', async t => {
+  for (const [mode, factor, expectedP] of [['race', undefined, 8], ['race-atomic', undefined, 8], ['plain', 1.5, 6]]) {
     const root = temporary(t);
     fs.mkdirSync(path.join(root, 'backend'));
     const fake = fakeTask({ elapsed: { synthetic: 516.86 } });
-    const summary = await runCI({ root, mode, outputDir: mode, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {} });
+    const summary = await runCI({ root, mode, outputDir: mode, packageParallelismFactor: factor, availableParallelism: () => 4, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {} });
     assert.equal(summary.shards.length, 4);
     assert.equal(summary.manifest.performanceRounds, 1);
+    assert.equal(summary.manifest.bulkPackageParallelism, expectedP);
+    assert.equal(summary.manifest.bulkPackageParallelismFactor, factor ?? 2);
+    assert.equal(summary.manifest.bulkPackageParallelismRequested, 'auto');
+    assert.equal(summary.environment.availableCPUCount, 4);
+    assert.ok(fake.calls.find(args => args[0] === 'backend:test:ci:inventory')[1].includes(`-p=${expectedP}`));
+    assert.ok(fake.calls.find(args => args[1]?.includes('-list'))[1].includes(`-p=${expectedP}`));
+    assert.deepEqual(summary.shards.map(shard => shard.effectiveP), [expectedP, 1, 1, 1]);
     assert.equal(summary.status, mode === 'race' ? 'failed' : 'passed');
     assert.equal(fake.calls.filter(args => ['backend:test:race', 'backend:test'].includes(args[0]) && !args[1]?.includes('-list')).length, 4);
   }
