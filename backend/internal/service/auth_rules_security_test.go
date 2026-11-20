@@ -108,7 +108,13 @@ func TestAuthRulesSaveAndFallbackRemovalRace(t *testing.T) {
 				s, c, ctx := f.services[0], f.clients[0], context.Background()
 				now := f.services[0].now()
 				rec := b4RulesFixture(t, f, true)
-				owner := createPasswordTestUser(t, c, "race-rule-owner", "password-123")
+				var owner *ent.User
+				if method == "binding" {
+					// Disabling enrollment does not remove an existing password fallback.
+					owner = c.User.Create().SetUsername("race-rule-owner").SaveX(ctx)
+				} else {
+					owner = createPasswordTestUser(t, c, "race-rule-owner", "password-123")
+				}
 				ruleBindingFixture(t, c, owner, rec.ID, now, c.AuthConnection.GetX(ctx, rec.ID).AuthGeneration)
 				action, target := "password_delete", PasswordConnectionID
 				var fallbackBinding *ent.LoginBinding
