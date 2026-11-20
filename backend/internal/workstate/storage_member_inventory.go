@@ -36,14 +36,13 @@ func storageTableFields(table string) []string {
 		return []string{"freeze_payload", "response_payload", "corrected_targets", "corrected_target_index", "glossary_receipt", "promotion_members", "promotion_status", "members", "debits", "segment_ids", "capture_payload", "response_glossary"}
 	}
 }
-func (s InventorySource) storageRowBytes(ctx context.Context, client *ent.Client, key storageRowKey) (int64, error) {
-	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "settle", Operation: "row_length", Rows: 1})
+func (s InventorySource) storageRowLengths(ctx context.Context, key storageRowKey) (string, error) {
 	fields := storageTableFields(key.table)
 	if key.table == "work_requests" {
 		var err error
 		fields, err = s.requestStorageFields(ctx)
 		if err != nil {
-			return 0, err
+			return "", err
 		}
 	}
 	var lengths []string
@@ -65,7 +64,15 @@ func (s InventorySource) storageRowBytes(ctx context.Context, client *ent.Client
 	if key.table == "work_requests" {
 		lengths = append(lengths, "CASE WHEN response_format_version=2 THEN request_metadata_bytes ELSE 0 END")
 	}
-	rows, err := client.QueryContext(ctx, s.bind("SELECT "+strings.Join(lengths, "+")+" FROM "+key.table+" WHERE id=?"), key.id)
+	return strings.Join(lengths, "+"), nil
+}
+func (s InventorySource) storageRowBytes(ctx context.Context, client *ent.Client, key storageRowKey) (int64, error) {
+	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "settle", Operation: "row_length", Rows: 1})
+	lengths, err := s.storageRowLengths(ctx, key)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := client.QueryContext(ctx, s.bind("SELECT "+lengths+" FROM "+key.table+" WHERE id=?"), key.id)
 	if err != nil {
 		return 0, err
 	}
@@ -107,12 +114,47 @@ func mutationRowID(m ent.Mutation, value ent.Value) (int, bool) {
 	}
 	return 0, false
 }
-func (b *StorageBudget) recordStorageBefore(ctx context.Context, client *ent.Client, m ent.Mutation) (storageRowKey, error) {
+
+// A first touched-row read may establish the current mutation's request
+// identity together with its physical byte baseline. No identity survives
+// this hook call: later mutations, even on the same row, take the old path.
+func storageBeforeIdentity(m ent.Mutation, requestID string) string {
+	if requestID == "" || m.Op() != ent.OpUpdateOne || len(m.ClearedFields()) != 0 || len(m.AddedEdges()) != 0 || len(m.RemovedEdges()) != 0 || len(m.ClearedEdges()) != 0 {
+		return ""
+	}
+	transactional, ok := m.(interface{ Tx() (*ent.Tx, error) })
+	if !ok {
+		return ""
+	}
+	if _, err := transactional.Tx(); err != nil {
+		return ""
+	}
+	// Keep this a conservative scalar allowlist. New schema fields, identity
+	// evidence and physical charge changes must retain the existing query.
+	for _, field := range append(m.Fields(), m.AddedFields()...) {
+		switch field {
+		case "updated_at", "state", "promotion_cursor", "promotion_state", "archive_cursor", "remaining_members", "input_member_bytes", "output_member_bytes", "model_output_bytes", "correction_bytes", "member_storage_bytes", "public_bytes", "payload_bytes", "corrected_bytes", "outcome_kind", "outcome_limit", "outcome_observed":
+		default:
+			return ""
+		}
+	}
+	switch mutationStorageTable(m) {
+	case "work_requests":
+		return "identity"
+	case "work_candidates":
+		return "parent_request_id"
+	case "work_request_input_members", "work_response_members":
+		return "(SELECT identity FROM work_requests WHERE id=request_id)"
+	}
+	return ""
+}
+
+func (b *StorageBudget) recordStorageBefore(ctx context.Context, client *ent.Client, m ent.Mutation, requestID string) (storageRowKey, bool, error) {
 	table := mutationStorageTable(m)
 	id, ok := mutationRowID(m, nil)
 	key := storageRowKey{table: table, id: id}
 	if m.Op().Is(ent.OpCreate) {
-		return key, nil
+		return key, false, nil
 	}
 	if !ok {
 		if many, yes := m.(interface {
@@ -120,7 +162,7 @@ func (b *StorageBudget) recordStorageBefore(ctx context.Context, client *ent.Cli
 		}); yes {
 			ids, err := many.IDs(ctx)
 			if err != nil {
-				return key, err
+				return key, false, err
 			}
 			for _, n := range ids {
 				k := storageRowKey{table: table, id: n}
@@ -129,21 +171,43 @@ func (b *StorageBudget) recordStorageBefore(ctx context.Context, client *ent.Cli
 				}
 				size, err := b.Source.storageRowBytes(ctx, client, k)
 				if err != nil {
-					return key, err
+					return key, false, err
 				}
 				b.changes[k] = storageRowChange{before: size}
 			}
 		}
-		return key, nil
+		return key, false, nil
 	}
 	if _, exists := b.changes[key]; exists {
-		return key, nil
+		return key, false, nil
+	}
+	if identity := storageBeforeIdentity(m, requestID); identity != "" {
+		lengths, err := b.Source.storageRowLengths(ctx, key)
+		if err != nil {
+			return key, false, err
+		}
+		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "settle", Operation: "row_length", Rows: 1})
+		rows, err := client.QueryContext(ctx, b.Source.bind("SELECT "+lengths+","+identity+" FROM "+table+" WHERE id=?"), id)
+		if err != nil {
+			return key, false, err
+		}
+		var n int64
+		var stableID string
+		err = (inventoryRow{rows: rows}).Scan(&n, &stableID)
+		found := err == nil
+		if errors.Is(err, sql.ErrNoRows) {
+			err = nil
+		}
+		if err == nil {
+			b.changes[key] = storageRowChange{before: n}
+		}
+		return key, found && stableID == requestID, err
 	}
 	n, err := b.Source.storageRowBytes(ctx, client, key)
 	if err == nil {
 		b.changes[key] = storageRowChange{before: n}
 	}
-	return key, err
+	return key, false, err
 }
 func (b *StorageBudget) actualChangedStorage(ctx context.Context) (int64, error) {
 	var delta int64
