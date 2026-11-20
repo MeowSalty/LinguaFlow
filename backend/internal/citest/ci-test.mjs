@@ -7,10 +7,12 @@ import { fileURLToPath } from 'node:url';
 import { epubLeaves, epubTop, requiredTests, skipRules, workerPackage } from './ci-test-contract.mjs';
 import { terminateOwnedProcess } from './process-cleanup.mjs';
 import { performancePolicy, performanceRounds, sceneFailure, sceneSeconds } from './performance-policy.mjs';
+import { ResourceScheduler } from './resource-scheduler.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = path.resolve(path.dirname(scriptPath), '../../..');
 const signedCountMax = (1n << 63n) - 1n;
+const defaultPackageParallelism = 'auto';
 const key = (pkg, test) => `${pkg}::${test}`;
 const sorted = values => [...values].sort();
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -54,7 +56,7 @@ export function resolveTaskBinary(env = process.env, platform = process.platform
   throw new Error('Native Task executable unavailable; set TASK_BINARY to the installed executable (no automatic download)');
 }
 
-export async function runProcess(binary, args, { cwd, env, outputFile, signal } = {}) {
+export async function runProcess(binary, args, { cwd, env, outputFile, signal, onSpawn } = {}) {
   const output = outputFile ? fs.createWriteStream(outputFile, { flags: 'wx' }) : null;
   const splitJSON = outputFile && path.basename(outputFile) === 'test-results.out';
   const stdoutOutput = splitJSON ? fs.createWriteStream(path.join(path.dirname(outputFile), 'test-events.jsonl'), { flags: 'wx' }) : null;
@@ -71,6 +73,7 @@ export async function runProcess(binary, args, { cwd, env, outputFile, signal } 
     let requestedSignal;
     const startedAt = Date.now();
     const child = spawn(binary, args, { cwd, env, shell: false, windowsHide: true, detached: process.platform !== 'win32' });
+    child.once('spawn', () => { try { onSpawn?.({ pid: child.pid, startedAt }); } catch (error) { ioError = error; onSignal('ABORT'); } });
     child.stdin.end();
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -342,9 +345,30 @@ export function mergeAtomicProfiles(profiles, outputFile) {
   return { profiles: profiles.map(profile => profile.id), blocks: sums.size, sha256: sha256(fs.readFileSync(outputFile)) };
 }
 
-export function planShards(mode, inventory, packageParallelism = 1, rounds = performancePolicy.defaultRounds) {
+export function resolvePackageParallelism(value = defaultPackageParallelism, availableParallelism = os.availableParallelism, factor = 2) {
+  if (value === 'auto') {
+    if (!Number.isFinite(factor) || factor <= 0) throw new Error('PACKAGE_PARALLELISM_FACTOR must be a positive finite number');
+    const cpus = availableParallelism();
+    if (!Number.isSafeInteger(cpus) || cpus < 1) throw new Error('Available CPU count must be a positive safe integer');
+    value = Math.ceil(cpus * factor);
+  }
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error('PACKAGE_PARALLELISM must be auto or a positive safe integer');
+  return value;
+}
+
+export function loadCPUReserve(root, env = {}) {
+  const explicit = env.LINGUAFLOW_CI_CPU_RESERVE;
+  if (explicit != null && explicit !== '') return { value: explicit, source: 'environment' };
+  const file = path.join(root, 'backend/.ci-resources.local.json');
+  if (!fs.existsSync(file)) return { source: 'host-default' };
+  const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!config || !Number.isFinite(config.cpuReserve) || config.cpuReserve < 0) throw new Error('Local CI cpuReserve must be a nonnegative number');
+  return { value: String(config.cpuReserve), source: 'workspace-local-file', file };
+}
+
+export function planShards(mode, inventory, packageParallelism = defaultPackageParallelism, rounds = performancePolicy.defaultRounds) {
   if (!['plain', 'race', 'race-atomic'].includes(mode)) throw new Error(`Unsupported CI mode: ${mode}`);
-  if (![1, 2].includes(packageParallelism)) throw new Error('PACKAGE_PARALLELISM must be 1 or 2');
+  packageParallelism = resolvePackageParallelism(packageParallelism);
   const worker = inventory.get(workerPackage);
   if (!worker?.tops.includes(epubTop)) throw new Error('Worker EPUB test missing from inventory');
   const others = [...inventory.keys()].filter(name => name !== workerPackage);
@@ -378,7 +402,7 @@ export async function sourceIdentity(root, outputDir, execute = runProcess) {
   return { head, sourceSha256: hash.digest('hex') };
 }
 
-export async function runCI({ mode, outputDir, packageParallelism = 1, root = defaultRoot, env = process.env, execute = runProcess, identity = sourceIdentity, contract = requiredTests, rules = skipRules, taskBinary } = {}) {
+export async function runCI({ mode, outputDir, packageParallelism = defaultPackageParallelism, packageParallelismFactor = 2, availableParallelism = os.availableParallelism, root = defaultRoot, env = process.env, execute = runProcess, identity = sourceIdentity, contract = requiredTests, rules = skipRules, taskBinary, resourceOptions = {} } = {}) {
   const backend = path.join(root, 'backend');
   outputDir = path.resolve(backend, outputDir ?? `.ci-test/${Date.now()}-${mode}`);
   if (outputDir === backend || !outputDir.startsWith(`${backend}${path.sep}`)) throw new Error('OUTPUT_DIR must be a new directory inside backend');
@@ -390,21 +414,34 @@ export async function runCI({ mode, outputDir, packageParallelism = 1, root = de
   writeJSON(summaryPath, summary);
   const requestedProcs = Number(env.GOMAXPROCS);
   const suppliedGoFlags = (env.GOFLAGS ?? '').trim();
+  // Explicit -p on inventory/shard commands overrides GOFLAGS. Keep this
+  // fallback at 1 for nested Go commands launched by test fixtures.
   const childGoFlags = /(?:^|\s)-p=1$/.test(suppliedGoFlags) ? suppliedGoFlags : `${suppliedGoFlags} -p=1`.trim();
   const runtimeEnv = { ...env, GOFLAGS: childGoFlags, GOTOOLCHAIN: 'local', GOMAXPROCS: String(Number.isInteger(requestedProcs) && requestedProcs > 0 ? Math.min(requestedProcs, 4) : 4) };
   if (mode !== 'plain') runtimeEnv.CGO_ENABLED = '1';
   let frozen;
+  let scheduler;
   let cancelled = false;
-  const cancel = () => { cancelled = true; };
+  const cancellation = new AbortController();
+  const cancel = () => { cancelled = true; cancellation.abort(); };
   process.once('SIGTERM', cancel);
   process.once('SIGINT', cancel);
-  const task = async (name, cliArgs, outputFile) => execute(taskBinary, [name, ...(cliArgs ? [`CLI_ARGS=${cliArgs}`] : [])], { cwd: root, env: runtimeEnv, outputFile });
+  const task = async (name, cliArgs, outputFile, budget = {}) => execute(taskBinary, [name, ...(cliArgs ? [`CLI_ARGS=${cliArgs}`] : [])], { cwd: root, env: { ...runtimeEnv, ...(budget.gomaxprocs ? { GOMAXPROCS: String(budget.gomaxprocs) } : {}), ...(budget.persistenceReport ? { LINGUAFLOW_PERSISTENCE_REPORT: budget.persistenceReport } : {}) }, outputFile, signal: budget.signal ?? cancellation.signal, onSpawn: budget.onSpawn });
   try {
     if (!['plain', 'race', 'race-atomic'].includes(mode)) throw new Error(`Unsupported CI mode: ${mode}`);
-    if (![1, 2].includes(packageParallelism)) throw new Error('PACKAGE_PARALLELISM must be 1 or 2');
+    const requestedPackageParallelism = packageParallelism;
+    const availableCPUCount = packageParallelism === 'auto' ? availableParallelism() : null;
+    packageParallelism = resolvePackageParallelism(packageParallelism, () => availableCPUCount, packageParallelismFactor);
     const requestedRounds = performanceRounds(runtimeEnv.LINGUAFLOW_CI_PERFORMANCE_ROUNDS);
     const rounds = mode === 'plain' ? 1 : requestedRounds;
     taskBinary ??= resolveTaskBinary(runtimeEnv);
+    const localCPU = loadCPUReserve(root, runtimeEnv);
+    if (localCPU.value != null) runtimeEnv.LINGUAFLOW_CI_CPU_RESERVE = localCPU.value;
+    const resourcesFile = path.join(outputDir, 'resources.jsonl');
+    scheduler = new ResourceScheduler({ env: runtimeEnv, signal: cancellation.signal, emit: event => fs.appendFileSync(resourcesFile, `${JSON.stringify(event)}\n`), ...resourceOptions });
+    scheduler.policy.cpuReserveSource = localCPU.source;
+    await scheduler.initialize();
+    summary.resources = { policy: scheduler.policy, cpuPool: scheduler.pool, samples: resourcesFile, requestedPackageParallelism: packageParallelism };
     const taskVersion = await execute(taskBinary, ['--version'], { cwd: root, env: runtimeEnv, outputFile: path.join(outputDir, 'task-version.out') });
     if (taskVersion.code) throw new Error('Native Task version query failed');
     frozen = await identity(root, outputDir, execute);
@@ -414,18 +451,23 @@ export async function runCI({ mode, outputDir, packageParallelism = 1, root = de
     const environment = await task('backend:test:ci:environment', '', path.join(outputDir, 'environment.out'));
     if (environment.code) throw new Error('Go environment discovery failed');
     summary.environment = { ...JSON.parse(environment.stdout), node: process.version, nodeBinary: process.execPath, actualHostOS: process.platform, actualHostArch: process.arch, hostRelease: os.release(), taskBinary, taskVersion: taskVersion.stdout.trim(), cpuCount: os.cpus().length, cpuModel: os.cpus()[0]?.model, totalMemoryBytes: os.totalmem(), gomaxprocs: runtimeEnv.GOMAXPROCS, runnerImage: runtimeEnv.ImageOS ?? null, runnerImageVersion: runtimeEnv.ImageVersion ?? null, postgresConfigured: Boolean(runtimeEnv.LINGUAFLOW_TEST_POSTGRES_DSN) };
+    summary.environment.availableCPUCount = availableCPUCount;
     summary.environment.storageAcceptanceEnabled = runtimeEnv.LINGUAFLOW_STORAGE_ACCEPTANCE === '1';
     runtimeEnv.CI_GOOS = summary.environment.GOOS;
     if (runtimeEnv.CI && !runtimeEnv.LINGUAFLOW_TEST_POSTGRES_DSN) throw new Error('CI requires the PostgreSQL test service DSN');
     const raceFlags = mode === 'plain' ? '' : '-race';
-    const discovery = await task('backend:test:ci:inventory', `${raceFlags} -p=${packageParallelism}`, path.join(outputDir, 'packages.out'));
+    const maxGoProcs = Number(runtimeEnv.GOMAXPROCS);
+    const inventoryBudget = await scheduler.bulkBudget(packageParallelism, maxGoProcs);
+    const discovery = await scheduler.executeOne({ id: 'package-inventory' }, inventoryBudget, (_job, budget) => task('backend:test:ci:inventory', `${raceFlags} -p=${budget.effectiveP}`, path.join(outputDir, 'packages.out'), budget));
     if (discovery.code) throw new Error('Package inventory failed');
-    const list = await task('backend:test', `-json -list . -p=${packageParallelism} -parallel=1 -count=1 -timeout=20m ${raceFlags} ${mode === 'race-atomic' ? '-covermode=atomic' : ''} ./...`, path.join(outputDir, 'test-inventory.out'));
+    const listBudget = await scheduler.bulkBudget(packageParallelism, maxGoProcs);
+    const list = await scheduler.executeOne({ id: 'test-inventory' }, listBudget, (_job, budget) => task('backend:test', `-json -list . -p=${budget.effectiveP} -parallel=1 -count=1 -timeout=20m ${raceFlags} ${mode === 'race-atomic' ? '-covermode=atomic' : ''} ./...`, path.join(outputDir, 'test-inventory.out'), budget));
     if (list.code) throw new Error('Top-level test inventory failed');
     const inventory = parseInventory(list.stdout, parseJSONObjects(discovery.stdout));
     for (const [pkg, tests] of Object.entries(contract)) for (const name of tests) if (!inventory.get(pkg)?.tops.includes(name.split('/')[0])) throw new Error(`Required matrix absent from inventory: ${key(pkg, name)}`);
-    const plan = planShards(mode, inventory, packageParallelism, rounds);
-    summary.manifest = { ...frozen, runnerSHA256: summary.runnerSHA256, contractSHA256: summary.contractSHA256, environment: summary.environment, mode, count: 1, performanceRounds: rounds, performancePolicy, bulkPackageParallelism: packageParallelism, parallel: 1, packages: [...inventory.values()], required: contract, skipRules: rules, plan };
+    const bulkBudget = await scheduler.bulkBudget(packageParallelism, maxGoProcs);
+    const plan = planShards(mode, inventory, bulkBudget.effectiveP, rounds);
+    summary.manifest = { ...frozen, runnerSHA256: summary.runnerSHA256, contractSHA256: summary.contractSHA256, environment: summary.environment, mode, count: 1, performanceRounds: rounds, performancePolicy, bulkPackageParallelismRequested: requestedPackageParallelism, bulkPackageParallelismTarget: packageParallelism, bulkPackageParallelismFactor: requestedPackageParallelism === 'auto' ? packageParallelismFactor : null, bulkPackageParallelism: bulkBudget.effectiveP, resources: summary.resources, inventoryBudget, listBudget, bulkBudget, parallel: 1, packages: [...inventory.values()], required: contract, skipRules: rules, plan };
     writeJSON(path.join(outputDir, 'manifest.json'), summary.manifest);
     const sameSource = async () => {
       if (cancelled) throw new Error('CI execution cancelled; later shards were not launched');
@@ -437,19 +479,14 @@ export async function runCI({ mode, outputDir, packageParallelism = 1, root = de
       }
       return current;
     };
-    for (const shard of plan) {
-      if (shard.round > 1 && summary.shards.filter(done => done.round === 1).some(done => done.validation.issues.length)) {
-        summary.issues.push('Performance repeat round not executed because the first complete round failed');
-        break;
-      }
-      await sameSource();
+    const executeShard = async (shard, budget) => {
       const directory = path.join(outputDir, `round-${shard.round}`, mode, shard.id);
       fs.mkdirSync(directory, { recursive: true });
       const profilePath = path.join(directory, 'coverage.out');
       const cliArgs = ['-json', `-p=${shard.effectiveP}`, '-parallel=1', '-count=1', `-timeout=${shard.timeout}`, ...shard.extra.map(value => /^[^\s'"`$;&|<>]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`), ...(mode === 'race-atomic' ? ['-covermode=atomic', `-coverprofile="${profilePath.replaceAll('\\', '/')}"`] : []), ...shard.packages].join(' ');
       const started = performance.now();
       let result;
-      try { result = await task(mode === 'plain' ? 'backend:test' : 'backend:test:race', cliArgs, path.join(directory, 'test-results.out')); }
+      try { result = await task(mode === 'plain' ? 'backend:test' : 'backend:test:race', cliArgs, path.join(directory, 'test-results.out'), { ...budget, persistenceReport: runtimeEnv.LINGUAFLOW_PERSISTENCE_REPORT ? path.join(directory, 'persistence-report.jsonl') : undefined }); }
       catch (error) {
         result = { code: 1, stdout: '', stderr: String(error), cleanup: error.cleanup };
         if (error.cleanup && !error.cleanup.confirmedGone) cancelled = true;
@@ -461,12 +498,24 @@ export async function runCI({ mode, outputDir, packageParallelism = 1, root = de
       const scene = validation.leaves.find(leaf => leaf.name === shard.requiredLeaf);
       const shape = shard.id.startsWith('synthetic-') ? 'synthetic' : 'dense';
       if (shard.requiredLeaf && mode !== 'plain' && (!Number.isFinite(scene?.elapsedSeconds) || scene.elapsedSeconds > sceneSeconds(mode, shape))) validation.issues.push(sceneFailure(mode, shape));
-      const record = { ...shard, cliArgs, wallSeconds: (performance.now() - started) / 1000, exitCode: result.code, cleanup: result.cleanup, profilePath: mode === 'race-atomic' ? profilePath : null, validation };
+      const record = { ...shard, cliArgs, gomaxprocs: budget.gomaxprocs, resourceBudget: { memoryReservationBytes: budget.memoryReservationBytes, cpuPool: budget.pool }, wallSeconds: (performance.now() - started) / 1000, exitCode: result.code, cleanup: result.cleanup, profilePath: mode === 'race-atomic' ? profilePath : null, validation };
       summary.shards.push(record);
       writeJSON(path.join(directory, 'result.json'), record);
       writeJSON(summaryPath, summary);
       console.log(`${shard.id}: ${validation.issues.length ? 'FAIL' : 'PASS'} (${record.wallSeconds.toFixed(2)}s)`);
+      if (result.cleanup && !result.cleanup.confirmedGone) throw Object.assign(new Error('Owned shard cleanup could not be confirmed'), { cleanup: result.cleanup });
+      return record;
+    };
+    const packagesShard = plan.find(shard => shard.id === 'packages');
+    if (packagesShard) await scheduler.executeOne(packagesShard, bulkBudget, executeShard, sameSource);
+    for (let roundNumber = 1; roundNumber <= (mode === 'plain' ? 1 : rounds); roundNumber++) {
+      if (roundNumber > 1 && summary.shards.filter(done => done.round === 1).some(done => done.validation.issues.length)) {
+        summary.issues.push('Performance repeat round not executed because the first complete round failed'); break;
+      }
+      const heavy = plan.filter(shard => shard.id !== 'packages' && shard.round === roundNumber).map(shard => ({ ...shard, trustKey: shard.id.replace(/-r\d+$/, '') }));
+      await scheduler.run(heavy, executeShard, { beforeLaunch: sameSource, maxGoProcs });
     }
+    summary.shards.sort((a, b) => plan.findIndex(shard => shard.id === a.id) - plan.findIndex(shard => shard.id === b.id));
     summary.finalIdentity = await sameSource();
     const round = validateRound(summary.shards.filter(shard => shard.round === 1), inventory, contract);
     summary.round = round;
@@ -475,6 +524,8 @@ export async function runCI({ mode, outputDir, packageParallelism = 1, root = de
     summary.issues.push(...round.issues);
     for (const shard of summary.shards.filter(done => done.round > 1)) summary.issues.push(...shard.validation.issues.map(issue => `${shard.id}: ${issue}`));
     if (summary.shards.length !== plan.length) summary.issues.push('Planned execution not complete');
+    await scheduler.close();
+    summary.resources.cpuAffinityRestored = true;
     if (mode === 'race-atomic' && !summary.issues.length) summary.coverage = mergeAtomicProfiles(summary.shards.filter(shard => shard.round === 1).map(shard => ({ id: shard.id, path: shard.profilePath, packages: shard.packages })), path.join(outputDir, 'coverage.out'));
     summary.finalIdentity = await sameSource();
     summary.status = summary.issues.length ? 'failed' : 'passed';
@@ -485,6 +536,10 @@ export async function runCI({ mode, outputDir, packageParallelism = 1, root = de
   } finally {
     process.removeListener('SIGTERM', cancel);
     process.removeListener('SIGINT', cancel);
+    try { await scheduler?.close(); }
+    catch (error) { summary.status = 'failed'; summary.issues.push(`Controller CPU affinity restoration failed: ${error.message}`); }
+    if (summary.resources) summary.resources.cpuAffinityRestored = Boolean(scheduler?.closed);
+    if (summary.manifest?.plan) summary.shards.sort((a, b) => summary.manifest.plan.findIndex(shard => shard.id === a.id) - summary.manifest.plan.findIndex(shard => shard.id === b.id));
     summary.finishedAt = new Date().toISOString();
     summary.wallSeconds = (Date.parse(summary.finishedAt) - Date.parse(summary.startedAt)) / 1000;
     writeJSON(summaryPath, summary);
@@ -496,5 +551,6 @@ export async function runCI({ mode, outputDir, packageParallelism = 1, root = de
 
 if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {
   const args = new Map(process.argv.slice(2).map(argument => { const split = argument.indexOf('='); return [argument.slice(0, split), argument.slice(split + 1)]; }));
-  runCI({ mode: args.get('MODE') ?? 'plain', outputDir: args.get('OUTPUT_DIR') || undefined, packageParallelism: Number(args.get('PACKAGE_PARALLELISM') ?? 1) }).then(summary => { process.exitCode = summary.status === 'passed' ? 0 : 1; }).catch(error => { console.error(error); process.exitCode = 1; });
+  const parallelism = args.get('PACKAGE_PARALLELISM') ?? defaultPackageParallelism;
+  runCI({ mode: args.get('MODE') ?? 'plain', outputDir: args.get('OUTPUT_DIR') || undefined, packageParallelism: parallelism === 'auto' ? parallelism : Number(parallelism), packageParallelismFactor: Number(args.get('PACKAGE_PARALLELISM_FACTOR') ?? 2) }).then(summary => { process.exitCode = summary.status === 'passed' ? 0 : 1; }).catch(error => { console.error(error); process.exitCode = 1; });
 }
