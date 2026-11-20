@@ -390,6 +390,30 @@ tasks:
     cmds:
       - go test -race {{default "./..." .CLI_ARGS}}
 
+  test:ci:
+    desc: 串行 CI 分片、实际执行合同和完整 atomic 覆盖率合并（plain/race/race-atomic）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/citest/ci-test.mjs "MODE={{default "plain" .MODE}}" "OUTPUT_DIR={{default "" .OUTPUT_DIR}}" "PACKAGE_PARALLELISM={{default "1" .PACKAGE_PARALLELISM}}"
+
+  test:ci:environment:
+    desc: 记录 CI 测试实际 Go 工具链、平台及构建环境
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go env -json GOVERSION GOOS GOARCH CGO_ENABLED GOFLAGS GOTOOLCHAIN CC
+
+  test:ci:inventory:
+    desc: 发现当前构建模式下的完整 Go 包集合（不执行测试）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - go list -json {{.CLI_ARGS}} ./...
+
+  test:ci:helpers:
+    desc: 验证 CI 分片、JSON、atomic 合并、失败证据及自有进程树清理
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node --test --test-concurrency=1 {{.CLI_ARGS}} ./internal/citest/ci-test.test.mjs
+
   test:capacity:
     desc: 显式满规模历史清理和持久化容量验收（只运行两个容量场景）
     dir: '{{.TASKFILE_DIR}}'

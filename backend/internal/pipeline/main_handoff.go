@@ -157,18 +157,31 @@ func (r *ExecutionRuntime) Run(ctx context.Context, fn func() error) error {
 }
 
 type mainBackingOwner struct {
-	permits   []*backend.RequestPermit
-	rawCredit *backend.OwnedAllocation
-	ctx       context.Context
+	permits      []*backend.RequestPermit
+	rawCredit    *backend.OwnedAllocation
+	ctx          context.Context
+	handoffStart time.Time
 }
 
 func (r *ExecutionRuntime) retainMainOwner(id string, permits []*backend.RequestPermit, rawCredit *backend.OwnedAllocation, ctx context.Context) {
+	var started time.Time
+	if ctx != nil {
+		if session, _ := ctx.Value(requestSessionKey{}).(*requestSession); session != nil {
+			session.handoffMu.Lock()
+			started = session.handoffStartedAt
+			session.handoffMu.Unlock()
+		}
+	}
 	r.ownerMu.Lock()
-	defer r.ownerMu.Unlock()
 	if r.mainOwners == nil {
 		r.mainOwners = map[string]mainBackingOwner{}
 	}
-	r.mainOwners[id] = mainBackingOwner{permits, rawCredit, ctx}
+	_, existed := r.mainOwners[id]
+	r.mainOwners[id] = mainBackingOwner{permits: permits, rawCredit: rawCredit, ctx: ctx, handoffStart: started}
+	r.ownerMu.Unlock()
+	if !existed && !started.IsZero() {
+		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "response_budget", Operation: "start", Rows: 1})
+	}
 }
 
 // Promotion borrows the original live completion lane. Saved inventory without
@@ -267,8 +280,14 @@ func (r *ExecutionRuntime) releaseMainOwner(id string) error {
 		r.Admission.ReleaseDurableResponse(id)
 	}
 	r.ownerMu.Lock()
+	_, existed := r.mainOwners[id]
 	delete(r.mainOwners, id)
 	r.ownerMu.Unlock()
+	// This is after every real release succeeded. Duplicate release calls
+	// cannot emit twice, and failure keeps the live owner and its clock.
+	if existed && !owner.handoffStart.IsZero() {
+		backend.ObserveMemberWork(owner.ctx, backend.MemberWorkEvent{Phase: "response_budget", Operation: "end", Rows: 1, DurationNS: time.Since(owner.handoffStart).Nanoseconds()})
+	}
 	return nil
 }
 
@@ -598,7 +617,7 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 			result.waitCapacity.Wait.CapacityChanged = runtime.Admission.Changed()
 		}
 		e.waitCapacity = result.waitCapacity
-		e.waitIndices = append([]int(nil), indices...)
+		e.waitIndices = indices
 		e.waitPool = pool
 		e.waitAttempt = attempt
 		return e
@@ -769,7 +788,7 @@ func advanceArchivedResponse(ctx context.Context, round Round, h stagedHandler, 
 				c = nil
 			} else {
 				operation = "seal_candidate"
-				if e = c.SealAndCompact(b, runtime.Window.limits.ItemBytes); e != nil {
+				if e = c.sealAndCompactMeasured(b, measured, runtime.Window.limits.ItemBytes); e != nil {
 					return e
 				}
 				next = WorkCursor{Pool: c.PoolIndex, Attempt: c.MainAttempt, State: "candidate"}

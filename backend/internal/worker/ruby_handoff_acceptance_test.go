@@ -280,6 +280,9 @@ func TestRubyHandoffAcceptanceHTTPStoredRoundsOwnResponseUntilDurable(t *testing
 				if atRecord.MainOwners[0] != 1 || atRecord.MainOwnerPeak != 1 || atRecord.HandoffBytes <= atRecord.ProgressLane || legacy.PendingResults != 1 || legacy.MainInflight[0] != 0 {
 					fail("stored direct-save has no held J/R owner at durable record: %+v %+v", atRecord, legacy)
 				}
+				if atRecord.OwnedPayloads.Current["worker_index"] <= 0 {
+					fail("wrapped stored round lost its live canonical index")
+				}
 				open()
 				got := <-done
 				joined = true
@@ -300,7 +303,7 @@ func TestRubyHandoffAcceptanceHTTPStoredRoundsOwnResponseUntilDurable(t *testing
 				if end.MainOwners[0] != 0 || end.HandoffBytes != end.ProgressLane || runtime.Admission.Snapshot().PendingResults != 0 {
 					fail("stored terminal owner leaked: %+v", end)
 				}
-				if err := verifyHandoffOwnedTerminal(end.OwnedPayloads, "wire"); err != nil {
+				if err := verifyHandoffOwnedTerminal(end.OwnedPayloads, "wire", "worker_index"); err != nil {
 					fail("stored actual backing observation: %v", err)
 				}
 				t.Logf("actual_HTTP=%d durable_failure=%v barrier=%+v network=%+v terminal=%+v", n, failure, atRecord, legacy, end)
@@ -2097,6 +2100,23 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
+			started := time.Now()
+			var workMu sync.Mutex
+			work := []map[string][3]int64{{}, {}}
+			laneContexts := make([]context.Context, 2)
+			for lane := range laneContexts {
+				lane := lane
+				laneContexts[lane] = backend.WithMemberWorkRecorder(ctx, func(e backend.MemberWorkEvent) {
+					workMu.Lock()
+					defer workMu.Unlock()
+					key := e.Phase + "/" + e.Operation
+					v := work[lane][key]
+					v[0]++
+					v[1] += e.Rows
+					v[2] += e.Bytes
+					work[lane][key] = v
+				})
+			}
 			first, err := NewExecutionRuntime(f.snapshot, f.pool, nil, pipeline.DefaultCandidateLimits())
 			if err != nil {
 				t.Fatal(err)
@@ -2126,10 +2146,39 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 					joined++
 				}
 			}
-			fail := func(format string, args ...any) { cleanup(); t.Fatalf(format, args...) }
+			logWork := func() {
+				workMu.Lock()
+				defer workMu.Unlock()
+				for lane := range work {
+					t.Logf("scope diagnostic lane%d elapsed=%s work[event,row,byte]=%v", lane, time.Since(started), work[lane])
+				}
+			}
+			fail := func(format string, args ...any) {
+				// Capture live ownership before cancellation, then inspect only
+				// finite scalar durable facts after both paid workers have joined.
+				for lane, runtime := range runtimes {
+					pending, queued := runtime.Preparation.Snapshot()
+					t.Logf("scope live lane%d preparation=%d/%d window=%+v pipeline=%+v owned=%+v", lane, pending, queued, runtime.Window.Snapshot(), runtime.Admission.PipelineSnapshot(), runtime.Admission.OwnedPayloadSnapshot())
+				}
+				cleanup()
+				logWork()
+				factCtx, factCancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer factCancel()
+				checkpoints, checkpointErr := f.client.JobRoundSegment.Query().Count(factCtx)
+				requests, requestErr := f.client.WorkRequest.Query().Select("state").All(factCtx)
+				states := map[string]int{}
+				for _, request := range requests {
+					states[request.State]++
+				}
+				barrier.mu.Lock()
+				calls := barrier.calls
+				barrier.mu.Unlock()
+				t.Logf("scope joined calls=%d checkpoints=%d/%v request_states=%v/%v", calls, checkpoints, checkpointErr, states, requestErr)
+				t.Fatalf(format, args...)
+			}
 			for lane := 0; lane < 2; lane++ {
 				fixture, runtime := fixtures[lane], runtimes[lane]
-				eng, err := fixture.factory.BuildEngine(pipeline.WithExecutionRuntime(ctx, runtime), fixture.snapshot, engine.RuntimeResources{}, progress.Nop{})
+				eng, err := fixture.factory.BuildEngine(pipeline.WithExecutionRuntime(laneContexts[lane], runtime), fixture.snapshot, engine.RuntimeResources{}, progress.Nop{})
 				if err != nil {
 					cancel()
 					barrier.open()
@@ -2148,7 +2197,7 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 				store.round = roundIndices[lane]
 				eng.PrepareDocument(doc, nil)
 				go func(lane int, doc *pipeline.Document, store *roundStore, eng *engine.Engine, runtime *pipeline.ExecutionRuntime) {
-					result, err := pipeline.RunStagedRound(ctx, eng.Rounds()[roundIndices[lane]], doc, store, runtime, f.logger, progress.Nop{})
+					result, err := pipeline.RunStagedRound(laneContexts[lane], eng.Rounds()[roundIndices[lane]], doc, store, runtime, f.logger, progress.Nop{})
 					done <- outcome{lane, result, err}
 				}(lane, doc, store, eng, runtime)
 			}
@@ -2242,6 +2291,7 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 				}
 			}
 			t.Logf("scope=%s real_HTTP_peak=%d calls=%d committed=%d distinct_job=%v barrier=%+v", name, peak, calls, 2*perResource, fixtures[1] != f, atBarrier)
+			logWork()
 		})
 	}
 }

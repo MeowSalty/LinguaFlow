@@ -33,6 +33,7 @@ type BuildBounds struct {
 	outputBytes, stringLimit                                  int64
 	fieldCache                                                *decoderFieldCache
 	jsonOperations                                            int
+	jsonMeasurements                                          int64
 	decodeAllocations                                         *decodeAllocationScope
 	ctx                                                       context.Context
 	reserve                                                   func(int64) error
@@ -43,6 +44,7 @@ type BuildBounds struct {
 type BuildSnapshot struct {
 	TextBytes, ObjectBytes, LiveBytes, MeasuredRequiredBytes, AllocationBytes, AllocationLimit int64
 	Depth                                                                                      int
+	JSONMeasurements                                                                           int64
 }
 
 func NewBuildBounds(outputBytes, inputBytes int64, allocationLimit ...int64) (*BuildBounds, error) {
@@ -365,7 +367,7 @@ func (b *BuildBounds) Leave() {
 func (b *BuildBounds) Snapshot() BuildSnapshot {
 	b.capacityMu.Lock()
 	defer b.capacityMu.Unlock()
-	return BuildSnapshot{b.text, b.objectBytes, b.live, b.peak, b.allocated, b.allocationLimit, b.depth}
+	return BuildSnapshot{b.text, b.objectBytes, b.live, b.peak, b.allocated, b.allocationLimit, b.depth, b.jsonMeasurements}
 }
 
 // BoundedWriter checks the future allocation before appending. Growing from c

@@ -27,6 +27,7 @@ func structuralProtectedText(source string, known map[string]string) bool {
 func prepareCanonicalMembership(ctx context.Context, h stagedHandler, doc *Document, runtime *ExecutionRuntime) (int, error) {
 	count, skipped := 0, 0
 	for i := range doc.Segments {
+		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "canonical_prepare", Operation: "doc_member_visit", Rows: 1})
 		seg := &doc.Segments[i]
 		seg.RoundWork.Member = false
 		seg.RoundWork.Completed = false

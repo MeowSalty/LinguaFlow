@@ -194,6 +194,152 @@ func TestPreparationBoundsBeforeReservation(t *testing.T) {
 	first.Release()
 	second.Release()
 }
+
+// A cold descriptor in a different round must remain queued until a ready
+// competitor can displace it. Its RPM deadline stays well beyond this test.
+func fullColdPreparationRuntime(t *testing.T) (*ExecutionRuntime, backend.RequestAdmissionIntent, backend.AdmissionWait) {
+	t.Helper()
+	pool := backend.NewLimiterPool()
+	pool.Initialize(map[int]int{1: 0, 2: 1})
+	t.Cleanup(pool.Shutdown)
+	a, err := backend.NewRequestAdmission(pool, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 1, 1: 1}, AlignmentConcurrency: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := NewExecutionRuntime(a, DefaultCandidateLimits(), nil)
+	r.Preparation.Resize(1)
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	cold := backend.RequestAdmissionIntent{RequestID: "cold-RPM", RoundIndex: 1, ResourceID: 88, BackendID: 2, Stage: backend.RequestStageMain}
+	if ok, err := a.PrepareMain(cold.RequestID, cold.RoundIndex, cold.ResourceID, 1, 1, 0, false); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	permit, _, err := a.TryAdmit(context.Background(), cold, r.Gate)
+	if permit == nil || err != nil {
+		t.Fatal("cold RPM setup", err)
+	}
+	permit.Release()
+	cold.RequestID = ""
+	_, err = r.Preparation.Try(context.Background(), cold, r.Gate)
+	deferred := workDeferred(err)
+	if deferred == nil || deferred.Wait.Reason != "backend_rpm" || time.Until(deferred.Wait.AvailableAt) < 30*time.Second {
+		t.Fatalf("cold descriptor not queued on future RPM: %v", err)
+	}
+	if pending, queued := r.Preparation.Snapshot(); pending != 0 || queued != 1 {
+		t.Fatalf("cold queue setup: pending%d queued%d", pending, queued)
+	}
+	return r, cold, deferred.Wait
+}
+
+func TestPreparationUnqueuedWaitPreservesAdmissionCause(t *testing.T) {
+	for _, reason := range []string{"main_concurrency", "backend_rpm", "paused", "admission_closed", "cancelled", "invalid_round"} {
+		t.Run(reason, func(t *testing.T) {
+			r, cold, _ := fullColdPreparationRuntime(t)
+			a, p := r.Admission, r.Preparation
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			own := backend.RequestAdmissionIntent{RoundIndex: 0, ResourceID: 89, BackendID: 1, Stage: backend.RequestStageMain}
+			switch reason {
+			case "main_concurrency":
+				heldIntent := own
+				heldIntent.ResourceID = 99
+				heldIntent.RequestID = "held-C1"
+				if ok, err := a.PrepareMain(heldIntent.RequestID, 0, 99, 1, 1, 0, false); !ok || err != nil {
+					t.Fatal(ok, err)
+				}
+				held, _, err := a.TryAdmit(ctx, heldIntent, r.Gate)
+				if held == nil || err != nil {
+					t.Fatal(err)
+				}
+				held.RequestDone()
+				defer held.Release()
+			case "backend_rpm":
+				own.RoundIndex, own.BackendID = cold.RoundIndex, cold.BackendID
+			case "paused":
+				r.Gate.Pause()
+			case "admission_closed":
+				a.Close()
+			case "cancelled":
+				cancel()
+			case "invalid_round":
+				own.RoundIndex = 2
+			}
+			want, wantErr := a.ReadyHint(ctx, own, r.Gate)
+			changed := p.Changed()
+			ticket, err := p.Try(ctx, own, r.Gate)
+			if ticket != nil {
+				ticket.Release()
+				t.Fatal("unready key acquired preparation")
+			}
+			if wantErr != nil {
+				if err == nil || workDeferred(err) != nil || err.Error() != wantErr.Error() {
+					t.Fatalf("admission error swallowed: got %v want %v", err, wantErr)
+				}
+			} else {
+				got := workDeferred(err)
+				if got == nil || got.Wait.Reason != want.Reason || got.Wait.CapacityChanged != want.CapacityChanged || got.Wait.PolicyChanged != want.PolicyChanged || got.Wait.PauseRequested != want.PauseRequested {
+					t.Fatalf("unqueued admission cause lost: got %v want %+v", err, want)
+				}
+				if delta := got.Wait.AvailableAt.Sub(want.AvailableAt); delta < -time.Millisecond || delta > time.Millisecond {
+					t.Fatalf("RPM expiry changed: got %v want %v", got.Wait.AvailableAt, want.AvailableAt)
+				}
+			}
+			if pending, queued := p.Snapshot(); pending != 0 || queued != 1 || mainWaitSignalReady(changed) {
+				t.Fatalf("unready/error key changed cold queue: pending%d queued%d", pending, queued)
+			}
+		})
+	}
+}
+
+func TestPreparationReadyQueueKeepsHeadPriority(t *testing.T) {
+	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 10}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	p := NewPreparation(a, 2)
+	defer p.Close()
+	intent := backend.RequestAdmissionIntent{RoundIndex: 0, BackendID: 1, Stage: backend.RequestStageMain}
+	acquire := func(resource int) *PreparationTicket {
+		t.Helper()
+		intent.ResourceID = resource
+		ticket, err := p.Try(context.Background(), intent, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ticket
+	}
+	defer acquire(1).Release()
+	occupied := acquire(2)
+	defer occupied.Release()
+	deferKey := func(resource int) {
+		t.Helper()
+		intent.ResourceID = resource
+		ticket, err := p.Try(context.Background(), intent, nil)
+		if ticket != nil {
+			ticket.Release()
+			t.Fatalf("resource%d bypassed ready queue head", resource)
+		}
+		if wait := workDeferred(err); wait == nil || wait.Wait.Reason != "prepare_capacity" {
+			t.Fatalf("resource%d lost queue wait: %v", resource, err)
+		}
+	}
+	deferKey(3)
+	deferKey(4)
+	occupied.Release()
+	deferKey(5) // Full descriptor queue has two ready keys; neither may be evicted.
+	deferKey(4)
+	head := acquire(3)
+	head.Release()
+	tail := acquire(4)
+	tail.Release()
+	next := acquire(5)
+	next.Release()
+}
+
 func TestReadyHintDoesNotSpendRPM(t *testing.T) {
 	pool := backend.NewLimiterPool()
 	pool.Initialize(map[int]int{1: 1})

@@ -229,13 +229,14 @@ func (b *StorageBudget) hook(client *ent.Client) ent.Hook {
 			if table == "" {
 				return next.Mutate(ctx, m)
 			}
-			beforeKey, err := b.recordStorageBefore(ctx, client, m)
+			metadataRequestID := persistence.MetadataFromContext(ctx).RequestID
+			beforeKey, identityRead, err := b.recordStorageBefore(ctx, client, m, metadataRequestID)
 			if err != nil {
 				return nil, err
 			}
 
 			var size, old int64
-			requestID := persistence.MetadataFromContext(ctx).RequestID
+			requestID := metadataRequestID
 			if requestID == "" {
 				if id, ok := m.Field("identity"); ok && table == "work_requests" {
 					requestID, _ = id.(string)
@@ -268,7 +269,7 @@ func (b *StorageBudget) hook(client *ent.Client) ent.Hook {
 				}
 				fields = append(fields, b.Source.storageLength(table, field))
 			}
-			if !m.Op().Is(ent.OpCreate) {
+			if !m.Op().Is(ent.OpCreate) && !identityRead {
 				if id, ok := m.(interface{ ID() (int, bool) }); ok {
 					if value, yes := id.ID(); yes {
 						identity := "identity"

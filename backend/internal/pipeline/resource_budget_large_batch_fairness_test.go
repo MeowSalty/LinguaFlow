@@ -104,6 +104,9 @@ func TestResourceBudgetStoppedProducerYieldsTurnBeforePaidWriterJoins(t *testing
 	if snapshot := a.PipelineSnapshot(); snapshot.MainOwners[0] != 1 || snapshot.Segments != 3 {
 		fail("slow writer lost paid main ownership: %+v", snapshot)
 	}
+	if owned := a.OwnedPayloadSnapshot(); owned.Current["scheduler"] <= 0 || owned.Current["main_plan"] <= 0 {
+		fail("entered paid writer lost borrowed plan backing: %+v", owned)
+	}
 	cancel()
 	waitReason("")
 	select {
@@ -115,6 +118,9 @@ func TestResourceBudgetStoppedProducerYieldsTurnBeforePaidWriterJoins(t *testing
 	if snapshot := a.PipelineSnapshot(); snapshot.MainOwners[0] != 1 || snapshot.Segments != 3 {
 		fail("yielding fair turn refunded unfinished paid writer: %+v", snapshot)
 	}
+	if owned := a.OwnedPayloadSnapshot(); owned.Current["scheduler"] <= 0 || owned.Current["main_plan"] <= 0 {
+		fail("cancellation refunded plan before paid writer joined: %+v", owned)
+	}
 	close(store.release)
 	released = true
 	select {
@@ -125,6 +131,9 @@ func TestResourceBudgetStoppedProducerYieldsTurnBeforePaidWriterJoins(t *testing
 		}
 	case <-deadline.C:
 		fail("released writer did not join")
+	}
+	if owned := a.OwnedPayloadSnapshot(); owned.Current["scheduler"] != 0 || owned.Current["main_plan"] != 0 {
+		t.Fatalf("joined paid writer retained plan backing: %+v", owned)
 	}
 	t.Log("public word bound formed first n3 then retained n16; cancelled producer yielded fair turn while paid main owner/S3 stayed live until reliable writer joined, leaving ordinary room for other small work")
 }

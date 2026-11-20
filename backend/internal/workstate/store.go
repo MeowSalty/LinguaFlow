@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqljson"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
@@ -71,7 +72,7 @@ func guardScope(ctx context.Context, tx *ent.Client, scope Scope, dispatch bool)
 	if err := LockJob(ctx, tx, scope.JobID); err != nil {
 		return err
 	}
-	j, err := tx.Job.Get(ctx, scope.JobID)
+	j, err := tx.Job.Query().Where(job.IDEQ(scope.JobID)).Select(job.FieldID, job.FieldRetryEpoch, job.FieldStatus, job.FieldPauseRequested).Only(ctx)
 	if err != nil {
 		return err
 	}
@@ -88,21 +89,21 @@ func guardScope(ctx context.Context, tx *ent.Client, scope Scope, dispatch bool)
 	if n != 1 {
 		return fmt.Errorf("%w: guard_scope resource=%d source_generation=%d matched=%d", ErrStale, scope.ResourceID, scope.SourceGeneration, n)
 	}
-	r, err := tx.Resource.Get(ctx, scope.ResourceID)
+	r, err := tx.Resource.Query().Where(resource.IDEQ(scope.ResourceID)).Select(resource.FieldID, resource.FieldCurrentSourceRevisionID).Only(ctx)
 	if err != nil {
 		return err
 	}
 	if !sameInt(r.CurrentSourceRevisionID, scope.SourceRevisionID) {
 		return fmt.Errorf("%w: guard_scope source_revision_changed resource=%d", ErrStale, scope.ResourceID)
 	}
-	round, err := tx.JobRound.Get(ctx, scope.RoundID)
+	round, err := tx.JobRound.Query().Where(jobround.IDEQ(scope.RoundID)).Select(jobround.FieldID, jobround.FieldJobID, jobround.FieldJobResourceID).Only(ctx)
 	if err != nil {
 		return err
 	}
 	if round.JobID != scope.JobID || (scope.JobResourceID != 0 && round.JobResourceID != scope.JobResourceID) {
 		return ErrManifest
 	}
-	jr, err := tx.JobResource.Get(ctx, round.JobResourceID)
+	jr, err := tx.JobResource.Query().Where(jobresource.IDEQ(round.JobResourceID)).Select(jobresource.FieldID).Only(ctx)
 	if err != nil {
 		return err
 	}
@@ -421,7 +422,7 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 	if err != nil && !ent.IsNotFound(err) {
 		return err
 	}
-	j, err := tx.Job.Get(ctx, c.Scope.JobID)
+	j, err := tx.Job.Query().Where(job.IDEQ(c.Scope.JobID)).Select(job.FieldID, job.FieldStatus, job.FieldPauseRequested).Only(ctx)
 	if err != nil {
 		return err
 	}

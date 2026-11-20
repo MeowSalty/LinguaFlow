@@ -82,8 +82,19 @@ func memberHeaderQuery(q *ent.WorkRequestQuery) *ent.WorkRequestQuery {
 		workrequest.FieldMemberMode, workrequest.FieldMemberFormat, workrequest.FieldSourceLang, workrequest.FieldTargetLang, workrequest.FieldTextMode, workrequest.FieldMemberPool, workrequest.FieldMemberAttempt).WorkRequestQuery
 }
 func memberRequest(ctx context.Context, tx *ent.Client, key MemberKey) (*ent.WorkRequest, error) {
+	return readMemberRequest(ctx, key, memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(key.RequestID))))
+}
+
+// Member payload readers use only the request key and phase. Their partial row
+// stays local; public response headers continue to use memberHeaderQuery.
+func memberAccessRequest(ctx context.Context, tx *ent.Client, key MemberKey) (*ent.WorkRequest, error) {
+	q := tx.WorkRequest.Query().Where(workrequest.IdentityEQ(key.RequestID)).Select(workrequest.FieldID, workrequest.FieldRetryEpoch, workrequest.FieldResponseFormatVersion, workrequest.FieldPromotionCount, workrequest.FieldPromotionState)
+	return readMemberRequest(ctx, key, q.WorkRequestQuery)
+}
+
+func readMemberRequest(ctx context.Context, key MemberKey, q *ent.WorkRequestQuery) (*ent.WorkRequest, error) {
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "header_read", Rows: 1})
-	r, err := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(key.RequestID))).Only(ctx)
+	r, err := q.Only(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +152,7 @@ func (r *memberByteReservation) release() {
 	})
 }
 func (s *Store) LoadInputMember(ctx context.Context, key MemberKey, limit int64) (InputMember, error) {
-	r, err := memberRequest(ctx, memberClient(ctx, s.client), key)
+	r, err := memberAccessRequest(ctx, memberClient(ctx, s.client), key)
 	if err != nil {
 		return InputMember{}, err
 	}
@@ -182,7 +193,7 @@ func (s *Store) LoadInputMember(ctx context.Context, key MemberKey, limit int64)
 	return InputMember{Key: key, PromotionMember: inputPromotion(row), PromptID: row.PromptID, Index: row.SegmentIndex, Payload: payload.Payload, Bytes: row.PayloadBytes, Digest: row.PayloadDigest, Release: release}, nil
 }
 func (s *Store) LoadOutputMember(ctx context.Context, key MemberKey, final bool, limit int64) (OutputMember, error) {
-	r, err := memberRequest(ctx, memberClient(ctx, s.client), key)
+	r, err := memberAccessRequest(ctx, memberClient(ctx, s.client), key)
 	if err != nil {
 		return OutputMember{}, err
 	}

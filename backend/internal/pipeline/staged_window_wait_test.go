@@ -180,6 +180,190 @@ func TestStagedWindowFullBatchIndependentOfConcurrency(t *testing.T) {
 	}
 }
 
+func TestStagedMainConcurrencyIgnoresUnrelatedByteWake(t *testing.T) {
+	testStagedMainConcurrencyByteWake(t, stagedTestRuntime(t, DefaultCandidateLimits()), nil)
+}
+
+func TestStagedUnqueuedMainConcurrencyIgnoresUnrelatedByteWake(t *testing.T) {
+	r, _, coldWait := fullColdPreparationRuntime(t)
+	testStagedMainConcurrencyByteWake(t, r, &coldWait)
+}
+
+func testStagedMainConcurrencyByteWake(t *testing.T, r *ExecutionRuntime, coldWait *backend.AdmissionWait) {
+	t.Helper()
+	const wakes = 128
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	a := r.Admission
+	preparationChanged := r.Preparation.Changed()
+	if ok, err := a.PrepareMain("held-C1", 0, 99, 128, 128, 0, false); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	held, _, err := a.TryAdmit(ctx, backend.RequestAdmissionIntent{RequestID: "held-C1", RoundIndex: 0, ResourceID: 99, BackendID: 1, Stage: backend.RequestStageMain}, nil)
+	if err != nil || held == nil {
+		t.Fatal(err)
+	}
+	held.RequestDone()
+	defer held.Release()
+	type observation struct{ builds, reuses, words, waits, preparationWaits int64 }
+	probes := make(chan observation)
+	counts := observation{}
+	observedCtx := backend.WithMemberWorkRecorder(ctx, func(event backend.MemberWorkEvent) {
+		if event.Phase != "scheduler" {
+			return
+		}
+		switch event.Operation {
+		case "plan_build":
+			counts.builds += event.Rows
+		case "plan_reuse":
+			counts.reuses += event.Rows
+		case "word_input":
+			counts.words += event.Rows
+		case "wait/main_concurrency":
+			counts.waits += event.Rows
+		case "wait/prepare_capacity":
+			counts.preparationWaits += event.Rows
+		case "deadline_probe":
+			select {
+			case probes <- counts:
+			case <-ctx.Done():
+			}
+		}
+	})
+	h := &windowBatchProbe{batchSize: 1}
+	store := &windowResourceStore{RoundStore: NewMemoryRoundStore(nil), resourceID: 1, roundID: 1}
+	type outcome struct {
+		result RunRoundResult
+		err    error
+	}
+	done := make(chan outcome, 1)
+	joined := false
+	go func() {
+		result, err := RunStagedRound(observedCtx, Round{Concurrency: 1, Handler: h.handler(t, r)}, newTestDoc(1), store, r, quietLogger(), nil)
+		done <- outcome{result, err}
+	}()
+	cleanup := func() {
+		cancel()
+		if !joined {
+			<-done
+			joined = true
+		}
+		a.ReleaseBuild("unrelated-byte")
+	}
+	defer cleanup()
+	fail := func(format string, args ...any) { cleanup(); t.Fatalf(format, args...) }
+	step := func() observation {
+		select {
+		case state := <-probes:
+			return state
+		case result := <-done:
+			joined = true
+			fail("waiting coordinator exited: %+v", result)
+		case <-ctx.Done():
+			fail("controlled wait did not reach coordinator barrier")
+		}
+		return observation{}
+	}
+	first := step()
+	for first.builds == 0 || (first.waits == 0 && first.preparationWaits == 0) {
+		first = step()
+	}
+	if coldWait != nil {
+		if pending, queued := r.Preparation.Snapshot(); pending != 0 || queued != 1 || a.PipelineSnapshot().MainOwners[0] != 1 {
+			fail("cold queue/C1 setup changed: pending%d queued%d", pending, queued)
+		}
+		if mainWaitSignalReady(preparationChanged) || mainWaitSignalReady(coldWait.PolicyChanged) || !time.Now().Before(coldWait.AvailableAt) {
+			fail("cold preparation/policy/expiry changed during setup")
+		}
+	}
+	if first.builds != 1 || first.words != 1 || first.waits == 0 {
+		fail("C1 admission cause lost after established owner/queue: %+v", first)
+	}
+	paidPlan := a.OwnedPayloadSnapshot().Current["main_plan"]
+	if paidPlan <= 0 {
+		fail("waiting plan has no real backing ownership")
+	}
+	checkColdQueue := func() {
+		if coldWait == nil {
+			return
+		}
+		if pending, queued := r.Preparation.Snapshot(); pending != 0 || queued != 1 {
+			fail("warm key entered full cold queue: pending%d queued%d", pending, queued)
+		}
+		if mainWaitSignalReady(preparationChanged) || mainWaitSignalReady(coldWait.PolicyChanged) || !time.Now().Before(coldWait.AvailableAt) {
+			fail("cold preparation/policy/expiry changed before real C release")
+		}
+	}
+	checkColdQueue()
+	for i := 0; i < wakes; i++ {
+		for _, bytes := range []int64{1, 0} {
+			if err := a.ResizeBuild("unrelated-byte", bytes); err != nil {
+				fail("unrelated byte transition: %v", err)
+			}
+			state := step()
+			if state.reuses != 0 || state.builds != 1 || state.words != 1 {
+				fail("unchanged C1 byte wake replanned/retried preparation: wake%d bytes%d state=%+v", i, bytes, state)
+			}
+			if current := a.PipelineSnapshot(); current.MainOwners[0] != 1 {
+				fail("byte notification changed C1 owner: %+v", current)
+			}
+			if a.OwnedPayloadSnapshot().Current["main_plan"] != paidPlan {
+				fail("unrelated byte notification refunded/rebuilt live plan")
+			}
+			checkColdQueue()
+		}
+	}
+	if batches, _ := h.snapshot(); len(batches) != 0 {
+		fail("blocked C1 dispatched before release: %v", batches)
+	}
+	state, err := store.Load(ctx)
+	if err != nil {
+		fail("load: %v", err)
+	}
+	for _, cursor := range state.Cursors {
+		if cursor.Pool != 0 || cursor.Attempt != 0 {
+			fail("byte wake advanced cursor: %+v", cursor)
+		}
+	}
+	// Remove only the test's iteration barrier before making C truly available.
+	// Production resumes the exact retained batch after the real owner release.
+	drainDone := make(chan struct{})
+	go func() {
+		defer close(drainDone)
+		for {
+			select {
+			case <-probes:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	held.Release()
+	select {
+	case result := <-done:
+		joined = true
+		if result.err != nil || len(result.result.Resolved) != 1 {
+			fail("real C release did not resume retained batch: %+v", result)
+		}
+	case <-ctx.Done():
+		fail("real C release lost wake")
+	}
+	cancel()
+	<-drainDone
+	batches, attempts := h.snapshot()
+	if len(batches) != 1 || len(batches[0]) != 1 || attempts[0] != 0 {
+		t.Fatalf("real release changed batch/attempt: %v/%v", batches, attempts)
+	}
+	if current := a.OwnedPayloadSnapshot(); current.Current["main_plan"] != 0 || current.Current["scheduler"] != 0 {
+		t.Fatalf("joined retained plan leaked: %+v", current)
+	}
+	if coldWait != nil {
+		if pending, queued := r.Preparation.Snapshot(); pending != 0 || queued != 0 {
+			t.Fatalf("ready warm request did not retire preparation: pending%d queued%d", pending, queued)
+		}
+	}
+}
+
 func TestStagedWindowActiveOwnerWaitsWithSameBatchAndAttempt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -238,6 +422,9 @@ func TestStagedWindowActiveOwnerWaitsWithSameBatchAndAttempt(t *testing.T) {
 	if batches, _ := second.snapshot(); len(batches) != 0 {
 		fail("busy batch dispatched early: %v", batches)
 	}
+	if owned := r.Admission.OwnedPayloadSnapshot(); owned.Current["scheduler"] <= 0 || owned.Current["main_plan"] <= 0 {
+		fail("provider/Window wait retired borrowed scheduler or plan backing: %+v", owned)
+	}
 	releaseOnce.Do(func() { close(first.release) })
 	if err := awaitRuntimeResult(t, ownerDone); err != nil {
 		ownerJoined = true
@@ -255,6 +442,9 @@ func TestStagedWindowActiveOwnerWaitsWithSameBatchAndAttempt(t *testing.T) {
 	}
 	if atomic.LoadInt32(&reporter.stageStartCalls) != 1 {
 		t.Fatal("active-owner wait restarted stage initialization")
+	}
+	if owned := r.Admission.OwnedPayloadSnapshot(); owned.Current["scheduler"] != 0 || owned.Current["main_plan"] != 0 {
+		t.Fatalf("joined workers retained scheduling backing: %+v", owned)
 	}
 }
 
@@ -339,6 +529,9 @@ func TestStagedWindowWaitingPauseCancelLeavesMembersAndCredit(t *testing.T) {
 		if pending, _ := r.Preparation.Snapshot(); pending != 0 {
 			t.Fatal("waiting prepare ticket leaked")
 		}
+		if owned := r.Admission.OwnedPayloadSnapshot(); owned.Current["scheduler"] != 0 || owned.Current["main_plan"] != 0 {
+			t.Fatalf("pause/cancel retained plan backing after join: %+v", owned)
+		}
 		r.Window.mu.Lock()
 		active := 0
 		for consumer := range r.Window.consumers {
@@ -404,6 +597,36 @@ func TestWindowConsumerDoesNotReviveEarlierInstanceClaims(t *testing.T) {
 	}
 }
 
+func TestCandidateWindowUnclaimedLoaderDrainRequiresCoordinator(t *testing.T) {
+	for _, loaderRound := range []int{0, 2} {
+		w := NewCandidateWindow(windowFixtureLimits())
+		if err := w.RestoreScoped("unclaimed", 1024, 9, 2); err != nil {
+			t.Fatal(err)
+		}
+		waiting := w.EnterScope(1, 1)
+		waiting.RecoveryComplete()
+		loader := w.EnterScope(9, loaderRound)
+		if w.CanDrainFor(nil) || !w.CanDrainFor(waiting) {
+			t.Fatalf("round%d confused actual claims with a foreign loader", loaderRound)
+		}
+		if result, _ := w.TryReserveOwned("waiting", 16, 1, waiting); result != WindowBusy {
+			t.Fatalf("round%d page loading manufactured a fixed pin: %v", loaderRound, result)
+		}
+		if err := w.ClaimRecovered("unclaimed", 1024, loader); err != nil || !w.CanDrainFor(nil) {
+			t.Fatalf("round%d real current-scope claim unavailable: %v", loaderRound, err)
+		}
+		loader.Leave()
+		if w.CanDrainFor(nil) {
+			t.Fatalf("round%d retired loader revived an earlier claim", loaderRound)
+		}
+		if current := w.Snapshot(); current.Segments != 1 || current.Bytes != 1024 {
+			t.Fatalf("round%d claim classification changed old inventory: %+v", loaderRound, current)
+		}
+		waiting.Leave()
+		w.Release("unclaimed")
+	}
+}
+
 func TestStagedWindowSameResourceFutureRoundWithoutClaimMakesProgress(t *testing.T) {
 	// The fixed recovery exception permits the earliest singleton while a
 	// later header remains pinned. The later body is never claimed or decoded.
@@ -444,10 +667,14 @@ type claimedRecoveryProbeStore struct {
 	claims atomic.Int32
 }
 
-func (s *claimedRecoveryProbeStore) ValidateCandidate(context.Context, *Candidate) (bool, error) {
-	if s.window.CanDrainFor(nil) {
+func (s *claimedRecoveryProbeStore) ValidateCandidate(_ context.Context, candidate *Candidate) (bool, error) {
+	s.window.mu.Lock()
+	entry, found := s.window.entries[candidate.ID]
+	if found && entry.consumer != nil && entry.consumer.active && entry.consumer.window == s.window &&
+		entry.consumer.resourceID == s.resourceID && entry.consumer.roundID == s.roundID {
 		s.claims.Add(1)
 	}
+	s.window.mu.Unlock()
 	return true, nil
 }
 func TestStagedWindowCurrentScopeRecoveryPageClaimsConsumer(t *testing.T) {
@@ -878,9 +1105,16 @@ func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 			if batches, _ := h.snapshot(); len(batches) != 0 {
 				t.Fatalf("page-loading temporary occupancy split the original batch: %v", batches)
 			}
+			finished := false
 			if outcome == "completed_without_claim" {
 				foreign.RecoveryComplete()
 				// All stock is now a proven pin: original n16 plus pin1 fits S17.
+				// Keep the completed loader entered until the original batch has
+				// finished. Leaving immediately concealed the classification gap.
+				if err := awaitRuntimeResult(t, done); err != nil {
+					t.Fatal(err)
+				}
+				finished = true
 			}
 			if outcome == "claim_and_release" {
 				if err := r.Window.ClaimRecovered("unclaimed", 1024, foreign); err != nil {
@@ -895,8 +1129,10 @@ func TestStagedWindowForeignScopeLoadingWaitsForClaimOrExit(t *testing.T) {
 				r.Window.Release("unclaimed")
 			}
 			foreign.Leave()
-			if err := awaitRuntimeResult(t, done); err != nil {
-				t.Fatal(err)
+			if !finished {
+				if err := awaitRuntimeResult(t, done); err != nil {
+					t.Fatal(err)
+				}
 			}
 			batches, _ := h.snapshot()
 			if len(batches) != 1 || len(batches[0]) != 16 {

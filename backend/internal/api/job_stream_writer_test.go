@@ -29,6 +29,15 @@ func assertStreamAbort(t *testing.T, fn func()) {
 	}
 }
 
+func assertWriterAbortWithoutHandlerPanic(t *testing.T, stream *jobStreamWriter, fn func()) {
+	t.Helper()
+	var fixture Server
+	logs := captureStreamLogs(&fixture)
+	stream.logger = fixture.logger
+	assertStreamAbort(t, fn)
+	assertNoStreamHandlerPanic(t, logs)
+}
+
 type streamClock struct {
 	mu sync.Mutex
 	t  time.Time
@@ -164,7 +173,7 @@ func TestJobStreamWriterFailureDoesNotRecover(t *testing.T) {
 				w.onWrite = func([]byte) { clock.advance(sseWriteBudget) }
 			}
 			stream := testJobStreamWriter(w, time.Time{})
-			assertStreamAbort(t, func() {
+			assertWriterAbortWithoutHandlerPanic(t, stream, func() {
 				defer stream.finish()
 				if stream.writeAndFlush([]byte(": connected\n\n"), true) == nil {
 					t.Fatal("failed I/O succeeded")
@@ -188,7 +197,7 @@ func TestJobStreamWriterExpiredSessionNeverStarts(t *testing.T) {
 	clock := &streamClock{t: time.Now()}
 	w := newControlledStreamWriter(clock)
 	stream := testJobStreamWriter(w, clock.now())
-	assertStreamAbort(t, func() {
+	assertWriterAbortWithoutHandlerPanic(t, stream, func() {
 		defer stream.finish()
 		stream.writeAndFlush([]byte(": connected\n\n"), true)
 	})
@@ -198,41 +207,75 @@ func TestJobStreamWriterExpiredSessionNeverStarts(t *testing.T) {
 }
 
 func TestJobStreamWriterSuccessfulFlushAtDeadlineDoesNotReset(t *testing.T) {
-	clock := &streamClock{t: time.Now()}
-	w := newControlledStreamWriter(clock)
-	w.onFlush = func() { clock.advance(sseWriteBudget) }
-	stream := testJobStreamWriter(w, time.Time{})
-	assertStreamAbort(t, func() {
-		defer stream.finish()
-		if stream.writeAndFlush([]byte(": connected\n\n"), true) == nil {
-			t.Fatal("expired Flush succeeded")
-		}
-	})
-	trace := w.snapshot()
-	if len(trace) != 4 || trace[3].kind != "flush" {
-		t.Fatalf("expired deadline was reset: %+v", trace)
+	for _, bound := range []string{"write_budget", "session_expiry"} {
+		t.Run(bound, func(t *testing.T) {
+			clock := &streamClock{t: time.Now()}
+			w := newControlledStreamWriter(clock)
+			budget, expiry := sseWriteBudget, time.Time{}
+			if bound == "session_expiry" {
+				budget, expiry = time.Second, clock.now().Add(time.Second)
+			}
+			w.onFlush = func() { clock.advance(budget) }
+			stream := testJobStreamWriter(w, expiry)
+			assertWriterAbortWithoutHandlerPanic(t, stream, func() {
+				defer stream.finish()
+				if stream.writeAndFlush([]byte(": connected\n\n"), true) == nil {
+					t.Fatal("expired Flush succeeded")
+				}
+			})
+			trace := w.snapshot()
+			if len(trace) != 4 || trace[3].kind != "flush" {
+				t.Fatalf("expired deadline was reset: %+v", trace)
+			}
+		})
 	}
 }
 
 func TestJobStreamWriterLocalExpiryWithPendingAbortsConnectionBuffer(t *testing.T) {
+	for _, next := range []string{"write", "flush"} {
+		t.Run(next, func(t *testing.T) {
+			clock := &streamClock{t: time.Now()}
+			w := newControlledStreamWriter(clock)
+			stream := testJobStreamWriter(w, clock.now().Add(time.Second))
+			assertWriterAbortWithoutHandlerPanic(t, stream, func() {
+				defer stream.finish()
+				if stream.writeAndFlush([]byte(": connected\n\n"), true) != nil || !stream.writeEvent([]byte("id: 1\n\n")) {
+					t.Fatal("initial writes failed")
+				}
+				clock.advance(time.Second)
+				if next == "write" && stream.writeEvent([]byte("id: 2\n\n")) || next == "flush" && stream.flushPage() {
+					t.Fatal("expired session resumed")
+				}
+			})
+			trace := w.snapshot()
+			last := trace[len(trace)-1]
+			if len(trace) != 9 || last.kind != "deadline" || !last.deadline.Before(clock.now()) || strings.Contains(w.String(), "id: 2") {
+				t.Fatalf("local expiry allowed pending connection buffer to escape: %+v", trace)
+			}
+		})
+	}
+}
+
+func TestJobStreamWriterSessionExpiryNeverResumes(t *testing.T) {
 	clock := &streamClock{t: time.Now()}
 	w := newControlledStreamWriter(clock)
 	stream := testJobStreamWriter(w, clock.now().Add(time.Second))
-	assertStreamAbort(t, func() {
+	assertWriterAbortWithoutHandlerPanic(t, stream, func() {
 		defer stream.finish()
-		if stream.writeAndFlush([]byte(": connected\n\n"), true) != nil || !stream.writeEvent([]byte("id: 1\n\n")) {
-			t.Fatal("initial writes failed")
+		if stream.writeAndFlush([]byte(": connected\n\n"), true) != nil {
+			t.Fatal("handshake")
 		}
+		before := w.snapshot()
 		clock.advance(time.Second)
-		if stream.writeEvent([]byte("id: 2\n\n")) {
-			t.Fatal("expired session resumed")
+		if stream.writeAndFlush([]byte("private"), false) == nil {
+			t.Fatal("expired session accepted a new frame")
+		}
+		// Once local expiry is observed even a clock rewind cannot resume I/O.
+		clock.advance(-time.Second)
+		if stream.writeEvent([]byte("private")) || stream.flushPage() || len(w.snapshot()) != len(before) {
+			t.Fatal("expired stream recovered or attempted business I/O")
 		}
 	})
-	trace := w.snapshot()
-	last := trace[len(trace)-1]
-	if len(trace) != 9 || last.kind != "deadline" || !last.deadline.Before(clock.now()) || strings.Contains(w.String(), "id: 2") {
-		t.Fatalf("local expiry allowed pending connection buffer to escape: %+v", trace)
-	}
 }
 
 func TestJobStreamWriterPendingAndPanicAbort(t *testing.T) {
@@ -241,6 +284,9 @@ func TestJobStreamWriterPendingAndPanicAbort(t *testing.T) {
 			clock := &streamClock{t: time.Now()}
 			w := newControlledStreamWriter(clock)
 			stream := testJobStreamWriter(w, time.Time{})
+			var fixture Server
+			logs := captureStreamLogs(&fixture)
+			stream.logger = fixture.logger
 			if cause == "header panic" {
 				w.failAt = 2
 			}
@@ -261,6 +307,13 @@ func TestJobStreamWriterPendingAndPanicAbort(t *testing.T) {
 			last := trace[len(trace)-1]
 			if last.kind != "deadline" || !last.deadline.Before(clock.now()) {
 				t.Fatalf("abort did not expire connection buffer deadline: %+v", trace)
+			}
+			wantPanics := 1
+			if cause == "pending" {
+				wantPanics = 0
+			}
+			if got := streamHandlerPanicCount(t, logs); got != wantPanics {
+				t.Fatalf("panic log detector = %d, want %d", got, wantPanics)
 			}
 		})
 	}
@@ -296,6 +349,7 @@ func manualStreamTiming(clock *streamClock) (jobStreamTiming, chan struct{}, cha
 
 func TestJobStreamIOWindowsAndIdleRevocation(t *testing.T) {
 	s, client, account, job := serverStreamFixture(t, 3)
+	logs := captureStreamLogs(s)
 	s.sseReplayBatch = 2
 	// Seed through the store so Publish's assigned live sequence follows replay.
 	// Direct DB seeding after HybridStore creation does not advance its counter.
@@ -310,7 +364,8 @@ func TestJobStreamIOWindowsAndIdleRevocation(t *testing.T) {
 	expiresAt := clock.now().Add(time.Second)
 	claims := &service.AccessTokenClaims{UserID: account.ID, AuthVersion: account.AuthVersion,
 		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: &jwt.NumericDate{Time: expiresAt}}}
-	r := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(context.WithValue(t.Context(), authContextKey{}, authenticatedUser{User: account, Claims: claims}))
+	ctx, cancel := context.WithCancel(t.Context())
+	r := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(context.WithValue(ctx, authContextKey{}, authenticatedUser{User: account, Claims: claims}))
 	w := newControlledStreamWriter(clock)
 	w.onWrite = func(data []byte) {
 		if strings.Contains(string(data), ": connected") {
@@ -318,8 +373,7 @@ func TestJobStreamIOWindowsAndIdleRevocation(t *testing.T) {
 		}
 	}
 	timing, ready, ticks := manualStreamTiming(clock)
-	done := make(chan any, 1)
-	go func() { done <- streamPanic(func() { s.handleJobStreamWithTiming(w, r, job.ID, time.Second, timing) }) }()
+	done, joined := startExpiryStream(t, cancel, nil, func() { s.handleJobStreamWithTiming(w, r, job.ID, time.Second, timing) })
 	awaitStreamSignal(t, ready)
 	for range 6 {
 		awaitStreamSignal(t, w.completed)
@@ -350,6 +404,8 @@ func TestJobStreamIOWindowsAndIdleRevocation(t *testing.T) {
 	if rec := awaitStreamResult(t, done); rec != nil {
 		t.Fatalf("healthy idle close aborted: %v", rec)
 	}
+	awaitStreamSignal(t, joined)
+	assertNoStreamHandlerPanic(t, logs)
 	closed := w.snapshot()
 	if len(closed) != len(trace)+1 || !closed[len(trace)].deadline.Equal(clock.now().Add(sseCloseBudget)) {
 		t.Fatalf("idle retained business deadline or close used expired session: %+v", closed)
@@ -363,22 +419,28 @@ func TestJobStreamBlockedWriteKeepsDeadlineDuringRevocation(t *testing.T) {
 	for _, lifetime := range []time.Duration{time.Hour, time.Second} {
 		t.Run(lifetime.String(), func(t *testing.T) {
 			s, client, account, job := serverStreamFixture(t, 1)
+			logs := captureStreamLogs(s)
 			clock := &streamClock{t: time.Now()}
 			claims := &service.AccessTokenClaims{UserID: account.ID, AuthVersion: account.AuthVersion,
 				RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: &jwt.NumericDate{Time: clock.now().Add(lifetime)}}}
-			r := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(context.WithValue(t.Context(), authContextKey{}, authenticatedUser{User: account, Claims: claims}))
+			ctx, cancel := context.WithCancel(t.Context())
+			r := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(context.WithValue(ctx, authContextKey{}, authenticatedUser{User: account, Claims: claims}))
 			w := newControlledStreamWriter(clock)
 			entered, release := make(chan struct{}), make(chan struct{})
+			var releaseOnce sync.Once
+			unblock := func() { releaseOnce.Do(func() { close(release) }) }
 			w.onWrite = func(data []byte) {
 				if strings.Contains(string(data), "id: 1") {
 					close(entered)
-					<-release
+					select {
+					case <-release:
+					case <-ctx.Done():
+					}
 				}
 			}
-			done := make(chan any, 1)
-			go func() {
-				done <- streamPanic(func() { s.handleJobStreamWithTiming(w, r, job.ID, time.Second, jobStreamTiming{now: clock.now}) })
-			}()
+			done, joined := startExpiryStream(t, cancel, unblock, func() {
+				s.handleJobStreamWithTiming(w, r, job.ID, time.Second, jobStreamTiming{now: clock.now})
+			})
 			awaitStreamSignal(t, entered)
 			trace := w.snapshot()
 			deadline := trace[len(trace)-1].deadline
@@ -388,10 +450,12 @@ func TestJobStreamBlockedWriteKeepsDeadlineDuringRevocation(t *testing.T) {
 			}
 			client.User.UpdateOneID(account.ID).AddAuthVersion(1).ExecX(t.Context())
 			clock.advance(budget)
-			close(release)
+			unblock()
 			if rec := awaitStreamResult(t, done); rec != http.ErrAbortHandler {
 				t.Fatalf("blocked stream = %v", rec)
 			}
+			awaitStreamSignal(t, joined)
+			assertNoStreamHandlerPanic(t, logs)
 			if after := w.snapshot(); len(after) != len(trace) {
 				t.Fatalf("recovered after expired Write: %+v", after)
 			}
@@ -403,6 +467,7 @@ func TestJobStreamReplayPageChecksAccessBeforeFlush(t *testing.T) {
 	for _, cancelRequest := range []bool{false, true} {
 		t.Run(map[bool]string{false: "revocation at page end", true: "canceled within page"}[cancelRequest], func(t *testing.T) {
 			s, client, account, job := serverStreamFixture(t, 3)
+			logs := captureStreamLogs(s)
 			s.sseReplayBatch = 2
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -420,6 +485,7 @@ func TestJobStreamReplayPageChecksAccessBeforeFlush(t *testing.T) {
 			assertStreamAbort(t, func() {
 				s.handleJobStreamWithTiming(w, r, job.ID, time.Second, jobStreamTiming{now: w.clock.now})
 			})
+			assertNoStreamHandlerPanic(t, logs)
 			flushes := 0
 			for _, op := range w.snapshot() {
 				if op.kind == "flush" {

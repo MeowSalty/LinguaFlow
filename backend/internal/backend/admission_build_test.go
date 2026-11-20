@@ -27,6 +27,7 @@ func buildAdmission(t *testing.T, bytes int64) (*RequestAdmission, *resourcebudg
 
 func TestBuildCapacityLeaseUsesRootAndTransfersLiveBacking(t *testing.T) {
 	a, r := buildAdmission(t, 100)
+	localChanged, rootChanged, version := a.changed, r.Changed(), a.version
 	l, err := a.BeginBuildCapacity("prepare", 80)
 	if err != nil {
 		t.Fatal(err)
@@ -34,11 +35,34 @@ func TestBuildCapacityLeaseUsesRootAndTransfersLiveBacking(t *testing.T) {
 	if l.Bytes() != 80 || r.Snapshot(1).Actor.PayloadBytes != 80 {
 		t.Fatal(r.Snapshot(1))
 	}
+	select {
+	case <-localChanged:
+	default:
+		t.Fatal("successful build claim did not wake local admission")
+	}
+	select {
+	case <-rootChanged:
+	default:
+		t.Fatal("successful build claim did not wake Root waiters")
+	}
+	if a.version != version+1 {
+		t.Fatal("successful build claim lost its admission turn change")
+	}
+	localChanged, rootChanged, version = a.changed, r.Changed(), a.version
+	if err = l.Reserve(0); err != nil {
+		t.Fatal(err)
+	}
+	if a.version != version || a.changed != localChanged || r.Changed() != rootChanged || l.Bytes() != 80 {
+		t.Fatal("unchanged build claim changed admission, Root, or backing")
+	}
 	if err = l.Transfer(30, "candidate"); err != nil {
 		t.Fatal(err)
 	}
 	if l.Bytes() != 0 || a.BuildBytes("candidate") != 30 || r.Snapshot(1).Actor.PayloadBytes != 30 {
 		t.Fatal(r.Snapshot(1))
+	}
+	if a.version != version+1 || a.changed == localChanged || r.Changed() == rootChanged {
+		t.Fatal("successful build transfer did not publish its ownership change")
 	}
 	if err = l.Close(); err != nil {
 		t.Fatal(err)
@@ -60,11 +84,15 @@ func TestBuildCapacityRejectedGrowthLeavesBothLedgersIntact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	localChanged, rootChanged, version := a.changed, r.Changed(), a.version
 	if err = l.Reserve(21); !errors.Is(err, ErrNoCapacityDrain) {
 		t.Fatal(err)
 	}
 	if l.Bytes() != 80 || r.Snapshot(1).Actor.PayloadBytes != 80 {
 		t.Fatal(r.Snapshot(1))
+	}
+	if a.version != version || a.changed != localChanged || r.Changed() != rootChanged {
+		t.Fatal("rejected build growth published an admission change")
 	}
 	if err = l.Release(50); err != nil {
 		t.Fatal(err)
@@ -276,11 +304,15 @@ func TestBuildCapacityPartialMovePreservesRemainingSource(t *testing.T) {
 	if err := a.ClaimBuild("source", 80); err != nil {
 		t.Fatal(err)
 	}
+	localChanged, rootChanged, version := a.changed, root.Changed(), a.version
 	if err := a.MoveBuildBytes("source", "field:new", 30); err != nil {
 		t.Fatal(err)
 	}
 	if a.BuildBytes("source") != 50 || a.BuildBytes("field:new") != 30 || root.Snapshot(1).Actor.PayloadBytes != 80 {
 		t.Fatal(root.Snapshot(1))
+	}
+	if a.version != version+1 || a.changed == localChanged || root.Changed() == rootChanged {
+		t.Fatal("equal-total backing transfer did not publish its ownership change")
 	}
 	if err := a.MoveBuildBytes("source", "field:new", 51); !errors.Is(err, ErrBuildCapacity) {
 		t.Fatal(err)
@@ -337,12 +369,16 @@ func TestBuildCapacityBatchMoveIsAtomicAcrossFields(t *testing.T) {
 	if !errors.Is(err, resourcebudget.ErrIdentity) || !reflect.DeepEqual(before, a.BuildAllocationSnapshot()) || root.Snapshot(1).Actor.PayloadBytes != 90 {
 		t.Fatal("root rejection failed to roll back complete field batch", err, a.BuildAllocationSnapshot(), root.Snapshot(1))
 	}
+	localChanged, rootChanged, version := a.changed, root.Changed(), a.version
 	if err = a.MoveBuildAllocations("source", []BuildAllocationTransfer{{"new:first", 10}, {"existing", 20}, {"new:first", 20}}); err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]int64{"source": 30, "existing": 30, "new:first": 30}
 	if !reflect.DeepEqual(want, a.BuildAllocationSnapshot()) || root.Snapshot(1).Actor.PayloadBytes != 90 {
 		t.Fatal("successful batch lost capacity", a.BuildAllocationSnapshot(), root.Snapshot(1))
+	}
+	if a.version != version+1 || a.changed == localChanged || root.Changed() == rootChanged {
+		t.Fatal("equal-total field batch did not publish its ownership change")
 	}
 	if err = a.ReleaseBuild("source"); err != nil || root.Snapshot(1).Actor.PayloadBytes != 60 {
 		t.Fatal("source release refunded live targets", err, root.Snapshot(1))

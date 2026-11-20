@@ -11,7 +11,10 @@ jobs:
   test:
     name: 发布前测试
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 120
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '4'
     services:
       postgres:
         image: postgres:16
@@ -45,20 +48,21 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: 运行测试
-        timeout-minutes: 30
+        # PF-04 修后同 runner 的最差串行墙钟 / 0.75 决定预算；原场景/响应期限不变。
+        timeout-minutes: 90
         shell: bash
         env:
           LINGUAFLOW_TEST_POSTGRES_DSN: postgres://linguaflow:linguaflow-test@localhost:5432/linguaflow_test?sslmode=disable
         run: |
-          set -o pipefail
-          task backend:test:race -- -json -count=1 -timeout=20m ./... 2>&1 | tee backend/test-results.out
+          task backend:test:ci MODE=race OUTPUT_DIR=".ci-test/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
-      - name: 上传测试日志
+      - name: 上传完整测试证据（失败也保留分片原始数据）
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: release-test-results
-          path: backend/test-results.out
+          path: backend/.ci-test/${{ github.run_id }}-${{ github.run_attempt }}/
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: warn
 

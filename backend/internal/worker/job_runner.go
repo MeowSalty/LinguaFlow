@@ -1050,6 +1050,7 @@ func (r *JobRunner) processJobResource(
 			probe := newRoundStore(r.client, scope, nil, snapshot, roundIdx, nil, false, r.dbDriver, nil, nil)
 			probe.bindCanonical(doc)
 			sealed, _, loadErr := probe.LoadCanonical(ctx, doc)
+			probe.CloseCanonicalIndex()
 			if loadErr != nil {
 				return loadErr
 			}

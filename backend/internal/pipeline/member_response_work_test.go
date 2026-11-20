@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/bits"
 	"strings"
 	"sync"
 	"testing"
@@ -23,11 +24,13 @@ const memberWorkRowsPerMember int64 = 64
 type memberWorkTotals struct {
 	mu                                                     sync.Mutex
 	bytes, rows, sourceScans, hotFullJob, startupFullJob   int64
+	linearRows, indexRows, deadlineRows                    int64
 	liveFrames, liveFrameBytes, peakFrames, peakFrameBytes int64
 	peakRoot                                               int64
 	started                                                bool
 	invalid                                                bool
 	operations                                             map[string]int64
+	operationRows                                          map[string]int64
 	root                                                   *resourcebudget.RootBudget
 	rootActor                                              int
 }
@@ -40,8 +43,10 @@ func (m *memberWorkTotals) observe(e backend.MemberWorkEvent) {
 	}
 	if m.operations == nil {
 		m.operations = make(map[string]int64)
+		m.operationRows = make(map[string]int64)
 	}
 	m.operations[e.Phase+"/"+e.Operation]++
+	m.operationRows[e.Phase+"/"+e.Operation] += e.Rows
 	if e.Phase == "capture" || e.Phase == "prepare" || e.Phase == "member" {
 		m.started = true
 	}
@@ -67,6 +72,15 @@ func (m *memberWorkTotals) observe(e backend.MemberWorkEvent) {
 	default:
 		m.bytes += e.Bytes
 		m.rows += e.Rows
+		switch {
+		case e.Phase == "scheduler" && e.Operation == "index_visit":
+			m.indexRows += e.Rows
+		case e.Phase == "scheduler" && e.Operation == "deadline_probe":
+			m.deadlineRows += e.Rows
+		default:
+			// Unknown/new phases still belong to the original strict data bound.
+			m.linearRows += e.Rows
+		}
 	}
 	if e.Operation == "source_scan" {
 		m.sourceScans += e.Bytes
@@ -80,7 +94,7 @@ func (m *memberWorkTotals) observe(e backend.MemberWorkEvent) {
 	}
 }
 
-func (m *memberWorkTotals) check(t *testing.T, n int, payload, raw int64) {
+func (m *memberWorkTotals) check(t *testing.T, n int, payload, raw int64, loadPasses int64) {
 	t.Helper()
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -88,8 +102,24 @@ func (m *memberWorkTotals) check(t *testing.T, n int, payload, raw int64) {
 		t.Fatalf("invalid event/whole-job query during hot work: invalid=%t hot=%d ops=%v", m.invalid, m.hotFullJob, m.operations)
 	}
 	byteBound := memberWorkBytePasses*payload + memberWorkMetadataBytes*int64(n)
-	if m.bytes <= 0 || m.bytes > byteBound || m.rows > memberWorkRowsPerMember*int64(n)+128 {
-		t.Fatalf("work grew beyond fixed stage bounds: n=%d bytes=%d/%d rows=%d/%d ops=%v", n, m.bytes, byteBound, m.rows, memberWorkRowsPerMember*int64(n)+128, m.operations)
+	linearBound := memberWorkRowsPerMember*int64(n) + 128
+	if m.bytes <= 0 || m.bytes > byteBound || m.linearRows > linearBound {
+		t.Fatalf("work grew beyond fixed stage bounds: n=%d bytes=%d/%d linear_rows=%d/%d total_rows=%d operation_rows=%v", n, m.bytes, byteBound, m.linearRows, linearBound, m.rows, m.operationRows)
+	}
+	rows := m.operationRows
+	updates := rows["scheduler/ready_update"]
+	base := int64(uint(1) << bits.Len(uint(n-1)))
+	if rows["canonical_load/doc_member_visit"] != loadPasses*int64(n) || rows["canonical_prepare/doc_member_visit"] != int64(n) || rows["canonical_seal/doc_member_visit"] != 2*int64(n) ||
+		updates <= 0 || updates > 8*int64(n) || rows["scheduler/doc_member_visit"] != updates+4*int64(n) || rows["scheduler/index_build_visit"] != 2*base ||
+		rows["scheduler/word_input"] != int64(n) || rows["scheduler/plan_build"] != 1 || rows["response_budget/start"] != 1 || rows["response_budget/end"] != 1 {
+		t.Fatalf("cold/touched/word/response work escaped fixed passes: n%d operation_rows=%v", n, rows)
+	}
+	// E includes cold initialization and each actual touched-member refresh.
+	// K is real heap-top probes, with constant ready-root work per wake. Keep
+	// organic K observable rather than deriving it from unrelated frame events.
+	indexBound := updates*int64(8*bits.Len(uint(n))+8) + 3*m.deadlineRows + 4*rows["scheduler/plan_build"]
+	if m.indexRows > indexBound || m.deadlineRows != m.operations["scheduler/deadline_probe"] {
+		t.Fatalf("typed index/probe work escaped (E+B)logN+K: n%d index=%d/%d K=%d operation_rows=%v", n, m.indexRows, indexBound, m.deadlineRows, rows)
 	}
 	if m.sourceScans <= 0 || m.sourceScans > 2*raw {
 		t.Fatalf("archive source scans=%d raw=%d", m.sourceScans, raw)
@@ -123,6 +153,7 @@ func (m *memberWorkTotals) check(t *testing.T, n int, payload, raw int64) {
 		}
 	}
 	t.Logf("N=%d work_bytes=%d bound=%d rows=%d startup_full_job=%d hot_full_job=%d source_scans=%d raw=%d peak_frames=%d peak_frame_bytes=%d peak_root=%d operations=%v", n, m.bytes, byteBound, m.rows, m.startupFullJob, m.hotFullJob, m.sourceScans, raw, m.peakFrames, m.peakFrameBytes, m.peakRoot, m.operations)
+	t.Logf("linear_rows=%d/%d index_rows=%d/%d actual_K=%d operation_rows=%v", m.linearRows, linearBound, m.indexRows, indexBound, m.deadlineRows, rows)
 }
 
 func TestMemberResponseWorkMemory(t *testing.T) {
@@ -170,7 +201,7 @@ func TestMemberResponseWorkMemory(t *testing.T) {
 			if doc.InputTokens != 17 || doc.OutputTokens != 3 {
 				t.Fatalf("usage changed: %d/%d", doc.InputTokens, doc.OutputTokens)
 			}
-			totals.check(t, n, int64(n*(len(source)+len(target))+len(raw)), int64(len(raw)))
+			totals.check(t, n, int64(n*(len(source)+len(target))+len(raw)), int64(len(raw)), 1)
 			owned := r.Admission.OwnedPayloadSnapshot()
 			if owned.TotalPeak <= 0 || owned.TotalPeak > memberWorkBytePasses*int64(n*(len(source)+len(target))+len(raw))+memberWorkMetadataBytes*int64(n) {
 				t.Fatalf("actual observed backing peak exceeds fixed bound: %+v", owned)

@@ -58,9 +58,11 @@ jobs:
   test:
     name: 自动化测试
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 120
     env:
-      TEST_MODE: ${{ github.event_name == 'pull_request' && 'plain' || 'race-cover-atomic' }}
+      TEST_MODE: ${{ github.event_name == 'pull_request' && 'plain' || 'race-atomic' }}
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '4'
     services:
       postgres:
         image: postgres:16
@@ -119,34 +121,33 @@ jobs:
             go-test-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-test-cache.outputs.image }}-${{ steps.go-test-cache.outputs.version }}-${{ env.TEST_MODE }}-${{ hashFiles('backend/go.mod', 'backend/go.sum') }}-
 
       - name: 运行测试（PR 普通测试，main 竞态与覆盖率）
-        timeout-minutes: 30
+        # PF-04 修后同 runner 的最差串行墙钟 / 0.75 决定预算；不以延时替代性能修复。
+        timeout-minutes: 90
         shell: bash
         env:
           LINGUAFLOW_TEST_POSTGRES_DSN: postgres://linguaflow:linguaflow-test@localhost:5432/linguaflow_test?sslmode=disable
         run: |
-          set -o pipefail
-          if [ "$TEST_MODE" = "plain" ]; then
-            task backend:test -- -json -count=1 -timeout=20m ./... 2>&1 | tee backend/test-results.out
-          else
-            task backend:test:race -- -json -count=1 -timeout=20m -coverprofile=coverage.out -covermode=atomic ./... 2>&1 | tee backend/test-results.out
-          fi
+          task backend:test:ci MODE="$TEST_MODE" OUTPUT_DIR=".ci-test/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
-      - name: 上传测试日志
+      - name: 上传完整测试证据（失败也保留分片原始数据）
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
-          path: backend/test-results.out
+          path: backend/.ci-test/${{ github.run_id }}-${{ github.run_attempt }}/
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: warn
 
       - name: 上传覆盖率报告
-        if: always() && github.event_name != 'pull_request'
+        if: success() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           name: coverage
-          path: backend/coverage.out
+          path: backend/.ci-test/${{ github.run_id }}-${{ github.run_attempt }}/coverage.out
+          include-hidden-files: true
           retention-days: 7
+          if-no-files-found: error
 
   build:
     name: 构建验证

@@ -88,20 +88,37 @@ func TestJobStreamSessionRevocationIdleAndLive(t *testing.T) {
 }
 
 func TestJobStreamFreezesOriginalSessionExpiry(t *testing.T) {
+	t.Run("realtime", testJobStreamRealtimeSessionExpiry)
+	t.Run("healthy_return", func(t *testing.T) { testJobStreamControlledSessionExpiry(t, false) })
+	t.Run("write_boundary_abort", func(t *testing.T) { testJobStreamControlledSessionExpiry(t, true) })
+}
+
+func testJobStreamRealtimeSessionExpiry(t *testing.T) {
 	s, _, account, job := serverStreamFixture(t, 0)
-	expiresAt := time.Now().Add(150 * time.Millisecond)
-	claims := &service.AccessTokenClaims{UserID: account.ID, AuthVersion: account.AuthVersion,
-		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: &jwt.NumericDate{Time: expiresAt}}}
-	r := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(context.WithValue(t.Context(), authContextKey{}, authenticatedUser{User: account, Claims: claims}))
-	w := &revokingStreamWriter{safeRecorder: newSafeRecorder(), trigger: ": connected", revoke: func() {
+	logs := captureStreamLogs(s)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	claims := &service.AccessTokenClaims{UserID: account.ID, AuthVersion: account.AuthVersion}
+	r := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(context.WithValue(ctx, authContextKey{}, authenticatedUser{User: account, Claims: claims}))
+	w := &expiryHandshakeWriter{revokingStreamWriter: &revokingStreamWriter{safeRecorder: newSafeRecorder(), trigger: ": connected", revoke: func() {
 		// Even an updated authentication context cannot renew an established stream.
 		claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(time.Hour))
-	}}
+	}}}
+	// Prepare every fixture before the original short real-time window starts.
 	started := time.Now()
-	s.handleJobStreamWithInterval(w, r, job.ID, 10*time.Millisecond)
+	expiresAt := started.Add(150 * time.Millisecond)
+	claims.ExpiresAt = &jwt.NumericDate{Time: expiresAt}
+	streamTermination(func() { s.handleJobStreamWithInterval(w, r, job.ID, 10*time.Millisecond) })
 	if elapsed := time.Since(started); elapsed < 100*time.Millisecond || elapsed > 2*time.Second {
 		t.Fatalf("original access expiry not respected: %s", elapsed)
 	}
+	if ctx.Err() != nil || w.firstFlush.IsZero() || !w.firstFlush.Before(expiresAt) || !strings.HasPrefix(w.String(), ": connected\n\n") {
+		t.Fatalf("original stream was not established before expiry: flush=%v expiry=%v context=%v body=%q", w.firstFlush, expiresAt, ctx.Err(), w.String())
+	}
+	if !claims.ExpiresAt.Time.After(expiresAt.Add(time.Minute)) || countIDLines(w.String()) != 0 {
+		t.Fatalf("refresh was not exercised or private data escaped: %q", w.String())
+	}
+	assertNoStreamHandlerPanic(t, logs)
 }
 
 func TestJobStreamRequiresCompleteServerClaims(t *testing.T) {

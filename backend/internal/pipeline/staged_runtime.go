@@ -334,11 +334,19 @@ func (w *CandidateWindow) fixedPin(entry windowEntry, consumer *WindowConsumer) 
 	// Header accounting has no entry-level claim yet. An active coordinator
 	// loading that scope's page still makes this temporary occupancy, not a pin.
 	for active := range w.consumers {
-		if active.active && active.resourceID == entry.resourceID && (active.roundID == 0 || active.roundID == entry.roundID) {
+		if potentialWindowLoader(active, entry) {
 			return false
 		}
 	}
 	return true
+}
+
+// A completed exact-scope page loader cannot subsequently claim an omitted
+// durable entry. A wildcard scope has not established that exhaustive fact.
+// Actual claims are checked separately through entry.consumer.
+func potentialWindowLoader(active *WindowConsumer, entry windowEntry) bool {
+	return active.active && active.resourceID > 0 && active.resourceID == entry.resourceID &&
+		(active.roundID == 0 || active.roundID == entry.roundID && !active.recovered)
 }
 
 // CanDrainFor excludes only proven fixed drafts. With no actual live consumer
@@ -358,8 +366,9 @@ func (w *CandidateWindow) CanDrainFor(consumer *WindowConsumer) bool {
 		if entry.resourceID <= 0 || entry.consumer == nil || !entry.consumer.active {
 			loading := false
 			for active := range w.consumers {
-				if entry.durable && !entry.reservation && active != consumer && active.active && !active.recovered && active.resourceID > 0 && active.roundID > 0 &&
-					active.resourceID == entry.resourceID && active.roundID == entry.roundID {
+				// A waiting coordinator may rely on a foreign page loader. A nil
+				// observer has no such wait and requires an actual active claim.
+				if consumer != nil && entry.durable && !entry.reservation && active != consumer && potentialWindowLoader(active, entry) {
 					loading = true
 					break
 				}
@@ -834,6 +843,7 @@ type requestSession struct {
 	pending           []string
 	completionCtx     context.Context
 	handoffDeadline   time.Time
+	handoffStartedAt  time.Time
 	handoffMu         sync.Mutex
 	callCtx           context.Context
 	workCancel        context.CancelFunc
@@ -1294,7 +1304,13 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 	duration := time.Since(start)
 	permit.RequestDone()
 	if session != nil && session.store != nil {
-		deadline := time.Now().Add(b.runtime.Policy.HandoffBudget)
+		handoffStart := time.Now()
+		deadline := handoffStart.Add(b.runtime.Policy.HandoffBudget)
+		session.handoffMu.Lock()
+		if session.handoffStartedAt.IsZero() {
+			session.handoffStartedAt = handoffStart
+		}
+		session.handoffMu.Unlock()
 		session.startHandoff(deadline)
 		handoffCtx := persistence.WithDeadline(b.runtime.CompletionContext(providerCtx), session.handoffDeadline)
 		phase := "dispatch_returned"
