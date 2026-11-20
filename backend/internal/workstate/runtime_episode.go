@@ -165,7 +165,7 @@ func (s *Store) BeginRuntimeProgress(ctx context.Context, jobID int, id, respons
 }
 
 func clearRuntimeBindingTx(ctx context.Context, tx *ent.Client, jobID int, id string, responseDone bool) error {
-	j, err := tx.Job.Get(ctx, jobID)
+	j, err := tx.Job.Query().Where(job.IDEQ(jobID)).Select(job.FieldID, job.FieldPipelineRuntimeState).Only(ctx)
 	if err != nil {
 		return err
 	}
@@ -250,7 +250,7 @@ func (s *Store) MoveRuntimeProgress(ctx context.Context, jobID int, previous, bu
 }
 
 func transferRuntimeBindingTx(ctx context.Context, tx *ent.Client, jobID int, from, to string) error {
-	j, err := tx.Job.Get(ctx, jobID)
+	j, err := tx.Job.Query().Where(job.IDEQ(jobID)).Select(job.FieldID, job.FieldPipelineRuntimeState).Only(ctx)
 	if err != nil {
 		return err
 	}

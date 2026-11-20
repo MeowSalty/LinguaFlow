@@ -70,6 +70,17 @@ func guardExecution(ctx context.Context, tx *ent.Client, jobID int) error {
 	return CheckExecution(ctx, tx, jobID)
 }
 
+// Promotion retains every stable identity field, but neither preflight nor its
+// locked proof consumes response accounting or business context. Only the
+// locked transition and ACK verification additionally consume cursor and phase.
+func memberPromotionIdentityQuery(q *ent.WorkRequestQuery) *ent.WorkRequestQuery {
+	return q.Select(workrequest.FieldID, workrequest.FieldIdentity, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldResponseFormatVersion, workrequest.FieldPromotionCount, workrequest.FieldSnapshotDigest, workrequest.FieldFreezeDigest, workrequest.FieldResponseDigest).WorkRequestQuery
+}
+
+func memberPromotionStateQuery(q *ent.WorkRequestQuery) *ent.WorkRequestQuery {
+	return memberPromotionIdentityQuery(q).Select(workrequest.FieldPromotionCursor, workrequest.FieldPromotionState).WorkRequestQuery
+}
+
 func responseHeader(row *ent.WorkRequest) ResponseHeader {
 	return ResponseHeader{MemberContext: MemberContext{MemberPool: row.MemberPool, MemberAttempt: row.MemberAttempt, MemberMode: row.MemberMode, MemberFormat: row.MemberFormat, SourceLang: row.SourceLang, TargetLang: row.TargetLang, TextMode: row.TextMode}, FormatVersion: row.ResponseFormatVersion, ArchiveCursor: row.ArchiveCursor, ArchiveDigest: row.ArchiveDigest, InputMemberBytes: row.InputMemberBytes, OutputMemberBytes: row.OutputMemberBytes, PublicBytes: row.PublicBytes, MetadataBytes: row.RequestMetadataBytes + row.MemberStorageBytes - row.InputMemberBytes - row.OutputMemberBytes - row.CaptureBytes - row.PublicBytes, DatabaseID: row.ID, RequestID: row.Identity, Scope: Scope{JobID: row.JobID, ResourceID: row.ResourceID, RoundID: row.JobRoundID, RetryEpoch: row.RetryEpoch}, SnapshotDigest: row.SnapshotDigest, FreezeDigest: row.FreezeDigest, ResponseDigest: row.ResponseDigest, CaptureBytes: row.CaptureBytes, ModelOutputBytes: row.ModelOutputBytes, CorrectionBytes: row.CorrectionBytes, PublicKind: responsecontract.PublicKind(row.PublicKind), BusinessBound: row.BusinessBound, MemberCount: row.PromotionCount, Cursor: row.PromotionCursor, Phase: responsecontract.ResponsePhase(row.PromotionState), Truncated: row.ResponseTruncated}
 }
@@ -129,7 +140,7 @@ func (s *Store) promoteMember(ctx context.Context, in MemberPromotion) error {
 		return ErrManifest
 	}
 	failure := in.Outcome.String()
-	current, err := memberRequest(ctx, s.client, in.Key)
+	current, err := readMemberRequest(ctx, in.Key, memberPromotionIdentityQuery(s.client.WorkRequest.Query().Where(workrequest.IdentityEQ(in.Key.RequestID))))
 	if err != nil {
 		return err
 	}
@@ -151,7 +162,7 @@ func (s *Store) promoteMember(ctx context.Context, in MemberPromotion) error {
 		if err := guardExecution(ctx, tx, in.Scope.JobID); err != nil {
 			return err
 		}
-		r, err := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(in.Key.RequestID))).Only(ctx)
+		r, err := memberPromotionStateQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(in.Key.RequestID))).Only(ctx)
 		if err != nil {
 			return err
 		}
@@ -250,7 +261,7 @@ type memberPromotionProof struct {
 }
 
 func (p memberPromotionProof) exists(ctx context.Context, tx *ent.Client) (bool, error) {
-	r, e := memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(p.Key.RequestID))).Only(ctx)
+	r, e := memberPromotionStateQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(p.Key.RequestID))).Only(ctx)
 	if e != nil {
 		return false, e
 	}
