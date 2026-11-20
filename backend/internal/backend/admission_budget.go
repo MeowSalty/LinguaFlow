@@ -81,6 +81,9 @@ type PipelineBudgetEntry struct {
 	// Snapshots align with Replaced and preserve the bounded member records
 	// if an admitted replacement is aborted before becoming durable.
 	replacedEntries []replacedMemberEntry
+	// Borrow the canonical map key rather than a caller's equal transient key.
+	// Preparation rollback may retain this identity beyond that caller's plan.
+	stableKey string
 }
 
 // Replacement snapshots contain scalar member state only. They cannot retain
@@ -89,6 +92,20 @@ type replacedMemberEntry struct {
 	ResourceID, RoundID     int
 	Bytes, Growth           int64
 	Progress, GrowthDurable bool
+}
+
+func stableBudgetKey(entries map[string]PipelineBudgetEntry, id string, entry PipelineBudgetEntry) string {
+	if entry.stableKey != "" {
+		return entry.stableKey
+	}
+	// Preparation entries can predate durable member ownership. Their existing
+	// map key is already owned by that inventory; do not clone it.
+	for key := range entries {
+		if key == id {
+			return key
+		}
+	}
+	return id
 }
 
 func snapshotReplacedMember(e PipelineBudgetEntry) replacedMemberEntry {
@@ -389,6 +406,9 @@ func (a *RequestAdmission) BudgetEntries() map[string]PipelineBudgetEntry {
 	out := map[string]PipelineBudgetEntry{}
 	if a.budget != nil {
 		for k, v := range a.budget.entries {
+			// This internal backing reference is not a stock snapshot fact.
+			// Keep it in the live ledger; copies preserve the inventory contract.
+			v.stableKey = ""
 			out[k] = v
 		}
 	}
@@ -442,7 +462,7 @@ func (a *RequestAdmission) PrepareMembers(key string, count, resource, round int
 			// Fresh canonical members have no reservation to replace. Recording
 			// their keys would manufacture durable inventory when a preparation
 			// fails and ReleaseBudgetEntry restores the replaced reservations.
-			replaced = append(replaced, id)
+			replaced = append(replaced, stableBudgetKey(b.entries, id, e))
 			previous = append(previous, snapshotReplacedMember(e))
 		}
 	}
@@ -494,7 +514,7 @@ func (a *RequestAdmission) ReserveMembersReplacing(key string, count, resource, 
 			if !e.Reservation || !e.Durable || e.Count != 1 || e.PlannedCount != 0 || len(e.Replaced) != 0 || e.ResourceID != resource || e.RoundID != round {
 				return false, ErrPipelineCapacity
 			}
-			replaced = append(replaced, id)
+			replaced = append(replaced, stableBudgetKey(b.entries, id, e))
 		}
 	}
 	n, _, _ := b.candidateTotals()
@@ -551,6 +571,7 @@ func (a *RequestAdmission) RenameMembers(from, to string) error {
 		return ErrPipelineCapacity
 	}
 	delete(b.entries, from)
+	e.stableKey = to
 	e.Durable = true
 	e.Replaced = nil
 	e.replacedEntries = nil
@@ -599,6 +620,7 @@ func (a *RequestAdmission) RestoreBudgetEntryWithTransfer(key string, e Pipeline
 		b.baseGrowth -= e.Growth
 		transferred = int64(e.Count)
 	}
+	e.stableKey = key
 	b.entries[key] = e
 	if e.Progress {
 		b.progressID = key
@@ -804,7 +826,9 @@ func (a *RequestAdmission) ReleaseBudgetEntry(id string) {
 			// Do not overwrite an entry that was never removed or was already
 			// restored. After a grant, restore the exact original bounded record.
 			if _, exists := a.budget.entries[old]; !exists {
-				a.budget.entries[old] = e.replacedEntries[i].budgetEntry()
+				previous := e.replacedEntries[i].budgetEntry()
+				previous.stableKey = old
+				a.budget.entries[old] = previous
 			}
 		}
 	}
@@ -1638,7 +1662,7 @@ func (a *RequestAdmission) SplitOwnedMembers(from string, ids []string) error {
 	}
 	delete(b.entries, from)
 	for _, id := range ids {
-		b.entries[id] = PipelineBudgetEntry{ResourceID: e.ResourceID, RoundID: e.RoundID, Count: 1, Reservation: true, Durable: true, Progress: e.Progress && len(ids) == 1}
+		b.entries[id] = PipelineBudgetEntry{ResourceID: e.ResourceID, RoundID: e.RoundID, Count: 1, Reservation: true, Durable: true, Progress: e.Progress && len(ids) == 1, stableKey: id}
 	}
 	if b.progressID == from {
 		b.progressID = ""
@@ -1665,7 +1689,7 @@ func (a *RequestAdmission) RetireToMember(from, to string) error {
 		return ErrPipelineCapacity
 	}
 	delete(b.entries, from)
-	b.entries[to] = PipelineBudgetEntry{ResourceID: e.ResourceID, RoundID: e.RoundID, Count: 1, Reservation: true, Durable: true, Progress: e.Progress}
+	b.entries[to] = PipelineBudgetEntry{ResourceID: e.ResourceID, RoundID: e.RoundID, Count: 1, Reservation: true, Durable: true, Progress: e.Progress, stableKey: to}
 	if b.progressID == from {
 		b.progressID = to
 	}

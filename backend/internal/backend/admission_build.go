@@ -77,7 +77,7 @@ func (a *RequestAdmission) resizeBuildLocked(owner string, bytes int64) error {
 		}
 		return err
 	}
-	a.notifyLocked()
+	a.signalChangedLocked()
 	if a.closed && len(a.buildAllocations) == 0 {
 		return a.detachRootLocked()
 	}
@@ -119,7 +119,7 @@ func (a *RequestAdmission) TransferBuild(owner string, retainedBytes int64, targ
 		}
 		return err
 	}
-	a.notifyLocked()
+	a.signalChangedLocked()
 	if a.closed && len(a.buildAllocations) == 0 {
 		return a.detachRootLocked()
 	}
@@ -162,7 +162,7 @@ func (a *RequestAdmission) moveBuildBytesLocked(owner, target string, bytes int6
 		}
 		return err
 	}
-	a.notifyLocked()
+	a.signalChangedLocked()
 	return nil
 }
 
@@ -228,7 +228,7 @@ func (a *RequestAdmission) MoveBuildAllocations(source string, transfers []Build
 		}
 		return err
 	}
-	a.notifyLocked()
+	a.signalChangedLocked()
 	return nil
 }
 

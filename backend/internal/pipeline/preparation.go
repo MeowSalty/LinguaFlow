@@ -116,13 +116,19 @@ func (p *Preparation) Try(ctx context.Context, i backend.RequestAdmissionIntent,
 	// the descriptor queue. The displaced batch remains in its coordinator.
 	if !found && len(p.queue) >= p.capacity && p.admission != nil {
 		hint, err := p.admission.ReadyHint(ctx, i, gate)
-		if err == nil && hint.Reason == "" {
-			for _, q := range p.queue {
-				old, oldErr := p.admission.ReadyHint(ctx, q, gate)
-				if oldErr != nil || old.Reason != "" {
-					p.forgetLocked(preparationIdentity(q))
-					break
-				}
+		if err != nil {
+			return nil, err
+		}
+		if hint.Reason != "" {
+			// This key has no queued descriptor to signal when its own admission
+			// becomes ready. Keep that cause instead of waiting on the cold queue.
+			return nil, &WorkDeferred{Wait: hint}
+		}
+		for _, q := range p.queue {
+			old, oldErr := p.admission.ReadyHint(ctx, q, gate)
+			if oldErr != nil || old.Reason != "" {
+				p.forgetLocked(preparationIdentity(q))
+				break
 			}
 		}
 	}

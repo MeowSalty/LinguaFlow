@@ -368,6 +368,12 @@ func (a *RequestAdmission) notifyLocked() {
 	if a.root != nil {
 		_ = a.syncRootLocked(0)
 	}
+	a.signalChangedLocked()
+}
+
+// signalChangedLocked publishes only local admission state. Callers bypassing
+// notifyLocked must have already synchronized the same locked state to Root.
+func (a *RequestAdmission) signalChangedLocked() {
 	a.version++
 	close(a.changed)
 	a.changed = make(chan struct{})
