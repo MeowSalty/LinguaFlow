@@ -110,6 +110,9 @@ func (b *BuildBounds) MeasureJSON(v any) (int64, error) {
 // MeasureJSONLimited applies the caller's input/output policy while counting a
 // borrowed value. Allocation demand and the eventual output grant are separate.
 func (b *BuildBounds) MeasureJSONLimited(v any, maxBytes int64) (int64, error) {
+	b.capacityMu.Lock()
+	b.jsonMeasurements++
+	b.capacityMu.Unlock()
 	b.jsonOperations++
 	defer b.retireJSONFields()
 	if maxBytes < 0 {

@@ -164,17 +164,8 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 					selected.Outcome.Reason = responsecontract.MemberMissing
 				}
 			}
-			measured, e := mb.MeasureJSON(selected)
-			if e != nil {
-				finish()
-				return header, e
-			}
-			if measured > runtime.Window.limits.ItemBytes {
-				outcome := MemberOutcome{Key: archiveMemberKey(header, start+i), Reason: responsecontract.MemberTooLarge, Limit: runtime.Window.limits.ItemBytes, Observed: measured}
-				selected = archivedOutput{Failure: outcome.String(), Outcome: outcome}
-			}
 			operation = "encode_archive_member"
-			payload, e := mb.EncodeJSON(selected, runtime.Window.limits.ItemBytes)
+			payload, e := encodeArchivedOutput(mb, selected, archiveMemberKey(header, start+i), runtime.Window.limits.ItemBytes)
 			if e != nil {
 				finish()
 				return header, e
@@ -213,4 +204,22 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 		return header, fmt.Errorf("incomplete output archive")
 	}
 	return header, nil
+}
+
+// selected is private to this member. A replacement changes its representation
+// and needs its own measurement before the fixed-size encoder can admit it.
+func encodeArchivedOutput(b *backend.BuildBounds, selected archivedOutput, key MemberKey, limit int64) ([]byte, error) {
+	measured, err := b.MeasureJSON(selected)
+	if err != nil {
+		return nil, err
+	}
+	if measured > limit {
+		outcome := MemberOutcome{Key: key, Reason: responsecontract.MemberTooLarge, Limit: limit, Observed: measured}
+		selected = archivedOutput{Failure: outcome.String(), Outcome: outcome}
+		measured, err = b.MeasureJSON(selected)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return b.EncodeJSONMeasured(selected, measured, limit)
 }

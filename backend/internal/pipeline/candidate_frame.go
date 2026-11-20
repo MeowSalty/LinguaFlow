@@ -97,7 +97,19 @@ func DecodeCandidateFrame(b *backend.BuildBounds, f CandidateFrame) (*Candidate,
 func (c *Candidate) SealAndCompact(b *backend.BuildBounds, limit int64) error {
 	c.PreparedPayload = nil
 	c.PreparedHeader = nil
-	payload, err := b.EncodeJSON(c, limit)
+	measured, err := b.MeasureJSON(c)
+	if err != nil {
+		return err
+	}
+	return c.sealAndCompactMeasured(b, measured, limit)
+}
+
+// The caller owns this unchanged candidate between measurement and sealing.
+// Both prepared fields are excluded from JSON; compaction follows encoding.
+func (c *Candidate) sealAndCompactMeasured(b *backend.BuildBounds, measured, limit int64) error {
+	c.PreparedPayload = nil
+	c.PreparedHeader = nil
+	payload, err := b.EncodeJSONMeasured(c, measured, limit)
 	if err != nil {
 		return err
 	}

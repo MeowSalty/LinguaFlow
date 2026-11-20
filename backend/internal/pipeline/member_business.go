@@ -151,7 +151,7 @@ func processArchivedGlossary(ctx context.Context, h stagedHandler, header MainRe
 		if measured > in.ItemLimit {
 			return &responsecontract.MemberContentError{Ordinal: target.Ordinal, Kind: responsecontract.MemberTooLarge, Limit: in.ItemLimit, Observed: measured}
 		}
-		return candidate.SealAndCompact(b, in.ItemLimit)
+		return candidate.sealAndCompactMeasured(b, measured, in.ItemLimit)
 	}
 	in.WriteTarget = func(memberCtx context.Context, target glossary.ResponseTarget) error {
 		if !in.Rewrite {
