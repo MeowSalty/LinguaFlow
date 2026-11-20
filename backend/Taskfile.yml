@@ -391,10 +391,10 @@ tasks:
       - go test -race {{default "./..." .CLI_ARGS}}
 
   test:ci:
-    desc: 串行 CI 分片、实际执行合同和完整 atomic 覆盖率合并（plain/race/race-atomic）
+    desc: CI 分片（CPU 倍率目标、物理资源准入与重片动态并行）、执行合同与 atomic 覆盖率合并
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - node ./internal/citest/ci-test.mjs "MODE={{default "plain" .MODE}}" "OUTPUT_DIR={{default "" .OUTPUT_DIR}}" "PACKAGE_PARALLELISM={{default "1" .PACKAGE_PARALLELISM}}"
+      - node ./internal/citest/ci-test.mjs "MODE={{default "plain" .MODE}}" "OUTPUT_DIR={{default "" .OUTPUT_DIR}}" "PACKAGE_PARALLELISM={{default "auto" .PACKAGE_PARALLELISM}}" "PACKAGE_PARALLELISM_FACTOR={{default "2" .PACKAGE_PARALLELISM_FACTOR}}"
 
   test:ci:environment:
     desc: 记录 CI 测试实际 Go 工具链、平台及构建环境
@@ -412,7 +412,7 @@ tasks:
     desc: 验证 CI 分片、JSON、atomic 合并、失败证据及自有进程树清理
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - node --test --test-concurrency=1 {{.CLI_ARGS}} ./internal/citest/ci-test.test.mjs
+      - node --test --test-concurrency=1 {{.CLI_ARGS}} ./internal/citest/ci-test.test.mjs ./internal/citest/resource-scheduler.test.mjs
 
   test:capacity:
     desc: 显式满规模历史清理和持久化容量验收（只运行两个容量场景）
