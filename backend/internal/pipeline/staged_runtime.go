@@ -599,6 +599,7 @@ type ExecutionRuntime struct {
 	responseAttemptDeadlines    map[string]time.Time
 	documentOwners              map[documentSlot][4]string
 	documentPendingRefunds      map[documentSlot][]string
+	pendingConfirmations        map[documentSlot]*preparedConfirmation
 	ResponseBytes, HandoffBytes int64
 	EpisodeStore                RuntimeEpisodeStore
 	episodeMu                   sync.Mutex
@@ -681,8 +682,9 @@ func (r *ExecutionRuntime) Close() error {
 	}
 	r.ownerMu.Lock()
 	r.responseAttemptDeadlines = nil
+	pendingErr := r.closePendingConfirmations(nil)
 	r.ownerMu.Unlock()
-	return nil
+	return pendingErr
 }
 
 func (r *ExecutionRuntime) saveScheduler() *persistence.Scheduler {

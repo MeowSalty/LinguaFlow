@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
@@ -493,6 +494,39 @@ func (s *roundStore) ValidateCandidate(ctx context.Context, c *pipeline.Candidat
 	return row.ContentVersion == c.Segment.ContentVersion && string(row.Status) == c.BaselineStatus && sameTarget, nil
 }
 func (s *roundStore) PrepareCandidateCommit(ctx context.Context, b *backend.BuildBounds, c *pipeline.Candidate, result pipeline.TranslatedSegment) (pipeline.TranslatedSegment, error) {
+	previous, err := s.client.JobRoundSegment.Query().Where(jobroundsegment.CommitIDEQ(c.ID)).Select(jobroundsegment.FieldID, jobroundsegment.FieldJobRoundID, jobroundsegment.FieldSegmentID).Only(ctx)
+	if err == nil {
+		if previous.JobRoundID != s.scope.RoundID || previous.SegmentID != c.Segment.DBID {
+			return result, workstate.ErrManifest
+		}
+		row, err := s.client.Segment.Query().Where(segment.IDEQ(c.Segment.DBID), segment.ResourceIDEQ(s.scope.ResourceID)).Select(segment.FieldID, segment.FieldTargetText, segment.FieldStatus, segment.FieldContentVersion, segment.FieldQualityIssues).Only(ctx)
+		if err != nil {
+			return result, s.classify(err)
+		}
+		if row.TargetText == nil {
+			result.TargetText = ""
+		} else if err := b.CloneInto(*row.TargetText, &result.TargetText); err != nil {
+			return result, err
+		}
+		if err := b.CloneInto(row.QualityIssues, &result.Issues); err != nil {
+			return result, err
+		}
+		if s.canonical != nil && c.Index >= 0 && c.Index < len(s.canonical.Segments) {
+			if err := b.CloneInto(s.canonical.Segments[c.Index].Meta, &result.Meta); err != nil {
+				return result, err
+			}
+			if err := b.CloneInto(s.canonical.Segments[c.Index].Protected, &result.Protected); err != nil {
+				return result, err
+			}
+		}
+		result.PreparedStatus, result.PreparedAuthorityVersion = string(row.Status), row.ContentVersion
+		result.PreparedTargetIsNull = row.TargetText == nil
+		result.CommitPrepared = true
+		return result, nil
+	}
+	if !ent.IsNotFound(err) {
+		return result, s.classify(err)
+	}
 	issues := result.Issues
 	status := string(service.SegmentStatusTranslated)
 	noop := false
@@ -554,7 +588,15 @@ func (s *roundStore) PrepareCandidateCommit(ctx context.Context, b *backend.Buil
 				return result, err
 			}
 		} else {
-			issues = result.Issues
+			// A no-op confirms the existing row, including its unresolved issue
+			// dispositions. The candidate may carry a filtered revision view.
+			row, err := s.client.Segment.Query().Where(segment.IDEQ(c.Segment.DBID), segment.ContentVersionEQ(c.Segment.ContentVersion)).Select(segment.FieldID, segment.FieldQualityIssues).Only(ctx)
+			if err != nil {
+				return result, s.classify(err)
+			}
+			if err = b.CloneInto(row.QualityIssues, &issues); err != nil {
+				return result, err
+			}
 		}
 	}
 	result.Issues = issues
@@ -575,16 +617,18 @@ func (s *roundStore) Commit(ctx context.Context, c *pipeline.Candidate, result p
 		if err != nil {
 			return "", err
 		}
+
 	}
 	status, noop, clearReview := result.PreparedStatus, result.PreparedNoop, result.PreparedClearReview
 	issues := result.Issues
-	committed, err := s.store.Commit(ctx, workstate.CommitInput{Scope: s.scope, SegmentID: c.Segment.DBID, CommitID: c.ID, CandidateID: c.ID, CandidateVersion: c.Version, BaselineVersion: c.Segment.ContentVersion, BaselineTarget: candidateBaseline(c), BaselineDigest: c.BaselineDigest, BaselineTargetIsNull: c.Segment.TargetIsNull, BaselineStatus: c.BaselineStatus, Target: result.TargetText, Status: status, Issues: issues, IssuesPayload: result.IssuesPayload, ClearReview: clearReview, Noop: noop})
+	committed, err := s.store.Commit(ctx, workstate.CommitInput{RequireProjectionProof: true, ConfirmedVersion: result.PreparedAuthorityVersion, Scope: s.scope, SegmentID: c.Segment.DBID, CommitID: c.ID, CandidateID: c.ID, CandidateVersion: c.Version, BaselineVersion: c.Segment.ContentVersion, BaselineTarget: candidateBaseline(c), BaselineDigest: c.BaselineDigest, BaselineTargetIsNull: c.Segment.TargetIsNull, BaselineStatus: c.BaselineStatus, Target: result.TargetText, Status: status, Issues: issues, IssuesPayload: result.IssuesPayload, ClearReview: clearReview, Noop: noop})
 	outcome := pipeline.CommitOutcome(committed.Outcome)
 	if err != nil {
 		return outcome, s.classify(err)
 	}
 	if outcome == pipeline.CommitAccepted || outcome == pipeline.CommitNoop || outcome == pipeline.CommitExisting {
 		c.Segment.Target = result.TargetText
+		c.Segment.TargetIsNull = result.PreparedTargetIsNull
 		c.Segment.Issues = issues
 		c.Segment.Status = status
 		if committed.ContentVersion > 0 {

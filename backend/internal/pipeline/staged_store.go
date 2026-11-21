@@ -125,23 +125,28 @@ type memoryCandidateOwner struct {
 	Window    *CandidateWindow
 }
 type MemoryRoundStore struct {
-	publication         responsecontract.PublicationDomain
-	mutation            sync.Mutex
-	retirement          sync.Mutex
-	mu                  sync.Mutex
-	state               RoundRecovery
-	candidates          map[string][]byte
-	headers             map[string]CandidateHeader
-	confirmed           map[string]bool
-	apply               func(context.Context, BatchResult) error
-	identity            string
-	requests            map[string]*memoryResponse
-	retiredResponses    *memoryResponse
-	nextRequest         int
-	closed              bool
-	candidateOwners     map[string]map[memoryCandidateOwner]struct{}
+	publication      responsecontract.PublicationDomain
+	mutation         sync.Mutex
+	retirement       sync.Mutex
+	mu               sync.Mutex
+	state            RoundRecovery
+	candidates       map[string][]byte
+	headers          map[string]CandidateHeader
+	confirmed        map[string]bool
+	apply            func(context.Context, BatchResult) error
+	identity         string
+	requests         map[string]*memoryResponse
+	retiredResponses *memoryResponse
+	nextRequest      int
+	closed           bool
+	// The value says whether store cleanup still owns the final candidate build.
+	// Promotion header cleanup remains the store's duty for every entry.
+	candidateOwners     map[string]map[memoryCandidateOwner]bool
 	promotionCandidates map[string]*Candidate
 	promotionActive     map[string]bool
+	canonicalDocument   *Document
+	canonicalRuntime    *ExecutionRuntime
+	confirmations       map[int]*memoryConfirmation
 }
 
 // MemoryStore also identifies adapters embedding this store, so their audit
@@ -157,6 +162,11 @@ func (s *MemoryRoundStore) Close() error {
 	s.closed = true
 	s.state = RoundRecovery{}
 	s.apply = nil
+	s.canonicalDocument = nil
+	s.canonicalRuntime = nil
+	for _, record := range s.confirmations {
+		record.payload = nil
+	}
 	// No new borrower may enter after this point. Destroy candidate payload and
 	// header backing before their conservative inventory/refund is released.
 	for _, candidate := range s.promotionCandidates {
@@ -179,14 +189,24 @@ func (s *MemoryRoundStore) Close() error {
 	s.mu.Unlock()
 	s.mutation.Unlock()
 	var result error
+	for index, record := range s.confirmations {
+		if err := record.close(); err != nil {
+			result = errors.Join(result, err)
+		} else {
+			delete(s.confirmations, index)
+		}
+	}
 	// This store has no durable candidate destination after Close. Every user
 	// has joined; retire each actual payload before its matching inventory.
 	for id, runtimes := range s.candidateOwners {
 		var candidateErr error
-		for runtime := range runtimes {
+		for runtime, ownsFinal := range runtimes {
 			runtime.Admission.ReleaseMemoryPromotion(id)
 			runtime.Window.Release(id)
-			candidateErr = errors.Join(candidateErr, runtime.Admission.ReleaseBuild("candidate:"+id), runtime.Admission.ReleaseBuild(s.promotionOwner(id)))
+			candidateErr = errors.Join(candidateErr, runtime.Admission.ReleaseBuild(s.promotionOwner(id)))
+			if ownsFinal {
+				candidateErr = errors.Join(candidateErr, runtime.Admission.ReleaseBuild("candidate:"+id))
+			}
 		}
 		result = errors.Join(result, candidateErr)
 		if candidateErr == nil {
@@ -307,12 +327,12 @@ func (s *MemoryRoundStore) Save(ctx context.Context, c *Candidate) error {
 func (s *MemoryRoundStore) retainCandidateRuntime(ctx context.Context, id string) {
 	if runtime := ExecutionRuntimeFromContext(ctx); runtime != nil {
 		if s.candidateOwners == nil {
-			s.candidateOwners = make(map[string]map[memoryCandidateOwner]struct{})
+			s.candidateOwners = make(map[string]map[memoryCandidateOwner]bool)
 		}
 		if s.candidateOwners[id] == nil {
-			s.candidateOwners[id] = make(map[memoryCandidateOwner]struct{})
+			s.candidateOwners[id] = make(map[memoryCandidateOwner]bool)
 		}
-		s.candidateOwners[id][memoryCandidateOwner{runtime.Admission, runtime.Window}] = struct{}{}
+		s.candidateOwners[id][memoryCandidateOwner{runtime.Admission, runtime.Window}] = true
 	}
 }
 
@@ -432,23 +452,81 @@ func (s *MemoryRoundStore) Cursors(_ context.Context, transitions []CursorTransi
 	return nil
 }
 func (s *MemoryRoundStore) Commit(ctx context.Context, c *Candidate, result TranslatedSegment) (CommitOutcome, error) {
+	s.mutation.Lock()
+	defer s.mutation.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
+		s.mu.Unlock()
 		return CommitStale, backend.ErrAdmissionClosed
 	}
 	if s.confirmed[c.ID] {
+		record := s.confirmations[c.Index]
+		if record == nil || record.candidateID != c.ID || record.index != c.Index {
+			s.mu.Unlock()
+			return CommitExisting, ErrCandidateStale
+		}
+		if result.memoryConfirmation == nil {
+			s.mu.Unlock()
+			if err := s.prepareDirectMemoryExisting(ctx, c, record); err != nil {
+				return CommitExisting, err
+			}
+			c.Segment.Status, c.Segment.ContentVersion, c.Segment.TargetIsNull = record.status, record.version, record.targetIsNull
+			return CommitExisting, nil
+		}
+		c.Segment.Target, c.Segment.Issues = result.TargetText, result.Issues
+		c.Segment.Status, c.Segment.ContentVersion, c.Segment.TargetIsNull = record.status, record.version, record.targetIsNull
+		s.mu.Unlock()
 		return CommitExisting, nil
 	}
+	if s.confirmations[c.Index] != nil {
+		s.mu.Unlock()
+		return CommitStale, ErrCandidateStale
+	}
+	s.mu.Unlock()
+	record, err := s.prepareMemoryConfirmation(ctx, c, result)
+	if err != nil {
+		return CommitRejected, err
+	}
+	if record.admission != nil && result.memoryConfirmation != nil {
+		if err := record.admission.MoveBuildAllocations("candidate:"+c.ID, []backend.BuildAllocationTransfer{{Owner: record.owner, Bytes: record.transferredBytes}}); err != nil {
+			return CommitRejected, err
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.confirmations == nil {
+		s.confirmations = make(map[int]*memoryConfirmation)
+	}
+	record.stored = true
+	s.confirmations[c.Index] = record
 	s.confirmed[c.ID] = true
 	c.Segment.Target, c.Segment.Issues = result.TargetText, result.Issues
+	c.Segment.TargetIsNull = false
 	if c.Mode == RoundModeTranslate {
 		c.Segment.Status = "translated"
 	}
+	record.status, record.version, record.targetIsNull = c.Segment.Status, c.Segment.ContentVersion, c.Segment.TargetIsNull
 	s.state.Completed = append(s.state.Completed, c.Index)
 	delete(s.candidates, c.ID)
 	s.dropPromotionPayload(c.ID)
 	return CommitAccepted, nil
+}
+
+// Recovery decodes the paid encoding even when its prior document has closed.
+func (s *MemoryRoundStore) PrepareCandidateCommit(_ context.Context, b *backend.BuildBounds, c *Candidate, result TranslatedSegment) (TranslatedSegment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.confirmed[c.ID] {
+		return result, nil
+	}
+	record := s.confirmations[c.Index]
+	if record == nil || record.candidateID != c.ID || record.index != c.Index {
+		return result, ErrCandidateStale
+	}
+	var authoritative TranslatedSegment
+	err := b.DecodeJSON(record.payload, &authoritative)
+	authoritative.PreparedTargetIsNull = record.targetIsNull
+	return authoritative, err
 }
 
 func (s *MemoryRoundStore) Retire(_ context.Context, c *Candidate, cursor WorkCursor) error {

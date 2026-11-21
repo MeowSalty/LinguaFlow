@@ -47,22 +47,29 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 				return ErrManifest
 			}
 			result.Outcome = AlreadyCommitted
+			row, err := tx.Segment.Query().Where(segment.IDEQ(in.SegmentID), segment.ResourceIDEQ(in.Scope.ResourceID)).Select(segment.FieldID, segment.FieldContentVersion).Only(ctx)
+			if err != nil {
+				return err
+			}
+			result.ContentVersion = row.ContentVersion
+			if in.RequireProjectionProof && (in.ConfirmedVersion <= 0 || row.ContentVersion != in.ConfirmedVersion) {
+				return ErrStale
+			}
 			return nil
 		}
 		if !ent.IsNotFound(err) {
 			return err
 		}
-		if err := guardScope(ctx, tx, in.Scope, false); err != nil {
+		round, err := guardLockedScope(ctx, tx, in.Scope, false, true)
+		if err != nil {
 			return err
 		}
 		w, err := member(ctx, tx, in.Scope, in.SegmentID)
 		if err != nil {
 			return err
 		}
-		round, err := tx.JobRound.Get(ctx, in.Scope.RoundID)
-		if err != nil {
-			return err
-		}
+		// Member loading changes no round facts under the Job lock. Check the
+		// manifest here, in its original order, without another full row read.
 		if !round.ManifestSealed {
 			return ErrManifest
 		}
@@ -84,8 +91,9 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 			result.Outcome = Stale
 			return nil
 		}
+		var current *ent.WorkCandidate
 		if in.CandidateID != "" {
-			current, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(in.CandidateID), workcandidate.WorkItemIDEQ(w.ID)).Select(workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldVersion, workcandidate.FieldBaselineVersion, workcandidate.FieldState).Only(ctx)
+			current, err = tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(in.CandidateID), workcandidate.WorkItemIDEQ(w.ID)).Select(workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldVersion, workcandidate.FieldBaselineVersion, workcandidate.FieldState).Only(ctx)
 			if ent.IsNotFound(err) || w.CandidateID != in.CandidateID || (err == nil && current.Version != in.CandidateVersion) {
 				result.Outcome = Stale
 				return nil
@@ -105,14 +113,10 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 			return terminal(Stale)
 		}
 		if in.CandidateID != "" {
-			c, err := tx.WorkCandidate.Query().Where(workcandidate.IdentityEQ(in.CandidateID), workcandidate.WorkItemIDEQ(w.ID)).Select(workcandidate.FieldID, workcandidate.FieldIdentity, workcandidate.FieldVersion, workcandidate.FieldBaselineVersion, workcandidate.FieldState).Only(ctx)
-			if ent.IsNotFound(err) {
-				return terminal(Stale)
-			}
-			if err != nil {
-				return err
-			}
-			if w.CandidateID != in.CandidateID || c.Version != in.CandidateVersion || c.BaselineVersion != in.BaselineVersion || c.State != "ready_to_commit" {
+			// Candidate writers share the Job lock held by this transaction.
+			// Segment locking changes no candidate fields; preserve the original
+			// check order and use the same authoritative row instead of rereading.
+			if w.CandidateID != in.CandidateID || current.Version != in.CandidateVersion || current.BaselineVersion != in.BaselineVersion || current.State != "ready_to_commit" {
 				return terminal(Stale)
 			}
 		}
@@ -209,9 +213,24 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		return result, nil
 	}
 	if unknownCommit(err) {
-		err = s.finishUnknown(ctx, in.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) { return commitExists(ctx, tx, in) })
+		err = s.finishUnknown(ctx, in.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
+			found, lookupErr := commitExists(ctx, tx, in)
+			if lookupErr != nil || !found {
+				return found, lookupErr
+			}
+			row, readErr := tx.Segment.Query().Where(segment.IDEQ(in.SegmentID), segment.ResourceIDEQ(in.Scope.ResourceID)).Select(segment.FieldID, segment.FieldContentVersion).Only(ctx)
+			if readErr != nil {
+				return false, readErr
+			}
+			if in.RequireProjectionProof && row.ContentVersion != result.ContentVersion {
+				return false, ErrStale
+			}
+			result.ContentVersion = row.ContentVersion
+			return true, nil
+		})
 		if err == nil {
-			return CommitResult{Outcome: AlreadyCommitted}, nil
+			result.Outcome = AlreadyCommitted
+			return result, nil
 		}
 	}
 	if errors.Is(err, ErrStale) {

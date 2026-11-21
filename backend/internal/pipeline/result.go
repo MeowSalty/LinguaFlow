@@ -17,10 +17,13 @@ type SegmentResult struct {
 
 // TranslatedSegment 描述单个段落的翻译结果（含 Meta）。
 type TranslatedSegment struct {
-	PreparedPayload                                   []byte `json:"-"`
-	IssuesPayload                                     []byte `json:"-"`
-	PreparedStatus                                    string `json:"-"`
-	PreparedNoop, PreparedClearReview, CommitPrepared bool   `json:"-"`
+	memoryConfirmation                                *memoryConfirmation `json:"-"`
+	PreparedTargetIsNull                              bool                `json:"-"`
+	PreparedAuthorityVersion                          int64               `json:"-"`
+	PreparedPayload                                   []byte              `json:"-"`
+	IssuesPayload                                     []byte              `json:"-"`
+	PreparedStatus                                    string              `json:"-"`
+	PreparedNoop, PreparedClearReview, CommitPrepared bool                `json:"-"`
 	Index                                             int
 	ID                                                string
 	SourceText                                        string

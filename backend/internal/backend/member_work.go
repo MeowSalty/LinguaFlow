@@ -11,7 +11,9 @@ type MemberWorkEvent struct {
 	Phase, Operation string
 	Bytes, Rows      int64
 	DurationNS       int64 // Monotonic elapsed time, only for duration events.
-	FullJob          bool
+	// Pure duration observations carry zero Bytes/Rows: data processing is
+	// already recorded by its real reader, decoder or mutation event.
+	FullJob bool
 }
 type memberWorkKey struct{}
 

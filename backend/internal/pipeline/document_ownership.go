@@ -120,15 +120,9 @@ func retainedBacking(ctx context.Context, b *backend.BuildBounds, v reflect.Valu
 	}
 	return total, nil
 }
-func installConfirmedFields(ctx context.Context, runtime *ExecutionRuntime, doc *Document, c *Candidate, result TranslatedSegment, prepared bool, owner string, previous Segment, afterInstall func()) error {
-	ctx = runtime.BuildContext(ctx, owner)
-	b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
-	if err != nil {
-		return err
-	}
+func prepareConfirmedFields(ctx context.Context, b *backend.BuildBounds, result TranslatedSegment, prepared bool, previous Segment) (DocumentAllocationPlan, uint8, error) {
 	var plan DocumentAllocationPlan
 	borrowed := uint8(0)
-	old := &doc.Segments[c.Index]
 	if unsafe.StringData(result.TargetText) == unsafe.StringData(previous.Target) && len(result.TargetText) == len(previous.Target) {
 		borrowed |= BorrowTarget
 	}
@@ -152,26 +146,47 @@ func installConfirmedFields(ctx context.Context, runtime *ExecutionRuntime, doc 
 		}
 		n, err := retainedBacking(ctx, b, reflect.ValueOf(field.value), 0)
 		if err != nil {
-			return err
+			return DocumentAllocationPlan{}, 0, err
 		}
 		*field.dst = n
 	}
+	return plan, borrowed, nil
+}
+
+func installPreparedConfirmedFields(ctx context.Context, runtime *ExecutionRuntime, doc *Document, c *Candidate, result TranslatedSegment, owner string, plan DocumentAllocationPlan, borrowed uint8, afterInstall func()) error {
+	return installPreparedConfirmedHeader(ctx, runtime, doc, confirmationHeader{Index: c.Index, Status: c.Segment.Status, Version: c.Segment.ContentVersion, TargetIsNull: c.Segment.TargetIsNull}, result, owner, plan, borrowed, afterInstall)
+}
+
+func installPreparedConfirmedHeader(ctx context.Context, runtime *ExecutionRuntime, doc *Document, header confirmationHeader, result TranslatedSegment, owner string, plan DocumentAllocationPlan, borrowed uint8, afterInstall func()) error {
+	old := &doc.Segments[header.Index]
 	install := func() {
 		old.Target = result.TargetText
 		old.Issues = result.Issues
 		old.Meta = result.Meta
 		old.Protected = result.Protected
-		old.Status = c.Segment.Status
-		old.ContentVersion = c.Segment.ContentVersion
-		old.TargetIsNull = false
-		previous = Segment{}
+		old.Status = header.Status
+		old.ContentVersion = header.Version
+		old.TargetIsNull = header.TargetIsNull
 		if afterInstall != nil {
 			afterInstall()
 		}
 	}
 	ctx = WithExecutionRuntime(ctx, runtime)
 	if receiver, _ := ctx.Value(documentAllocationOwnerKey{}).(DocumentAllocationOwner); receiver != nil {
-		return receiver(ctx, c.Index, owner, plan, borrowed, install)
+		return receiver(ctx, header.Index, owner, plan, borrowed, install)
 	}
-	return runtime.installDocumentBacking(b, doc, c.Index, owner, plan, borrowed, install)
+	return runtime.installDocumentBacking(nil, doc, header.Index, owner, plan, borrowed, install)
+}
+
+func installConfirmedFields(ctx context.Context, runtime *ExecutionRuntime, doc *Document, c *Candidate, result TranslatedSegment, prepared bool, owner string, previous Segment, afterInstall func()) error {
+	ctx = runtime.BuildContext(ctx, owner)
+	b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
+	if err != nil {
+		return err
+	}
+	plan, borrowed, err := prepareConfirmedFields(ctx, b, result, prepared, previous)
+	if err != nil {
+		return err
+	}
+	return installPreparedConfirmedFields(ctx, runtime, doc, c, result, owner, plan, borrowed, afterInstall)
 }

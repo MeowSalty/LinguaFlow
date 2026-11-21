@@ -77,10 +77,19 @@ func TestAlignmentBatchSchedulingBoundaries(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			r := stagedTestRuntime(t, DefaultCandidateLimits())
+			ready := make(chan time.Time, 1)
+			ctx = context.WithValue(ctx, alignmentReadyObserverKey{}, func(at time.Time) {
+				select {
+				case ready <- at:
+				default:
+				}
+			})
 			secondStarted, releaseMain, aligned := make(chan struct{}), make(chan struct{}), make(chan struct{})
 			var releaseOnce, alignedOnce sync.Once
 			defer releaseOnce.Do(func() { close(releaseMain) })
 			var mainCalls, alignmentCalls atomic.Int32
+			var firstAlignmentSize atomic.Int32
+			var firstAlignmentAt time.Time
 			main := &scheduleBackend{call: func(ctx context.Context, req backend.Request) (*backend.Response, error) {
 				if mainCalls.Add(1) == 2 {
 					close(secondStarted)
@@ -106,8 +115,6 @@ func TestAlignmentBatchSchedulingBoundaries(t *testing.T) {
 				return &backend.Response{Text: string(data)}, err
 			}}
 			alignment := &scheduleBackend{call: func(ctx context.Context, req backend.Request) (*backend.Response, error) {
-				alignmentCalls.Add(1)
-				alignedOnce.Do(func() { close(aligned) })
 				var input struct {
 					Alignments []struct {
 						WorkID      string `json:"work_id"`
@@ -121,7 +128,20 @@ func TestAlignmentBatchSchedulingBoundaries(t *testing.T) {
 				for _, m := range input.Alignments {
 					rows = append(rows, map[string]any{"work_id": m.WorkID, "candidate_id": m.CandidateID, "ruby_output": []map[string]any{{"id": "1", "base": "alpha", "text": "reading", "kind": "creative", "occurrence": 1}}})
 				}
-				data, err := json.Marshal(map[string]any{"alignments": rows})
+				output := []map[string]any{{"id": "1", "base": "alpha", "text": "reading", "kind": "creative", "occurrence": 1}}
+				var response any = map[string]any{"ruby_output": output}
+				members := len(input.Alignments)
+				if members > 0 {
+					response = map[string]any{"alignments": rows}
+				} else {
+					members = 1
+				}
+				if alignmentCalls.Add(1) == 1 {
+					firstAlignmentSize.Store(int32(members))
+					firstAlignmentAt = time.Now()
+				}
+				alignedOnce.Do(func() { close(aligned) })
+				data, err := json.Marshal(response)
 				return &backend.Response{Text: string(data)}, err
 			}}
 			doc := newTestDoc(4)
@@ -138,18 +158,38 @@ func TestAlignmentBatchSchedulingBoundaries(t *testing.T) {
 			h.RubyTemplates = prompt.RubyTemplates{JSON: prompt.RubyAlignmentJSONTemplate, Text: prompt.RubyAlignmentTextTemplate, BatchJSON: prompt.RubyAlignmentBatchJSONTemplate, BatchText: prompt.RubyAlignmentBatchTextTemplate}
 			h.RubyBatch = AlignmentBatchConfig{BatchSize: 8, Wait: time.Minute, ProtocolVersion: ruby.BatchProtocolVersion}
 			if name == "deadline" {
+				h.BatchSize = 1
 				h.RubyBatch.Wait = 20 * time.Millisecond
 			}
 			if name == "full" {
 				h.RubyBatch.BatchSize = 2
 			}
 			done := make(chan error, 1)
+			store := NewMemoryRoundStore(nil)
+			defer store.Close()
+			defer r.CloseDocument(doc)
+			joined := false
+			defer func() {
+				cancel()
+				releaseOnce.Do(func() { close(releaseMain) })
+				if !joined {
+					<-done
+				}
+			}()
 			go func() {
-				_, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h}, doc, NewMemoryRoundStore(nil), r, quietLogger(), progress.Nop{})
+				_, err := RunStagedRound(ctx, Round{Concurrency: 1, Handler: h}, doc, store, r, quietLogger(), progress.Nop{})
 				done <- err
 			}()
 			if name != "tail" {
 				awaitSignal(t, secondStarted)
+			}
+			var queuedAt time.Time
+			if name == "deadline" {
+				select {
+				case queuedAt = <-ready:
+				case <-ctx.Done():
+					t.Fatal("first member did not enter alignment queue")
+				}
 			}
 			if name == "pause_waiting" {
 				// A one-minute timer cannot race this barrier; the second main
@@ -160,10 +200,14 @@ func TestAlignmentBatchSchedulingBoundaries(t *testing.T) {
 				}
 			} else {
 				awaitSignal(t, aligned)
+				if name == "deadline" && (firstAlignmentSize.Load() != 1 || firstAlignmentAt.Sub(queuedAt) < h.RubyBatch.Wait) {
+					t.Fatal("single member dispatched before the queue deadline")
+				}
 			}
 			releaseOnce.Do(func() { close(releaseMain) })
 			select {
 			case err := <-done:
+				joined = true
 				if err != nil {
 					t.Fatal(err)
 				}

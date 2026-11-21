@@ -16,7 +16,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 type stagedHandler interface {
@@ -48,6 +47,7 @@ type stagedEvent struct {
 	outputTokens          int64
 	members               []stagedEvent
 	mainPlan              *deferredMainPlan
+	confirmation          *preparedConfirmation
 }
 
 // These counters belong to the coordinator. Workers remain in flight until
@@ -79,6 +79,10 @@ var ErrResourceYield = errors.New("resource yields to recovered candidates")
 // Only this goroutine applies confirmed results to the resource Document.
 func RunStagedRound(ctx context.Context, round Round, doc *Document, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporter progress.Reporter) (RunRoundResult, error) {
 	ctx = WithExecutionRuntime(ctx, runtime)
+	ctx = context.WithValue(ctx, confirmationDocumentKey{}, doc)
+	if err := runtime.RetryConfirmedDocument(ctx, doc); err != nil {
+		return RunRoundResult{}, err
+	}
 	h, ok := round.Handler.(stagedHandler)
 	if !ok {
 		return RunRound(ctx, round, doc, nil, logger, reporter)
@@ -242,6 +246,10 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			}
 			candidates[c.Index] = HeaderForCandidate(c).Candidate()
 			alignmentReadyAt[c.Index] = time.Now()
+			if observe, _ := ctx.Value(alignmentReadyObserverKey{}).(func(time.Time)); observe != nil {
+				observe(alignmentReadyAt[c.Index])
+			}
+			backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "alignment", Operation: "ready", Rows: 1})
 		}
 		if e.candidate != nil {
 			c := e.candidate
@@ -249,108 +257,53 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			alignmentReadyAt[c.Index] = maxTime(time.Now(), c.NextAttemptAt)
 			if e.outcome == CommitAccepted || e.outcome == CommitExisting || e.outcome == CommitNoop {
 				if e.completed != nil {
-					previous := doc.Segments[c.Index]
-					var final TranslatedSegment
-					installed := false
-					defer func() {
-						if !installed {
-							doc.Segments[c.Index] = previous
-						}
-						*e.completed = TranslatedSegment{}
-						final = TranslatedSegment{}
-						previous = Segment{}
-						c.PreparedPayload, c.PreparedHeader = nil, nil
-						c.Segment.Target, c.Segment.Issues = "", nil
-						_ = runtime.Admission.ReleaseBuild("candidate:" + c.ID)
-					}()
-					prepared := e.completed.PreparedPayload != nil
-					buildCtx := runtime.BuildContext(ctx, "candidate:"+c.ID)
-					if prepared {
-						err := runtime.Run(buildCtx, func() error {
-							b, e2 := backend.NewBuildBoundsFromContext(buildCtx, runtime.Window.limits.ItemBytes, int64(len(e.completed.PreparedPayload)))
-							if e2 != nil {
-								return e2
-							}
-							full, e2 := restoreCommitResult(b, *e.completed)
-							if e2 != nil {
-								return e2
-							}
-							// Parser positions remain typed in the canonical input. The
-							// compact JSON handoff preserves their values, then this short
-							// confirmation step restores their native representation.
-							meta := Segment{Meta: full.Meta}
-							if e2 = restoreMetadataTypes(&meta, metadataTypes(doc.Segments[c.Index].Meta), b); e2 != nil {
-								return e2
-							}
-							full.Meta = meta.Meta
-							*e.completed = full
-							return nil
-						})
-						if err != nil {
-							if firstErr == nil {
-								firstErr = err
-								cancel()
-							}
-							return
-						}
+					p := e.confirmation
+					if p == nil {
+						firstErr = errors.New("confirmed result has no prepared handoff")
+						cancel()
+						return
 					}
-					applied := false
-					if local, ok := store.(interface {
+					p.candidate, p.doc, p.runtime = c, doc, runtime
+					if memory, ok := store.(interface{ MemoryStore() *MemoryRoundStore }); ok {
+						m := memory.MemoryStore()
+						p.memoryStore = m
+						m.mu.Lock()
+						callback := m.apply
+						// Commit ended the store's candidate payload lifetime. The
+						// confirmation now owns this runtime's final backing, even
+						// if its later move to a pending owner is rejected.
+						if owners := m.candidateOwners[c.ID]; owners != nil {
+							owners[memoryCandidateOwner{runtime.Admission, runtime.Window}] = false
+						}
+						m.mu.Unlock()
+						if callback != nil {
+							p.apply = func(callCtx context.Context, _ *Candidate, result TranslatedSegment) (bool, error) {
+								return true, callback(callCtx, BatchResult{Segments: []TranslatedSegment{result}})
+							}
+						}
+					} else if local, ok := store.(interface {
 						ApplyConfirmed(context.Context, *Candidate, TranslatedSegment) (bool, error)
 					}); ok {
-						var err error
-						applied, err = local.ApplyConfirmed(buildCtx, c, *e.completed)
-						if err != nil {
-							if firstErr == nil {
-								firstErr = err
-								cancel()
-							}
-							return
+						p.apply = local.ApplyConfirmed
+					}
+					p.result.TargetText = c.Segment.Target
+					if err := p.project(ctx); err != nil {
+						if doc.Segments[c.Index].RoundWork.Completed {
+							runtime.Window.Release(c.ID)
+							_ = p.release()
+						} else {
+							err = errors.Join(err, runtime.rememberConfirmation(p))
 						}
-					}
-					final = *e.completed
-					if !prepared {
-						final.Meta = previous.Meta
-						final.Protected = previous.Protected
-					}
-					if applied {
-						final.TargetText = doc.Segments[c.Index].Target
-						final.Issues = doc.Segments[c.Index].Issues
-						c.Segment.Status = doc.Segments[c.Index].Status
-						c.Segment.ContentVersion = doc.Segments[c.Index].ContentVersion
-					}
-					if applied && unsafe.SliceData(final.Issues) != unsafe.SliceData(previous.Issues) {
-						cloneErr := runtime.Run(buildCtx, func() error {
-							cloneBounds, err := backend.NewBuildBoundsFromContext(buildCtx, 0, 0)
-							if err != nil {
-								return err
-							}
-							var private []qa.QualityIssue
-							if err = cloneBounds.CloneInto(final.Issues, &private); err != nil {
-								return err
-							}
-							final.Issues = private
-							return nil
-						})
-						if cloneErr != nil {
-							if firstErr == nil {
-								firstErr = cloneErr
-								cancel()
-							}
-							return
-						}
-					}
-					if err := runtime.Run(buildCtx, func() error {
-						return installConfirmedFields(buildCtx, runtime, doc, c, final, prepared, "candidate:"+c.ID, previous, func() {
-							installed = true
-							previous = Segment{}
-						})
-					}); err != nil {
 						if firstErr == nil {
-							firstErr = err
+							firstErr = &ConfirmationProjectionError{Index: c.Index, Cause: err}
 							cancel()
 						}
 						return
+					}
+					*e.completed = TranslatedSegment{}
+					if err := p.release(); err != nil && firstErr == nil {
+						firstErr = err
+						cancel()
 					}
 				}
 				doc.Segments[c.Index].RoundWork.Completed = true
@@ -1201,8 +1154,20 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 	var accepted bool
 	var finalBounds *backend.BuildBounds
 	var retainedResult int64
+	var confirmation *preparedConfirmation
 	defer func() {
 		if e.completed == nil {
+			if saved := result.memoryConfirmation; saved != nil && saved.stored {
+				retainedResult -= saved.transferredBytes
+			}
+			// An uncertain ACK may have written only these transient decoded
+			// fields to the candidate header. Its encoded store record is a
+			// separate owner; end every temporary body borrower before refund.
+			c.Segment.Target, c.Segment.Issues = "", nil
+			if confirmation != nil {
+				confirmation.result = TranslatedSegment{}
+				confirmation.memoryHeader = nil
+			}
 			result = TranslatedSegment{}
 			if retainedResult > 0 {
 				_ = runtime.Admission.ReleaseBuildBytes("candidate:"+c.ID, retainedResult)
@@ -1220,6 +1185,7 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 		return e
 	}
 	defer frame.Release()
+	finalizeStarted := time.Now()
 	err := runtime.Run(ctx, func() error {
 		b, err := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, int64(len(frame.Payload)))
 		if err != nil {
@@ -1248,14 +1214,67 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 			if err = runtime.Admission.ApplyFinalResultCredit(c.ID, int64(len(result.PreparedPayload))); err != nil {
 				return err
 			}
+			compact := result
+			result, err = restoreCommitResult(b, compact)
+			if err != nil {
+				return err
+			}
+			result.PreparedPayload, result.IssuesPayload = compact.PreparedPayload, compact.IssuesPayload
+			result.PreparedStatus, result.PreparedNoop = compact.PreparedStatus, compact.PreparedNoop
+			result.PreparedClearReview, result.CommitPrepared = compact.PreparedClearReview, compact.CommitPrepared
+			result.PreparedAuthorityVersion = compact.PreparedAuthorityVersion
+			result.PreparedTargetIsNull = compact.PreparedTargetIsNull
+			if memory, ok := store.(interface{ MemoryStore() *MemoryRoundStore }); ok {
+				if err := backend.ReserveSlice[memoryConfirmation](b, 1); err != nil {
+					return err
+				}
+				result.memoryConfirmation = &memoryConfirmation{payload: result.PreparedPayload, admission: runtime.Admission, owner: memory.MemoryStore().confirmationOwner(c.ID), candidateID: c.ID, index: c.Index, transferredBytes: int64(cap(result.PreparedPayload)) + int64(unsafe.Sizeof(memoryConfirmation{}))}
+			}
+			previous := Segment{}
+			if document, _ := ctx.Value(confirmationDocumentKey{}).(*Document); document != nil {
+				previous = document.Segments[c.Index]
+				meta := Segment{Meta: result.Meta}
+				if err = restoreMetadataTypes(&meta, metadataTypes(previous.Meta), b); err != nil {
+					return err
+				}
+				result.Meta = meta.Meta
+			}
+			plan, borrowed, err := prepareConfirmedFields(ctx, b, result, true, previous)
+			if err != nil {
+				return err
+			}
+			if err = backend.ReserveSlice[preparedConfirmation](b, 1); err != nil {
+				return err
+			}
+			deadline := persistence.Deadline(ctx)
+			if callerDeadline, ok := ctx.Deadline(); ok && (deadline.IsZero() || callerDeadline.Before(deadline)) {
+				deadline = callerDeadline
+			}
+			if deadline.IsZero() {
+				deadline = time.Now().Add(runtime.Policy.HandoffBudget)
+			}
+			confirmation = &preparedConfirmation{result: result, plan: plan, borrowed: borrowed, owner: "candidate:" + c.ID, callbackOwner: "candidate-callback:" + c.ID, deadline: deadline, lifetime: runtime.Lifetime, observe: backend.MemberWorkRecorder(ctx)}
+			if result.memoryConfirmation != nil {
+				if err := backend.ReserveSlice[confirmationHeader](b, 1); err != nil {
+					return err
+				}
+				confirmation.memoryHeader = &confirmationHeader{Index: c.Index}
+				if err := b.CloneInto(c.ID, &confirmation.memoryHeader.ID); err != nil {
+					return err
+				}
+			}
 		}
 		// The existing header remains authoritative. Preparation only reads it;
 		// Commit applies final status and content version after its durable save.
 		full = nil
 		if accepted {
+			if result.memoryConfirmation != nil {
+				retainedResult += int64(unsafe.Sizeof(memoryConfirmation{}))
+				retainedResult += int64(unsafe.Sizeof(confirmationHeader{})) + int64(len(confirmation.memoryHeader.ID))
+			}
 			// IssuesPayload borrows PreparedPayload; PreparedStatus is a literal.
 			// Only these original-build strings and buffer escape finalization.
-			for _, n := range []int64{int64(len(result.ID)), int64(len(result.SourceText)), int64(len(result.TargetText)), int64(cap(result.PreparedPayload))} {
+			for _, n := range []int64{int64(len(result.ID)), int64(len(result.SourceText)), confirmation.plan.TargetBytes, confirmation.plan.IssuesBytes, confirmation.plan.MetaBytes, confirmation.plan.ProtectedBytes, int64(cap(result.PreparedPayload)), int64(unsafe.Sizeof(preparedConfirmation{}))} {
 				retainedResult, err = backend.CheckedAdd(retainedResult, n)
 				if err != nil {
 					retainedResult = 0
@@ -1278,6 +1297,7 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 	})
 	frame.Release()
 	runtime.Admission.ObserveOwned("candidate", c.ID+"/frame", 0)
+	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "confirmation", Operation: "finalize", DurationNS: time.Since(finalizeStarted).Nanoseconds()})
 	if err != nil {
 		e.err = err
 		return e
@@ -1288,11 +1308,13 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 		return retired
 	}
 	var outcome CommitOutcome
+	commitStarted := time.Now()
 	err = runtime.SaveNamed(ctx, candidateSaveMetadata("commit", store, c), func(saveCtx context.Context) error {
 		var commitErr error
 		outcome, commitErr = store.Commit(saveCtx, c, result)
 		return commitErr
 	})
+	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "confirmation", Operation: "commit_ack", DurationNS: time.Since(commitStarted).Nanoseconds()})
 	e.outcome = outcome
 	e.err = err
 	if err != nil {
@@ -1300,8 +1322,19 @@ func processCandidate(ctx context.Context, round Round, c *Candidate, store Roun
 		return e
 	}
 	if outcome == CommitAccepted || outcome == CommitNoop || outcome == CommitExisting {
+		if confirmation.memoryHeader != nil {
+			confirmation.memoryHeader.Status, confirmation.memoryHeader.Version, confirmation.memoryHeader.TargetIsNull = c.Segment.Status, c.Segment.ContentVersion, c.Segment.TargetIsNull
+			if document, _ := ctx.Value(confirmationDocumentKey{}).(*Document); document != nil && document.Segments[c.Index].Status == c.Segment.Status {
+				// Preserve an existing canonical status string's source ownership.
+				confirmation.memoryHeader.Status = document.Segments[c.Index].Status
+			}
+		}
+		// Store ownership ends every borrowed reference to its encoding here.
+		result.PreparedPayload, result.IssuesPayload, result.memoryConfirmation = nil, nil, nil
+		confirmation.result.PreparedPayload, confirmation.result.IssuesPayload, confirmation.result.memoryConfirmation = nil, nil, nil
 		result.TargetText = c.Segment.Target
 		e.completed = &result
+		e.confirmation = confirmation
 	}
 	return e
 }
