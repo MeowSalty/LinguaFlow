@@ -72,49 +72,62 @@ func guardScope(ctx context.Context, tx *ent.Client, scope Scope, dispatch bool)
 	if err := LockJob(ctx, tx, scope.JobID); err != nil {
 		return err
 	}
+	_, err := guardLockedScope(ctx, tx, scope, dispatch, false)
+	return err
+}
+
+// The caller already holds this Job's transaction lock. Mutable scope facts
+// are still read and checked on every call; only the duplicate lock is omitted.
+// Commit may retain this transaction's short round facts for its later
+// manifest check. Other callers project only the relationship fields they use.
+func guardLockedScope(ctx context.Context, tx *ent.Client, scope Scope, dispatch, manifest bool) (*ent.JobRound, error) {
 	j, err := tx.Job.Query().Where(job.IDEQ(scope.JobID)).Select(job.FieldID, job.FieldRetryEpoch, job.FieldStatus, job.FieldPauseRequested).Only(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if j.RetryEpoch != scope.RetryEpoch || (j.Status != "running" && j.Status != "pausing" && j.Status != "pending") {
-		return ErrStopped
+		return nil, ErrStopped
 	}
 	if dispatch && (j.PauseRequested || j.Status == "pausing") {
-		return ErrStopped
+		return nil, ErrStopped
 	}
 	n, err := tx.Resource.Update().Where(resource.IDEQ(scope.ResourceID), resource.SourceGenerationEQ(scope.SourceGeneration)).AddTranslationGeneration(0).Save(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if n != 1 {
-		return fmt.Errorf("%w: guard_scope resource=%d source_generation=%d matched=%d", ErrStale, scope.ResourceID, scope.SourceGeneration, n)
+		return nil, fmt.Errorf("%w: guard_scope resource=%d source_generation=%d matched=%d", ErrStale, scope.ResourceID, scope.SourceGeneration, n)
 	}
 	r, err := tx.Resource.Query().Where(resource.IDEQ(scope.ResourceID)).Select(resource.FieldID, resource.FieldCurrentSourceRevisionID).Only(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !sameInt(r.CurrentSourceRevisionID, scope.SourceRevisionID) {
-		return fmt.Errorf("%w: guard_scope source_revision_changed resource=%d", ErrStale, scope.ResourceID)
+		return nil, fmt.Errorf("%w: guard_scope source_revision_changed resource=%d", ErrStale, scope.ResourceID)
 	}
-	round, err := tx.JobRound.Query().Where(jobround.IDEQ(scope.RoundID)).Select(jobround.FieldID, jobround.FieldJobID, jobround.FieldJobResourceID).Only(ctx)
+	fields := []string{jobround.FieldID, jobround.FieldJobID, jobround.FieldJobResourceID}
+	if manifest {
+		fields = append(fields, jobround.FieldManifestSealed)
+	}
+	round, err := tx.JobRound.Query().Where(jobround.IDEQ(scope.RoundID)).Select(fields...).Only(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if round.JobID != scope.JobID || (scope.JobResourceID != 0 && round.JobResourceID != scope.JobResourceID) {
-		return ErrManifest
+		return nil, ErrManifest
 	}
 	jr, err := tx.JobResource.Query().Where(jobresource.IDEQ(round.JobResourceID)).Select(jobresource.FieldID).Only(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	belongs, err := jr.QueryResource().Where(resource.IDEQ(scope.ResourceID)).Exist(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !belongs {
-		return ErrManifest
+		return nil, ErrManifest
 	}
-	return nil
+	return round, nil
 }
 
 func sameInt(a, b *int) bool       { return a == nil && b == nil || a != nil && b != nil && *a == *b }
