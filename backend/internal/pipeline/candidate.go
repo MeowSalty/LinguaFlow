@@ -23,35 +23,48 @@ const CandidateDTOVersion = 2
 // Candidate owns its entire payload. It is never an alias of a live Document.
 // Its baseline is captured before the main request, and cannot be refreshed on retry.
 type Candidate struct {
-	PreparedPayload        []byte               `json:"-"`
-	PreparedHeader         []byte               `json:"-"`
-	BaselineDigest         string               `json:"-"`
-	PendingSave            bool                 `json:"-"`
-	HeaderOnly             bool                 `json:"-"`
-	HeaderWords            int                  `json:"-"`
-	HeaderMissing          bool                 `json:"-"`
-	DTOVersion             int                  `json:"dto_version"`
-	ID                     string               `json:"id"`
-	WorkID                 string               `json:"work_id,omitempty"`
-	Version                int64                `json:"version"`
-	Index                  int                  `json:"index"`
-	Mode                   string               `json:"mode"`
-	Format                 string               `json:"format"`
-	Segment                Segment              `json:"segment"`
-	BaselineTarget         string               `json:"baseline_target"`
-	BaselineStatus         string               `json:"baseline_status"`
-	Alignment              *ruby.AlignmentState `json:"alignment,omitempty"`
-	PoolIndex              int                  `json:"pool_index"`
-	MainAttempt            int                  `json:"main_attempt"`
-	LogicalAttempt         int                  `json:"logical_attempt"`
-	NetworkAttempt         int                  `json:"network_attempt"`
-	RetryEpoch             int64                `json:"retry_epoch"`
-	StoredBytes            int64                `json:"-"`
-	NextAttemptAt          time.Time            `json:"next_attempt_at,omitempty"`
-	Ready                  bool                 `json:"ready"`
-	ParentRequestID        string               `json:"parent_request_id"`
-	LastAlignmentRequestID string               `json:"last_alignment_request_id,omitempty"`
-	ForceSingleAlignment   bool                 `json:"force_single_alignment,omitempty"`
+	confirmedRead          *backend.OwnedAllocation `json:"-"`
+	PreparedPayload        []byte                   `json:"-"`
+	PreparedHeader         []byte                   `json:"-"`
+	BaselineDigest         string                   `json:"-"`
+	PendingSave            bool                     `json:"-"`
+	HeaderOnly             bool                     `json:"-"`
+	HeaderWords            int                      `json:"-"`
+	HeaderMissing          bool                     `json:"-"`
+	DTOVersion             int                      `json:"dto_version"`
+	ID                     string                   `json:"id"`
+	WorkID                 string                   `json:"work_id,omitempty"`
+	Version                int64                    `json:"version"`
+	Index                  int                      `json:"index"`
+	Mode                   string                   `json:"mode"`
+	Format                 string                   `json:"format"`
+	Segment                Segment                  `json:"segment"`
+	BaselineTarget         string                   `json:"baseline_target"`
+	BaselineStatus         string                   `json:"baseline_status"`
+	Alignment              *ruby.AlignmentState     `json:"alignment,omitempty"`
+	PoolIndex              int                      `json:"pool_index"`
+	MainAttempt            int                      `json:"main_attempt"`
+	LogicalAttempt         int                      `json:"logical_attempt"`
+	NetworkAttempt         int                      `json:"network_attempt"`
+	RetryEpoch             int64                    `json:"retry_epoch"`
+	StoredBytes            int64                    `json:"-"`
+	NextAttemptAt          time.Time                `json:"next_attempt_at,omitempty"`
+	Ready                  bool                     `json:"ready"`
+	ParentRequestID        string                   `json:"parent_request_id"`
+	LastAlignmentRequestID string                   `json:"last_alignment_request_id,omitempty"`
+	ForceSingleAlignment   bool                     `json:"force_single_alignment,omitempty"`
+}
+
+// CloseConfirmedRead ends the caller-owned fields returned by a direct Memory
+// Existing read. Staged execution transfers its preprepared fields to Document
+// ownership instead and never creates this standalone read receipt.
+func (c *Candidate) CloseConfirmedRead() {
+	if c == nil || c.confirmedRead == nil {
+		return
+	}
+	c.Segment.Target, c.Segment.Issues, c.Segment.Meta, c.Segment.Protected = "", nil, nil, nil
+	c.confirmedRead.Release()
+	c.confirmedRead = nil
 }
 
 func NewWorkID() string {

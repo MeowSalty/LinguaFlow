@@ -72,7 +72,7 @@ func (r *ExecutionRuntime) CloseDocument(doc *Document) error {
 	r.ownerMu.Lock()
 	defer r.ownerMu.Unlock()
 	doc.Segments = nil
-	var result error
+	result := r.closePendingConfirmations(doc)
 	for key, owners := range r.documentPendingRefunds {
 		if key.document != doc {
 			continue

@@ -8,6 +8,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
+type alignmentReadyObserverKey struct{}
+
 // AlignmentBatchConfig is frozen by the execution resolver. Its zero value
 // preserves single-paragraph behavior for legacy snapshots and direct callers.
 type AlignmentBatchConfig struct {
