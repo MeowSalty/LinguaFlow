@@ -1,8 +1,9 @@
 // Engineering targets are separate from the unchanged native 600s/120s budgets.
 export const performancePolicy = Object.freeze({
-  version: 1,
+  version: 2,
   defaultRounds: 1,
   sceneSeconds: 450,
+  raceSyntheticSceneSeconds: 540,
   atomicSyntheticSceneSeconds: 540,
   responseSeconds: 90,
   originalSceneSeconds: 600,
@@ -11,7 +12,9 @@ export const performancePolicy = Object.freeze({
 
 export function sceneSeconds(mode, shape) {
   if (!['plain', 'race', 'race-atomic'].includes(mode) || !['dense', 'synthetic'].includes(shape)) throw new Error('Unknown EPUB mode/shape');
-  return mode === 'race-atomic' && shape === 'synthetic' ? performancePolicy.atomicSyntheticSceneSeconds : performancePolicy.sceneSeconds;
+  if (shape === 'synthetic' && mode === 'race') return performancePolicy.raceSyntheticSceneSeconds;
+  if (shape === 'synthetic' && mode === 'race-atomic') return performancePolicy.atomicSyntheticSceneSeconds;
+  return performancePolicy.sceneSeconds;
 }
 
 export function sceneFailure(mode, shape) {
