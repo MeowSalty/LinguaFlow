@@ -47,6 +47,14 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 				return ErrManifest
 			}
 			result.Outcome = AlreadyCommitted
+			row, err := tx.Segment.Query().Where(segment.IDEQ(in.SegmentID), segment.ResourceIDEQ(in.Scope.ResourceID)).Select(segment.FieldID, segment.FieldContentVersion).Only(ctx)
+			if err != nil {
+				return err
+			}
+			result.ContentVersion = row.ContentVersion
+			if in.RequireProjectionProof && (in.ConfirmedVersion <= 0 || row.ContentVersion != in.ConfirmedVersion) {
+				return ErrStale
+			}
 			return nil
 		}
 		if !ent.IsNotFound(err) {
@@ -205,9 +213,24 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		return result, nil
 	}
 	if unknownCommit(err) {
-		err = s.finishUnknown(ctx, in.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) { return commitExists(ctx, tx, in) })
+		err = s.finishUnknown(ctx, in.Scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
+			found, lookupErr := commitExists(ctx, tx, in)
+			if lookupErr != nil || !found {
+				return found, lookupErr
+			}
+			row, readErr := tx.Segment.Query().Where(segment.IDEQ(in.SegmentID), segment.ResourceIDEQ(in.Scope.ResourceID)).Select(segment.FieldID, segment.FieldContentVersion).Only(ctx)
+			if readErr != nil {
+				return false, readErr
+			}
+			if in.RequireProjectionProof && row.ContentVersion != result.ContentVersion {
+				return false, ErrStale
+			}
+			result.ContentVersion = row.ContentVersion
+			return true, nil
+		})
 		if err == nil {
-			return CommitResult{Outcome: AlreadyCommitted}, nil
+			result.Outcome = AlreadyCommitted
+			return result, nil
 		}
 	}
 	if errors.Is(err, ErrStale) {

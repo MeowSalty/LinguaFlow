@@ -145,22 +145,24 @@ const (
 )
 
 type CommitInput struct {
-	Scope                Scope
-	SegmentID            int
-	CommitID             string
-	CandidateID          string
-	CandidateVersion     int64
-	BaselineVersion      int64
-	BaselineTarget       *string
-	BaselineDigest       string
-	BaselineTargetIsNull bool
-	BaselineStatus       string
-	Target               string
-	Status               string // empty preserves current status
-	Issues               []qa.QualityIssue
-	IssuesPayload        []byte // bounded JSON, borrowed from one opaque commit payload
-	ClearReview          bool
-	Noop                 bool
+	RequireProjectionProof bool
+	ConfirmedVersion       int64
+	Scope                  Scope
+	SegmentID              int
+	CommitID               string
+	CandidateID            string
+	CandidateVersion       int64
+	BaselineVersion        int64
+	BaselineTarget         *string
+	BaselineDigest         string
+	BaselineTargetIsNull   bool
+	BaselineStatus         string
+	Target                 string
+	Status                 string // empty preserves current status
+	Issues                 []qa.QualityIssue
+	IssuesPayload          []byte // bounded JSON, borrowed from one opaque commit payload
+	ClearReview            bool
+	Noop                   bool
 }
 
 type CommitResult struct {
