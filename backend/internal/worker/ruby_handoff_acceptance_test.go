@@ -36,6 +36,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	pa "github.com/MeowSalty/LinguaFlow/backend/internal/persistenceacceptance"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -2103,10 +2104,14 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 			started := time.Now()
 			var workMu sync.Mutex
 			work := []map[string][3]int64{{}, {}}
+			stages := [2]scopeStageObserver{}
 			laneContexts := make([]context.Context, 2)
 			for lane := range laneContexts {
 				lane := lane
 				laneContexts[lane] = backend.WithMemberWorkRecorder(ctx, func(e backend.MemberWorkEvent) {
+					if e.DurationNS > 0 || e.Phase == "confirmation" {
+						stages[lane].duration(e.Phase+"/"+e.Operation, time.Duration(e.DurationNS))
+					}
 					workMu.Lock()
 					defer workMu.Unlock()
 					key := e.Phase + "/" + e.Operation
@@ -2116,6 +2121,7 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 					v[2] += e.Bytes
 					work[lane][key] = v
 				})
+				laneContexts[lane] = persistence.WithObserver(laneContexts[lane], &stages[lane])
 			}
 			first, err := NewExecutionRuntime(f.snapshot, f.pool, nil, pipeline.DefaultCandidateLimits())
 			if err != nil {
@@ -2151,6 +2157,7 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 				defer workMu.Unlock()
 				for lane := range work {
 					t.Logf("scope diagnostic lane%d elapsed=%s work[event,row,byte]=%v", lane, time.Since(started), work[lane])
+					t.Logf("scope stage lane%d timings=%s", lane, stages[lane].snapshot())
 				}
 			}
 			fail := func(format string, args ...any) {
