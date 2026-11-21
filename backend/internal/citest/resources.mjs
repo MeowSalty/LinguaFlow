@@ -23,13 +23,14 @@ export function cpuIds(text) {
 
 // Mount roots matter in containers: /sys/fs/cgroup may already be mounted at
 // the process's cgroup, so simply appending /proc/self/cgroup is incorrect.
-export async function linuxLimits(readFile = read) {
+export async function linuxLimits(readFile = read, { cpuDiagnosticsOnly = false } = {}) {
   const membership = (await readFile('/proc/self/cgroup') ?? '').trim().split('\n').map(line => line.split(':'));
   const mounts = (await readFile('/proc/self/mountinfo') ?? '').trim().split('\n');
   let cpuQuota = Infinity;
   let memoryHeadroom = Infinity;
   let usageSeconds = null;
   let quotaSource = null;
+  let cpuError;
   const unescape = value => value.replace(/\\([0-7]{3})/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)));
   for (const line of mounts) {
     const [left, right] = line.split(' - ');
@@ -45,18 +46,23 @@ export async function linuxLimits(readFile = read) {
     if (relative === '..' || relative.startsWith('../')) continue;
     let directory = path.posix.join(mount, relative);
     while (directory === mount || directory.startsWith(`${mount}/`)) {
-      const cpu = unified ? await readFile(`${directory}/cpu.max`) : await readFile(`${directory}/cpu.cfs_quota_us`);
-      const period = unified ? cpu?.trim().split(/\s+/)[1] : await readFile(`${directory}/cpu.cfs_period_us`);
-      const amount = unified ? cpu?.trim().split(/\s+/)[0] : cpu?.trim();
-      if (amount && amount !== 'max' && Number(amount) > 0) {
-        if (!(Number(period) > 0)) throw new Error('Invalid cgroup CPU period');
-        const quota = Number(amount) / Number(period);
-        if (quota < cpuQuota) {
-          cpuQuota = quota; quotaSource = directory;
-          const usage = unified ? await readFile(`${directory}/cpu.stat`) : await readFile(`${directory}/cpuacct.usage`);
-          usageSeconds = unified ? Number(usage?.match(/^usage_usec\s+(\d+)/m)?.[1]) / 1e6 : Number(usage) / 1e9;
-          if (!Number.isFinite(usageSeconds)) usageSeconds = null;
+      try {
+        const cpu = unified ? await readFile(`${directory}/cpu.max`) : await readFile(`${directory}/cpu.cfs_quota_us`);
+        const period = unified ? cpu?.trim().split(/\s+/)[1] : await readFile(`${directory}/cpu.cfs_period_us`);
+        const amount = unified ? cpu?.trim().split(/\s+/)[0] : cpu?.trim();
+        if (amount && amount !== 'max' && Number(amount) > 0) {
+          if (!(Number(period) > 0)) throw new Error('Invalid cgroup CPU period');
+          const quota = Number(amount) / Number(period);
+          if (quota < cpuQuota) {
+            cpuQuota = quota; quotaSource = directory;
+            const usage = unified ? await readFile(`${directory}/cpu.stat`) : await readFile(`${directory}/cpuacct.usage`);
+            usageSeconds = unified ? Number(usage?.match(/^usage_usec\s+(\d+)/m)?.[1]) / 1e6 : Number(usage) / 1e9;
+            if (!Number.isFinite(usageSeconds)) usageSeconds = null;
+          }
         }
+      } catch (error) {
+        if (!cpuDiagnosticsOnly) throw error;
+        cpuError ??= error.message;
       }
       const max = await readFile(`${directory}/${unified ? 'memory.max' : 'memory.limit_in_bytes'}`);
       if (max?.trim() && max.trim() !== 'max') {
@@ -69,7 +75,7 @@ export async function linuxLimits(readFile = read) {
       directory = path.posix.dirname(directory);
     }
   }
-  return { cpuQuota, memoryHeadroom, usageSeconds, quotaSource };
+  return { cpuQuota: cpuError ? null : cpuQuota, memoryHeadroom, usageSeconds: cpuError ? null : usageSeconds, quotaSource, ...(cpuError ? { cpuError } : {}) };
 }
 
 export async function linuxProcesses() {
@@ -87,21 +93,39 @@ export async function linuxProcesses() {
   return result;
 }
 
-const windowsSnapshotScript = `
+export const windowsSnapshotScript = `
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$cpuDiagnosticsOnly=$env:LINGUAFLOW_RESOURCE_CPU_DIAGNOSTICS_ONLY -eq '1'
+$cpuError=$null
 $memory=Get-CimInstance Win32_OperatingSystem -Property FreePhysicalMemory,TotalVisibleMemorySize
 $processes=@(Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,CreationDate,WorkingSetSize,KernelModeTime,UserModeTime,Name | ForEach-Object {
   [pscustomobject]@{pid=[int]$_.ProcessId;parent=[int]$_.ParentProcessId;birth=if($_.CreationDate){([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds()}else{0};name=$_.Name;rssBytes=[double]$_.WorkingSetSize;cpuSeconds=([double]$_.KernelModeTime+[double]$_.UserModeTime)/10000000}
 })
-$owner=if($env:LINGUAFLOW_RESOURCE_OWNER){Get-Process -Id ([int]$env:LINGUAFLOW_RESOURCE_OWNER)}else{$null}
-$hostCpu=if(!$owner){Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"}else{$null}
-$hostCores=if(!$owner){(Get-CimInstance Win32_ComputerSystem -Property NumberOfLogicalProcessors).NumberOfLogicalProcessors}else{0}
-[pscustomobject]@{availableBytes=[double]$memory.FreePhysicalMemory*1024;totalBytes=[double]$memory.TotalVisibleMemorySize*1024;processes=$processes;mask=if($owner){$owner.ProcessorAffinity.ToInt64().ToString('X')}else{$null};hostCpuCores=[double]$hostCores;hostBusyCores=if($hostCpu){[double]$hostCores*[double]$hostCpu.PercentProcessorTime/100}else{0}} | ConvertTo-Json -Depth 4 -Compress
+$owner=$null
+$mask=$null
+$hostCpu=$null
+$hostCores=0
+try {
+  if($env:LINGUAFLOW_RESOURCE_OWNER){
+    $owner=Get-Process -Id ([int]$env:LINGUAFLOW_RESOURCE_OWNER)
+    $mask=$owner.ProcessorAffinity.ToInt64().ToString('X')
+  }else{
+    $hostCpu=Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"
+    $hostCores=(Get-CimInstance Win32_ComputerSystem -Property NumberOfLogicalProcessors).NumberOfLogicalProcessors
+  }
+}catch{
+  if(!$cpuDiagnosticsOnly){throw}
+  $cpuError=$_.Exception.Message
+  $mask=$null
+  $hostCores=$null
+  $hostCpu=$null
+}
+[pscustomobject]@{availableBytes=[double]$memory.FreePhysicalMemory*1024;totalBytes=[double]$memory.TotalVisibleMemorySize*1024;processes=$processes;mask=$mask;hostCpuCores=if($cpuError){$null}else{[double]$hostCores};hostBusyCores=if($cpuError){$null}elseif($hostCpu){[double]$hostCores*[double]$hostCpu.PercentProcessorTime/100}else{0};cpuError=$cpuError} | ConvertTo-Json -Depth 4 -Compress
 `;
 
-export async function windowsSnapshot({ interop = false } = {}) {
-  const result = await exec('pwsh.exe', ['-NoProfile', '-NonInteractive', '-Command', windowsSnapshotScript], { windowsHide: true, timeout: 4000, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, LINGUAFLOW_RESOURCE_OWNER: interop ? '' : String(process.pid) } });
+export async function windowsSnapshot({ interop = false, cpuDiagnosticsOnly = false } = {}) {
+  const result = await exec('pwsh.exe', ['-NoProfile', '-NonInteractive', '-Command', windowsSnapshotScript], { windowsHide: true, timeout: 4000, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, LINGUAFLOW_RESOURCE_OWNER: interop ? '' : String(process.pid), LINGUAFLOW_RESOURCE_CPU_DIAGNOSTICS_ONLY: cpuDiagnosticsOnly ? '1' : '' } });
   return JSON.parse(result.stdout.trim());
 }
 
@@ -120,7 +144,7 @@ function tree(rows, root, known) {
   return rows.filter(row => owned.has(row.pid));
 }
 
-export function createResourceMonitor({ platform = process.platform, now = Date.now, readFile = read, processes = platform === 'linux' ? linuxProcesses : null, windows = windowsSnapshot, wsl = Boolean(process.env.WSL_DISTRO_NAME || /microsoft/i.test(os.release())) } = {}) {
+export function createResourceMonitor({ platform = process.platform, now = Date.now, readFile = read, processes = platform === 'linux' ? linuxProcesses : null, windows = windowsSnapshot, wsl = Boolean(process.env.WSL_DISTRO_NAME || /microsoft/i.test(os.release())), cpuDiagnosticsOnly = false } = {}) {
   let previousTimes = os.cpus().map(cpu => cpu.times);
   let previousAt = now();
   let previousUsage = null;
@@ -137,32 +161,44 @@ export function createResourceMonitor({ platform = process.platform, now = Date.
       const delta = sum(Object.keys(times).map(k => times[k] - old[k]));
       return delta > 0 ? Math.max(0, 1 - (times.idle - old.idle) / delta) : null;
     });
-    let availableBytes, totalBytes, allowedIds, cpuQuota, limits = null, rows, windowsHost = null, mask = null;
+    let availableBytes, totalBytes, allowedIds, cpuQuota, limits = null, rows, windowsHost = null, mask = null, cpuError;
     if (platform === 'win32') {
-      const data = await windows();
+      const data = await windows({ cpuDiagnosticsOnly });
       ({ availableBytes, totalBytes, mask } = data); rows = data.processes;
-      if (!/^[0-9a-f]+$/i.test(mask)) throw new Error('Windows processor affinity unavailable');
-      const bits = BigInt(`0x${mask}`);
-      allowedIds = Array.from({ length: 64 }, (_, i) => i).filter(i => bits & (1n << BigInt(i)));
-      cpuQuota = Math.min(os.availableParallelism(), allowedIds.length);
+      cpuError = data.cpuError;
+      if (!/^[0-9a-f]+$/i.test(mask)) {
+        if (!cpuDiagnosticsOnly) throw new Error('Windows processor affinity unavailable');
+        allowedIds = []; cpuQuota = null;
+      } else {
+        const bits = BigInt(`0x${mask}`);
+        allowedIds = Array.from({ length: 64 }, (_, i) => i).filter(i => bits & (1n << BigInt(i)));
+        cpuQuota = Math.min(os.availableParallelism(), allowedIds.length);
+      }
     } else if (platform === 'linux') {
       const memory = await readFile('/proc/meminfo');
       availableBytes = Number(memory?.match(/^MemAvailable:\s+(\d+)\s+kB/m)?.[1]) * 1024;
       totalBytes = Number(memory?.match(/^MemTotal:\s+(\d+)\s+kB/m)?.[1]) * 1024;
-      const status = await readFile('/proc/self/status');
-      allowedIds = cpuIds(status?.match(/^Cpus_allowed_list:\s*(.+)$/m)?.[1] ?? '');
-      limits = await linuxLimits(readFile);
+      try {
+        const status = await readFile('/proc/self/status');
+        allowedIds = cpuIds(status?.match(/^Cpus_allowed_list:\s*(.+)$/m)?.[1] ?? '');
+      } catch (error) {
+        if (!cpuDiagnosticsOnly) throw error;
+        allowedIds = []; cpuError = error.message;
+      }
+      limits = await linuxLimits(readFile, { cpuDiagnosticsOnly });
+      cpuError ??= limits.cpuError;
       availableBytes = Math.min(availableBytes, limits.memoryHeadroom);
-      cpuQuota = Math.min(os.availableParallelism(), allowedIds.length, limits.cpuQuota);
+      cpuQuota = cpuError ? null : Math.min(os.availableParallelism(), allowedIds.length, limits.cpuQuota);
       rows = await processes();
       if (wsl) {
-        windowsHost = await windows({ interop: true });
-        if (!(windowsHost.availableBytes > 0) || !(windowsHost.hostCpuCores > 0) || !Number.isFinite(windowsHost.hostBusyCores) || windowsHost.hostBusyCores < 0) throw new Error('WSL Windows host physical/CPU budget unavailable');
+        windowsHost = await windows({ interop: true, cpuDiagnosticsOnly });
+        if (!Number.isFinite(windowsHost.availableBytes) || !(windowsHost.availableBytes > 0) || (!cpuDiagnosticsOnly && (!(windowsHost.hostCpuCores > 0) || !Number.isFinite(windowsHost.hostBusyCores) || windowsHost.hostBusyCores < 0))) throw new Error('WSL Windows host physical/CPU budget unavailable');
         availableBytes = Math.min(availableBytes, windowsHost.availableBytes);
-        cpuQuota = Math.min(cpuQuota, windowsHost.hostCpuCores);
+        if (windowsHost.hostCpuCores > 0 && cpuQuota != null) cpuQuota = Math.min(cpuQuota, windowsHost.hostCpuCores);
       }
     } else throw new Error(`Physical resource sampling unsupported on ${platform}`);
-    if (!Number.isFinite(availableBytes) || availableBytes < 0 || !Number.isFinite(totalBytes) || totalBytes <= 0 || !Number.isFinite(cpuQuota) || cpuQuota < 0) throw new Error('Physical memory/CPU sample invalid');
+    if (!Number.isFinite(availableBytes) || availableBytes <= 0 || !Number.isFinite(totalBytes) || totalBytes <= 0) throw Object.assign(new Error('Physical memory sample invalid or exhausted'), { physicalMemoryInvalid: true });
+    if (!cpuDiagnosticsOnly && (!Number.isFinite(cpuQuota) || cpuQuota < 0)) throw new Error('CPU sample invalid');
     const selected = monitor.pool?.ids ?? allowedIds;
     let busyCores = sum(selected.map(i => perCPU[i] ?? 1));
     if (limits?.usageSeconds != null && previousUsage != null && elapsed > 0) busyCores = Math.max(busyCores, Math.min(cpuQuota, Math.max(0, (limits.usageSeconds - previousUsage) / elapsed)));
@@ -193,49 +229,7 @@ export function createResourceMonitor({ platform = process.platform, now = Date.
     }
     previousTimes = allTimes; previousAt = timestamp; previousUsage = limits?.usageSeconds ?? null;
     previousProcesses = new Map(rows.map(row => [`${row.pid}:${row.birth}`, row.cpuSeconds]));
-    return { atMs: timestamp, platform, availableBytes, totalBytes, cpuQuota, allowedIds, cpuLoads: perCPU, mask, busyCores, sharedBusyCores: Math.max(0, busyCores - sum(owned.map(item => item.cpuCores))), owned, shared, cpuLoadKnown: selected.every(i => perCPU[i] != null), cgroup: limits ? { cpuQuota: Number.isFinite(limits.cpuQuota) ? limits.cpuQuota : null, memoryHeadroom: Number.isFinite(limits.memoryHeadroom) ? limits.memoryHeadroom : null, quotaSource: limits.quotaSource } : null, wslHost: windowsHost ? { availableBytes: windowsHost.availableBytes, cpuCores: windowsHost.hostCpuCores, busyCores: windowsHost.hostBusyCores } : null, owner: rows.find(row => row.pid === process.pid) ?? null };
+    return { atMs: timestamp, platform, availableBytes, totalBytes, cpuQuota, allowedIds, cpuLoads: perCPU, mask, busyCores, sharedBusyCores: Math.max(0, busyCores - sum(owned.map(item => item.cpuCores))), owned, shared, cpuLoadKnown: !cpuError && (!cpuDiagnosticsOnly || selected.length > 0) && selected.every(i => perCPU[i] != null), ...(cpuError ? { cpuError } : {}), cgroup: limits ? { cpuQuota: Number.isFinite(limits.cpuQuota) ? limits.cpuQuota : null, memoryHeadroom: Number.isFinite(limits.memoryHeadroom) ? limits.memoryHeadroom : null, quotaSource: limits.quotaSource } : null, wslHost: windowsHost ? { availableBytes: windowsHost.availableBytes, cpuCores: windowsHost.hostCpuCores, busyCores: windowsHost.hostBusyCores, ...(windowsHost.cpuError ? { cpuError: windowsHost.cpuError } : {}) } : null, owner: rows.find(row => row.pid === process.pid) ?? null };
   };
   return monitor;
-}
-
-export async function bindControllerCPU(monitor, snapshot, { reserve = 0, platform = process.platform, execute = exec } = {}) {
-  const count = Math.floor(Math.min(snapshot.cpuQuota, snapshot.allowedIds.length) - reserve);
-  if (count < 1) throw new Error('No full CPU remains after shared-host reserve');
-  const ids = [...snapshot.allowedIds].sort((a, b) => (snapshot.cpuLoads?.[a] ?? 1) - (snapshot.cpuLoads?.[b] ?? 1)).slice(0, count).sort((a, b) => a - b);
-  const originalIds = snapshot.allowedIds;
-  if (platform === 'linux') {
-    const set = async values => {
-      await execute('taskset', ['--all-tasks', '--pid', '--cpu-list', values.join(','), String(process.pid)], { timeout: 4000 });
-      const actual = cpuIds((await read('/proc/self/status')).match(/^Cpus_allowed_list:\s*(.+)$/m)[1]);
-      if (JSON.stringify(actual) !== JSON.stringify(values)) throw new Error('Controller CPU affinity could not be verified');
-    };
-    try { await set(ids); }
-    catch (error) {
-      // execFile did not create a process: there can be no affinity mutation
-      // to undo, and a second missing taskset must not mask safe fallback.
-      if (['ENOENT', 'EACCES'].includes(error.code)) throw error;
-      try { await set(originalIds); } catch (restore) { error.restoreFailure = restore.message; }
-      throw error;
-    }
-    monitor.pool = { ids, cores: ids.length, method: 'taskset-controller-inherit' };
-    return { ...monitor.pool, restore: () => set(originalIds) };
-  }
-  if (platform !== 'win32' || ids.some(id => id >= 63) || !snapshot.owner?.birth) throw new Error('Controller CPU group/birth cannot be safely represented');
-  const originalMask = snapshot.mask;
-  const setMask = async (expected, mask) => {
-    const script = `$ErrorActionPreference='Stop'; $p=Get-Process -Id ${process.pid}; if([Math]::Abs(([DateTimeOffset]$p.StartTime).ToUnixTimeMilliseconds()-${snapshot.owner.birth}) -gt 10){throw 'Controller birth changed'}; if($p.ProcessorAffinity.ToInt64().ToString('X') -ne '${expected}'){throw 'Controller affinity changed'}; $p.ProcessorAffinity=[IntPtr]([Int64]::Parse('${mask}',[Globalization.NumberStyles]::HexNumber)); $p.Refresh(); if($p.ProcessorAffinity.ToInt64().ToString('X') -ne '${mask}'){throw 'Controller affinity verification failed'}`;
-    await exec('pwsh.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 4000 });
-  };
-  const mask = ids.reduce((bits, id) => bits | (1n << BigInt(id)), 0n).toString(16).toUpperCase();
-  try { await setMask(originalMask, mask); }
-  catch (error) {
-    try {
-      const current = (await windowsSnapshot()).mask;
-      if (current === mask) await setMask(mask, originalMask);
-      else if (current !== originalMask) throw new Error('Controller affinity changed externally during failed bind');
-    } catch (restore) { error.restoreFailure = restore.message; }
-    throw error;
-  }
-  monitor.pool = { ids, cores: ids.length, method: 'windows-controller-inherit' };
-  return { ...monitor.pool, restore: () => setMask(mask, originalMask) };
 }
