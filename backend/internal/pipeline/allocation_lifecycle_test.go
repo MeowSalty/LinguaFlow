@@ -6,6 +6,7 @@ import (
 	"fmt"
 	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -313,6 +314,8 @@ func TestAllocationDocumentInstallFailureKeepsCommittedSiblingAndUsage(t *testin
 	doc.Segments[1].Target = "previous"
 	defer r.CloseDocument(doc)
 	installed := make(chan struct{})
+	var installedOnce sync.Once
+	rejectSecond := true
 	s := &allocationOrderedDocumentStore{installed: installed}
 	s.MemoryRoundStore = NewMemoryRoundStore(func(ctx context.Context, batch BatchResult) error {
 		b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
@@ -329,7 +332,7 @@ func TestAllocationDocumentInstallFailureKeepsCommittedSiblingAndUsage(t *testin
 	})
 	defer s.Close()
 	ctx := WithDocumentAllocationOwner(context.Background(), func(ctx context.Context, index int, owner string, plan DocumentAllocationPlan, borrowed uint8, install func()) error {
-		if index == 1 {
+		if index == 1 && rejectSecond {
 			return backend.ErrBuildCapacity
 		}
 		b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
@@ -338,7 +341,7 @@ func TestAllocationDocumentInstallFailureKeepsCommittedSiblingAndUsage(t *testin
 		}
 		return r.installDocumentBacking(b, doc, index, owner, plan, borrowed, func() {
 			install()
-			close(installed)
+			installedOnce.Do(func() { close(installed) })
 		})
 	})
 	inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
@@ -351,10 +354,16 @@ func TestAllocationDocumentInstallFailureKeepsCommittedSiblingAndUsage(t *testin
 	if len(s.confirmed) != 2 || len(s.state.Completed) != 2 || doc.InputTokens != 3 || doc.OutputTokens != 5 {
 		t.Fatalf("document failure changed durable commits or usage: confirmed=%d completed=%d usage=%d/%d", len(s.confirmed), len(s.state.Completed), doc.InputTokens, doc.OutputTokens)
 	}
-	for id := range s.confirmed {
-		if r.Admission.BuildBytes("candidate:"+id) != 0 {
-			t.Fatalf("candidate owner survived local install: %s", id)
-		}
+	var pending *ConfirmationProjectionError
+	if !errors.As(err, &pending) || len(r.pendingConfirmations) != 1 {
+		t.Fatal("failed receiver lost its paid retry")
+	}
+	rejectSecond = false
+	if err := r.RetryConfirmedDocument(ctx, doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.pendingConfirmations) != 0 || doc.Segments[1].Target != "QA corrected" || inner.calls.Load() != 1 {
+		t.Fatal("projection retry repeated model or lost callback result")
 	}
 }
 
@@ -384,7 +393,10 @@ func TestAllocationDocumentPostInstallErrorKeepsInstalledFields(t *testing.T) {
 		if err = r.installDocumentBacking(b, doc, index, owner, plan, borrowed, install); err != nil {
 			return err
 		}
-		return backend.ErrBuildCapacity
+		if strings.HasPrefix(owner, "candidate-callback:") {
+			return backend.ErrBuildCapacity
+		}
+		return nil
 	})
 	inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
 		return &backend.Response{Text: `{"translations":{"1":"translated"}}`}, nil

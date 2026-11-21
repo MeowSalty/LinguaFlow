@@ -146,6 +146,11 @@ func TestMemberRecoveryAttemptKeepsOneDeadlineAcrossCheckpointAndPromotion(t *te
 			if err != nil || len(result.Resolved) != n || main.calls.Load() != 1 || doc.InputTokens != 17 || doc.OutputTokens != 3 {
 				t.Fatalf("new finite attempt could not resume: resolved=%d calls=%d err=%v", len(result.Resolved), main.calls.Load(), err)
 			}
+			for i, seg := range doc.Segments {
+				if seg.Target != fmt.Sprintf("saved-%d", i) || seg.Status != "translated" || !seg.RoundWork.Completed || seg.TargetIsNull {
+					t.Fatalf("recovery skipped confirmed body at %d: %+v", i, seg)
+				}
+			}
 		})
 	}
 }

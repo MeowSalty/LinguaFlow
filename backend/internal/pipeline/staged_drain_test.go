@@ -48,6 +48,7 @@ func TestStagedCancelledDrainRetainsInFlightPaidResults(t *testing.T) {
 			cancel()
 			r := stagedTestRuntime(t, DefaultCandidateLimits())
 			store := NewMemoryRoundStore(nil)
+			defer store.Close()
 			c := &Candidate{ID: "paid", Index: 0}
 			events := make(chan stagedEvent, 1)
 			terminal := make(chan stagedEvent, 1)
