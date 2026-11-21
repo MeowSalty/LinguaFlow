@@ -428,6 +428,13 @@ func saveCandidate(ctx context.Context, tx *ent.Client, c Candidate) error {
 	if err != nil {
 		return err
 	}
+	return saveCandidateWithLockedMember(ctx, tx, c, w)
+}
+
+// saveCandidateWithLockedMember uses facts checked by guardScope and member in
+// this transaction. The caller must still hold the Job and resource locks;
+// candidate, pause and segment-baseline checks remain at their original places.
+func saveCandidateWithLockedMember(ctx context.Context, tx *ent.Client, c Candidate, w *ent.WorkItem) error {
 	if w.State == "resolved" {
 		return fmt.Errorf("%w: save_candidate work_already_resolved segment=%d candidate=%s", ErrStale, c.SegmentID, c.ID)
 	}
