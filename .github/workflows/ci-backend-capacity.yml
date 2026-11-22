@@ -1,0 +1,99 @@
+name: 后端专项验收
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 验收范围（完整 race 与无插桩性能分别报告）
+        type: choice
+        default: all
+        options: [all, full-race, performance]
+
+permissions:
+  contents: read
+
+jobs:
+  full-race:
+    name: 完整竞态验收（含 5338 段）
+    if: inputs.scope == 'all' || inputs.scope == 'full-race'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '4'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: linguaflow
+          POSTGRES_PASSWORD: linguaflow-test
+          POSTGRES_DB: linguaflow_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U linguaflow -d linguaflow_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.51.1'
+      - name: 从 go.mod 读取 Go 系列
+        id: go-version
+        shell: bash
+        run: awk '$1 == "go" { sub(/\r$/, "", $2); n = split($2, v, "."); if (n < 2 || v[1] !~ /^[0-9]+$/ || v[2] !~ /^[0-9]+$/) exit 1; print "series=" v[1] "." v[2]; found = 1; exit } END { if (!found) exit 1 }' backend/go.mod >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ steps.go-version.outputs.series }}
+          check-latest: true
+          cache-dependency-path: backend/go.sum
+      - name: 完整竞态测试
+        timeout-minutes: 90
+        shell: bash
+        env:
+          LINGUAFLOW_TEST_POSTGRES_DSN: postgres://linguaflow:linguaflow-test@localhost:5432/linguaflow_test?sslmode=disable
+        run: task backend:test:ci:full-race OUTPUT_DIR=".ci-test/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-full-race"
+      - name: 保存完整竞态证据
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-full-race-results
+          path: backend/.ci-test/${{ github.run_id }}-${{ github.run_attempt }}-full-race/
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: warn
+
+  performance:
+    name: 普通无插桩性能验收（450s 场景 / 90s 响应）
+    if: inputs.scope == 'all' || inputs.scope == 'performance'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '4'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.51.1'
+      - name: 从 go.mod 读取 Go 系列
+        id: go-version
+        shell: bash
+        run: awk '$1 == "go" { sub(/\r$/, "", $2); n = split($2, v, "."); if (n < 2 || v[1] !~ /^[0-9]+$/ || v[2] !~ /^[0-9]+$/) exit 1; print "series=" v[1] "." v[2]; found = 1; exit } END { if (!found) exit 1 }' backend/go.mod >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ steps.go-version.outputs.series }}
+          check-latest: true
+          cache-dependency-path: backend/go.sum
+      - name: 顺序运行原始性能场景
+        timeout-minutes: 30
+        shell: bash
+        run: task backend:test:performance OUTPUT_DIR=".ci-test/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-performance"
+      - name: 保存性能证据
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-performance-results
+          path: backend/.ci-test/${{ github.run_id }}-${{ github.run_attempt }}-performance/
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: warn

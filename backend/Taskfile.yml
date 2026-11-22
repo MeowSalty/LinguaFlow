@@ -396,6 +396,18 @@ tasks:
     cmds:
       - node ./internal/citest/ci-test.mjs "MODE={{default "plain" .MODE}}" "OUTPUT_DIR={{default "" .OUTPUT_DIR}}" "PACKAGE_PARALLELISM={{default "auto" .PACKAGE_PARALLELISM}}" "PACKAGE_PARALLELISM_FACTOR={{default "2" .PACKAGE_PARALLELISM_FACTOR}}"
 
+  test:ci:gate:
+    desc: 主提交/发布门禁（完整普通 atomic 覆盖率与代表规模竞态）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/citest/ci-test.mjs MODE=race-atomic "OUTPUT_DIR={{default "" .OUTPUT_DIR}}" "PACKAGE_PARALLELISM={{default "auto" .PACKAGE_PARALLELISM}}" "PACKAGE_PARALLELISM_FACTOR={{default "2" .PACKAGE_PARALLELISM_FACTOR}}"
+
+  test:ci:full-race:
+    desc: 独立完整竞态验收（原 5338 段场景，保留完整功能矩阵）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/citest/ci-test.mjs MODE=race "OUTPUT_DIR={{default "" .OUTPUT_DIR}}" "PACKAGE_PARALLELISM={{default "auto" .PACKAGE_PARALLELISM}}" "PACKAGE_PARALLELISM_FACTOR={{default "2" .PACKAGE_PARALLELISM_FACTOR}}"
+
   test:performance:
     desc: 普通无覆盖率 EPUB dense256/full5338 性能门（450s 场景、90s 响应）
     dir: '{{.TASKFILE_DIR}}'

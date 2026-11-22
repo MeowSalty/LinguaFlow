@@ -54,7 +54,7 @@ jobs:
         env:
           LINGUAFLOW_TEST_POSTGRES_DSN: postgres://linguaflow:linguaflow-test@localhost:5432/linguaflow_test?sslmode=disable
         run: |
-          task backend:test:ci MODE=race OUTPUT_DIR=".ci-test/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          task backend:test:ci MODE=race-atomic OUTPUT_DIR=".ci-test/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: 上传完整测试证据（失败也保留分片原始数据）
         if: always()
