@@ -228,40 +228,21 @@ export function parseTestEvents(text) {
   return { tests, packages, issues };
 }
 
-export function hasGoFunctionToken(source) {
-  for (let i = 0; i < source.length;) {
-    if (source.startsWith('//', i)) { const end = source.indexOf('\n', i + 2); i = end < 0 ? source.length : end; continue; }
-    if (source.startsWith('/*', i)) { const end = source.indexOf('*/', i + 2); if (end < 0) throw new Error('Unterminated Go comment'); i = end + 2; continue; }
-    if (['"', "'", '`'].includes(source[i])) {
-      const quote = source[i++];
-      let closed = false;
-      while (i < source.length) {
-        if (quote !== '`' && source[i] === '\\') { i += 2; continue; }
-        if (source[i++] === quote) { closed = true; break; }
-      }
-      if (!closed) throw new Error('Unterminated Go literal');
-      continue;
-    }
-    if (/[\p{L}\p{N}_]/u.test(source[i])) {
-      const start = i++;
-      while (i < source.length && /[\p{L}\p{N}_]/u.test(source[i])) i++;
-      if (source.slice(start, i) === 'func') return true;
-    } else i++;
-  }
-  return false;
-}
-
 function noFunctionSourceEvidence(record) {
+  const evidence = record.NoFunctionSourceEvidence;
+  if (!evidence) return null;
   const names = [...(record.GoFiles ?? []), ...(record.CgoFiles ?? [])];
-  if (!record.Dir || !names.length) return null;
+  if (!record.Dir || !names.length || evidence.kind !== 'no-go-function-bodies' || evidence.parser !== 'go/parser' || !Array.isArray(evidence.files) || evidence.files.length !== names.length) throw new Error(`Invalid Go AST source evidence: ${record.ImportPath}`);
+  const expected = new Map(evidence.files.map(file => [file.name, file.sha256]));
+  if (expected.size !== names.length || new Set(names).size !== names.length) throw new Error(`Repeated Go AST source evidence: ${record.ImportPath}`);
   const files = [];
   for (const name of names) {
-    if (path.basename(name) !== name || !name.endsWith('.go')) throw new Error(`Invalid discovered Go source: ${name}`);
-    const source = fs.readFileSync(path.join(record.Dir, name), 'utf8');
-    if (hasGoFunctionToken(source)) return null;
-    files.push({ name, sha256: sha256(source) });
+    if (path.basename(name) !== name || /[\\/]/.test(name) || !name.endsWith('.go')) throw new Error(`Invalid discovered Go source: ${name}`);
+    const digest = sha256(fs.readFileSync(path.join(record.Dir, name)));
+    if (expected.get(name) !== digest) throw new Error(`Changed or missing Go AST source evidence: ${record.ImportPath}/${name}`);
+    files.push({ name, sha256: digest });
   }
-  return { reason: 'Every go-list selected production Go/Cgo source has no func token outside comments/literals; Go coverage emits no function metadata.', files };
+  return { ...evidence, files };
 }
 
 export function parseInventory(listResult, packageRecords) {

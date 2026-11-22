@@ -409,10 +409,10 @@ tasks:
       - go env -json GOVERSION GOOS GOARCH CGO_ENABLED GOFLAGS GOTOOLCHAIN CC
 
   test:ci:inventory:
-    desc: 发现当前构建模式下的完整 Go 包集合（不执行测试）
+    desc: 发现当前构建模式完整 Go 包集合并用 AST 记录无函数体源码证据（不执行测试）
     dir: '{{.TASKFILE_DIR}}'
     cmds:
-      - go list -json {{.CLI_ARGS}} ./...
+      - go run ./internal/tools/ci-inventory {{.CLI_ARGS}}
 
   test:ci:helpers:
     desc: 验证 CI 分片、JSON、atomic 合并、失败证据及自有进程树清理
