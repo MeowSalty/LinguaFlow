@@ -391,10 +391,16 @@ tasks:
       - go test -race {{default "./..." .CLI_ARGS}}
 
   test:ci:
-    desc: CI 分片（CPU 倍率目标、物理资源准入与重片动态并行）、执行合同与 atomic 覆盖率合并
+    desc: CI 完整普通测试、普通 atomic 覆盖率与独立代表规模 race 执行合同
     dir: '{{.TASKFILE_DIR}}'
     cmds:
       - node ./internal/citest/ci-test.mjs "MODE={{default "plain" .MODE}}" "OUTPUT_DIR={{default "" .OUTPUT_DIR}}" "PACKAGE_PARALLELISM={{default "auto" .PACKAGE_PARALLELISM}}" "PACKAGE_PARALLELISM_FACTOR={{default "2" .PACKAGE_PARALLELISM_FACTOR}}"
+
+  test:performance:
+    desc: 普通无覆盖率 EPUB dense256/full5338 性能门（450s 场景、90s 响应）
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - node ./internal/citest/ci-test.mjs MODE=performance "OUTPUT_DIR={{default "" .OUTPUT_DIR}}" "PACKAGE_PARALLELISM={{default "auto" .PACKAGE_PARALLELISM}}"
 
   test:ci:environment:
     desc: 记录 CI 测试实际 Go 工具链、平台及构建环境

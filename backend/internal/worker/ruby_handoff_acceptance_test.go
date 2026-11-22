@@ -1214,7 +1214,7 @@ func runHandoffHTTPCase(t *testing.T, mode string, concurrency, count, batch, ac
 			t.Fatal(err)
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), handoffFixtureLifetime)
 	defer cancel()
 	limits := pipeline.DefaultCandidateLimits()
 	if len(configured) > 0 {
@@ -1252,21 +1252,21 @@ func runHandoffHTTPCase(t *testing.T, mode string, concurrency, count, batch, ac
 			select {
 			case <-done:
 				joined = true
-			case <-time.After(10 * time.Second):
-				t.Log("pipeline still draining after releasing HTTP and cancelling")
-				<-done
-				joined = true
+			case <-time.After(handoffFixtureJoinWait):
+				failHandoffFixtureJoin(t, ctx, []*rubyPipelineFixture{f}, []*pipeline.ExecutionRuntime{runtime})
 			}
 		}
 	}
 	defer cleanup()
 	fail := func(format string, args ...any) {
+		t.Logf("HTTP fixture failure before cancellation: "+format, args...)
+		logHandoffAcceptanceFailure(t, f, runtime)
 		cleanup()
 		logHandoffAcceptanceFailure(t, f, runtime)
 		// All launched work is released and joined before Fatal.
 		t.Fatalf(format, args...)
 	}
-	barrierDeadline := time.NewTimer(10 * time.Second)
+	barrierDeadline := time.NewTimer(handoffFixtureBarrierWait)
 	defer barrierDeadline.Stop()
 	for i := 0; i < wantPeak; i++ {
 		select {
@@ -1582,7 +1582,7 @@ func runHandoffHTTPAuxScopes(t *testing.T, twoJobs bool, counts ...int) {
 		mu.Unlock()
 		return rubyPipelineResponse(request), nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), handoffFixtureLifetime)
 	defer cancel()
 	runtime, err := NewExecutionRuntime(f.snapshot, f.pool, nil, pipeline.DefaultCandidateLimits())
 	if err != nil {
@@ -1659,17 +1659,23 @@ func runHandoffHTTPAuxScopes(t *testing.T, twoJobs bool, counts ...int) {
 		open()
 		cancel()
 		if !joined {
-			<-done
-			joined = true
+			select {
+			case <-done:
+				joined = true
+			case <-time.After(handoffFixtureJoinWait):
+				failHandoffFixtureJoin(t, ctx, fixtures, runtimes)
+			}
 		}
 	}
 	defer cleanup()
 	fail := func(format string, args ...any) {
+		t.Logf("aux fixture failure before cancellation: "+format, args...)
+		logHandoffAcceptanceFailure(t, f, runtime)
 		cleanup()
 		logHandoffAcceptanceFailure(t, f, runtime)
 		t.Fatalf(format, args...)
 	}
-	deadline := time.NewTimer(10 * time.Second)
+	deadline := time.NewTimer(handoffFixtureBarrierWait)
 	defer deadline.Stop()
 	wantPeak := 8
 	if twoJobs {
@@ -1781,16 +1787,41 @@ func runHandoffHTTPAuxScopes(t *testing.T, twoJobs bool, counts ...int) {
 	t.Logf("requestedA=8 resources=%d distinctJobs=%v real_aux_HTTP_peak=%d aux_calls=%d members=%d barrier=%+v terminal=%+v", len(counts), twoJobs, actualPeak, actualCalls, count, atBarrier, end)
 }
 
+func boundedHandoffDiagnostic(budget time.Duration, collect func(context.Context) string) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	done := make(chan string, 1)
+	go func() { done <- collect(ctx) }()
+	select {
+	case diagnostic := <-done:
+		return diagnostic, true
+	case <-ctx.Done():
+		return fmt.Sprintf("diagnostic collection exceeded %s (including fixture mutexes)", budget), false
+	}
+}
+
 func logHandoffAcceptanceFailure(t *testing.T, f *rubyPipelineFixture, runtime *pipeline.ExecutionRuntime) {
 	t.Helper()
-	ctx := context.Background()
+	diagnostic, complete := boundedHandoffDiagnostic(2*time.Second, func(ctx context.Context) string {
+		return collectHandoffAcceptanceFailure(ctx, f, runtime)
+	})
+	t.Log(diagnostic)
+	if !complete {
+		t.Error("HTTP fixture diagnostics did not complete within their wall-clock budget")
+	}
+}
+
+func collectHandoffAcceptanceFailure(ctx context.Context, f *rubyPipelineFixture, runtime *pipeline.ExecutionRuntime) string {
+	var diagnostic strings.Builder
+	pending, queued := runtime.Preparation.Snapshot()
+	fmt.Fprintf(&diagnostic, "live fixture preparation=%d/%d window=%+v ledger=%+v owned=%+v\n", pending, queued, runtime.Window.Snapshot(), runtime.Admission.PipelineSnapshot(), runtime.Admission.OwnedPayloadSnapshot())
 	states := map[string]int{}
 	if rows, err := f.client.WorkItem.Query().Where(workitem.JobRoundIDEQ(f.roundIDs[0])).Select(workitem.FieldState, workitem.FieldCandidateID, workitem.FieldResponseRequestID).All(ctx); err == nil {
 		for _, row := range rows {
 			states[fmt.Sprintf("%s/candidate=%v/raw=%v", row.State, row.CandidateID != "", row.ResponseRequestID != "")]++
 		}
 	} else {
-		t.Logf("read work diagnostics: %v", err)
+		fmt.Fprintf(&diagnostic, "read work diagnostics: %v\n", err)
 	}
 	candidates := map[string]int{}
 	if rows, err := f.client.WorkCandidate.Query().Where(workcandidate.HasWorkItemWith(workitem.JobRoundIDEQ(f.roundIDs[0]))).Select(workcandidate.FieldState, workcandidate.FieldDtoVersion).All(ctx); err == nil {
@@ -1798,7 +1829,7 @@ func logHandoffAcceptanceFailure(t *testing.T, f *rubyPipelineFixture, runtime *
 			candidates[fmt.Sprintf("%s/DTO%d", row.State, row.DtoVersion)]++
 		}
 	} else {
-		t.Logf("read candidate diagnostics: %v", err)
+		fmt.Fprintf(&diagnostic, "read candidate diagnostics: %v\n", err)
 	}
 	requests := map[string]int{}
 	if rows, err := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).Select(workrequest.FieldState, workrequest.FieldStage, workrequest.FieldPromotionState, workrequest.FieldPromotionCursor, workrequest.FieldPromotionCount).All(ctx); err == nil {
@@ -1806,12 +1837,41 @@ func logHandoffAcceptanceFailure(t *testing.T, f *rubyPipelineFixture, runtime *
 			requests[fmt.Sprintf("%s/%s/%s/cursor%dof%d", row.Stage, row.State, row.PromotionState, row.PromotionCursor, row.PromotionCount)]++
 		}
 	} else {
-		t.Logf("read request diagnostics: %v", err)
+		fmt.Fprintf(&diagnostic, "read request diagnostics: %v\n", err)
 	}
 	f.mu.Lock()
 	httpCalls := len(f.requests)
 	f.mu.Unlock()
-	t.Logf("failure ledger=%+v work=%v candidates=%v requests=%v fixture_request_records=%d", runtime.Admission.PipelineSnapshot(), states, candidates, requests, httpCalls)
+	fmt.Fprintf(&diagnostic, "failure ledger=%+v work=%v candidates=%v requests=%v fixture_request_records=%d\n", runtime.Admission.PipelineSnapshot(), states, candidates, requests, httpCalls)
+	return diagnostic.String()
+}
+
+// Called only after releasing the HTTP barrier and cancelling the fixture. A
+// stuck worker cannot safely enter normal deferred engine/server shutdown. The
+// separate goroutine makes the test process fail after bounded diagnostics,
+// rather than hiding this failure behind another unbounded close or join.
+func failHandoffFixtureJoin(t *testing.T, ctx context.Context, fixtures []*rubyPipelineFixture, runtimes []*pipeline.ExecutionRuntime) {
+	t.Helper()
+	t.Logf("HTTP fixture cancel-join exceeded %s; cancellation=%v", handoffFixtureJoinWait, ctx.Err())
+	// Capture stacks independently first, so a stuck ledger mutex cannot hide
+	// the goroutine that owns it. The two stages have a total 2s wall budget.
+	stackDiagnostic, _ := boundedHandoffDiagnostic(time.Second, func(context.Context) string {
+		stack := make([]byte, 256<<10)
+		n := goRuntime.Stack(stack, true)
+		return fmt.Sprintf("HTTP fixture stuck-worker stacks (bounded to %d bytes):\n%s", len(stack), stack[:n])
+	})
+	t.Log(stackDiagnostic)
+	diagnostic, _ := boundedHandoffDiagnostic(time.Second, func(factCtx context.Context) string {
+		var diagnostic strings.Builder
+		for i, runtime := range runtimes {
+			diagnostic.WriteString(collectHandoffAcceptanceFailure(factCtx, fixtures[min(i, len(fixtures)-1)], runtime))
+		}
+		return diagnostic.String()
+	})
+	t.Log(diagnostic)
+	reason := fmt.Sprintf("%s: HTTP fixture workers did not join after cancellation (%v)", t.Name(), ctx.Err())
+	go func() { panic(reason) }()
+	select {}
 }
 
 type handoffCrashBoundaryStore struct {
@@ -2099,7 +2159,7 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 					wantPeak = 1
 				}
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), handoffFixtureLifetime)
 			defer cancel()
 			started := time.Now()
 			var workMu sync.Mutex
@@ -2147,40 +2207,62 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 			cleanup := func() {
 				barrier.open()
 				cancel()
+				joinDeadline := time.NewTimer(handoffFixtureJoinWait)
+				defer joinDeadline.Stop()
 				for joined < 2 {
-					<-done
-					joined++
+					select {
+					case <-done:
+						joined++
+					case <-joinDeadline.C:
+						failHandoffFixtureJoin(t, ctx, fixtures, runtimes)
+					}
 				}
 			}
 			logWork := func() {
-				workMu.Lock()
-				defer workMu.Unlock()
-				for lane := range work {
-					t.Logf("scope diagnostic lane%d elapsed=%s work[event,row,byte]=%v", lane, time.Since(started), work[lane])
-					t.Logf("scope stage lane%d timings=%s", lane, stages[lane].snapshot())
+				diagnostic, complete := boundedHandoffDiagnostic(2*time.Second, func(context.Context) string {
+					var diagnostic strings.Builder
+					workMu.Lock()
+					defer workMu.Unlock()
+					for lane := range work {
+						fmt.Fprintf(&diagnostic, "scope diagnostic lane%d elapsed=%s work[event,row,byte]=%v\n", lane, time.Since(started), work[lane])
+						fmt.Fprintf(&diagnostic, "scope stage lane%d timings=%s\n", lane, stages[lane].snapshot())
+					}
+					return diagnostic.String()
+				})
+				t.Log(diagnostic)
+				if !complete {
+					t.Error("scope work diagnostics exceeded their wall-clock budget")
 				}
 			}
 			fail := func(format string, args ...any) {
-				// Capture live ownership before cancellation, then inspect only
-				// finite scalar durable facts after both paid workers have joined.
-				for lane, runtime := range runtimes {
-					pending, queued := runtime.Preparation.Snapshot()
-					t.Logf("scope live lane%d preparation=%d/%d window=%+v pipeline=%+v owned=%+v", lane, pending, queued, runtime.Window.Snapshot(), runtime.Admission.PipelineSnapshot(), runtime.Admission.OwnedPayloadSnapshot())
+				t.Logf("scope fixture failure before cancellation: "+format, args...)
+				diagnostic, complete := boundedHandoffDiagnostic(2*time.Second, func(factCtx context.Context) string {
+					var diagnostic strings.Builder
+					for lane, runtime := range runtimes {
+						fmt.Fprintf(&diagnostic, "scope live lane%d ", lane)
+						diagnostic.WriteString(collectHandoffAcceptanceFailure(factCtx, fixtures[lane], runtime))
+					}
+					return diagnostic.String()
+				})
+				t.Log(diagnostic)
+				if !complete {
+					t.Error("scope live diagnostics exceeded their wall-clock budget")
 				}
 				cleanup()
 				logWork()
-				factCtx, factCancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer factCancel()
-				checkpoints, checkpointErr := f.client.JobRoundSegment.Query().Count(factCtx)
-				requests, requestErr := f.client.WorkRequest.Query().Select("state").All(factCtx)
-				states := map[string]int{}
-				for _, request := range requests {
-					states[request.State]++
-				}
-				barrier.mu.Lock()
-				calls := barrier.calls
-				barrier.mu.Unlock()
-				t.Logf("scope joined calls=%d checkpoints=%d/%v request_states=%v/%v", calls, checkpoints, checkpointErr, states, requestErr)
+				diagnostic, _ = boundedHandoffDiagnostic(2*time.Second, func(factCtx context.Context) string {
+					checkpoints, checkpointErr := f.client.JobRoundSegment.Query().Count(factCtx)
+					requests, requestErr := f.client.WorkRequest.Query().Select("state").All(factCtx)
+					states := map[string]int{}
+					for _, request := range requests {
+						states[request.State]++
+					}
+					barrier.mu.Lock()
+					calls := barrier.calls
+					barrier.mu.Unlock()
+					return fmt.Sprintf("scope joined calls=%d checkpoints=%d/%v request_states=%v/%v", calls, checkpoints, checkpointErr, states, requestErr)
+				})
+				t.Log(diagnostic)
 				t.Fatalf(format, args...)
 			}
 			for lane := 0; lane < 2; lane++ {
@@ -2189,10 +2271,16 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 				if err != nil {
 					cancel()
 					barrier.open()
+					joinDeadline := time.NewTimer(handoffFixtureJoinWait)
 					for joined < lane {
-						<-done
-						joined++
+						select {
+						case <-done:
+							joined++
+						case <-joinDeadline.C:
+							failHandoffFixtureJoin(t, ctx, fixtures[:lane], runtimes[:lane])
+						}
 					}
+					joinDeadline.Stop()
 					t.Fatal(err)
 				}
 				defer eng.Close()
@@ -2209,7 +2297,7 @@ func TestRubyHandoffAcceptanceHTTPResourceAndJobScopes(t *testing.T) {
 				}(lane, doc, store, eng, runtime)
 			}
 			defer cleanup()
-			deadline := time.NewTimer(10 * time.Second)
+			deadline := time.NewTimer(handoffFixtureBarrierWait)
 			defer deadline.Stop()
 			for i := 0; i < wantPeak; i++ {
 				select {

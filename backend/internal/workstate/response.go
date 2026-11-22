@@ -203,7 +203,7 @@ func (s *Store) promoteMember(ctx context.Context, in MemberPromotion) error {
 				return ErrManifest
 			}
 			c.Scope = in.Scope
-			if err := saveCandidate(ctx, tx, c); err != nil {
+			if err := saveCandidateWithLockedMember(ctx, tx, c, w); err != nil {
 				return err
 			}
 			if err := transferRuntimeBindingTx(ctx, tx, in.Scope.JobID, in.Key.RequestID, c.ID); err != nil {
@@ -217,8 +217,17 @@ func (s *Store) promoteMember(ctx context.Context, in MemberPromotion) error {
 		if in.Candidate != nil {
 			next.State = "candidate"
 		}
-		if err := saveCursor(ctx, tx, in.Scope, m.SegmentID, next, make(map[int]attemptCounters)); err != nil {
-			return fmt.Errorf("promote_member cursor_transition request=%s ordinal=%d next_main=%d next_alignment=%d next_network=%d: %w", in.Key.RequestID, in.Key.Ordinal, next.MainAttempts, next.AlignmentAttempts, next.NetworkAttempts, err)
+		var cursorErr error
+		if in.Candidate == nil {
+			// No writes have changed this member since its locked read above.
+			cursorErr = saveCursorRows(ctx, tx, in.Scope, []CursorTransition{{SegmentID: m.SegmentID, Cursor: next}}, map[int]*ent.WorkItem{m.SegmentID: w}, make(map[int]attemptCounters))
+		} else {
+			// Candidate publication and runtime-binding hooks can change member
+			// facts. Preserve the fresh read and epoch check before the cursor CAS.
+			cursorErr = saveCursor(ctx, tx, in.Scope, m.SegmentID, next, make(map[int]attemptCounters))
+		}
+		if cursorErr != nil {
+			return fmt.Errorf("promote_member cursor_transition request=%s ordinal=%d next_main=%d next_alignment=%d next_network=%d: %w", in.Key.RequestID, in.Key.Ordinal, next.MainAttempts, next.AlignmentAttempts, next.NetworkAttempts, cursorErr)
 		}
 		if err := tx.WorkItem.UpdateOneID(w.ID).SetResponseRequestID("").Exec(ctx); err != nil {
 			return err

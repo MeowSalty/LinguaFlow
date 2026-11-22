@@ -2,6 +2,8 @@
 export const modulePath = 'github.com/MeowSalty/LinguaFlow/backend';
 export const workerPackage = `${modulePath}/internal/worker`;
 export const epubTop = 'TestAllocationEPUBWorkerEndToEnd';
+export const representativeTop = 'TestAllocationEPUBWorkerRepresentative';
+export const representativeLeaf = `${representativeTop}/representative_book_1001_word_bounded_batches`;
 export const epubLeaves = [
   `${epubTop}/dense_256_seven_keys_512_words`,
   `${epubTop}/synthetic_book_5338_word_bounded_batches`,
@@ -9,6 +11,7 @@ export const epubLeaves = [
 export const requiredTests = {
   [`${modulePath}/internal/worker`]: [
     ...epubLeaves,
+    representativeLeaf,
     'TestPersistenceTranslationContract',
     'TestMemberResponseWorkSQLite',
     'TestMemberPublicationCapabilityRejectedBeforeDispatch',
