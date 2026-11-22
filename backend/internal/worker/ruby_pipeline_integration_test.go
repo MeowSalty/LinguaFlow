@@ -622,7 +622,15 @@ func TestRubyPipelineSQLitePartialMainSaveRecoverySkipsSavedSegments(t *testing.
 	if len(saved) != 1 {
 		t.Fatalf("partial main response saved %d candidates, want 1", len(saved))
 	}
-	request := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).OnlyX(ctx)
+	// Alignment and cancelled descriptors may share this job. The saved
+	// candidate pins the exact main response whose promotion must recover.
+	request, err := f.client.WorkRequest.Query().Where(workrequest.IdentityEQ(saved[0].ParentRequestID)).Only(ctx)
+	if err != nil {
+		t.Fatalf("saved candidate parent request %q: %v", saved[0].ParentRequestID, err)
+	}
+	if request.JobID != f.jobID || request.JobRoundID != f.roundIDs[0] || request.ResourceID != f.resourceIDs[0] || request.Stage != string(backend.RequestStageMain) {
+		t.Fatalf("saved candidate references another scope or request stage: %+v", request)
+	}
 	if request.State != "completed" || !request.UsageKnown || request.PromotionCursor != 1 || request.PromotionState != "business_ready" || (request.CaptureBytes+request.OutputMemberBytes) == 0 {
 		t.Fatalf("failed promotion lost the reliable raw or its cursor: %+v", request)
 	}
