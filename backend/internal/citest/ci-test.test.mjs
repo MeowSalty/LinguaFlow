@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { epubLeaves, epubTop, representativeLeaf, representativeTop, modulePath, requiredTests, workerPackage } from './ci-test-contract.mjs';
-import { hasGoFunctionToken, mergeAtomicProfiles, parseInventory, parseJSONObjects, performanceMeasurement, planShards, resolveGoMaxProcs, resolvePackageParallelism, resolveTaskBinary, runCI as nativeRunCI, runProcess, validateRound, validateShard } from './ci-test.mjs';
+import { mergeAtomicProfiles, parseInventory, parseJSONObjects, performanceMeasurement, planShards, resolveGoMaxProcs, resolvePackageParallelism, resolveTaskBinary, runCI as nativeRunCI, runProcess, validateRound, validateShard } from './ci-test.mjs';
 import { terminateOwnedProcess } from './process-cleanup.mjs';
 
 const pipelinePackage = `${modulePath}/internal/pipeline`;
@@ -786,22 +787,28 @@ test('native coverage distinguishes no-test packages with statements from proven
   ]) assert.ok(validateShard(native(output), inv, new Set(), { coverage: true }).issues.some(issue => issue.includes('Repeated/conflicting')));
 });
 
-test('no-test-files coverage exemption requires all discovered production sources to prove no functions', t => {
+test('no-test-files coverage exemption requires matching AST evidence for every selected production source', t => {
   const directory = temporary(t);
   const list = jsonLines([event(emptyPackage, 'start'), event(emptyPackage, 'skip'), event(pipelinePackage, 'start'), event(pipelinePackage, 'output', null, { Output: 'TestPipeline\n' }), event(pipelinePackage, 'pass')]);
   const output = jsonLines([event(emptyPackage, 'start'), event(emptyPackage, 'output', null, { Output: `?   \t${emptyPackage}\t[no test files]\n` }), event(emptyPackage, 'skip')]);
   const file = path.join(directory, 'types.go');
-  fs.writeFileSync(file, 'package empty\n// func fake() {}\ntype Name string\nconst text = "func fake() {}"\n');
-  const records = [{ ImportPath: emptyPackage, Dir: directory, GoFiles: ['types.go'] }, { ImportPath: pipelinePackage, TestGoFiles: ['pipeline_test.go'] }];
+  fs.writeFileSync(file, 'package empty\n// func fake() {}\ntype Predicate func(int)\ntype Callback = func()\nconst text = "func fake() {}"\n');
+  const evidence = { kind: 'no-go-function-bodies', parser: 'go/parser', files: [{ name: 'types.go', sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') }] };
+  const records = [{ ImportPath: emptyPackage, Dir: directory, GoFiles: ['types.go'], NoFunctionSourceEvidence: evidence }, { ImportPath: pipelinePackage, TestGoFiles: ['pipeline_test.go'] }];
   const proven = parseInventory(list, records);
   assert.ok(proven.get(emptyPackage).noFunctionSourceEvidence);
   assert.deepEqual(validateShard({ code: 0, stdout: output }, new Map([[emptyPackage, proven.get(emptyPackage)]]), new Set(), { coverage: true }).issues, []);
+  for (const invalid of [
+    { ...evidence, kind: 'unchecked' }, { ...evidence, parser: 'token-scan' }, { ...evidence, files: [] },
+    { ...evidence, files: [{ ...evidence.files[0], name: 'unselected.go' }] },
+  ]) assert.throws(() => parseInventory(list, [{ ...records[0], NoFunctionSourceEvidence: invalid }, records[1]]), /Go AST source evidence/);
+  assert.throws(() => parseInventory(list, [{ ...records[0], GoFiles: ['types.go', 'other.go'] }, records[1]]), /Go AST source evidence/);
   fs.writeFileSync(file, 'package empty\nfunc Work() { println("covered statement") }\n');
+  assert.throws(() => parseInventory(list, records), /Changed or missing Go AST source evidence/);
+  records[0].NoFunctionSourceEvidence = null;
   const withCode = parseInventory(list, records);
   assert.equal(withCode.get(emptyPackage).noFunctionSourceEvidence, null);
   assert.ok(validateShard({ code: 0, stdout: output }, new Map([[emptyPackage, withCode.get(emptyPackage)]]), new Set(), { coverage: true }).issues.some(issue => issue.includes('Missing native package coverage')));
-  for (const source of ['package p\nfunc F() {}', 'package p\nvar f = func() {}', 'package p\ntype Callback func()']) assert.equal(hasGoFunctionToken(source), true);
-  for (const source of ['package p // func\ntype F int', 'package p\nconst f = `func`', 'package p /* func */\nvar f = "func"']) assert.equal(hasGoFunctionToken(source), false);
 });
 
 test('role instrumentation cannot be injected through GOFLAGS and only performance repeats', async t => {
