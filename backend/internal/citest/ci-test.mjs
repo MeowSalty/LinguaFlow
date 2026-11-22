@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { epubLeaves, epubTop, representativeLeaf, requiredTests, skipRules, workerPackage } from './ci-test-contract.mjs';
+import { epubLeaves, epubTop, representativeLeaf, representativeTop, requiredTests, skipRules, workerFunctionalGroups, workerPackage } from './ci-test-contract.mjs';
 import { terminateOwnedProcess } from './process-cleanup.mjs';
 import { performancePolicy, performanceRounds, sceneFailure, sceneSeconds } from './performance-policy.mjs';
 import { ResourceScheduler } from './resource-scheduler.mjs';
@@ -327,10 +327,11 @@ export function validateShard(result, expectedPackages, expectedTops, { env = {}
   }
   const terminal = [...parsed.tests.values()].filter(test => test.terminal);
   if ([...expectedPackages.values()].some(pkg => pkg.tops.length) && !terminal.some(test => test.pass === 1)) issues.push('Zero passing terminal leaves');
-  return { issues, skips, packageCoverage, tops: sorted(actualTops), leaves: terminal.map(test => ({ name: key(test.package, test.test), pass: test.pass, skip: test.skip, elapsedSeconds: test.elapsedSeconds })), packages: [...parsed.packages.values()] };
+  const topResults = [...parsed.tests.values()].filter(test => !test.test.includes('/')).map(test => ({ name: key(test.package, test.test), run: test.run, pass: test.pass, skip: test.skip, fail: test.fail }));
+  return { issues, skips, packageCoverage, tops: sorted(actualTops), topResults, leaves: terminal.map(test => ({ name: key(test.package, test.test), run: test.run, pass: test.pass, skip: test.skip, fail: test.fail, elapsedSeconds: test.elapsedSeconds })), packages: [...parsed.packages.values()] };
 }
 
-export function validateRound(shards, inventory, required = requiredTests, plan) {
+export function validateRound(shards, inventory, required = requiredTests, plan, { completeInventory = true } = {}) {
   const issues = [];
   const leaves = new Map();
   const tops = new Map();
@@ -346,12 +347,18 @@ export function validateRound(shards, inventory, required = requiredTests, plan)
   }
   for (const pkg of inventory.values()) {
     const expectedPackages = plan ? plan.filter(shard => shard.packages.includes(pkg.name)).length : pkg.name === workerPackage && pkg.tops.includes(epubTop) ? 3 : 1;
-    if (!expectedPackages) continue;
+    if (!expectedPackages) {
+      if (completeInventory) issues.push(`Unplanned package: ${pkg.name}`);
+      continue;
+    }
     if (packages.get(pkg.name) !== expectedPackages) issues.push(`Package coverage mismatch: ${pkg.name} expected ${expectedPackages}`);
     for (const top of pkg.tops) {
       const id = key(pkg.name, top);
       const expected = plan ? plan.filter(shard => shard.tops.includes(id)).length : pkg.name === workerPackage && top === epubTop ? 2 : 1;
-      if (!expected) continue;
+      if (!expected) {
+        if (completeInventory) issues.push(`Unplanned top-level test: ${id}`);
+        continue;
+      }
       if (tops.get(id) !== expected) issues.push(`Top-level coverage mismatch: ${id} expected ${expected}`);
     }
   }
@@ -359,8 +366,16 @@ export function validateRound(shards, inventory, required = requiredTests, plan)
     // A named parent matrix must pass, but is not mislabelled as a terminal leaf.
     const id = key(pkg, name);
     const leaf = leaves.get(id);
-    const present = name.includes('/') ? leaf?.pass === 1 && !leaf.skip : shards.some(shard => shard.validation.tops.includes(id) && !shard.validation.issues.length && !shard.validation.skips.some(skip => skip.name === id || skip.name.startsWith(`${id}/`)));
-    if (!present) issues.push(`Missing/failed/skipped required test: ${id}`);
+    const present = name.includes('/') ? leaf?.pass === 1 && !leaf.skip : shards.some(shard => {
+      const result = shard.validation.topResults?.find(top => top.name === id);
+      return result?.run === 1 && result.pass === 1 && !result.skip && !result.fail && !shard.validation.skips.some(skip => skip.name === id || skip.name.startsWith(`${id}/`));
+    });
+    if (!present) {
+      const actual = name.includes('/') ? leaf : shards.flatMap(shard => shard.validation.topResults ?? []).find(top => top.name === id);
+      const skipped = actual?.skip || shards.some(shard => shard.validation.skips.some(skip => skip.name === id || skip.name.startsWith(`${id}/`)));
+      const status = !actual ? 'not-run' : actual.fail ? 'failed' : skipped ? 'skipped' : 'incomplete';
+      issues.push(`Missing/failed/skipped required test: ${id} (${status})`);
+    }
   }
   return { issues, leaves: sorted(leaves.keys()), skips: shards.flatMap(shard => shard.validation.skips) };
 }
@@ -461,13 +476,32 @@ export function planShards(mode, inventory, packageParallelism = defaultPackageP
     shards.push({ id: packageBatching ? `packages-b${String(batch + 1).padStart(3, '0')}` : 'packages', round: 1, effectiveP: packageBatching ? Math.min(packageParallelism, packages.length) : packageParallelism, ...(packageBatching ? { bulkPackageParallelism: packages.length } : {}), packages, timeout: '20m', extra: [], tops: packages.flatMap(name => inventory.get(name).tops.map(top => key(name, top))) });
     offset += packages.length;
   }
-  if (mode !== 'performance') shards.push({ id: 'worker-remainder', round: 1, effectiveP: 1, packages: [workerPackage], timeout: '20m', extra: ['-skip', `^${epubTop}$`], tops: worker.tops.filter(top => top !== epubTop).map(top => key(workerPackage, top)) });
+  if (mode !== 'performance') {
+    const assigned = new Set([epubTop, representativeTop]);
+    const selector = tops => `^(${tops.map(top => top.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`;
+    const functional = [];
+    for (const group of workerFunctionalGroups) {
+      const tops = worker.tops.filter(top => !assigned.has(top) && (group.prefix ? top.startsWith(group.prefix) : group.names.includes(top)));
+      if (!tops.length) continue;
+      tops.forEach(top => assigned.add(top));
+      functional.push({ id: group.id, round: 1, effectiveP: 1, packages: [workerPackage], timeout: '20m', extra: ['-run', selector(tops)], tops: tops.map(top => key(workerPackage, top)) });
+    }
+    const remainder = worker.tops.filter(top => !assigned.has(top));
+    if (remainder.length) shards.push({ id: 'worker-remainder', round: 1, effectiveP: 1, packages: [workerPackage], timeout: '20m', extra: ['-skip', selector([...assigned])], tops: remainder.map(top => key(workerPackage, top)) });
+    shards.push(...functional);
+    if (worker.tops.includes(representativeTop)) shards.push({ id: 'representative-r1', round: 1, effectiveP: 1, packages: [workerPackage], timeout: '15m', isolated: true, extra: ['-run', `^${representativeTop}$`], tops: [key(workerPackage, representativeTop)], requiredLeaf: key(workerPackage, representativeLeaf) });
+  }
   rounds = performanceRounds(rounds);
   for (let round = 1; round <= (mode === 'performance' ? rounds : 1); round++) {
     epubLeaves.forEach((leaf, i) => {
       if (mode === 'race-representative' && i === 1) return;
-      shards.push({ id: `${i === 0 ? 'dense' : 'synthetic'}-r${round}`, round, effectiveP: 1, packages: [workerPackage], timeout: '15m', extra: ['-run', `^${leaf.split('/')[0]}$/^${leaf.split('/')[1]}$`], tops: [key(workerPackage, epubTop)], requiredLeaf: key(workerPackage, leaf) });
+      shards.push({ id: `${i === 0 ? 'dense' : 'synthetic'}-r${round}`, round, effectiveP: 1, packages: [workerPackage], timeout: '15m', isolated: true, extra: ['-run', `^${leaf.split('/')[0]}$/^${leaf.split('/')[1]}$`], tops: [key(workerPackage, epubTop)], requiredLeaf: key(workerPackage, leaf) });
     });
+  }
+  if (mode !== 'performance') for (const pkg of inventory.values()) for (const top of pkg.tops) {
+    const count = shards.filter(shard => shard.tops.includes(key(pkg.name, top))).length;
+    const expected = pkg.name === workerPackage && top === epubTop ? mode === 'race-representative' ? 1 : 2 : 1;
+    if (count !== expected) throw new Error(`Invalid planned top-level inventory: ${key(pkg.name, top)} expected ${expected}, planned ${count}`);
   }
   return shards;
 }
@@ -479,7 +513,7 @@ export async function sourceIdentity(root, outputDir, execute = runProcess) {
     return result.stdout;
   };
   const head = (await git(['rev-parse', 'HEAD'])).trim();
-  const paths = ['backend', 'api', 'Taskfile.yml', '.github/workflows/ci-backend.yml', '.github/workflows/release.yml'];
+  const paths = ['backend', 'api', 'Taskfile.yml', '.github/workflows/ci-backend.yml', '.github/workflows/release.yml', '.github/workflows/ci-backend-capacity.yml'];
   const files = new Set((await git(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...paths])).split('\0').filter(Boolean));
   const hash = createHash('sha256');
   for (const relative of sorted(files)) {
@@ -641,14 +675,15 @@ async function runRole({ mode, outputDir, packageParallelism = defaultPackagePar
       }
       const heavy = plan.filter(shard => !shard.id.startsWith('packages') && shard.round === roundNumber).map(shard => ({ ...shard, trustKey: shard.id.replace(/-r\d+$/, '') }));
       const jobs = roundNumber === 1 ? [...packageShards, ...heavy] : heavy;
-      if (mode === 'performance') {
-        // Do not let the two performance fixtures contend with one another.
-        for (const job of jobs) await scheduler.run([job], executeShard, { beforeLaunch: sameSource, maxGoProcs });
-      } else await scheduler.run(jobs, executeShard, { beforeLaunch: sameSource, maxGoProcs });
+      // Native EPUB scene/response deadlines need their own execution phase.
+      // Functional groups retain dynamic memory admission and Go concurrency.
+      const functional = jobs.filter(job => !job.isolated);
+      if (functional.length) await scheduler.run(functional, executeShard, { beforeLaunch: sameSource, maxGoProcs });
+      for (const job of jobs.filter(job => job.isolated)) await scheduler.run([job], executeShard, { beforeLaunch: sameSource, maxGoProcs });
     }
     summary.shards.sort((a, b) => plan.findIndex(shard => shard.id === a.id) - plan.findIndex(shard => shard.id === b.id));
     summary.finalIdentity = await sameSource();
-    const round = validateRound(summary.shards.filter(shard => shard.round === 1), inventory, contract, plan.filter(shard => shard.round === 1));
+    const round = validateRound(summary.shards.filter(shard => shard.round === 1), inventory, contract, plan.filter(shard => shard.round === 1), { completeInventory: mode !== 'performance' });
     summary.round = round;
     summary.performanceMeasurements = mode === 'performance' ? summary.shards.filter(shard => shard.requiredLeaf).map(shard => ({ round: shard.round, wallSeconds: shard.wallSeconds, ...shard.measurement })) : [];
     summary.responseMarginEvidence = '450s scene and 90s response engineering gates apply only to the ordinary uncovered performance role; production 600s/120s budgets remain native.';

@@ -57,9 +57,10 @@ function inventory() {
     [workerPackage, { name: workerPackage, tops: [epubTop, representativeTop, 'TestWorker'], noTestFiles: false }],
   ]);
 }
-function fakeTask({ failShard, failureExitCode = 1, wrongProfile, elapsed = 2, shardProcess, additionalPackages = [], extraStdout = '' } = {}) {
+function fakeTask({ failShard, failureExitCode = 1, wrongProfile, elapsed = 2, shardProcess, additionalPackages = [], additionalWorkerTops = [], additionalWorkerLeaves = {}, extraStdout = '' } = {}) {
   const calls = [];
   const discovered = inventory();
+  discovered.get(workerPackage).tops.push(...additionalWorkerTops);
   for (const pkg of additionalPackages) discovered.set(pkg.name, pkg);
   const execute = async (_binary, args, options) => {
     calls.push(args);
@@ -73,8 +74,10 @@ function fakeTask({ failShard, failureExitCode = 1, wrongProfile, elapsed = 2, s
     else if (name === 'backend:test:ci:inventory') stdout = [...discovered.values()].map(pkg => JSON.stringify({ ImportPath: pkg.name, TestGoFiles: pkg.tops.length ? ['fixture_test.go'] : undefined })).join('\n');
     else if (cli.includes('-list')) stdout = jsonLines([...discovered.values()].flatMap(pkg => [event(pkg.name, 'start'), ...pkg.tops.map(top => event(pkg.name, 'output', null, { Output: `${top}\n` })), event(pkg.name, pkg.tops.length ? 'pass' : 'skip')]));
     else {
-      const shard = cli.includes('-skip') ? 'worker-remainder' : cli.includes('dense_256') ? 'dense' : cli.includes('synthetic_book') ? 'synthetic' : 'packages';
-      const names = shard === 'worker-remainder' ? ['TestWorker', representativeLeaf] : shard === 'dense' ? [epubLeaves[0]] : [epubLeaves[1]];
+      const shard = cli.includes('-skip') ? 'worker-remainder' : cli.includes('dense_256') ? 'dense' : cli.includes('synthetic_book') ? 'synthetic' : cli.includes(representativeTop) ? 'representative' : cli.includes('-run') ? 'worker-fixture' : 'packages';
+      const skip = cli.match(/-skip '([^']+)'/)?.[1];
+      const run = cli.match(/-run '([^']+)'/)?.[1];
+      const names = shard === 'dense' ? [epubLeaves[0]] : shard === 'synthetic' ? [epubLeaves[1]] : shard === 'representative' ? [representativeLeaf] : discovered.get(workerPackage).tops.filter(top => skip ? !new RegExp(skip).test(top) : run ? new RegExp(run).test(top) : true).map(top => additionalWorkerLeaves[top] ?? top);
       const pkg = shard === 'packages' ? pipelinePackage : workerPackage;
       stdout = jsonLines(shard === 'packages' ? [...eventsFor(pkg, ['TestPipeline'], { fail: failShard === shard }), event(emptyPackage, 'start'), event(emptyPackage, 'skip')] : eventsFor(pkg, names, { fail: failShard === shard, elapsed: typeof elapsed === 'object' ? elapsed[shard] ?? 2 : elapsed }));
       const selectedPackages = shard === 'packages' && additionalPackages.length ? [...discovered.values()].filter(pkg => cli.split(/\s+/).includes(pkg.name)) : null;
@@ -86,7 +89,7 @@ function fakeTask({ failShard, failureExitCode = 1, wrongProfile, elapsed = 2, s
         const coveredPackages = selectedPackages ?? (shard === 'packages' ? [discovered.get(pkg), discovered.get(emptyPackage)] : [discovered.get(pkg)]);
         stdout += jsonLines(coveredPackages.map(pkg => event(pkg.name, 'output', null, { Output: `${pkg.name} coverage: ${pkg.tops.length ? '0.0% of statements' : '[no statements]'}\n` })));
         const file = shard === 'packages' ? 'pipeline.go' : 'worker.go';
-        const value = profile[1].includes('round-2') ? 99 : shard === 'dense' ? 1 : shard === 'synthetic' ? 2 : 3;
+        const value = profile[1].includes('round-2') ? 99 : shard === 'dense' ? 1 : shard === 'synthetic' ? 2 : shard === 'representative' ? 4 : 3;
         fs.writeFileSync(profile[1], `mode: ${wrongProfile ? 'set' : 'atomic'}\n${(selectedPackages?.filter(pkg => pkg.tops.length) ?? [{ name: pkg }]).map(pkg => `${pkg.name}/${file}:1.1,2.1 1 ${value}\n`).join('')}`);
       }
       const nativeResult = await shardProcess?.({ shard, stdout, code, options });
@@ -121,7 +124,7 @@ test('gomaxprocs runner leaves defaults unset and propagates explicit 16 and 4 w
     };
     const summary = await runCI({ root, mode: 'race', outputDir: 'gomaxprocs', execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: value == null ? {} : { GOMAXPROCS: value } });
     assert.equal(summary.status, 'passed', JSON.stringify(summary.issues));
-    assert.equal(goTaskCalls, 7);
+    assert.equal(goTaskCalls, 8);
     assert.equal(summary.environment.gomaxprocs, expected);
     assert.equal(summary.environment.gomaxprocsSource, expected == null ? 'runtime-default' : 'environment-override');
     assert.ok(summary.shards.every(shard => shard.gomaxprocs === expected));
@@ -341,14 +344,14 @@ test('named PostgreSQL and deployment skips require disabled environments and th
 test('split plan preserves precise original selectors and rejects cross-shard terminal duplication', () => {
   const inv = inventory();
   const plan = planShards('coverage', inv, resolvePackageParallelism('auto', () => 4));
-  assert.equal(plan.length, 4);
-  assert.deepEqual(plan.map(shard => shard.effectiveP), [8, 1, 1, 1]);
-  assert.deepEqual(planShards('coverage', inv, 1).map(shard => shard.effectiveP), [1, 1, 1, 1]);
-  assert.deepEqual(planShards('coverage', inv, 2).map(shard => shard.effectiveP), [2, 1, 1, 1]);
-  assert.equal(planShards('coverage', inv, 2, 2).length, 4);
+  assert.equal(plan.length, 5);
+  assert.deepEqual(plan.map(shard => shard.effectiveP), [8, 1, 1, 1, 1]);
+  assert.deepEqual(planShards('coverage', inv, 1).map(shard => shard.effectiveP), [1, 1, 1, 1, 1]);
+  assert.deepEqual(planShards('coverage', inv, 2).map(shard => shard.effectiveP), [2, 1, 1, 1, 1]);
+  assert.equal(planShards('coverage', inv, 2, 2).length, 5);
   assert.equal(planShards('performance', inv, 2, 2).length, 4);
-  assert.equal(planShards('plain', inv, 2, 3).length, 4);
-  assert.deepEqual(planShards('coverage', inv, 12).map(shard => shard.effectiveP), [12, 1, 1, 1]);
+  assert.equal(planShards('plain', inv, 2, 3).length, 5);
+  assert.deepEqual(planShards('coverage', inv, 12).map(shard => shard.effectiveP), [12, 1, 1, 1, 1]);
   for (const [cpus, expected] of [[1, 2], [4, 8], [6, 12]]) assert.equal(resolvePackageParallelism('auto', () => cpus), expected);
   assert.equal(resolvePackageParallelism('auto', () => 4, 1.5), 6);
   assert.equal(resolvePackageParallelism('auto', () => 3, 1.5), 5);
@@ -356,11 +359,11 @@ test('split plan preserves precise original selectors and rejects cross-shard te
   for (const factor of [0, -1, NaN, Infinity, '1.5']) assert.throws(() => resolvePackageParallelism('auto', () => 4, factor), /PACKAGE_PARALLELISM_FACTOR/);
   for (const cpus of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER]) assert.throws(() => resolvePackageParallelism('auto', () => cpus), /CPU|PACKAGE_PARALLELISM/);
   for (const invalid of [0, -1, 2.5, '2', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => planShards('plain', inv, invalid), /PACKAGE_PARALLELISM/);
-  assert.deepEqual(plan[1].extra, ['-skip', `^${epubTop}$`]);
-  assert.equal(plan[2].extra[1], `^${epubTop}$/^dense_256_seven_keys_512_words$`);
-  assert.equal(plan[2].timeout, '15m');
+  assert.deepEqual(plan[1].extra, ['-skip', `^(${epubTop}|${representativeTop})$`]);
+  assert.equal(plan[2].extra[1], `^${representativeTop}$`);
+  assert.equal(plan[3].extra[1], `^${epubTop}$/^dense_256_seven_keys_512_words$`);
   assert.equal(plan[3].timeout, '15m');
-  assert.equal(planShards('plain', inv).length, 4);
+  assert.equal(planShards('plain', inv).length, 5);
   const validation = { issues: [], tops: [], skips: [], leaves: [{ name: id(pipelinePackage, 'TestPipeline'), pass: 1 }] };
   const round = validateRound([{ id: 'a', validation }, { id: 'b', validation }], new Map(), {});
   assert.ok(round.issues.some(issue => issue.includes('multiple shards')));
@@ -384,15 +387,65 @@ test('memory auto package batches partition every package once and reject missin
     });
     return { ...shard, validation: validateShard({ code: 0, stdout: jsonLines(events), stderr: '' }, expected, new Set(shard.tops)) };
   });
-  assert.deepEqual(validateRound(records, inv, { [workerPackage]: epubLeaves }).issues, []);
-  const missing = validateRound(records.filter(record => record.id !== batches.at(-1).id), inv, {});
+  assert.deepEqual(validateRound(records, inv, { [workerPackage]: epubLeaves }, plan).issues, []);
+  const missing = validateRound(records.filter(record => record.id !== batches.at(-1).id), inv, {}, plan);
   assert.ok(missing.issues.includes(`Package coverage mismatch: ${batches.at(-1).packages[0]} expected 1`));
   const empty = { id: 'duplicate-empty', validation: validateShard({ code: 0, stdout: jsonLines([event(emptyPackage, 'skip')]), stderr: '' }, new Map([[emptyPackage, inv.get(emptyPackage)]]), new Set()) };
-  assert.ok(validateRound([...records, empty], inv, {}).issues.includes(`Package coverage mismatch: ${emptyPackage} expected 1`), 'no-test packages must also execute exactly once');
-  assert.ok(validateRound([...records, records[0]], inv, {}).issues.some(issue => issue.includes('multiple shards')));
+  assert.ok(validateRound([...records, empty], inv, {}, plan).issues.includes(`Package coverage mismatch: ${emptyPackage} expected 1`), 'no-test packages must also execute exactly once');
+  assert.ok(validateRound([...records, records[0]], inv, {}, plan).issues.some(issue => issue.includes('multiple shards')));
 });
 
-test('memory runner overlaps batches and heavy shards beyond the initial target, joins failures and rejects invalid stdout coverage', async t => {
+test('worker groups partition the complete inventory and retain metadata boundary leaves', async t => {
+  const metadata = 'TestRubyHandoffAcceptanceHTTPBoundedProtectionContextAndMetadata';
+  const additionalWorkerTops = [metadata, 'TestRubyHandoffAcceptanceHTTPMainConcurrency', 'TestRubyHandoffAcceptanceRunnerFixedFuturePrefixMakesProgress', 'TestMemberResponseWorkSQLite', 'TestMemberSavedBusinessCanonicalLoweredJRecovery', 'TestUnclassifiedWorker'];
+  const inv = inventory();
+  inv.get(workerPackage).tops.push(...additionalWorkerTops);
+  for (const mode of ['plain', 'coverage', 'race', 'race-representative']) {
+    const plan = planShards(mode, inv);
+    const workers = plan.filter(shard => shard.packages.includes(workerPackage));
+    for (const top of inv.get(workerPackage).tops) {
+      const selected = workers.filter(shard => {
+        const matches = new RegExp(shard.extra[1].split('/')[0]).test(top);
+        return shard.extra[0] === '-skip' ? !matches : matches;
+      });
+      const expected = top === epubTop ? mode === 'race-representative' ? 1 : 2 : 1;
+      assert.equal(selected.length, expected, `${mode}: ${top}`);
+      assert.ok(selected.every(shard => shard.tops.includes(id(workerPackage, top))));
+    }
+    assert.deepEqual(workers.filter(shard => shard.isolated).map(shard => shard.id), mode === 'race-representative' ? ['representative-r1', 'dense-r1'] : ['representative-r1', 'dense-r1', 'synthetic-r1']);
+    assert.deepEqual(workers.find(shard => shard.id === 'worker-remainder').tops, ['TestWorker', 'TestUnclassifiedWorker'].map(top => id(workerPackage, top)));
+    assert.ok(workers.find(shard => shard.id === 'worker-handoff-http').tops.includes(id(workerPackage, metadata)));
+    assert.equal(workers.find(shard => shard.id === 'worker-handoff-recovery').tops.length, 1);
+    assert.equal(workers.find(shard => shard.id === 'worker-members').tops.length, 2);
+  }
+  const required = `${metadata}/metadata_many_values65537`;
+  for (const fail of [false, true]) {
+    const root = temporary(t);
+    fs.mkdirSync(path.join(root, 'backend'));
+    const fake = fakeTask({ additionalWorkerTops, additionalWorkerLeaves: { [metadata]: required }, failShard: fail ? 'worker-fixture' : undefined });
+    const summary = await runCI({ root, mode: 'coverage', outputDir: 'grouped', execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: [...epubLeaves, required] }, rules: [], env: {} });
+    assert.equal(summary.status, fail ? 'failed' : 'passed', JSON.stringify(summary.issues));
+    assert.equal(summary.shards.length, 8);
+    assert.ok(summary.shards.find(shard => shard.id === 'worker-handoff-http').validation.leaves.some(leaf => leaf.name === id(workerPackage, required)));
+    if (fail) assert.ok(!fs.existsSync(path.join(root, 'backend/grouped/coverage.out')));
+    else assert.equal(summary.coverage.profiles.length, 8);
+  }
+});
+
+test('required results distinguish failing and unrun tests without blaming passed siblings', () => {
+  const good = 'TestRequiredPass', bad = 'TestSiblingFail', absent = 'TestNotRun', failedLeaf = `${bad}/failed`, absentLeaf = `${absent}/missing`;
+  const inv = new Map([[pipelinePackage, { name: pipelinePackage, tops: [good, bad, absent], noTestFiles: false }]]);
+  const plan = [{ id: 'fixture', packages: [pipelinePackage], tops: [good, bad, absent].map(top => id(pipelinePackage, top)) }];
+  const events = [event(pipelinePackage, 'start'), event(pipelinePackage, 'run', good), event(pipelinePackage, 'pass', good), event(pipelinePackage, 'run', bad), event(pipelinePackage, 'run', failedLeaf), event(pipelinePackage, 'fail', failedLeaf), event(pipelinePackage, 'fail', bad), event(pipelinePackage, 'fail')];
+  const validation = validateShard({ code: 1, stdout: jsonLines(events), stderr: '' }, inv, new Set(plan[0].tops));
+  const round = validateRound([{ ...plan[0], validation }], inv, { [pipelinePackage]: [good, bad, absent, failedLeaf, absentLeaf] }, plan);
+  assert.ok(!round.issues.some(issue => issue.startsWith('Missing/failed/skipped required test:') && issue.includes(id(pipelinePackage, good))));
+  for (const [name, status] of [[bad, 'failed'], [absent, 'not-run'], [failedLeaf, 'failed'], [absentLeaf, 'not-run']]) assert.ok(round.issues.includes(`Missing/failed/skipped required test: ${id(pipelinePackage, name)} (${status})`));
+  const dropped = [{ ...plan[0], tops: plan[0].tops.filter(top => top !== id(pipelinePackage, absent)) }];
+  assert.ok(validateRound([{ ...plan[0], validation }], inv, {}, dropped).issues.includes(`Unplanned top-level test: ${id(pipelinePackage, absent)}`));
+});
+
+test('memory runner overlaps functional batches, isolates EPUB scenes and joins failures', async t => {
   const additionalPackages = Array.from({ length: 9 }, (_, i) => ({ name: `${modulePath}/internal/extra${i}`, tops: [`TestExtra${i}`], noTestFiles: false }));
   for (const scenario of [{ name: 'complete' }, { name: 'hosted' }, { name: 'failed', failShard: 'packages' }, { name: 'unknown', extraStdout: 'unknown stdout\n' }]) {
     const root = temporary(t);
@@ -406,17 +459,19 @@ test('memory runner overlaps batches and heavy shards beyond the initial target,
       entered.add(shard);
       options.onSpawn?.({ pid: 100 + entered.size });
       assert.equal(options.env.GOMAXPROCS, '4', 'CPU diagnostics must not reduce the configured Go allowance');
-      if (entered.size === 8) release();
-      await gate;
+      if (shard.startsWith('packages') || shard === 'worker-remainder') {
+        if (entered.size === 6) release();
+        await gate;
+      } else assert.equal(entered.size - completed.size, 1, 'EPUB scenes must run after functional shards and without another scene');
       completed.add(shard);
     } });
     const monitor = { sample: async groups => ({ atMs: Date.now(), availableBytes: 100 * 1024 ** 3, totalBytes: 128 * 1024 ** 3, cpuQuota: null, allowedIds: [], cpuLoadKnown: false, sharedBusyCores: null, busyCores: null, owned: groups.map(group => ({ id: group.id, rssBytes: 64 * 1024 ** 2, cpuCores: null, complete: true })), shared: [] }) };
     const complete = ['complete', 'hosted'].includes(scenario.name);
     const summary = await runCI({ root, mode: 'coverage', outputDir: scenario.name, availableParallelism: () => 2, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { ...(scenario.name === 'hosted' ? { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted' } : {}), GOMAXPROCS: '4', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: complete ? '1' : '2' }, resourceOptions: { monitor } });
     assert.equal(summary.status, complete ? 'passed' : 'failed', JSON.stringify(summary.issues));
-    assert.equal(summary.shards.length, 8);
-    assert.equal(entered.size, 8, 'all independent jobs must enter before any fake child completes');
-    assert.equal(completed.size, 8, 'native failure must still join all entered jobs');
+    assert.equal(summary.shards.length, 9);
+    assert.equal(entered.size, 9);
+    assert.equal(completed.size, 9, 'native failure must still join all entered jobs');
     const batches = summary.shards.filter(shard => shard.id.startsWith('packages'));
     assert.deepEqual(batches.map(shard => shard.packages.length), [4, 2, 2, 2, 1]);
     assert.equal(new Set(batches.flatMap(shard => shard.packages)).size, 11);
@@ -427,9 +482,9 @@ test('memory runner overlaps batches and heavy shards beyond the initial target,
     assert.deepEqual(summary.identity, summary.finalIdentity);
     assert.equal(summary.resources.policy.minFreeBytes, scenario.name === 'hosted' ? 0 : 1024 ** 3);
     if (complete) {
-      assert.equal(summary.coverage.profiles.length, 8);
-      assert.equal(new Set(summary.coverage.profiles).size, 8);
-      assert.equal(new Set(summary.shards.map(shard => shard.profilePath)).size, 8);
+      assert.equal(summary.coverage.profiles.length, 9);
+      assert.equal(new Set(summary.coverage.profiles).size, 9);
+      assert.equal(new Set(summary.shards.map(shard => shard.profilePath)).size, 9);
     } else {
       assert.equal(summary.coverage, undefined);
       assert.ok(!fs.existsSync(path.join(root, 'backend', scenario.name, 'coverage.out')));
@@ -509,13 +564,13 @@ test('fake Task smoke produces complete ordinary atomic coverage without perform
   const fake = fakeTask();
   const summary = await runCI({ root, mode: 'coverage', outputDir: 'evidence', packageParallelism: 12, packageParallelismFactor: 0, availableParallelism: () => { throw new Error('Explicit value must bypass CPU detection'); }, execute: fake.execute, identity: async () => ({ head: 'fixture-sha', sourceSha256: 'fixture-hash' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves, [pipelinePackage]: ['TestPipeline'] }, rules: [], env: { GOFLAGS: '-tags=fixture -p=4', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
   assert.equal(summary.status, 'passed', JSON.stringify(summary.issues));
-  assert.equal(summary.shards.length, 4);
-  assert.equal(summary.coverage.profiles.length, 4);
+  assert.equal(summary.shards.length, 5);
+  assert.equal(summary.coverage.profiles.length, 5);
   assert.equal(summary.manifest.bulkPackageParallelism, 12);
   assert.equal(summary.manifest.bulkPackageParallelismFactor, null);
   assert.equal(summary.environment.availableCPUCount, null);
   assert.equal(summary.environment.GOFLAGS, '-tags=fixture -p=4 -p=1');
-  assert.deepEqual(summary.manifest.plan.map(shard => shard.effectiveP), [12, 1, 1, 1]);
+  assert.deepEqual(summary.manifest.plan.map(shard => shard.effectiveP), [12, 1, 1, 1, 1]);
   assert.ok(fake.calls.find(args => args[0] === 'backend:test:ci:inventory')[1].includes('-p=12'));
   assert.ok(fake.calls.find(args => args[1]?.includes('-list'))[1].includes('-p=12'));
   for (const shard of summary.shards) assert.ok(shard.cliArgs.includes(`-p=${shard.effectiveP}`), shard.id);
@@ -529,7 +584,7 @@ test('fake Task smoke produces complete ordinary atomic coverage without perform
   assert.equal(summary.environment.nodeBinary, process.execPath);
   assert.equal(summary.environment.storageAcceptanceEnabled, false);
   const merged = fs.readFileSync(path.join(root, 'backend/evidence/coverage.out'), 'utf8');
-  assert.ok(merged.includes('worker.go:1.1,2.1 1 6'));
+  assert.ok(merged.includes('worker.go:1.1,2.1 1 10'));
   assert.ok(fs.readFileSync(path.join(root, 'backend/evidence/round-1/coverage/dense-r1/test-events.jsonl'), 'utf8').includes(epubLeaves[0]));
   assert.ok(!merged.includes('198'));
   assert.equal(fake.calls.filter(args => args[0] === 'backend:test:race').length, 0);
@@ -544,7 +599,7 @@ test('failed first round preserves raw evidence and summary, skips repeats and n
   const summary = await runCI({ root, mode: 'coverage', outputDir: 'failed', execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
   assert.equal(summary.status, 'failed');
   assert.equal(summary.resources.policy.scope, 'github-hosted-job');
-  assert.equal(summary.shards.length, 4);
+  assert.equal(summary.shards.length, 5);
   assert.equal(summary.shards[0].exitCode, 137, 'OOM-style failure must not become a passing run');
   const packageDirectory = path.join(root, 'backend/failed/round-1/coverage', summary.shards.find(shard => shard.id.startsWith('packages')).id);
   assert.ok(fs.existsSync(path.join(packageDirectory, 'test-results.out')));
@@ -586,7 +641,7 @@ test('native Task stdout reaches runner failure reports without masking unknown 
     const summary = await runCI({ root, mode: 'coverage', outputDir: scenario.name, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { SystemRoot: process.env.SystemRoot, LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
     assert.equal(nativeCalls, 1);
     assert.equal(summary.status, 'failed', scenario.name);
-    assert.equal(summary.shards.length, 4, 'failed first round must suppress all repeat shards');
+    assert.equal(summary.shards.length, 5, 'failed first round must suppress all repeat shards');
     const record = summary.shards.find(shard => shard.id.startsWith('packages'));
     assert.equal(record.exitCode, scenario.code, scenario.name);
     assert.equal(record.taskDiagnostics, scenario.diagnostics, scenario.name);
@@ -626,7 +681,7 @@ test('automatic CI concurrency records CPU and factor while preserving first-rou
     fs.mkdirSync(path.join(root, 'backend'));
     const fake = fakeTask({ elapsed: { synthetic: 516.86 } });
     const summary = await runCI({ root, mode, outputDir: mode, packageParallelismFactor: factor, availableParallelism: () => 4, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {} });
-    assert.equal(summary.shards.length, 4);
+    assert.equal(summary.shards.length, 5);
     assert.equal(summary.manifest.performanceRounds, 1);
     assert.equal(summary.manifest.bulkPackageParallelism, expectedP);
     assert.equal(summary.manifest.bulkPackageParallelismFactor, factor ?? 2);
@@ -634,9 +689,9 @@ test('automatic CI concurrency records CPU and factor while preserving first-rou
     assert.equal(summary.environment.availableCPUCount, 4);
     assert.ok(fake.calls.find(args => args[0] === 'backend:test:ci:inventory')[1].includes(`-p=${expectedP}`));
     assert.ok(fake.calls.find(args => args[1]?.includes('-list'))[1].includes(`-p=${expectedP}`));
-    assert.deepEqual(summary.shards.map(shard => shard.effectiveP), [2, 1, 1, 1], 'the batch contains only two packages even when its initial target is larger');
+    assert.deepEqual(summary.shards.map(shard => shard.effectiveP), [2, 1, 1, 1, 1], 'the batch contains only two packages even when its initial target is larger');
     assert.equal(summary.status, 'passed');
-    assert.equal(fake.calls.filter(args => ['backend:test:race', 'backend:test'].includes(args[0]) && !args[1]?.includes('-list')).length, 4);
+    assert.equal(fake.calls.filter(args => ['backend:test:race', 'backend:test'].includes(args[0]) && !args[1]?.includes('-list')).length, 5);
   }
 });
 
@@ -693,7 +748,7 @@ test('invalid repeat counts never start discovery and plain ignores valid opt-in
   fs.mkdirSync(path.join(root, 'backend'));
   const summary = await runCI({ root, mode: 'plain', outputDir: 'plain', execute: fakeTask().execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '3' } });
   assert.equal(summary.manifest.performanceRounds, 1);
-  assert.equal(summary.shards.length, 4);
+  assert.equal(summary.shards.length, 5);
 });
 
 test('source changes, incorrect atomic mode and insufficient scene margin block success', async t => {
@@ -726,15 +781,15 @@ test('composite independently completes ordinary full coverage and all normal ra
   const [coverage, race] = summary.roles;
   assert.deepEqual(coverage.instrumentation, { race: false, coverage: 'atomic' });
   assert.deepEqual(race.instrumentation, { race: true, coverage: null });
-  assert.equal(coverage.shards.length, 4);
-  assert.equal(race.shards.length, 3);
+  assert.equal(coverage.shards.length, 5);
+  assert.equal(race.shards.length, 4);
   assert.ok(coverage.round.leaves.includes(id(workerPackage, epubLeaves[1])));
   assert.ok(race.round.leaves.includes(id(workerPackage, representativeLeaf)));
   assert.ok(!race.round.leaves.includes(id(workerPackage, epubLeaves[1])));
   assert.ok(race.round.leaves.includes(id(pipelinePackage, 'TestPipeline')));
   assert.equal(race.notScheduled.length, 1);
-  assert.equal(summary.coverage.profiles.length, 4);
-  assert.equal(summary.shards.length, 7);
+  assert.equal(summary.coverage.profiles.length, 5);
+  assert.equal(summary.shards.length, 9);
   assert.ok(summary.shards.every(shard => shard.round === 1));
   assert.ok(fake.calls.filter(args => args[0] === 'backend:test:race').every(args => !args[1].includes('-cover')));
   assert.ok(fake.calls.filter(args => args[1]?.includes('-coverprofile')).every(args => args[0] === 'backend:test' && !args[1].includes('-race')));
@@ -750,8 +805,8 @@ test('composite never pools required leaves and rejects missing/skipped full boo
       if (covered && shard === 'synthetic' && scenario === 'missing-full') return { code: 0, stdout: jsonLines(eventsFor(workerPackage, [epubTop])), stderr: '' };
       if (covered && shard === 'synthetic' && scenario === 'skipped-full') return { code: 0, stdout: jsonLines(eventsFor(workerPackage, [epubLeaves[1]], { skip: 'fixture unavailable' })), stderr: '' };
       if (!covered && scenario === 'failed-race' && shard === 'worker-remainder') return { code: 1, stdout, stderr: 'race fixture failed' };
-      if (!covered && shard === 'worker-remainder' && scenario === 'missing-representative') return { code: 0, stdout: jsonLines(eventsFor(workerPackage, ['TestWorker', representativeTop])), stderr: '' };
-      if (!covered && shard === 'worker-remainder' && scenario === 'skipped-representative') return { code: 0, stdout: jsonLines([...eventsFor(workerPackage, ['TestWorker']).slice(0, -1), ...eventsFor(workerPackage, [representativeLeaf], { skip: 'fixture unavailable' }).slice(1)]), stderr: '' };
+      if (!covered && shard === 'representative' && scenario === 'missing-representative') return { code: 0, stdout: jsonLines(eventsFor(workerPackage, [representativeTop])), stderr: '' };
+      if (!covered && shard === 'representative' && scenario === 'skipped-representative') return { code: 0, stdout: jsonLines(eventsFor(workerPackage, [representativeLeaf], { skip: 'fixture unavailable' })), stderr: '' };
     } });
     const identity = async () => {
       const roleSummary = path.join(root, 'backend', scenario, 'roles/full-coverage/summary.json');

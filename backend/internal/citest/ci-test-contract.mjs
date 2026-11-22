@@ -8,6 +8,13 @@ export const epubLeaves = [
   `${epubTop}/dense_256_seven_keys_512_words`,
   `${epubTop}/synthetic_book_5338_word_bounded_batches`,
 ];
+// Functional fixtures remain in every complete role. Match in this order so
+// HTTP handoff tests and the remaining recovery tests form disjoint groups.
+export const workerFunctionalGroups = [
+  { id: 'worker-handoff-http', prefix: 'TestRubyHandoffAcceptanceHTTP' },
+  { id: 'worker-handoff-recovery', prefix: 'TestRubyHandoffAcceptance' },
+  { id: 'worker-members', names: ['TestMemberResponseWorkSQLite', 'TestMemberSavedBusinessCanonicalLoweredJRecovery'] },
+];
 export const requiredTests = {
   [`${modulePath}/internal/worker`]: [
     ...epubLeaves,
