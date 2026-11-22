@@ -1083,7 +1083,7 @@ func TestRubyHandoffAcceptanceHTTPBoundedProtectionContextAndMetadata(t *testing
 					return r
 				}
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), handoffFixtureFunctionalWait)
 			defer cancel()
 			runtime, err := NewExecutionRuntime(f.snapshot, f.pool, nil, pipeline.DefaultCandidateLimits())
 			if err != nil {
@@ -3309,9 +3309,9 @@ func TestMemberSavedBusinessCanonicalLoweredJRecovery(t *testing.T) {
 
 func runHandoffRunnerFuturePins(t *testing.T, business bool, options ...handoffRunnerFuturePinsOptions) {
 	ctx := context.Background()
-	option, runTimeout := handoffRunnerFuturePinsOptions{segments: 1}, 30*time.Second
+	option := handoffRunnerFuturePinsOptions{segments: 1}
 	if len(options) > 0 {
-		option, runTimeout = options[0], 5*time.Second
+		option = options[0]
 	}
 	barrier := &handoffHTTPBarrier{entered: make(chan struct{}, 32), release: make(chan struct{})}
 	barrier.open()
@@ -3450,7 +3450,7 @@ func runHandoffRunnerFuturePins(t *testing.T, business bool, options ...handoffR
 	barrier.mu.Lock()
 	before := barrier.calls
 	barrier.mu.Unlock()
-	runCtx, cancel := context.WithTimeout(ctx, runTimeout)
+	runCtx, cancel := context.WithTimeout(ctx, handoffFixtureFunctionalWait)
 	err := f.runner.processJob(runCtx, f.jobID)
 	cancel()
 	barrier.mu.Lock()
