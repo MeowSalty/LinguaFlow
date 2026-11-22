@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { epubLeaves, epubTop, modulePath, requiredTests, workerPackage } from './ci-test-contract.mjs';
-import { mergeAtomicProfiles, parseInventory, parseJSONObjects, planShards, resolveGoMaxProcs, resolvePackageParallelism, resolveTaskBinary, runCI as nativeRunCI, runProcess, validateRound, validateShard } from './ci-test.mjs';
+import { epubLeaves, epubTop, representativeLeaf, representativeTop, modulePath, requiredTests, workerPackage } from './ci-test-contract.mjs';
+import { hasGoFunctionToken, mergeAtomicProfiles, parseInventory, parseJSONObjects, performanceMeasurement, planShards, resolveGoMaxProcs, resolvePackageParallelism, resolveTaskBinary, runCI as nativeRunCI, runProcess, validateRound, validateShard } from './ci-test.mjs';
 import { terminateOwnedProcess } from './process-cleanup.mjs';
 
 const pipelinePackage = `${modulePath}/internal/pipeline`;
@@ -32,6 +32,7 @@ function eventsFor(pkg, names, { skip, fail, elapsed = 2 } = {}) {
     events.push(event(pkg, 'run', top));
     if (name !== top) events.push(event(pkg, 'run', name));
     if (skip) events.push(event(pkg, 'output', name, { Output: skip }));
+    if (epubLeaves.includes(name)) events.push(event(pkg, 'output', name, { Output: `response_count=${name === epubLeaves[0] ? 1 : 27} response_inflight=0 response_max_ns=1000000 work[event,row,byte]=fixture\n` }));
     events.push(event(pkg, fail ? 'fail' : skip ? 'skip' : 'pass', name, { Elapsed: elapsed }));
     if (name !== top) events.push(event(pkg, fail ? 'fail' : 'pass', top, { Elapsed: elapsed }));
   }
@@ -52,7 +53,7 @@ function inventory() {
   return new Map([
     [pipelinePackage, { name: pipelinePackage, tops: ['TestPipeline'], noTestFiles: false }],
     [emptyPackage, { name: emptyPackage, tops: [], noTestFiles: true }],
-    [workerPackage, { name: workerPackage, tops: [epubTop, 'TestWorker'], noTestFiles: false }],
+    [workerPackage, { name: workerPackage, tops: [epubTop, representativeTop, 'TestWorker'], noTestFiles: false }],
   ]);
 }
 function fakeTask({ failShard, failureExitCode = 1, wrongProfile, elapsed = 2, shardProcess, additionalPackages = [], extraStdout = '' } = {}) {
@@ -72,7 +73,7 @@ function fakeTask({ failShard, failureExitCode = 1, wrongProfile, elapsed = 2, s
     else if (cli.includes('-list')) stdout = jsonLines([...discovered.values()].flatMap(pkg => [event(pkg.name, 'start'), ...pkg.tops.map(top => event(pkg.name, 'output', null, { Output: `${top}\n` })), event(pkg.name, pkg.tops.length ? 'pass' : 'skip')]));
     else {
       const shard = cli.includes('-skip') ? 'worker-remainder' : cli.includes('dense_256') ? 'dense' : cli.includes('synthetic_book') ? 'synthetic' : 'packages';
-      const names = shard === 'worker-remainder' ? ['TestWorker'] : shard === 'dense' ? [epubLeaves[0]] : [epubLeaves[1]];
+      const names = shard === 'worker-remainder' ? ['TestWorker', representativeLeaf] : shard === 'dense' ? [epubLeaves[0]] : [epubLeaves[1]];
       const pkg = shard === 'packages' ? pipelinePackage : workerPackage;
       stdout = jsonLines(shard === 'packages' ? [...eventsFor(pkg, ['TestPipeline'], { fail: failShard === shard }), event(emptyPackage, 'start'), event(emptyPackage, 'skip')] : eventsFor(pkg, names, { fail: failShard === shard, elapsed: typeof elapsed === 'object' ? elapsed[shard] ?? 2 : elapsed }));
       const selectedPackages = shard === 'packages' && additionalPackages.length ? [...discovered.values()].filter(pkg => cli.split(/\s+/).includes(pkg.name)) : null;
@@ -81,9 +82,11 @@ function fakeTask({ failShard, failureExitCode = 1, wrongProfile, elapsed = 2, s
       code = failShard === shard ? failureExitCode : 0;
       const profile = cli.match(/-coverprofile="([^"]+)"/);
       if (profile) {
+        const coveredPackages = selectedPackages ?? (shard === 'packages' ? [discovered.get(pkg), discovered.get(emptyPackage)] : [discovered.get(pkg)]);
+        stdout += jsonLines(coveredPackages.map(pkg => event(pkg.name, 'output', null, { Output: `${pkg.name} coverage: ${pkg.tops.length ? '0.0% of statements' : '[no statements]'}\n` })));
         const file = shard === 'packages' ? 'pipeline.go' : 'worker.go';
         const value = profile[1].includes('round-2') ? 99 : shard === 'dense' ? 1 : shard === 'synthetic' ? 2 : 3;
-        fs.writeFileSync(profile[1], `mode: ${wrongProfile ? 'set' : 'atomic'}\n${(selectedPackages ?? [{ name: pkg }]).map(pkg => `${pkg.name}/${file}:1.1,2.1 1 ${value}\n`).join('')}`);
+        fs.writeFileSync(profile[1], `mode: ${wrongProfile ? 'set' : 'atomic'}\n${(selectedPackages?.filter(pkg => pkg.tops.length) ?? [{ name: pkg }]).map(pkg => `${pkg.name}/${file}:1.1,2.1 1 ${value}\n`).join('')}`);
       }
       const nativeResult = await shardProcess?.({ shard, stdout, code, options });
       if (nativeResult) return nativeResult;
@@ -336,14 +339,15 @@ test('named PostgreSQL and deployment skips require disabled environments and th
 
 test('split plan preserves precise original selectors and rejects cross-shard terminal duplication', () => {
   const inv = inventory();
-  const plan = planShards('race-atomic', inv, resolvePackageParallelism('auto', () => 4));
+  const plan = planShards('coverage', inv, resolvePackageParallelism('auto', () => 4));
   assert.equal(plan.length, 4);
   assert.deepEqual(plan.map(shard => shard.effectiveP), [8, 1, 1, 1]);
-  assert.deepEqual(planShards('race-atomic', inv, 1).map(shard => shard.effectiveP), [1, 1, 1, 1]);
-  assert.deepEqual(planShards('race-atomic', inv, 2).map(shard => shard.effectiveP), [2, 1, 1, 1]);
-  assert.equal(planShards('race-atomic', inv, 2, 2).length, 6);
+  assert.deepEqual(planShards('coverage', inv, 1).map(shard => shard.effectiveP), [1, 1, 1, 1]);
+  assert.deepEqual(planShards('coverage', inv, 2).map(shard => shard.effectiveP), [2, 1, 1, 1]);
+  assert.equal(planShards('coverage', inv, 2, 2).length, 4);
+  assert.equal(planShards('performance', inv, 2, 2).length, 4);
   assert.equal(planShards('plain', inv, 2, 3).length, 4);
-  assert.deepEqual(planShards('race-atomic', inv, 12).map(shard => shard.effectiveP), [12, 1, 1, 1]);
+  assert.deepEqual(planShards('coverage', inv, 12).map(shard => shard.effectiveP), [12, 1, 1, 1]);
   for (const [cpus, expected] of [[1, 2], [4, 8], [6, 12]]) assert.equal(resolvePackageParallelism('auto', () => cpus), expected);
   assert.equal(resolvePackageParallelism('auto', () => 4, 1.5), 6);
   assert.equal(resolvePackageParallelism('auto', () => 3, 1.5), 5);
@@ -367,7 +371,7 @@ test('memory auto package batches partition every package once and reject missin
     const name = `${modulePath}/internal/extra${i}`;
     inv.set(name, { name, tops: [`TestExtra${i}`], noTestFiles: false });
   }
-  const plan = planShards('race-atomic', inv, 4, 1, { initialWidth: 4, incrementWidth: 2 });
+  const plan = planShards('coverage', inv, 4, 1, { initialWidth: 4, incrementWidth: 2 });
   const batches = plan.filter(shard => shard.id.startsWith('packages'));
   assert.deepEqual(batches.map(shard => shard.packages.length), [4, 2, 2, 2, 1]);
   assert.deepEqual(batches.flatMap(shard => shard.packages), [...inv.keys()].filter(name => name !== workerPackage));
@@ -407,7 +411,7 @@ test('memory runner overlaps batches and heavy shards beyond the initial target,
     } });
     const monitor = { sample: async groups => ({ atMs: Date.now(), availableBytes: 100 * 1024 ** 3, totalBytes: 128 * 1024 ** 3, cpuQuota: null, allowedIds: [], cpuLoadKnown: false, sharedBusyCores: null, busyCores: null, owned: groups.map(group => ({ id: group.id, rssBytes: 64 * 1024 ** 2, cpuCores: null, complete: true })), shared: [] }) };
     const complete = ['complete', 'hosted'].includes(scenario.name);
-    const summary = await runCI({ root, mode: 'race-atomic', outputDir: scenario.name, availableParallelism: () => 2, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { ...(scenario.name === 'hosted' ? { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted' } : {}), GOMAXPROCS: '4', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: complete ? '1' : '2' }, resourceOptions: { monitor } });
+    const summary = await runCI({ root, mode: 'coverage', outputDir: scenario.name, availableParallelism: () => 2, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { ...(scenario.name === 'hosted' ? { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted' } : {}), GOMAXPROCS: '4', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: complete ? '1' : '2' }, resourceOptions: { monitor } });
     assert.equal(summary.status, complete ? 'passed' : 'failed', JSON.stringify(summary.issues));
     assert.equal(summary.shards.length, 8);
     assert.equal(entered.size, 8, 'all independent jobs must enter before any fake child completes');
@@ -428,7 +432,7 @@ test('memory runner overlaps batches and heavy shards beyond the initial target,
     } else {
       assert.equal(summary.coverage, undefined);
       assert.ok(!fs.existsSync(path.join(root, 'backend', scenario.name, 'coverage.out')));
-      assert.ok(summary.issues.includes('Performance repeat round not executed because the first complete round failed'));
+      assert.ok(summary.issues.length > 0);
       if (scenario.name === 'failed') assert.ok(batches.every(shard => shard.exitCode === 137));
       else assert.ok(batches.every(shard => shard.validation.issues.includes('Non-JSON output on go test stdout')));
     }
@@ -449,13 +453,14 @@ test('memory runner numeric override retains a single package invocation', async
 
 test('atomic profiles sum equal blocks and reject missing, wrong-mode, conflicting or overflowing data', t => {
   const directory = temporary(t);
-  const make = (name, data, packages = [workerPackage]) => { const file = path.join(directory, name); fs.writeFileSync(file, data); return { id: name, path: file, packages }; };
+  const qualified = data => data.replace(/^([\w.-]+\.go):/gm, `${workerPackage}/$1:`);
+  const make = (name, data, packages = [workerPackage], packageCoverage = Object.fromEntries(packages.map(pkg => [pkg, 'statements']))) => { const file = path.join(directory, name); fs.writeFileSync(file, qualified(data)); return { id: name, path: file, packages, packageCoverage }; };
   const a = make('a', 'mode: atomic\nworker.go:1.1,2.1 1 4\n');
   const b = make('b', 'mode: atomic\nworker.go:1.1,2.1 1 7\n');
   const output = path.join(directory, 'merged');
   mergeAtomicProfiles([a, b], output);
-  assert.equal(fs.readFileSync(output, 'utf8'), 'mode: atomic\nworker.go:1.1,2.1 1 11\n');
-  assert.throws(() => mergeAtomicProfiles([{ id: 'missing', path: path.join(directory, 'missing'), packages: [workerPackage] }], output), /Missing profile/);
+  assert.equal(fs.readFileSync(output, 'utf8'), qualified('mode: atomic\nworker.go:1.1,2.1 1 11\n'));
+  assert.throws(() => mergeAtomicProfiles([{ id: 'missing', path: path.join(directory, 'missing'), packages: [workerPackage], packageCoverage: { [workerPackage]: 'statements' } }], output), /Missing profile/);
   assert.throws(() => mergeAtomicProfiles([make('set', 'mode: set\nworker.go:1.1,2.1 1 1\n')], output), /Wrong coverage/);
   assert.throws(() => mergeAtomicProfiles([a, make('conflict', 'mode: atomic\nworker.go:1.1,2.1 2 1\n')], output), /Inconsistent/);
   assert.throws(() => mergeAtomicProfiles([a, make('partition', 'mode: atomic\nworker.go:1.1,1.5 1 1\nworker.go:1.5,2.1 1 1\n')], output), /Inconsistent/);
@@ -468,14 +473,24 @@ test('atomic profiles sum equal blocks and reject missing, wrong-mode, conflicti
   const distinctOutput = path.join(directory, 'distinct-packages');
   mergeAtomicProfiles([complete, other], distinctOutput);
   assert.ok(fs.readFileSync(distinctOutput, 'utf8').includes('b.go:1.1,2.1 1 1'));
+  const missingPackage = make('missing-package', `mode: atomic\n${workerPackage}/worker.go:1.1,2.1 1 1\n`, [workerPackage, pipelinePackage]);
+  assert.throws(() => mergeAtomicProfiles([missingPackage], path.join(directory, 'missing-package-out')), /Missing coverage blocks for package with statements/);
+  const noStatements = make('without-statements', `mode: atomic\n${workerPackage}/worker.go:1.1,2.1 1 1\n`, [workerPackage, emptyPackage], { [workerPackage]: 'statements', [emptyPackage]: 'no-statements' });
+  mergeAtomicProfiles([noStatements], path.join(directory, 'allowed-no-statements'));
+  const foreign = make('foreign', 'mode: atomic\ngithub.com/foreign/module/worker.go:1.1,2.1 1 1\n');
+  assert.throws(() => mergeAtomicProfiles([foreign], path.join(directory, 'foreign-out')), /Cannot attribute/);
+  const unknown = { ...noStatements, packageCoverage: { [workerPackage]: 'statements' } };
+  assert.throws(() => mergeAtomicProfiles([unknown], path.join(directory, 'unknown-out')), /Missing native package coverage/);
+  const inconsistent = { ...noStatements, packageCoverage: { [workerPackage]: 'no-statements', [emptyPackage]: 'no-statements' } };
+  assert.throws(() => mergeAtomicProfiles([inconsistent], path.join(directory, 'inconsistent-status-out')), /contradict no-statements/);
 });
 
 test('native zero-statement coverage blocks retain coordinates and counts', t => {
   const directory = temporary(t);
-  const make = (name, line) => { const file = path.join(directory, name); fs.writeFileSync(file, `mode: atomic\n${line}\n`); return { id: name, path: file, packages: [workerPackage] }; };
+  const make = (name, line) => { const file = path.join(directory, name); fs.writeFileSync(file, `mode: atomic\n${line.replaceAll('worker.go:', `${workerPackage}/worker.go:`)}\n`); return { id: name, path: file, packages: [workerPackage], packageCoverage: { [workerPackage]: 'no-statements' } }; };
   const output = path.join(directory, 'merged-zero');
   mergeAtomicProfiles([make('zero-a', 'worker.go:123.16,123.16 0 57'), make('zero-b', 'worker.go:123.16,123.16 0 3')], output);
-  assert.equal(fs.readFileSync(output, 'utf8'), 'mode: atomic\nworker.go:123.16,123.16 0 60\n');
+  assert.equal(fs.readFileSync(output, 'utf8'), `mode: atomic\n${workerPackage}/worker.go:123.16,123.16 0 60\n`);
   for (const [name, line] of [
     ['nonzero-statements', 'worker.go:123.16,123.16 1 57'],
     ['reversed-lines', 'worker.go:124.16,123.16 0 57'],
@@ -487,19 +502,19 @@ test('native zero-statement coverage blocks retain coordinates and counts', t =>
   assert.throws(() => mergeAtomicProfiles([duplicate], output), /Duplicate/);
 });
 
-test('fake Task smoke produces a complete atomic round and keeps repeat profiles separate', async t => {
+test('fake Task smoke produces complete ordinary atomic coverage without performance repeats', async t => {
   const root = temporary(t);
   fs.mkdirSync(path.join(root, 'backend'));
   const fake = fakeTask();
-  const summary = await runCI({ root, mode: 'race-atomic', outputDir: 'evidence', packageParallelism: 12, packageParallelismFactor: 0, availableParallelism: () => { throw new Error('Explicit value must bypass CPU detection'); }, execute: fake.execute, identity: async () => ({ head: 'fixture-sha', sourceSha256: 'fixture-hash' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves, [pipelinePackage]: ['TestPipeline'] }, rules: [], env: { GOFLAGS: '-tags=fixture -p=4', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
+  const summary = await runCI({ root, mode: 'coverage', outputDir: 'evidence', packageParallelism: 12, packageParallelismFactor: 0, availableParallelism: () => { throw new Error('Explicit value must bypass CPU detection'); }, execute: fake.execute, identity: async () => ({ head: 'fixture-sha', sourceSha256: 'fixture-hash' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves, [pipelinePackage]: ['TestPipeline'] }, rules: [], env: { GOFLAGS: '-tags=fixture -p=4', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
   assert.equal(summary.status, 'passed', JSON.stringify(summary.issues));
-  assert.equal(summary.shards.length, 6);
+  assert.equal(summary.shards.length, 4);
   assert.equal(summary.coverage.profiles.length, 4);
   assert.equal(summary.manifest.bulkPackageParallelism, 12);
   assert.equal(summary.manifest.bulkPackageParallelismFactor, null);
   assert.equal(summary.environment.availableCPUCount, null);
   assert.equal(summary.environment.GOFLAGS, '-tags=fixture -p=4 -p=1');
-  assert.deepEqual(summary.manifest.plan.map(shard => shard.effectiveP), [12, 1, 1, 1, 1, 1]);
+  assert.deepEqual(summary.manifest.plan.map(shard => shard.effectiveP), [12, 1, 1, 1]);
   assert.ok(fake.calls.find(args => args[0] === 'backend:test:ci:inventory')[1].includes('-p=12'));
   assert.ok(fake.calls.find(args => args[1]?.includes('-list'))[1].includes('-p=12'));
   for (const shard of summary.shards) assert.ok(shard.cliArgs.includes(`-p=${shard.effectiveP}`), shard.id);
@@ -514,10 +529,10 @@ test('fake Task smoke produces a complete atomic round and keeps repeat profiles
   assert.equal(summary.environment.storageAcceptanceEnabled, false);
   const merged = fs.readFileSync(path.join(root, 'backend/evidence/coverage.out'), 'utf8');
   assert.ok(merged.includes('worker.go:1.1,2.1 1 6'));
-  assert.ok(fs.readFileSync(path.join(root, 'backend/evidence/round-1/race-atomic/dense-r1/test-events.jsonl'), 'utf8').includes(epubLeaves[0]));
+  assert.ok(fs.readFileSync(path.join(root, 'backend/evidence/round-1/coverage/dense-r1/test-events.jsonl'), 'utf8').includes(epubLeaves[0]));
   assert.ok(!merged.includes('198'));
-  assert.equal(fake.calls.filter(args => args[0] === 'backend:test:race').length, 6);
-  assert.equal(summary.manifest.performanceRounds, 2);
+  assert.equal(fake.calls.filter(args => args[0] === 'backend:test:race').length, 0);
+  assert.equal(summary.manifest.performanceRounds, 1);
   assert.ok(fake.calls.every(args => args[0] === '--version' || args[0].startsWith('backend:')));
 });
 
@@ -525,12 +540,12 @@ test('failed first round preserves raw evidence and summary, skips repeats and n
   const root = temporary(t);
   fs.mkdirSync(path.join(root, 'backend'));
   const fake = fakeTask({ failShard: 'packages', failureExitCode: 137 });
-  const summary = await runCI({ root, mode: 'race-atomic', outputDir: 'failed', execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
+  const summary = await runCI({ root, mode: 'coverage', outputDir: 'failed', execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
   assert.equal(summary.status, 'failed');
   assert.equal(summary.resources.policy.scope, 'github-hosted-job');
   assert.equal(summary.shards.length, 4);
   assert.equal(summary.shards[0].exitCode, 137, 'OOM-style failure must not become a passing run');
-  const packageDirectory = path.join(root, 'backend/failed/round-1/race-atomic', summary.shards.find(shard => shard.id.startsWith('packages')).id);
+  const packageDirectory = path.join(root, 'backend/failed/round-1/coverage', summary.shards.find(shard => shard.id.startsWith('packages')).id);
   assert.ok(fs.existsSync(path.join(packageDirectory, 'test-results.out')));
   assert.ok(fs.existsSync(path.join(packageDirectory, 'test-events.jsonl')));
   assert.ok(fs.existsSync(path.join(root, 'backend/failed/manifest.json')));
@@ -545,7 +560,7 @@ test('failed first round preserves raw evidence and summary, skips repeats and n
 test('native Task stdout reaches runner failure reports without masking unknown output, build failures or unfinished leaves', async t => {
   const root = temporary(t);
   fs.mkdirSync(path.join(root, 'backend'));
-  const annotation = "::error title=Task 'backend:test:race' failed::exit status 1\n";
+  const annotation = "::error title=Task 'backend:test' failed::exit status 1\n";
   const failedJSON = jsonLines(eventsFor(pipelinePackage, ['TestPipeline'], { fail: true }));
   const passedJSON = jsonLines(eventsFor(pipelinePackage, ['TestPipeline']));
   const emptyEvents = jsonLines([event(emptyPackage, 'start'), event(emptyPackage, 'skip')]);
@@ -562,12 +577,12 @@ test('native Task stdout reaches runner failure reports without masking unknown 
     const fake = fakeTask({ shardProcess: async ({ shard, options }) => {
       if (shard !== 'packages') return;
       nativeCalls++;
-      assert.equal(options.taskName, 'backend:test:race', 'runner must configure the real stdout boundary');
+      assert.equal(options.taskName, 'backend:test', 'runner must configure the real stdout boundary');
       const cut = Math.max(1, scenario.stdout.length - 20);
       const script = `process.stdout.write(${JSON.stringify(scenario.stdout.slice(0, cut))}); process.stderr.write(${JSON.stringify(stderr)}); setTimeout(() => { process.stdout.write(${JSON.stringify(scenario.stdout.slice(cut))}); process.exitCode = ${scenario.code}; }, 10);`;
       return runProcess(process.execPath, ['-e', script], options);
     } });
-    const summary = await runCI({ root, mode: 'race-atomic', outputDir: scenario.name, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { SystemRoot: process.env.SystemRoot, LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
+    const summary = await runCI({ root, mode: 'coverage', outputDir: scenario.name, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { SystemRoot: process.env.SystemRoot, LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
     assert.equal(nativeCalls, 1);
     assert.equal(summary.status, 'failed', scenario.name);
     assert.equal(summary.shards.length, 4, 'failed first round must suppress all repeat shards');
@@ -577,7 +592,7 @@ test('native Task stdout reaches runner failure reports without masking unknown 
     assert.ok(record.validation.issues.includes(scenario.issue), `${scenario.name}: ${JSON.stringify(record.validation.issues)}`);
     assert.equal(record.validation.issues.includes('Non-JSON output on go test stdout'), scenario.name === 'unknown-stdout', scenario.name);
     const output = path.join(root, 'backend', scenario.name);
-    const directory = path.join(output, 'round-1/race-atomic', record.id);
+    const directory = path.join(output, 'round-1/coverage', record.id);
     assert.equal(fs.readFileSync(path.join(directory, 'task-stdout.out'), 'utf8'), scenario.stdout);
     assert.equal(fs.readFileSync(path.join(directory, 'test-events.jsonl'), 'utf8'), scenario.stdout.slice(0, scenario.stdout.length - scenario.diagnostics.length));
     assert.equal(fs.readFileSync(path.join(directory, 'task-diagnostics.out'), 'utf8'), scenario.diagnostics);
@@ -605,7 +620,7 @@ test('invalid package parallelism never starts Task or Go discovery', async t =>
 });
 
 test('automatic CI concurrency records CPU and factor while preserving first-round policy', async t => {
-  for (const [mode, factor, expectedP] of [['race', undefined, 8], ['race-atomic', undefined, 8], ['plain', 1.5, 6]]) {
+  for (const [mode, factor, expectedP] of [['race', undefined, 8], ['coverage', undefined, 8], ['plain', 1.5, 6]]) {
     const root = temporary(t);
     fs.mkdirSync(path.join(root, 'backend'));
     const fake = fakeTask({ elapsed: { synthetic: 516.86 } });
@@ -624,33 +639,44 @@ test('automatic CI concurrency records CPU and factor while preserving first-rou
   }
 });
 
-test('engineering scene boundaries preserve dense gates and native failures', async t => {
-  for (const mode of ['race', 'race-atomic']) {
-    for (const scenario of [
-      { name: 'synthetic-boundary', elapsed: { synthetic: 540 }, passed: true },
-      { name: 'synthetic-over', elapsed: { synthetic: 540.01 }, issue: `Instrumented ${mode}/synthetic EPUB scene exceeds 540s engineering target (10% margin within original 600s budget)` },
-      { name: 'dense-over', elapsed: { dense: 451 }, issue: `Instrumented ${mode}/dense EPUB scene exceeds 450s engineering target (25% margin within original 600s budget)` },
-      { name: 'native-fail', elapsed: { synthetic: 300 }, failShard: 'synthetic', failureExitCode: 137 },
-    ]) {
-      const root = temporary(t);
-      fs.mkdirSync(path.join(root, 'backend'));
-      const summary = await runCI({ root, mode, outputDir: scenario.name, execute: fakeTask(scenario).execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {} });
-      assert.equal(summary.manifest.performancePolicy.version, 2);
-      assert.equal(summary.manifest.performancePolicy.sceneSeconds, 450);
-      assert.equal(summary.manifest.performancePolicy.raceSyntheticSceneSeconds, 540);
-      assert.equal(summary.manifest.performancePolicy.atomicSyntheticSceneSeconds, 540);
-      assert.equal(summary.manifest.performancePolicy.responseSeconds, 90);
-      assert.equal(summary.manifest.performancePolicy.originalSceneSeconds, 600);
-      assert.equal(summary.manifest.performancePolicy.originalResponseSeconds, 120);
-      assert.equal(summary.status, scenario.passed ? 'passed' : 'failed', `${mode}/${scenario.name}: ${JSON.stringify(summary.issues)}`);
-      if (scenario.issue) assert.ok(summary.shards.some(shard => shard.validation.issues.includes(scenario.issue)), `${mode}/${scenario.name} did not retain the exact engineering gate`);
-      if (scenario.failShard) {
-        assert.equal(summary.shards.find(shard => shard.id === 'synthetic-r1').exitCode, 137);
-        assert.ok(summary.issues.length > 0, 'A native failure must remain a failure within the engineering target');
-      }
-      assert.equal(fs.existsSync(path.join(root, 'backend', scenario.name, 'coverage.out')), mode === 'race-atomic' && Boolean(scenario.passed), 'Only successful atomic execution may merge coverage');
-    }
+test('ordinary uncovered performance enforces scene boundaries and native failures', async t => {
+  for (const scenario of [
+    { name: 'boundary', elapsed: 450, passed: true },
+    { name: 'synthetic-over', elapsed: { synthetic: 450.01 }, issue: 'synthetic EPUB scene exceeds 450s' },
+    { name: 'dense-over', elapsed: { dense: 450.01 }, issue: 'dense EPUB scene exceeds 450s' },
+    { name: 'native-fail', elapsed: 300, failShard: 'synthetic', failureExitCode: 137 },
+  ]) {
+    const root = temporary(t);
+    fs.mkdirSync(path.join(root, 'backend'));
+    const fake = fakeTask(scenario);
+    const summary = await runCI({ root, mode: 'performance', outputDir: scenario.name, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, rules: [], env: {} });
+    assert.equal(summary.manifest.performancePolicy.version, 3);
+    assert.equal(summary.status, scenario.passed ? 'passed' : 'failed', JSON.stringify(summary.issues));
+    assert.equal(summary.shards.length, 2);
+    assert.deepEqual(summary.instrumentation, { race: false, coverage: null });
+    assert.ok(summary.shards.every(shard => !shard.profilePath && !shard.cliArgs.includes('-cover')));
+    if (scenario.issue) assert.ok(summary.issues.some(issue => issue.includes(scenario.issue)));
+    if (scenario.failShard) assert.equal(summary.shards.find(shard => shard.id === 'synthetic-r1').exitCode, 137);
+    assert.equal(fs.existsSync(path.join(root, 'backend', scenario.name, 'coverage.out')), false);
   }
+});
+
+test('response performance measurements fail closed on wrong count, inflight, missing, malformed, duplicate or over-target evidence', () => {
+  const leaf = id(workerPackage, epubLeaves[1]);
+  const native = jsonLines(eventsFor(workerPackage, [epubLeaves[1]], { elapsed: 450 }));
+  const marker = 'response_count=27 response_inflight=0 response_max_ns=1000000';
+  const boundary = native.replace(marker, 'response_count=27 response_inflight=0 response_max_ns=90000000000');
+  assert.equal(performanceMeasurement(boundary, leaf, 'synthetic').responseMaxNS, '90000000000');
+  for (const text of [
+    native.replace(marker, 'response_count=27 response_inflight=0 response_max_ns=90000000001'),
+    native.replace(marker, 'response_count=26 response_inflight=0 response_max_ns=1'),
+    native.replace(marker, 'response_count=27 response_inflight=1 response_max_ns=1'),
+    native.replace(marker, 'response_count=27 response_inflight=0 response_max_ns=0'),
+    native.replace(marker, 'response_count=x response_inflight=0 response_max_ns=1'),
+    native.replace(marker, 'missing evidence'),
+    native.replace(marker, `${marker} response_count=27`),
+    native + jsonLines([event(workerPackage, 'output', epubLeaves[1], { Output: marker + '\n' })]),
+  ]) assert.throws(() => performanceMeasurement(text, leaf, 'synthetic'));
 });
 
 test('invalid repeat counts never start discovery and plain ignores valid opt-in repeats', async t => {
@@ -677,14 +703,138 @@ test('source changes, incorrect atomic mode and insufficient scene margin block 
   assert.equal(change.status, 'failed');
   assert.ok(change.issues.some(issue => issue.includes('Source changed')));
   assert.notDeepEqual(change.finalIdentity, change.identity);
-  const postMerge = await runCI({ root, mode: 'race-atomic', outputDir: 'post-merge-changed', execute: fakeTask().execute, identity: async (_root, outputDir) => ({ head: 'fixture', sourceSha256: fs.existsSync(path.join(outputDir, 'coverage.out')) ? 'changed-after-merge' : 'frozen' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {} });
+  const postMerge = await runCI({ root, mode: 'coverage', outputDir: 'post-merge-changed', execute: fakeTask().execute, identity: async (_root, outputDir) => ({ head: 'fixture', sourceSha256: fs.existsSync(path.join(outputDir, 'coverage.out')) ? 'changed-after-merge' : 'frozen' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {} });
   assert.equal(postMerge.status, 'failed');
   assert.equal(postMerge.finalIdentity.sourceSha256, 'changed-after-merge');
   assert.ok(postMerge.issues.some(issue => issue.includes('Source changed')));
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'backend/post-merge-changed/summary.json'), 'utf8')).finalIdentity, postMerge.finalIdentity);
-  for (const [name, options] of [['mode', { wrongProfile: true }], ['margin', { elapsed: 451 }]]) {
-    const summary = await runCI({ root, mode: 'race-atomic', outputDir: name, execute: fakeTask(options).execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {} });
+  for (const [name, options] of [['mode', { wrongProfile: true }]]) {
+    const summary = await runCI({ root, mode: 'coverage', outputDir: name, execute: fakeTask(options).execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {} });
     assert.equal(summary.status, 'failed');
     assert.ok(!fs.existsSync(path.join(root, `backend/${name}/coverage.out`)));
+  }
+});
+
+test('composite independently completes ordinary full coverage and all normal race tests except full synthetic', async t => {
+  const root = temporary(t);
+  fs.mkdirSync(path.join(root, 'backend'));
+  const fake = fakeTask({ elapsed: 599 });
+  const summary = await runCI({ root, mode: 'race-atomic', outputDir: 'composite', execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
+  assert.equal(summary.status, 'passed', JSON.stringify(summary.issues));
+  assert.deepEqual(summary.roles.map(role => role.status), ['passed', 'passed']);
+  const [coverage, race] = summary.roles;
+  assert.deepEqual(coverage.instrumentation, { race: false, coverage: 'atomic' });
+  assert.deepEqual(race.instrumentation, { race: true, coverage: null });
+  assert.equal(coverage.shards.length, 4);
+  assert.equal(race.shards.length, 3);
+  assert.ok(coverage.round.leaves.includes(id(workerPackage, epubLeaves[1])));
+  assert.ok(race.round.leaves.includes(id(workerPackage, representativeLeaf)));
+  assert.ok(!race.round.leaves.includes(id(workerPackage, epubLeaves[1])));
+  assert.ok(race.round.leaves.includes(id(pipelinePackage, 'TestPipeline')));
+  assert.equal(race.notScheduled.length, 1);
+  assert.equal(summary.coverage.profiles.length, 4);
+  assert.equal(summary.shards.length, 7);
+  assert.ok(summary.shards.every(shard => shard.round === 1));
+  assert.ok(fake.calls.filter(args => args[0] === 'backend:test:race').every(args => !args[1].includes('-cover')));
+  assert.ok(fake.calls.filter(args => args[1]?.includes('-coverprofile')).every(args => args[0] === 'backend:test' && !args[1].includes('-race')));
+  assert.equal(fs.readFileSync(path.join(root, 'backend/composite/coverage.out'), 'utf8'), fs.readFileSync(path.join(coverage.outputDir, 'coverage.out'), 'utf8'));
+});
+
+test('composite never pools required leaves and rejects missing/skipped full book, role failure and source changes', async t => {
+  const root = temporary(t);
+  fs.mkdirSync(path.join(root, 'backend'));
+  for (const scenario of ['missing-full', 'skipped-full', 'failed-race', 'missing-representative', 'skipped-representative', 'between-roles']) {
+    const fake = fakeTask({ shardProcess: async ({ shard, stdout, options }) => {
+      const covered = options.outputFile.includes(`${path.sep}coverage${path.sep}`);
+      if (covered && shard === 'synthetic' && scenario === 'missing-full') return { code: 0, stdout: jsonLines(eventsFor(workerPackage, [epubTop])), stderr: '' };
+      if (covered && shard === 'synthetic' && scenario === 'skipped-full') return { code: 0, stdout: jsonLines(eventsFor(workerPackage, [epubLeaves[1]], { skip: 'fixture unavailable' })), stderr: '' };
+      if (!covered && scenario === 'failed-race' && shard === 'worker-remainder') return { code: 1, stdout, stderr: 'race fixture failed' };
+      if (!covered && shard === 'worker-remainder' && scenario === 'missing-representative') return { code: 0, stdout: jsonLines(eventsFor(workerPackage, ['TestWorker', representativeTop])), stderr: '' };
+      if (!covered && shard === 'worker-remainder' && scenario === 'skipped-representative') return { code: 0, stdout: jsonLines([...eventsFor(workerPackage, ['TestWorker']).slice(0, -1), ...eventsFor(workerPackage, [representativeLeaf], { skip: 'fixture unavailable' }).slice(1)]), stderr: '' };
+    } });
+    const identity = async () => {
+      const roleSummary = path.join(root, 'backend', scenario, 'roles/full-coverage/summary.json');
+      const coverageFinished = scenario === 'between-roles' && fs.existsSync(roleSummary) && JSON.parse(fs.readFileSync(roleSummary, 'utf8')).status === 'passed';
+      return { head: 'fixture', sourceSha256: coverageFinished ? 'changed' : 'fixture' };
+    };
+    const summary = await runCI({ root, mode: 'race-atomic', outputDir: scenario, execute: fake.execute, identity, taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: {} });
+    assert.equal(summary.status, 'failed', scenario);
+    assert.equal(fs.existsSync(path.join(root, 'backend', scenario, 'coverage.out')), false);
+    assert.ok(summary.roles.some(role => role.status !== 'passed'));
+    if (['missing-full', 'skipped-full', 'between-roles'].includes(scenario)) assert.equal(summary.roles[1].status, 'not-scheduled');
+    else assert.equal(summary.roles[0].status, 'passed');
+    if (scenario === 'between-roles') assert.equal(summary.roles[0].status, 'passed', 'drift occurs only after the first role independently passed');
+  }
+});
+
+test('native coverage distinguishes no-test packages with statements from proven no-statements packages', () => {
+  const inv = new Map([[emptyPackage, { name: emptyPackage, tops: [], noTestFiles: true }]]);
+  const native = output => ({ code: 0, stdout: jsonLines([event(emptyPackage, 'start'), event(emptyPackage, 'output', null, { Output: output }), event(emptyPackage, 'skip')]) });
+  const withStatements = validateShard(native(`${emptyPackage} coverage: 0.0% of statements\n`), inv, new Set(), { coverage: true });
+  assert.equal(withStatements.packageCoverage[emptyPackage], 'statements');
+  assert.deepEqual(withStatements.issues, []);
+  const withoutStatements = validateShard(native(`${emptyPackage} coverage: [no statements]\n`), inv, new Set(), { coverage: true });
+  assert.equal(withoutStatements.packageCoverage[emptyPackage], 'no-statements');
+  const unknown = validateShard(native(`? ${emptyPackage} [no test files]\n`), inv, new Set(), { coverage: true });
+  assert.ok(unknown.issues.some(issue => issue.includes('native package coverage statement status')));
+  const dual = validateShard(native(`coverage: 0.0% of statements\nok  \t${emptyPackage}\t1.000s\tcoverage: 0.0% of statements\n`), inv, new Set(), { coverage: true });
+  assert.deepEqual(dual.issues, []);
+  for (const output of [
+    `coverage: 1.0% of statements\nok  \t${emptyPackage}\t1.000s\tcoverage: 0.0% of statements\n`,
+    `coverage: 0.0% of statements\ncoverage: 0.0% of statements\n`,
+    `ok  \t${emptyPackage}\t1.000s\tcoverage: 0.0% of statements\nok  \t${emptyPackage}\t1.000s\tcoverage: 0.0% of statements\n`,
+  ]) assert.ok(validateShard(native(output), inv, new Set(), { coverage: true }).issues.some(issue => issue.includes('Repeated/conflicting')));
+});
+
+test('no-test-files coverage exemption requires all discovered production sources to prove no functions', t => {
+  const directory = temporary(t);
+  const list = jsonLines([event(emptyPackage, 'start'), event(emptyPackage, 'skip'), event(pipelinePackage, 'start'), event(pipelinePackage, 'output', null, { Output: 'TestPipeline\n' }), event(pipelinePackage, 'pass')]);
+  const output = jsonLines([event(emptyPackage, 'start'), event(emptyPackage, 'output', null, { Output: `?   \t${emptyPackage}\t[no test files]\n` }), event(emptyPackage, 'skip')]);
+  const file = path.join(directory, 'types.go');
+  fs.writeFileSync(file, 'package empty\n// func fake() {}\ntype Name string\nconst text = "func fake() {}"\n');
+  const records = [{ ImportPath: emptyPackage, Dir: directory, GoFiles: ['types.go'] }, { ImportPath: pipelinePackage, TestGoFiles: ['pipeline_test.go'] }];
+  const proven = parseInventory(list, records);
+  assert.ok(proven.get(emptyPackage).noFunctionSourceEvidence);
+  assert.deepEqual(validateShard({ code: 0, stdout: output }, new Map([[emptyPackage, proven.get(emptyPackage)]]), new Set(), { coverage: true }).issues, []);
+  fs.writeFileSync(file, 'package empty\nfunc Work() { println("covered statement") }\n');
+  const withCode = parseInventory(list, records);
+  assert.equal(withCode.get(emptyPackage).noFunctionSourceEvidence, null);
+  assert.ok(validateShard({ code: 0, stdout: output }, new Map([[emptyPackage, withCode.get(emptyPackage)]]), new Set(), { coverage: true }).issues.some(issue => issue.includes('Missing native package coverage')));
+  for (const source of ['package p\nfunc F() {}', 'package p\nvar f = func() {}', 'package p\ntype Callback func()']) assert.equal(hasGoFunctionToken(source), true);
+  for (const source of ['package p // func\ntype F int', 'package p\nconst f = `func`', 'package p /* func */\nvar f = "func"']) assert.equal(hasGoFunctionToken(source), false);
+});
+
+test('role instrumentation cannot be injected through GOFLAGS and only performance repeats', async t => {
+  const root = temporary(t);
+  fs.mkdirSync(path.join(root, 'backend'));
+  for (const [mode, flags] of [['plain', '-race'], ['performance', '-cover'], ['coverage', '-coverprofile=hidden.out'], ['race-atomic', '-race=true']]) {
+    const fake = fakeTask();
+    const summary = await runCI({ root, mode, outputDir: `${mode}-flags`, execute: fake.execute, taskBinary: process.execPath, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), env: { GOFLAGS: flags } });
+    assert.equal(summary.status, 'failed');
+    assert.equal(fake.calls.length, 0);
+    assert.ok(summary.issues.some(issue => issue.includes('instrumentation')));
+  }
+  const summary = await runCI({ root, mode: 'performance', outputDir: 'repeats', execute: fakeTask().execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, env: { LINGUAFLOW_CI_PERFORMANCE_ROUNDS: '2' } });
+  assert.equal(summary.status, 'passed', JSON.stringify(summary.issues));
+  assert.equal(summary.shards.length, 4);
+  assert.equal(summary.performanceMeasurements.length, 4);
+});
+
+test('performance in CI needs no PostgreSQL while complete functional CI roles still require its DSN', async t => {
+  const root = temporary(t);
+  fs.mkdirSync(path.join(root, 'backend'));
+  for (const mode of ['performance', 'plain', 'race', 'race-atomic']) {
+    const fake = fakeTask();
+    const summary = await runCI({ root, mode, outputDir: `${mode}-ci-pg-preflight`, execute: fake.execute, identity: async () => ({ head: 'fixture', sourceSha256: 'fixture' }), taskBinary: process.execPath, contract: { [workerPackage]: epubLeaves }, rules: [], env: { CI: 'true' } });
+    if (mode === 'performance') {
+      assert.equal(summary.status, 'passed', JSON.stringify(summary.issues));
+      assert.equal(summary.environment.postgresConfigured, false);
+      assert.equal(summary.shards.length, 2);
+      assert.deepEqual(summary.instrumentation, { race: false, coverage: null });
+    } else {
+      assert.equal(summary.status, 'failed');
+      assert.ok(summary.issues.some(issue => issue.includes('PostgreSQL test service DSN')));
+      assert.ok(!fake.calls.some(args => args[0] === 'backend:test:ci:inventory'), 'Complete CI roles must fail before testing without their PostgreSQL service');
+    }
   }
 });

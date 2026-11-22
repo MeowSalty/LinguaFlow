@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { epubLeaves, epubTop, requiredTests, skipRules, workerPackage } from './ci-test-contract.mjs';
+import { epubLeaves, epubTop, representativeLeaf, requiredTests, skipRules, workerPackage } from './ci-test-contract.mjs';
 import { terminateOwnedProcess } from './process-cleanup.mjs';
 import { performancePolicy, performanceRounds, sceneFailure, sceneSeconds } from './performance-policy.mjs';
 import { ResourceScheduler } from './resource-scheduler.mjs';
@@ -203,10 +203,11 @@ export function parseTestEvents(text) {
       continue;
     }
     if (!event.Action || !event.Package) { issues.push('Missing Action/Package in go test JSON'); continue; }
-    if (!packages.has(event.Package)) packages.set(event.Package, { name: event.Package, pass: 0, fail: 0, skip: 0, started: 0 });
+    if (!packages.has(event.Package)) packages.set(event.Package, { name: event.Package, pass: 0, fail: 0, skip: 0, started: 0, output: '' });
     const pkg = packages.get(event.Package);
     if (event.Action === 'build-fail' || event.FailedBuild || event.BuildImportPath) issues.push(`Build failed: ${event.Package}`);
     if (!event.Test) {
+      if (event.Action === 'output') pkg.output += event.Output ?? '';
       if (event.Action === 'start') pkg.started++;
       if (['pass', 'fail', 'skip'].includes(event.Action)) pkg[event.Action]++;
       continue;
@@ -227,13 +228,50 @@ export function parseTestEvents(text) {
   return { tests, packages, issues };
 }
 
+export function hasGoFunctionToken(source) {
+  for (let i = 0; i < source.length;) {
+    if (source.startsWith('//', i)) { const end = source.indexOf('\n', i + 2); i = end < 0 ? source.length : end; continue; }
+    if (source.startsWith('/*', i)) { const end = source.indexOf('*/', i + 2); if (end < 0) throw new Error('Unterminated Go comment'); i = end + 2; continue; }
+    if (['"', "'", '`'].includes(source[i])) {
+      const quote = source[i++];
+      let closed = false;
+      while (i < source.length) {
+        if (quote !== '`' && source[i] === '\\') { i += 2; continue; }
+        if (source[i++] === quote) { closed = true; break; }
+      }
+      if (!closed) throw new Error('Unterminated Go literal');
+      continue;
+    }
+    if (/[\p{L}\p{N}_]/u.test(source[i])) {
+      const start = i++;
+      while (i < source.length && /[\p{L}\p{N}_]/u.test(source[i])) i++;
+      if (source.slice(start, i) === 'func') return true;
+    } else i++;
+  }
+  return false;
+}
+
+function noFunctionSourceEvidence(record) {
+  const names = [...(record.GoFiles ?? []), ...(record.CgoFiles ?? [])];
+  if (!record.Dir || !names.length) return null;
+  const files = [];
+  for (const name of names) {
+    if (path.basename(name) !== name || !name.endsWith('.go')) throw new Error(`Invalid discovered Go source: ${name}`);
+    const source = fs.readFileSync(path.join(record.Dir, name), 'utf8');
+    if (hasGoFunctionToken(source)) return null;
+    files.push({ name, sha256: sha256(source) });
+  }
+  return { reason: 'Every go-list selected production Go/Cgo source has no func token outside comments/literals; Go coverage emits no function metadata.', files };
+}
+
 export function parseInventory(listResult, packageRecords) {
   const packages = new Map();
   const terminalPackages = new Set();
   for (const record of packageRecords) {
     if (!record.ImportPath || record.Error || record.Incomplete) throw new Error(`Package discovery failed: ${record.ImportPath ?? 'unknown'}`);
     if (packages.has(record.ImportPath)) throw new Error(`Duplicate package discovery: ${record.ImportPath}`);
-    packages.set(record.ImportPath, { name: record.ImportPath, tops: [], noTestFiles: !(record.TestGoFiles?.length || record.XTestGoFiles?.length) });
+    const noTestFiles = !(record.TestGoFiles?.length || record.XTestGoFiles?.length);
+    packages.set(record.ImportPath, { name: record.ImportPath, tops: [], noTestFiles, noFunctionSourceEvidence: noTestFiles ? noFunctionSourceEvidence(record) : null });
   }
   for (const line of listResult.split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -265,10 +303,11 @@ function permittedSkip(test, env, rules) {
     (rule.condition === 'always' || (rule.condition === 'postgres-off' && !env.LINGUAFLOW_TEST_POSTGRES_DSN) || (rule.condition === 'capacity-off' && env.LINGUAFLOW_CAPACITY_TESTS !== '1') || (rule.condition === 'storage-acceptance-off' && env.LINGUAFLOW_STORAGE_ACCEPTANCE !== '1') || (rule.condition === 'windows' && env.CI_GOOS === 'windows')));
 }
 
-export function validateShard(result, expectedPackages, expectedTops, { env = {}, rules = skipRules } = {}) {
+export function validateShard(result, expectedPackages, expectedTops, { env = {}, rules = skipRules, coverage = false } = {}) {
   const parsed = parseTestEvents(result.stdout);
   const issues = [...parsed.issues];
   const skips = [];
+  const packageCoverage = {};
   if (result.code !== 0) issues.push(`Task exited ${result.code}${result.signal ? ` (${result.signal})` : ''}`);
   if (result.code === 0 && result.taskDiagnostics) issues.push('Task reported failure with zero exit code');
   if (/\[build failed\]|^FAIL\s+.*build failed/m.test(result.stderr)) issues.push('Build failure diagnostic');
@@ -276,6 +315,22 @@ export function validateShard(result, expectedPackages, expectedTops, { env = {}
     const actual = parsed.packages.get(name);
     if (!actual) { issues.push(`Missing package result: ${name}`); continue; }
     if (actual.fail || (pkg.tops.length ? actual.pass !== 1 || actual.skip !== 0 : actual.pass + actual.skip !== 1)) issues.push(`Unsuccessful package result: ${name}`);
+    if (coverage) {
+      const standalone = [], summaries = [];
+      for (const line of actual.output.split(/\r?\n/)) {
+        if (!line.includes('coverage:')) continue;
+        const metric = line.match(/coverage:\s*(\[no statements\]|\d+(?:\.\d+)?% of statements)(?:\s|$)/)?.[1];
+        if (!metric) { issues.push(`Malformed native package coverage statement status: ${name}`); continue; }
+        if (/^coverage:/.test(line)) standalone.push(metric);
+        else if (line.startsWith('ok ') && line.split(/\s+/)[1] === name || line.trimStart().startsWith(`${name}\t`) || line.trimStart().startsWith(`${name} `)) summaries.push(metric);
+        else issues.push(`Unknown native package coverage statement output: ${name}`);
+      }
+      if (standalone.length > 1 || summaries.length > 1 || standalone.length && summaries.length && standalone[0] !== summaries[0]) issues.push(`Repeated/conflicting native package coverage statement status: ${name}`);
+      const metric = summaries[0] ?? standalone[0];
+      if (metric) packageCoverage[name] = metric === '[no statements]' ? 'no-statements' : 'statements';
+      else if (pkg.noTestFiles && pkg.noFunctionSourceEvidence && actual.output.includes('[no test files]')) packageCoverage[name] = 'no-statements';
+      else issues.push(`Missing native package coverage statement status or proven no-function source: ${name}`);
+    }
   }
   for (const name of parsed.packages.keys()) if (!expectedPackages.has(name)) issues.push(`Unexpected package: ${name}`);
   const actualTops = new Set([...parsed.tests.values()].filter(test => !test.test.includes('/')).map(test => key(test.package, test.test)));
@@ -291,10 +346,10 @@ export function validateShard(result, expectedPackages, expectedTops, { env = {}
   }
   const terminal = [...parsed.tests.values()].filter(test => test.terminal);
   if ([...expectedPackages.values()].some(pkg => pkg.tops.length) && !terminal.some(test => test.pass === 1)) issues.push('Zero passing terminal leaves');
-  return { issues, skips, tops: sorted(actualTops), leaves: terminal.map(test => ({ name: key(test.package, test.test), pass: test.pass, skip: test.skip, elapsedSeconds: test.elapsedSeconds })), packages: [...parsed.packages.values()] };
+  return { issues, skips, packageCoverage, tops: sorted(actualTops), leaves: terminal.map(test => ({ name: key(test.package, test.test), pass: test.pass, skip: test.skip, elapsedSeconds: test.elapsedSeconds })), packages: [...parsed.packages.values()] };
 }
 
-export function validateRound(shards, inventory, required = requiredTests) {
+export function validateRound(shards, inventory, required = requiredTests, plan) {
   const issues = [];
   const leaves = new Map();
   const tops = new Map();
@@ -309,11 +364,13 @@ export function validateRound(shards, inventory, required = requiredTests) {
     for (const pkg of shard.validation.packages ?? []) packages.set(pkg.name, (packages.get(pkg.name) ?? 0) + 1);
   }
   for (const pkg of inventory.values()) {
-    const expectedPackages = pkg.name === workerPackage && pkg.tops.includes(epubTop) ? 3 : 1;
+    const expectedPackages = plan ? plan.filter(shard => shard.packages.includes(pkg.name)).length : pkg.name === workerPackage && pkg.tops.includes(epubTop) ? 3 : 1;
+    if (!expectedPackages) continue;
     if (packages.get(pkg.name) !== expectedPackages) issues.push(`Package coverage mismatch: ${pkg.name} expected ${expectedPackages}`);
     for (const top of pkg.tops) {
       const id = key(pkg.name, top);
-      const expected = pkg.name === workerPackage && top === epubTop ? 2 : 1;
+      const expected = plan ? plan.filter(shard => shard.tops.includes(id)).length : pkg.name === workerPackage && top === epubTop ? 2 : 1;
+      if (!expected) continue;
       if (tops.get(id) !== expected) issues.push(`Top-level coverage mismatch: ${id} expected ${expected}`);
     }
   }
@@ -339,10 +396,11 @@ export function mergeAtomicProfiles(profiles, outputFile) {
   const packageStructures = new Map();
   for (const profile of profiles) {
     if (!Array.isArray(profile.packages) || !profile.packages.length || new Set(profile.packages).size !== profile.packages.length) throw new Error(`Missing/invalid profile package identity: ${profile.id}`);
+    for (const pkg of profile.packages) if (!['statements', 'no-statements'].includes(profile.packageCoverage?.[pkg])) throw new Error(`Missing native package coverage statement status: ${pkg}`);
     if (!fs.existsSync(profile.path)) throw new Error(`Missing profile: ${profile.id}`);
     const lines = fs.readFileSync(profile.path, 'utf8').trim().split(/\r?\n/);
     if (lines.shift() !== 'mode: atomic') throw new Error(`Wrong coverage mode: ${profile.id}`);
-    if (!lines.length) throw new Error(`Empty coverage profile: ${profile.id}`);
+    if (!lines.length && profile.packages.some(pkg => profile.packageCoverage[pkg] === 'statements')) throw new Error(`Empty coverage profile: ${profile.id}`);
     const blocks = new Map();
     const sourceFiles = new Map();
     const packageFiles = new Map(profile.packages.map(pkg => [pkg, []]));
@@ -360,8 +418,10 @@ export function mergeAtomicProfiles(profiles, outputFile) {
       if (!sourceFiles.has(file)) sourceFiles.set(file, []);
       sourceFiles.get(file).push(block);
       const owners = profile.packages.filter(pkg => file.startsWith(`${pkg}/`)).sort((a, b) => b.length - a.length);
-      const owner = owners[0] ?? (profile.packages.length === 1 ? profile.packages[0] : null);
+      const owner = owners[0];
       if (!owner) throw new Error(`Cannot attribute coverage source to declared packages: ${file}`);
+      if (!/^[^/\\]+\.go$/.test(file.slice(owner.length + 1))) throw new Error(`Invalid coverage source path: ${file}`);
+      if (profile.packageCoverage[owner] === 'no-statements' && BigInt(numStmt) !== 0n) throw new Error(`Coverage blocks contradict no-statements package status: ${owner}`);
       packageFiles.get(owner).push(block);
       const sum = (sums.get(block) ?? 0n) + count;
       if (sum > signedCountMax) throw new Error(`Coverage count overflow: ${block}`);
@@ -376,6 +436,7 @@ export function mergeAtomicProfiles(profiles, outputFile) {
       structures.set(file, structure);
     }
     for (const [pkg, entries] of packageFiles) {
+      if (!entries.length && profile.packageCoverage[pkg] !== 'no-statements') throw new Error(`Missing coverage blocks for package with statements: ${pkg}`);
       const structure = entries.sort().join('\n');
       if (packageStructures.has(pkg) && packageStructures.get(pkg) !== structure) throw new Error(`Incomplete/inconsistent package file+block set: ${pkg}`);
       packageStructures.set(pkg, structure);
@@ -406,23 +467,26 @@ export function resolveGoMaxProcs(value) {
 }
 
 export function planShards(mode, inventory, packageParallelism = defaultPackageParallelism, rounds = performancePolicy.defaultRounds, packageBatching) {
-  if (!['plain', 'race', 'race-atomic'].includes(mode)) throw new Error(`Unsupported CI mode: ${mode}`);
+  if (!['plain', 'race', 'coverage', 'race-representative', 'performance'].includes(mode)) throw new Error(`Unsupported CI role: ${mode}`);
   packageParallelism = resolvePackageParallelism(packageParallelism);
   const worker = inventory.get(workerPackage);
   if (!worker?.tops.includes(epubTop)) throw new Error('Worker EPUB test missing from inventory');
   const others = [...inventory.keys()].filter(name => name !== workerPackage);
   const shards = [];
   if (packageBatching && ![packageBatching.initialWidth, packageBatching.incrementWidth].every(value => Number.isSafeInteger(value) && value >= 1)) throw new Error('Package batch widths must be positive safe integers');
-  for (let offset = 0, batch = 0; offset < others.length; batch++) {
+  for (let offset = 0, batch = 0; mode !== 'performance' && offset < others.length; batch++) {
     const width = packageBatching ? batch === 0 ? packageBatching.initialWidth : packageBatching.incrementWidth : others.length;
     const packages = others.slice(offset, offset + width);
     shards.push({ id: packageBatching ? `packages-b${String(batch + 1).padStart(3, '0')}` : 'packages', round: 1, effectiveP: packageBatching ? Math.min(packageParallelism, packages.length) : packageParallelism, ...(packageBatching ? { bulkPackageParallelism: packages.length } : {}), packages, timeout: '20m', extra: [], tops: packages.flatMap(name => inventory.get(name).tops.map(top => key(name, top))) });
     offset += packages.length;
   }
-  shards.push({ id: 'worker-remainder', round: 1, effectiveP: 1, packages: [workerPackage], timeout: '20m', extra: ['-skip', `^${epubTop}$`], tops: worker.tops.filter(top => top !== epubTop).map(top => key(workerPackage, top)) });
+  if (mode !== 'performance') shards.push({ id: 'worker-remainder', round: 1, effectiveP: 1, packages: [workerPackage], timeout: '20m', extra: ['-skip', `^${epubTop}$`], tops: worker.tops.filter(top => top !== epubTop).map(top => key(workerPackage, top)) });
   rounds = performanceRounds(rounds);
-  for (let round = 1; round <= (mode === 'plain' ? 1 : rounds); round++) {
-    epubLeaves.forEach((leaf, i) => shards.push({ id: `${i === 0 ? 'dense' : 'synthetic'}-r${round}`, round, effectiveP: 1, packages: [workerPackage], timeout: '15m', extra: ['-run', `^${leaf.split('/')[0]}$/^${leaf.split('/')[1]}$`], tops: [key(workerPackage, epubTop)], requiredLeaf: key(workerPackage, leaf) }));
+  for (let round = 1; round <= (mode === 'performance' ? rounds : 1); round++) {
+    epubLeaves.forEach((leaf, i) => {
+      if (mode === 'race-representative' && i === 1) return;
+      shards.push({ id: `${i === 0 ? 'dense' : 'synthetic'}-r${round}`, round, effectiveP: 1, packages: [workerPackage], timeout: '15m', extra: ['-run', `^${leaf.split('/')[0]}$/^${leaf.split('/')[1]}$`], tops: [key(workerPackage, epubTop)], requiredLeaf: key(workerPackage, leaf) });
+    });
   }
   return shards;
 }
@@ -447,7 +511,23 @@ export async function sourceIdentity(root, outputDir, execute = runProcess) {
   return { head, sourceSha256: hash.digest('hex') };
 }
 
-export async function runCI({ mode, outputDir, packageParallelism = defaultPackageParallelism, packageParallelismFactor = 2, availableParallelism = os.availableParallelism, root = defaultRoot, env = process.env, execute = runProcess, identity = sourceIdentity, contract = requiredTests, rules = skipRules, taskBinary, resourceOptions = {} } = {}) {
+export function performanceMeasurement(stdout, leaf, shape) {
+  const test = parseTestEvents(stdout).tests.get(leaf);
+  const output = test?.output ?? '';
+  const lines = output.split(/\r?\n/).filter(line => line.includes('response_count=') || line.includes('response_inflight=') || line.includes('response_max_ns='));
+  if (lines.length !== 1) throw new Error(`Expected exactly one response measurement for ${leaf}`);
+  for (const field of ['response_count=', 'response_inflight=', 'response_max_ns=']) if (lines[0].split(field).length !== 2) throw new Error(`Repeated response measurement field for ${leaf}`);
+  const match = lines[0].match(/response_count=(\d+) response_inflight=(\d+) response_max_ns=(\d+)(?:\s|$)/);
+  if (!match) throw new Error(`Malformed response measurement for ${leaf}`);
+  const [count, inflight, maxNS] = match.slice(1).map(value => BigInt(value));
+  const expected = shape === 'dense' ? 1n : 27n;
+  if (count !== expected || inflight !== 0n || maxNS <= 0n || maxNS > signedCountMax) throw new Error(`Invalid response measurement for ${leaf}: count=${count}/${expected} inflight=${inflight} max_ns=${maxNS}`);
+  if (!Number.isFinite(test.elapsedSeconds) || test.elapsedSeconds <= 0 || test.elapsedSeconds > sceneSeconds('performance', shape)) throw new Error(sceneFailure('performance', shape));
+  if (maxNS > BigInt(performancePolicy.responseSeconds) * 1000000000n) throw new Error(`Response exceeds ${performancePolicy.responseSeconds}s ordinary uncovered engineering target: ${leaf}`);
+  return { leaf, testSeconds: test.elapsedSeconds, responseCount: Number(count), responseInFlight: Number(inflight), responseMaxNS: maxNS.toString() };
+}
+
+async function runRole({ mode, outputDir, packageParallelism = defaultPackageParallelism, packageParallelismFactor = 2, availableParallelism = os.availableParallelism, root = defaultRoot, env = process.env, execute = runProcess, identity = sourceIdentity, contract = requiredTests, rules = skipRules, taskBinary, resourceOptions = {} } = {}) {
   const backend = path.join(root, 'backend');
   outputDir = path.resolve(backend, outputDir ?? `.ci-test/${Date.now()}-${mode}`);
   if (outputDir === backend || !outputDir.startsWith(`${backend}${path.sep}`)) throw new Error('OUTPUT_DIR must be a new directory inside backend');
@@ -455,7 +535,7 @@ export async function runCI({ mode, outputDir, packageParallelism = defaultPacka
   fs.mkdirSync(path.dirname(outputDir), { recursive: true });
   fs.mkdirSync(outputDir);
   const summaryPath = path.join(outputDir, 'summary.json');
-  const summary = { status: 'running', mode, startedAt: new Date().toISOString(), outputDir, issues: [], shards: [], budgetCalibration: 'candidate workflow step=90m job=120m; calibration pending final same-source full-mode worst wall / 0.75 and actual Ubuntu whole-job wall', performanceTargets: performancePolicy, integrityScope: 'complete package/top inventory; exhaustive split EPUB leaves; additional named critical matrix; no claim of a pre-enumerated global dynamic-leaf inventory' };
+  const summary = { status: 'running', mode, startedAt: new Date().toISOString(), outputDir, issues: [], shards: [], budgetCalibration: 'Existing workflow step=90m/job=120m unchanged; hosted whole-job and median calibration deferred.', performanceTargets: performancePolicy, integrityScope: mode === 'performance' ? 'Only the original dense256/full5338 EPUB scenes are planned; this role makes no full functional-suite claim.' : 'Complete package/top inventory for this role; explicit required EPUB leaves and additional named critical matrix.' };
   writeJSON(summaryPath, summary);
   const requestedProcs = env.GOMAXPROCS;
   const suppliedGoFlags = (env.GOFLAGS ?? '').trim();
@@ -464,7 +544,9 @@ export async function runCI({ mode, outputDir, packageParallelism = defaultPacka
   const childGoFlags = /(?:^|\s)-p=1$/.test(suppliedGoFlags) ? suppliedGoFlags : `${suppliedGoFlags} -p=1`.trim();
   const runtimeEnv = { ...env, GOFLAGS: childGoFlags, GOTOOLCHAIN: 'local' };
   delete runtimeEnv.GOMAXPROCS;
-  if (mode !== 'plain') runtimeEnv.CGO_ENABLED = '1';
+  const race = mode === 'race' || mode === 'race-representative';
+  const covered = mode === 'coverage';
+  if (race) runtimeEnv.CGO_ENABLED = '1';
   let frozen;
   let scheduler;
   let cancelled = false;
@@ -474,14 +556,19 @@ export async function runCI({ mode, outputDir, packageParallelism = defaultPacka
   process.once('SIGINT', cancel);
   const task = async (name, cliArgs, outputFile, budget = {}) => execute(taskBinary, [name, ...(cliArgs ? [`CLI_ARGS=${cliArgs}`] : [])], { cwd: root, env: { ...runtimeEnv, ...(budget.gomaxprocs ? { GOMAXPROCS: String(budget.gomaxprocs) } : {}), ...(budget.persistenceReport ? { LINGUAFLOW_PERSISTENCE_REPORT: budget.persistenceReport } : {}) }, outputFile, signal: budget.signal ?? cancellation.signal, onSpawn: budget.onSpawn, taskName: name });
   try {
-    if (!['plain', 'race', 'race-atomic'].includes(mode)) throw new Error(`Unsupported CI mode: ${mode}`);
+    if (!['plain', 'race', 'coverage', 'race-representative', 'performance'].includes(mode)) throw new Error(`Unsupported CI mode: ${mode}`);
+    if (/(?:^|\s)-(?:race|cover\w*)(?:=|\s|$)/.test(suppliedGoFlags)) throw new Error('GOFLAGS must not inject race or coverage instrumentation; the execution role owns instrumentation');
+    contract = Object.fromEntries(Object.entries(contract).map(([pkg, names]) => [pkg, names.filter(name => mode === 'performance' ? pkg === workerPackage && epubLeaves.includes(name) : mode === 'race-representative' ? name !== epubLeaves[1] : true)]).filter(([, names]) => names.length));
+    if (mode === 'race-representative') contract[workerPackage] = [...new Set([...(contract[workerPackage] ?? []), representativeLeaf])];
+    if (mode === 'performance') contract = { [workerPackage]: [...epubLeaves] };
     const configuredProcs = resolveGoMaxProcs(requestedProcs);
     if (configuredProcs != null) runtimeEnv.GOMAXPROCS = String(configuredProcs);
     const requestedPackageParallelism = packageParallelism;
     let availableCPUCount = packageParallelism === 'auto' ? availableParallelism() : null;
     packageParallelism = resolvePackageParallelism(packageParallelism, () => availableCPUCount, packageParallelismFactor);
     const requestedRounds = performanceRounds(runtimeEnv.LINGUAFLOW_CI_PERFORMANCE_ROUNDS);
-    const rounds = mode === 'plain' ? 1 : requestedRounds;
+    const rounds = mode === 'performance' ? requestedRounds : 1;
+    summary.instrumentation = { race, coverage: covered ? 'atomic' : null };
     taskBinary ??= resolveTaskBinary(runtimeEnv);
     const resourcesFile = path.join(outputDir, 'resources.jsonl');
     scheduler = new ResourceScheduler({ env: runtimeEnv, signal: cancellation.signal, emit: event => fs.appendFileSync(resourcesFile, `${JSON.stringify(event)}\n`), ...resourceOptions });
@@ -503,14 +590,14 @@ export async function runCI({ mode, outputDir, packageParallelism = defaultPacka
     summary.environment.availableCPUCount = availableCPUCount;
     summary.environment.storageAcceptanceEnabled = runtimeEnv.LINGUAFLOW_STORAGE_ACCEPTANCE === '1';
     runtimeEnv.CI_GOOS = summary.environment.GOOS;
-    if (runtimeEnv.CI && !runtimeEnv.LINGUAFLOW_TEST_POSTGRES_DSN) throw new Error('CI requires the PostgreSQL test service DSN');
-    const raceFlags = mode === 'plain' ? '' : '-race';
+    if (mode !== 'performance' && runtimeEnv.CI && !runtimeEnv.LINGUAFLOW_TEST_POSTGRES_DSN) throw new Error('CI requires the PostgreSQL test service DSN');
+    const raceFlags = race ? '-race' : '';
     const maxGoProcs = configuredProcs;
     const inventoryBudget = await scheduler.bulkBudget(packageParallelism, maxGoProcs);
     const discovery = await scheduler.executeOne({ id: 'package-inventory' }, inventoryBudget, (_job, budget) => task('backend:test:ci:inventory', `${raceFlags} -p=${budget.effectiveP}`, path.join(outputDir, 'packages.out'), budget));
     if (discovery.code || discovery.taskDiagnostics) throw new Error('Package inventory failed');
     const listBudget = await scheduler.bulkBudget(packageParallelism, maxGoProcs);
-    const list = await scheduler.executeOne({ id: 'test-inventory' }, listBudget, (_job, budget) => task('backend:test', `-json -list . -p=${budget.effectiveP} -parallel=1 -count=1 -timeout=20m ${raceFlags} ${mode === 'race-atomic' ? '-covermode=atomic' : ''} ./...`, path.join(outputDir, 'test-inventory.out'), budget));
+    const list = await scheduler.executeOne({ id: 'test-inventory' }, listBudget, (_job, budget) => task('backend:test', `-json -list . -p=${budget.effectiveP} -parallel=1 -count=1 -timeout=20m ${raceFlags} ${covered ? '-covermode=atomic' : ''} ./...`, path.join(outputDir, 'test-inventory.out'), budget));
     if (list.code || list.taskDiagnostics) throw new Error('Top-level test inventory failed');
     const inventory = parseInventory(list.stdout, parseJSONObjects(discovery.stdout));
     for (const [pkg, tests] of Object.entries(contract)) for (const name of tests) if (!inventory.get(pkg)?.tops.includes(name.split('/')[0])) throw new Error(`Required matrix absent from inventory: ${key(pkg, name)}`);
@@ -538,22 +625,25 @@ export async function runCI({ mode, outputDir, packageParallelism = defaultPacka
       const directory = path.join(outputDir, `round-${shard.round}`, mode, shard.id);
       fs.mkdirSync(directory, { recursive: true });
       const profilePath = path.join(directory, 'coverage.out');
-      const cliArgs = ['-json', `-p=${shard.effectiveP}`, '-parallel=1', '-count=1', `-timeout=${shard.timeout}`, ...shard.extra.map(value => /^[^\s'"`$;&|<>]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`), ...(mode === 'race-atomic' ? ['-covermode=atomic', `-coverprofile="${profilePath.replaceAll('\\', '/')}"`] : []), ...shard.packages].join(' ');
+      const cliArgs = ['-json', `-p=${shard.effectiveP}`, '-parallel=1', '-count=1', `-timeout=${shard.timeout}`, ...shard.extra.map(value => /^[^\s'"`$;&|<>]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`), ...(covered ? ['-covermode=atomic', `-coverprofile="${profilePath.replaceAll('\\', '/')}"`] : []), ...shard.packages].join(' ');
       const started = performance.now();
       let result;
-      try { result = await task(mode === 'plain' ? 'backend:test' : 'backend:test:race', cliArgs, path.join(directory, 'test-results.out'), { ...budget, persistenceReport: runtimeEnv.LINGUAFLOW_PERSISTENCE_REPORT ? path.join(directory, 'persistence-report.jsonl') : undefined }); }
+      try { result = await task(race ? 'backend:test:race' : 'backend:test', cliArgs, path.join(directory, 'test-results.out'), { ...budget, persistenceReport: runtimeEnv.LINGUAFLOW_PERSISTENCE_REPORT ? path.join(directory, 'persistence-report.jsonl') : undefined }); }
       catch (error) {
         result = { code: 1, stdout: '', stderr: String(error), cleanup: error.cleanup };
         if (error.cleanup && !error.cleanup.confirmedGone) cancelled = true;
       }
       const expected = new Map(shard.packages.map(pkg => [pkg, inventory.get(pkg)]));
-      const validation = validateShard(result, expected, new Set(shard.tops), { env: runtimeEnv, rules });
+      const validation = validateShard(result, expected, new Set(shard.tops), { env: runtimeEnv, rules, coverage: covered });
       if (shard.requiredLeaf && !validation.leaves.some(leaf => leaf.name === shard.requiredLeaf && leaf.pass === 1 && !leaf.skip)) validation.issues.push(`Missing required EPUB terminal leaf: ${shard.requiredLeaf}`);
       if (shard.requiredLeaf && validation.leaves.some(leaf => leaf.name !== shard.requiredLeaf)) validation.issues.push('EPUB selector executed an unexpected terminal leaf');
-      const scene = validation.leaves.find(leaf => leaf.name === shard.requiredLeaf);
       const shape = shard.id.startsWith('synthetic-') ? 'synthetic' : 'dense';
-      if (shard.requiredLeaf && mode !== 'plain' && (!Number.isFinite(scene?.elapsedSeconds) || scene.elapsedSeconds > sceneSeconds(mode, shape))) validation.issues.push(sceneFailure(mode, shape));
-      const record = { ...shard, cliArgs, gomaxprocs: budget.gomaxprocs, resourceBudget: { memoryReservationBytes: budget.memoryReservationBytes, cpuPool: budget.pool }, wallSeconds: (performance.now() - started) / 1000, exitCode: result.code, taskDiagnostics: result.taskDiagnostics ?? '', cleanup: result.cleanup, profilePath: mode === 'race-atomic' ? profilePath : null, validation };
+      let measurement;
+      if (shard.requiredLeaf && mode === 'performance') {
+        try { measurement = performanceMeasurement(result.stdout, shard.requiredLeaf, shape); }
+        catch (error) { validation.issues.push(error.message); }
+      }
+      const record = { ...shard, cliArgs, instrumentation: summary.instrumentation, measurement, gomaxprocs: budget.gomaxprocs, resourceBudget: { memoryReservationBytes: budget.memoryReservationBytes, cpuPool: budget.pool }, wallSeconds: (performance.now() - started) / 1000, exitCode: result.code, taskDiagnostics: result.taskDiagnostics ?? '', cleanup: result.cleanup, profilePath: covered ? profilePath : null, validation };
       summary.shards.push(record);
       writeJSON(path.join(directory, 'result.json'), record);
       writeJSON(summaryPath, summary);
@@ -564,26 +654,29 @@ export async function runCI({ mode, outputDir, packageParallelism = defaultPacka
     const packageShards = plan.filter(shard => shard.id.startsWith('packages'));
     // A numeric override retains one package invocation with its own launch
     // budget; auto batches resolve their -p against remaining memory at launch.
-    for (let roundNumber = 1; roundNumber <= (mode === 'plain' ? 1 : rounds); roundNumber++) {
+    for (let roundNumber = 1; roundNumber <= rounds; roundNumber++) {
       if (roundNumber > 1 && summary.shards.filter(done => done.round === 1).some(done => done.validation.issues.length)) {
         summary.issues.push('Performance repeat round not executed because the first complete round failed'); break;
       }
       const heavy = plan.filter(shard => !shard.id.startsWith('packages') && shard.round === roundNumber).map(shard => ({ ...shard, trustKey: shard.id.replace(/-r\d+$/, '') }));
       const jobs = roundNumber === 1 ? [...packageShards, ...heavy] : heavy;
-      await scheduler.run(jobs, executeShard, { beforeLaunch: sameSource, maxGoProcs });
+      if (mode === 'performance') {
+        // Do not let the two performance fixtures contend with one another.
+        for (const job of jobs) await scheduler.run([job], executeShard, { beforeLaunch: sameSource, maxGoProcs });
+      } else await scheduler.run(jobs, executeShard, { beforeLaunch: sameSource, maxGoProcs });
     }
     summary.shards.sort((a, b) => plan.findIndex(shard => shard.id === a.id) - plan.findIndex(shard => shard.id === b.id));
     summary.finalIdentity = await sameSource();
-    const round = validateRound(summary.shards.filter(shard => shard.round === 1), inventory, contract);
+    const round = validateRound(summary.shards.filter(shard => shard.round === 1), inventory, contract, plan.filter(shard => shard.round === 1));
     summary.round = round;
-    summary.performanceMeasurements = summary.shards.filter(shard => shard.requiredLeaf).map(shard => ({ round: shard.round, leaf: shard.requiredLeaf, wallSeconds: shard.wallSeconds, testSeconds: shard.validation.leaves.find(leaf => leaf.name === shard.requiredLeaf)?.elapsedSeconds }));
-    summary.responseMarginEvidence = 'The CI runner preserves the production 120s response deadline; the 90s response target requires PF-04 per-response measurements.';
+    summary.performanceMeasurements = mode === 'performance' ? summary.shards.filter(shard => shard.requiredLeaf).map(shard => ({ round: shard.round, wallSeconds: shard.wallSeconds, ...shard.measurement })) : [];
+    summary.responseMarginEvidence = '450s scene and 90s response engineering gates apply only to the ordinary uncovered performance role; production 600s/120s budgets remain native.';
     summary.issues.push(...round.issues);
     for (const shard of summary.shards.filter(done => done.round > 1)) summary.issues.push(...shard.validation.issues.map(issue => `${shard.id}: ${issue}`));
     if (summary.shards.length !== plan.length) summary.issues.push('Planned execution not complete');
     await scheduler.close();
     summary.resources.schedulerClosed = true;
-    if (mode === 'race-atomic' && !summary.issues.length) summary.coverage = mergeAtomicProfiles(summary.shards.filter(shard => shard.round === 1).map(shard => ({ id: shard.id, path: shard.profilePath, packages: shard.packages })), path.join(outputDir, 'coverage.out'));
+    if (covered && !summary.issues.length) summary.coverage = mergeAtomicProfiles(summary.shards.filter(shard => shard.round === 1).map(shard => ({ id: shard.id, path: shard.profilePath, packages: shard.packages, packageCoverage: shard.validation.packageCoverage })), path.join(outputDir, 'coverage.out'));
     summary.finalIdentity = await sameSource();
     summary.status = summary.issues.length ? 'failed' : 'passed';
   } catch (error) {
@@ -601,6 +694,74 @@ export async function runCI({ mode, outputDir, packageParallelism = defaultPacka
     summary.wallSeconds = (Date.parse(summary.finishedAt) - Date.parse(summary.startedAt)) / 1000;
     writeJSON(summaryPath, summary);
     fs.writeFileSync(path.join(outputDir, 'summary.md'), `CI test mode: ${mode}\n\nResult: ${summary.status}\n\n${summary.issues.map(issue => `- ${issue}`).join('\n')}\n\nBudget calibration: ${summary.budgetCalibration}\n\nActual source/environment/commands, named skips and raw evidence: manifest.json, summary.json and round directories. Coverage is merged only after all required execution succeeds.\n`);
+    if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, fs.readFileSync(path.join(outputDir, 'summary.md')));
+  }
+  return summary;
+}
+
+export async function runCI(options = {}) {
+  if (options.mode !== 'race-atomic') return runRole(options);
+  const root = options.root ?? defaultRoot;
+  const backend = path.join(root, 'backend');
+  const outputDir = path.resolve(backend, options.outputDir ?? `.ci-test/${Date.now()}-race-atomic`);
+  if (outputDir === backend || !outputDir.startsWith(`${backend}${path.sep}`)) throw new Error('OUTPUT_DIR must be a new directory inside backend');
+  if (/["`$\r\n]/.test(outputDir)) throw new Error('OUTPUT_DIR contains unsupported shell substitution characters');
+  fs.mkdirSync(path.dirname(outputDir), { recursive: true });
+  fs.mkdirSync(outputDir);
+  const env = options.env ?? process.env;
+  const identity = options.identity ?? sourceIdentity;
+  const frozenIdentity = () => identity(root, outputDir, options.execute ?? runProcess);
+  const roles = [{ id: 'full-coverage', mode: 'coverage' }, { id: 'representative-race', mode: 'race-representative' }];
+  const summary = { status: 'running', mode: 'race-atomic', startedAt: new Date().toISOString(), outputDir, roles: roles.map(role => ({ ...role, status: 'not-scheduled' })), shards: [], issues: [], performanceTargets: performancePolicy, performanceMeasurements: [], integrityScope: 'Each role independently validates its complete planned package/top/required-leaf inventory; leaves are never pooled across roles.' };
+  const summaryPath = path.join(outputDir, 'summary.json');
+  writeJSON(summaryPath, summary);
+  let cancelled = false;
+  const cancel = () => { cancelled = true; };
+  process.once('SIGTERM', cancel);
+  process.once('SIGINT', cancel);
+  const sameSource = async () => {
+    if (cancelled) throw new Error('Composite execution cancelled; later roles were not launched');
+    const current = await frozenIdentity();
+    summary.finalIdentity = current;
+    if (current.head !== summary.identity.head || current.sourceSha256 !== summary.identity.sourceSha256) throw new Error('Source changed between or during required execution roles');
+    return current;
+  };
+  try {
+    summary.identity = await frozenIdentity();
+    for (const [index, role] of roles.entries()) {
+      await sameSource();
+      const result = await runRole({ ...options, root, mode: role.mode, outputDir: path.join(outputDir, 'roles', role.id), env: { ...env, GITHUB_STEP_SUMMARY: undefined }, identity: sameSource });
+      summary.roles[index] = { ...role, ...result, role: role.id, notScheduled: role.mode === 'race-representative' ? [{ package: workerPackage, leaf: epubLeaves[1], reason: 'Replaced only in this race role by representative1001; original5338 is mandatory in full-coverage and pure full-race acceptance.' }] : [] };
+      summary.shards.push(...result.shards.map(shard => ({ ...shard, id: `${role.id}/${shard.id}`, role: role.id })));
+      summary.environment ??= result.environment;
+      writeJSON(summaryPath, summary);
+      if (result.status !== 'passed') {
+        summary.issues.push(...result.issues.map(issue => `${role.id}: ${issue}`));
+        throw new Error(`Required role failed: ${role.id}; remaining roles were not scheduled`);
+      }
+      await sameSource();
+    }
+    if (summary.roles.some(role => role.status !== 'passed')) throw new Error('Required execution roles incomplete');
+    const coverageRole = summary.roles[0];
+    if (!coverageRole.coverage || coverageRole.instrumentation?.race || coverageRole.instrumentation?.coverage !== 'atomic') throw new Error('Complete ordinary atomic coverage role missing');
+    await sameSource();
+    fs.copyFileSync(path.join(coverageRole.outputDir, 'coverage.out'), path.join(outputDir, 'coverage.out'), fs.constants.COPYFILE_EXCL);
+    summary.coverage = { ...coverageRole.coverage, path: path.join(outputDir, 'coverage.out'), role: coverageRole.id, instrumentation: coverageRole.instrumentation };
+    await sameSource();
+    summary.status = 'passed';
+  } catch (error) {
+    summary.status = 'failed';
+    summary.issues.push(error.stack ?? String(error));
+    const coveragePath = path.join(outputDir, 'coverage.out');
+    if (fs.existsSync(coveragePath)) fs.unlinkSync(coveragePath);
+    delete summary.coverage;
+  } finally {
+    process.removeListener('SIGTERM', cancel);
+    process.removeListener('SIGINT', cancel);
+    summary.finishedAt = new Date().toISOString();
+    summary.wallSeconds = (Date.parse(summary.finishedAt) - Date.parse(summary.startedAt)) / 1000;
+    writeJSON(summaryPath, summary);
+    fs.writeFileSync(path.join(outputDir, 'summary.md'), `CI test mode: race-atomic (complete ordinary atomic coverage + separate representative race)\n\nResult: ${summary.status}\n\n${summary.roles.map(role => `- ${role.id}: ${role.status}`).join('\n')}\n\n${summary.issues.map(issue => `- ${issue}`).join('\n')}\n\nRoot coverage.out contains only complete ordinary coverage and is published only when both required same-source roles pass. Engineering timing gates run through MODE=performance.\n`);
     if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, fs.readFileSync(path.join(outputDir, 'summary.md')));
   }
   return summary;
