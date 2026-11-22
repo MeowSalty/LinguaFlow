@@ -606,17 +606,33 @@ func TestRubyPipelineSQLiteRetryPreservesVerifiedMappingsAndResetsBudgets(t *tes
 func TestRubyPipelineSQLitePartialMainSaveRecoverySkipsSavedSegments(t *testing.T) {
 	f := newRubyPipelineFixture(t, 2)
 	injected := errors.New("second candidate save failed")
-	_, _, err := f.execute(t, 0, nil, func(store *roundStore) pipeline.RoundStore {
+	gate := pipeline.NewPauseGate()
+	var alignmentTicket *pipeline.PreparationTicket
+	defer func() { alignmentTicket.Release() }()
+	// Keep the saved first member out of alignment until the second main
+	// promotion fails, so cancellation cannot race an admitted HTTP request.
+	_, _, err := f.executePrepared(t, 0, gate, func(store *roundStore) pipeline.RoundStore {
 		return &rubyPipelineFaultStore{roundStore: store, beforeSave: func(_ context.Context, c *pipeline.Candidate) error {
 			if c.Index == 1 && c.Version == 1 {
 				return permanentStoreError{injected}
 			}
 			return nil
 		}}
+	}, func(ctx context.Context, runtime *pipeline.ExecutionRuntime, store *roundStore) {
+		var err error
+		alignmentTicket, err = runtime.Preparation.Try(ctx, backend.RequestAdmissionIntent{ResourceID: store.scope.ResourceID, RoundIndex: 0, BackendID: f.snapshot.RubyRetry.Backend.ID, Stage: backend.RequestStageAlignment}, gate)
+		if err != nil {
+			t.Fatal("auxiliary preparation barrier:", err)
+		}
 	})
+	alignmentTicket.Release()
 	if !errors.Is(err, injected) {
 		t.Fatalf("expected durable handoff failure, got %v", err)
 	}
+	if main, align, _, _ := f.calls(); main != 1 || align != 0 {
+		t.Fatalf("partial main save crossed the alignment barrier: HTTP=%d/%d", main, align)
+	}
+	f.assertUsage(t, 1)
 	ctx := context.Background()
 	saved := f.client.WorkCandidate.Query().Where(workcandidate.HasWorkItemWith(workitem.JobRoundIDEQ(f.roundIDs[0]))).AllX(ctx)
 	if len(saved) != 1 {
