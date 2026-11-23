@@ -13,9 +13,9 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobround"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobroundsegment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 )
 
@@ -102,8 +102,8 @@ func TestReadStageCountsSealedMemberGrowth(t *testing.T) {
 				client.WorkCandidate.UpdateOne(candidate).SetState("completed").ExecX(ctx)
 			}
 			queries := driver.observations()
-			if len(queries) != 2*n {
-				t.Fatalf("hot scalar/candidate queries=%d want=%d", len(queries), 2*n)
+			if len(queries) != n {
+				t.Fatalf("combined stage queries=%d want=%d", len(queries), n)
 			}
 			for _, observation := range queries[len(queries)-2:] {
 				rows, err := db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+observation.query, observation.args...)
@@ -131,7 +131,8 @@ func TestReadStageCountsSealedMemberGrowth(t *testing.T) {
 					if !strings.Contains(observation.query, "CASE WHEN") || !strings.Contains(observation.query, "segment_completed") {
 						t.Fatalf("sealed observation did not select its authoritative scalar: %s", observation.query)
 					}
-				} else if !strings.Contains(joined, "workcandidate_state_id") || !strings.Contains(joined, "PRIMARY KEY") {
+				}
+				if !strings.Contains(joined, "workcandidate_state_id") || !strings.Contains(joined, "PRIMARY KEY") {
 					t.Fatalf("live candidate observation did not use state index/item primary key: %s", joined)
 				}
 				t.Logf("N=%d stage_plan=%s", n, joined)
@@ -216,20 +217,14 @@ func TestReadStageCountsUnknownACKAndRepeatedCommit(t *testing.T) {
 func TestStageObservationSQLDialects(t *testing.T) {
 	for _, driver := range []string{dialect.SQLite, dialect.Postgres} {
 		t.Run(driver, func(t *testing.T) {
-			confirmed := entsql.Dialect(driver).Select().From(entsql.Table(jobround.Table))
-			selectStageConfirmedWork(confirmed)
-			q, args := confirmed.Query()
-			if len(args) != 0 || !strings.Contains(q, "CASE WHEN") || strings.Contains(q, "?") {
-				t.Fatalf("confirmed query=%s args=%v", q, args)
+			observation := entsql.Dialect(driver).Select().From(entsql.Table(job.Table))
+			selectStageCounts([]int{17})(observation)
+			q, args := observation.Query()
+			if len(args) != 8 || !strings.Contains(q, "CASE WHEN") || !strings.Contains(q, "stage_candidates") || !strings.Contains(q, "stage_confirmed") || !strings.Contains(q, "retry_epoch") {
+				t.Fatalf("stage query=%s args=%v", q, args)
 			}
-			candidate := entsql.Dialect(driver).Select().From(entsql.Table(workcandidate.Table))
-			stageCandidateJob(17)(candidate)
-			cq, args := candidate.Query()
-			if len(args) != 1 || args[0] != 17 || !strings.Contains(cq, "EXISTS") {
-				t.Fatalf("candidate query=%s args=%v", cq, args)
-			}
-			if driver == dialect.Postgres && (strings.Contains(q, "`") || strings.Contains(cq, "`")) {
-				t.Fatalf("PostgreSQL query contains SQLite identifier quoting: confirmed=%s candidate=%s", q, cq)
+			if driver == dialect.Postgres && strings.Contains(q, "`") {
+				t.Fatalf("PostgreSQL query contains SQLite identifier quoting: %s", q)
 			}
 		})
 	}

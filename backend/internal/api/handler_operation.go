@@ -52,11 +52,21 @@ func (s *Server) handleListOperations(w http.ResponseWriter, r *http.Request, p 
 		return
 	}
 	response := OperationListResponse{Items: make([]OperationSummary, 0, len(page.Items))}
+	candidates := make([]service.HistoryDeleteCandidate, 0, len(page.Items))
+	for _, row := range page.Items {
+		if j := row.Job; j != nil {
+			candidates = append(candidates, service.HistoryDeleteCandidate{Kind: "translation", ID: j.ID, ProjectID: j.ProjectID, Status: j.Status})
+		} else if row.SyncTask != nil {
+			t := row.SyncTask
+			candidates = append(candidates, service.HistoryDeleteCandidate{Kind: "glossary_sync", ID: t.ID, ProjectID: t.ProjectID, Status: t.Status})
+		}
+	}
+	ctx := s.taskHistory.PrepareDeleteObservation(r.Context(), actor.User.ID, candidates)
 	for _, row := range page.Items {
 		var item OperationSummary
 		if row.Job != nil {
 			j := row.Job
-			err = item.FromTranslationOperation(TranslationOperation{TaskType: "translation", TaskId: strconv.Itoa(j.ID), ProjectId: j.ProjectID, ProjectName: row.ProjectName, Status: TranslationOperationStatus(j.Status), TriggerType: TranslationOperationTriggerType(j.TriggerType), CreatedAt: timeutil.Normalize(j.CreatedAt), UpdatedAt: timeutil.Normalize(j.UpdatedAt), StartedAt: timeutil.NormalizePtr(j.StartedAt), FinishedAt: timeutil.NormalizePtr(j.FinishedAt), CanDelete: s.canDeleteHistory(r.Context(), actor.User.ID, "translation", j.ID, j.ProjectID, j.Status), SupportedActions: []TranslationOperationSupportedActions{"view", "pause", "resume", "cancel", "retry", "delete"}, Progress: JobSummaryProgress{TotalResources: j.ResourceCount, CompletedResources: j.CompletedResources, FailedResources: j.FailedResources, ProgressTotal: j.ProgressTotal, ProgressCompleted: j.ProgressCompleted}})
+			err = item.FromTranslationOperation(TranslationOperation{TaskType: "translation", TaskId: strconv.Itoa(j.ID), ProjectId: j.ProjectID, ProjectName: row.ProjectName, Status: TranslationOperationStatus(j.Status), TriggerType: TranslationOperationTriggerType(j.TriggerType), CreatedAt: timeutil.Normalize(j.CreatedAt), UpdatedAt: timeutil.Normalize(j.UpdatedAt), StartedAt: timeutil.NormalizePtr(j.StartedAt), FinishedAt: timeutil.NormalizePtr(j.FinishedAt), CanDelete: s.canDeleteHistory(ctx, actor.User.ID, "translation", j.ID, j.ProjectID, j.Status), SupportedActions: []TranslationOperationSupportedActions{"view", "pause", "resume", "cancel", "retry", "delete"}, Progress: JobSummaryProgress{TotalResources: j.ResourceCount, CompletedResources: j.CompletedResources, FailedResources: j.FailedResources, ProgressTotal: j.ProgressTotal, ProgressCompleted: j.ProgressCompleted}})
 		} else if row.StorageTask != nil {
 			t := row.StorageTask
 			err = item.FromStorageOperation(StorageOperation{
@@ -80,7 +90,7 @@ func (s *Server) handleListOperations(w http.ResponseWriter, r *http.Request, p 
 			})
 		} else {
 			t := row.SyncTask
-			sync := GlossarySyncOperation{TaskType: "glossary_sync", TaskId: strconv.Itoa(t.ID), ProjectId: t.ProjectID, ProjectName: row.ProjectName, Status: GlossarySyncOperationStatus(t.Status), CreatedAt: timeutil.Normalize(t.CreatedAt), UpdatedAt: timeutil.Normalize(t.UpdatedAt), StartedAt: timeutil.NormalizePtr(t.StartedAt), FinishedAt: timeutil.NormalizePtr(t.FinishedAt), CanDelete: s.canDeleteHistory(r.Context(), actor.User.ID, "glossary_sync", t.ID, t.ProjectID, t.Status), SupportedActions: []GlossarySyncOperationSupportedActions{"view", "cancel", "delete"}}
+			sync := GlossarySyncOperation{TaskType: "glossary_sync", TaskId: strconv.Itoa(t.ID), ProjectId: t.ProjectID, ProjectName: row.ProjectName, Status: GlossarySyncOperationStatus(t.Status), CreatedAt: timeutil.Normalize(t.CreatedAt), UpdatedAt: timeutil.Normalize(t.UpdatedAt), StartedAt: timeutil.NormalizePtr(t.StartedAt), FinishedAt: timeutil.NormalizePtr(t.FinishedAt), CanDelete: s.canDeleteHistory(ctx, actor.User.ID, "glossary_sync", t.ID, t.ProjectID, t.Status), SupportedActions: []GlossarySyncOperationSupportedActions{"view", "cancel", "delete"}}
 			sync.Progress.ProcessedSegments = t.ProcessedSegments
 			sync.Progress.TotalSegments = t.TotalSegments
 			err = item.FromGlossarySyncOperation(sync)

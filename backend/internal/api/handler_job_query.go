@@ -57,13 +57,18 @@ func (s *Server) handleListAccessibleJobs(w http.ResponseWriter, r *http.Request
 		return
 	}
 	response := JobSummaryListResponse{Items: make([]JobSummary, 0, len(page.Items))}
+	candidates := make([]service.HistoryDeleteCandidate, 0, len(page.Items))
+	for _, row := range page.Items {
+		candidates = append(candidates, service.HistoryDeleteCandidate{Kind: "translation", ID: row.ID, ProjectID: row.ProjectID, Status: row.Status})
+	}
+	ctx := s.taskHistory.PrepareDeleteObservation(r.Context(), actor.User.ID, candidates)
 	for _, row := range page.Items {
 		item, err := toJobSummary(row)
 		if err != nil {
 			s.writeServiceError(w, r, err)
 			return
 		}
-		item.CanDelete = s.canDeleteHistory(r.Context(), actor.User.ID, "translation", row.ID, row.ProjectID, row.Status)
+		item.CanDelete = s.canDeleteHistory(ctx, actor.User.ID, "translation", row.ID, row.ProjectID, row.Status)
 		response.Items = append(response.Items, item)
 	}
 	if page.NextCursor != "" {

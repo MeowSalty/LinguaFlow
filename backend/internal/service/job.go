@@ -2130,18 +2130,23 @@ func (s *JobService) ListJobs(ctx context.Context, actorUserID, projectID int, o
 		q = q.Where(job.TriggerTypeEQ(triggerType))
 	}
 	return q.
-		WithCreatedBy().
+		Select(job.FieldID, job.FieldProjectID, job.FieldStatus, job.FieldTriggerType, job.FieldExecutionPlanID, job.FieldErrorMessage, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldProgressTotal, job.FieldProgressCompleted, job.FieldStartedAt, job.FieldFinishedAt, job.FieldCreatedAt, job.FieldUpdatedAt).
+		WithCreatedBy(func(q *ent.UserQuery) { q.Select(user.FieldID, user.FieldUsername) }).
 		Order(ent.Desc(job.FieldID)).
 		Limit(opts.Limit).
 		All(ctx)
 }
 
 func (s *JobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
+	if err := s.CheckJobAccess(ctx, actorUserID, jobID); err != nil {
+		return nil, err
+	}
 	row, err := s.client.Job.Query().
 		Where(job.IDEQ(jobID)).
-		WithProject().
-		WithCreatedBy().
+		WithProject(func(q *ent.ProjectQuery) { q.Select(project.FieldID) }).
+		WithCreatedBy(func(q *ent.UserQuery) { q.Select(user.FieldID, user.FieldUsername) }).
 		WithJobResources(func(q *ent.JobResourceQuery) {
+			q.Select(jobresource.FieldID, jobresource.FieldStatus, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldSkippedSegments, jobresource.FieldWorkWeight, jobresource.FieldOutputPath, jobresource.FieldErrorMessage, jobresource.FieldWarningMessage, jobresource.FieldStartedAt, jobresource.FieldCreatedAt, jobresource.FieldUpdatedAt)
 			q.WithResource().WithRounds(func(rq *ent.JobRoundQuery) {
 				// 详情视图不消费断点数据（jobRoundResponse 不含该字段），
 				// 投影只取响应所需列——断点存于 job_round_segments
@@ -2167,11 +2172,9 @@ func (s *JobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.J
 		}
 		return nil, err
 	}
-	projectRow, err := row.Edges.ProjectOrErr()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectRow.ID, false); err != nil {
+	// Keep a fresh authorization check after detail hydration as well as the
+	// early check that protects expensive payload reads.
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, row.ProjectID, false); err != nil {
 		return nil, err
 	}
 	return row, nil
@@ -2236,7 +2239,7 @@ func (s *JobService) GetExecutionSnapshot(ctx context.Context, jobID int) (*JobE
 func (s *JobService) CheckJobAccess(ctx context.Context, userID, jobID int) error {
 	job, err := s.client.Job.Query().
 		Where(job.IDEQ(jobID)).
-		WithProject().
+		Select(job.FieldID, job.FieldProjectID).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -2245,11 +2248,7 @@ func (s *JobService) CheckJobAccess(ctx context.Context, userID, jobID int) erro
 		return fmt.Errorf("load job: %w", err)
 	}
 	// 通过项目权限校验：用户必须是任务所属项目的访问者
-	projectRow, err := job.Edges.ProjectOrErr()
-	if err != nil {
-		return fmt.Errorf("load project: %w", err)
-	}
-	if _, err := s.projects.requireProjectAccess(ctx, userID, projectRow.ID, false); err != nil {
+	if _, err := s.projects.requireProjectAccess(ctx, userID, job.ProjectID, false); err != nil {
 		return fmt.Errorf("access denied: %w", err)
 	}
 	return nil
