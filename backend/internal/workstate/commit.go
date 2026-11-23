@@ -75,7 +75,7 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		}
 		terminal := func(outcome Outcome) error {
 			result.Outcome = outcome
-			if err := tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(false).SetState(string(outcome)).Exec(ctx); err != nil {
+			if err := tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(false).SetState(string(outcome)).Select("id").Exec(ctx); err != nil {
 				return err
 			}
 			if in.CandidateID != "" {
@@ -179,13 +179,13 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 					if in.ClearReview {
 						u.ClearReviewComment()
 					}
-					updated, err := u.Save(ctx)
+					updated, err := u.Select(segment.FieldID, segment.FieldContentVersion).Save(ctx)
 					if err != nil {
 						return err
 					}
 					result.ContentVersion = updated.ContentVersion
 				}
-				if err := tx.Resource.UpdateOneID(in.Scope.ResourceID).AddTranslationGeneration(1).Exec(ctx); err != nil {
+				if err := tx.Resource.UpdateOneID(in.Scope.ResourceID).AddTranslationGeneration(1).Select("id").Exec(ctx); err != nil {
 					return err
 				}
 			} else {
@@ -198,7 +198,7 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		if _, err := confirm(ctx, tx, in.Scope.JobID, in.Scope.RoundID, []Confirmation{{SegmentID: in.SegmentID, CommitID: in.CommitID, CandidateID: in.CandidateID, Outcome: outcome}}, true); err != nil {
 			return err
 		}
-		if err := tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(false).SetState("resolved").ClearNextAttemptAt().Exec(ctx); err != nil {
+		if err := tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(false).SetState("resolved").ClearNextAttemptAt().Select("id").Exec(ctx); err != nil {
 			return err
 		}
 		if in.CandidateID != "" {

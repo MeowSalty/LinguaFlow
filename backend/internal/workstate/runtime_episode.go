@@ -43,7 +43,7 @@ func saveRuntimeState(ctx context.Context, tx *ent.Client, jobID int, s backend.
 	if err != nil {
 		return err
 	}
-	return tx.Job.UpdateOneID(jobID).SetPipelineRuntimeState(data).Exec(ctx)
+	return tx.Job.UpdateOneID(jobID).SetPipelineRuntimeState(data).Select("id").Exec(ctx)
 }
 func (s *Store) LoadRuntimeState(ctx context.Context, jobID int) (backend.PipelineRuntimeState, error) {
 	j, err := s.client.Job.Query().Where(job.IDEQ(jobID), func(q *sql.Selector) {
@@ -284,12 +284,15 @@ func (s *Store) CleanupCancelledPayloads(ctx context.Context, jobID int) error {
 			return err
 		}
 		state.ProgressID, state.ResponseID, state.BusinessOwner = "", "", ""
-		ids, err := tx.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID)).IDs(ctx)
-		if err != nil {
-			return err
-		}
-		for start := 0; start < len(ids); start += 16 {
-			page := ids[start:min(start+16, len(ids))]
+		for after := 0; ; {
+			page, err := tx.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.IDGT(after)).Order(ent.Asc(workrequest.FieldID)).Limit(16).IDs(ctx)
+			if err != nil {
+				return err
+			}
+			if len(page) == 0 {
+				break
+			}
+			after = page[len(page)-1]
 			if _, err = tx.WorkRequestInputMember.Update().Where(workrequestinputmember.RequestIDIn(page...)).ClearPayload().SetPayloadBytes(0).Save(ctx); err != nil {
 				return err
 			}

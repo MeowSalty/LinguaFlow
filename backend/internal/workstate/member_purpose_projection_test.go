@@ -134,8 +134,9 @@ func TestMemberPurposeProjectionReadsRealSQLFacts(t *testing.T) {
 			want := [][]string{access}
 			switch kind {
 			case "promotion":
-				// UpdateOne.Exec retains its generated full entity read after UPDATE.
-				want = [][]string{identity, state, workrequest.Columns}
+				// Exec keeps the generated read and hook/NotFound path, but only
+				// returns the ID needed by hooks instead of discarded payloads.
+				want = [][]string{identity, state, {workrequest.FieldID}}
 			case "ack":
 				want = [][]string{state}
 			}
@@ -143,14 +144,7 @@ func TestMemberPurposeProjectionReadsRealSQLFacts(t *testing.T) {
 				t.Fatalf("physical reads or header rows changed: kind=%s snapshot=%+v observed=%d", kind, actual, headerRows)
 			}
 			for i, fields := range want {
-				if kind == "promotion" && i == 2 {
-					_, columns := scopeSelectedColumns(t, calls[i].query)
-					if !reflect.DeepEqual(columns, workrequest.Columns) || calls[i].rows != 1 {
-						t.Fatal("generated post-UPDATE full entity read changed", calls[i])
-					}
-				} else {
-					purposeSQLFields(t, calls[i], fields, full.calls[0])
-				}
+				purposeSQLFields(t, calls[i], fields, full.calls[0])
 			}
 			if kind == "promotion" {
 				jobCalls := purposeSQLCalls(t, actual, "jobs")
@@ -292,11 +286,7 @@ func TestRuntimePurposeProjectionPreservesLockedBindings(t *testing.T) {
 			}
 			purposeSQLFields(t, calls[0], []string{"id", "pipeline_runtime_state"}, full.calls[0])
 			if reads == 2 {
-				_, fields := scopeSelectedColumns(t, calls[1].query)
-				_, fullFields := scopeSelectedColumns(t, full.calls[0].query)
-				if !reflect.DeepEqual(fields, fullFields) || calls[1].rows != 1 || calls[1].valueBytes < 4096 {
-					t.Fatal("generated post-UPDATE job read or its returned definition changed", calls[1])
-				}
+				purposeSQLFields(t, calls[1], []string{"id"}, full.calls[0])
 			}
 			after := client.Job.GetX(ctx, scope.JobID)
 			loaded, e := decodeRuntimeState(after.PipelineRuntimeState)

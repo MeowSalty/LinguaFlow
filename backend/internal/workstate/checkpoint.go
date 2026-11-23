@@ -162,7 +162,45 @@ func confirm(ctx context.Context, tx *ent.Client, jobID, roundID int, facts []Co
 	if row.JobID != jobID {
 		return 0, ErrManifest
 	}
-	before := EffectiveProgress(row.Status, int64(row.SegmentTotal), int64(row.SegmentCompleted))
+	added, err := confirmRoundFacts(ctx, tx, row, facts, enrich)
+	if err != nil {
+		return 0, err
+	}
+	return added, finishConfirmedRound(ctx, tx, row, added)
+}
+
+// ConfirmIDStream retains one round snapshot and at most 16 incoming facts.
+// It shares the original Job transaction and publishes derived progress once.
+// Unknown acknowledgements still require the caller's checkpoint proof.
+func ConfirmIDStream(ctx context.Context, tx *ent.Client, jobID, roundID int, walk func(func([]int) error) error) (int, error) {
+	row, err := loadCheckpointRound(ctx, tx, roundID)
+	if err != nil {
+		return 0, err
+	}
+	if row.JobID != jobID {
+		return 0, ErrManifest
+	}
+	added := 0
+	err = walk(func(ids []int) error {
+		if len(ids) > 16 {
+			return ErrManifest
+		}
+		var facts [16]Confirmation
+		for i, id := range ids {
+			facts[i] = Confirmation{SegmentID: id}
+		}
+		n, err := confirmRoundFacts(ctx, tx, row, facts[:len(ids)], false)
+		added += n
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return added, finishConfirmedRound(ctx, tx, row, added)
+}
+
+func confirmRoundFacts(ctx context.Context, tx *ent.Client, row *ent.JobRound, facts []Confirmation, enrich bool) (int, error) {
+	jobID, roundID := row.JobID, row.ID
 	byID := make(map[int]Confirmation, len(facts))
 	for _, fact := range facts {
 		if fact.SegmentID < 1 {
@@ -274,30 +312,36 @@ func confirm(ctx context.Context, tx *ent.Client, jobID, roundID int, facts []Co
 			return 0, err
 		}
 	}
-	added := len(newIDs)
+	return len(newIDs), nil
+}
+
+func finishConfirmedRound(ctx context.Context, tx *ent.Client, row *ent.JobRound, added int) error {
+	jobID, roundID := row.JobID, row.ID
+	before := EffectiveProgress(row.Status, int64(row.SegmentTotal), int64(row.SegmentCompleted))
 	// Counting the round's indexed relation also repairs pre-upgrade caches. No
 	// per-segment scan over the job or a reporter's stale absolute value is used.
 	count := row.SegmentCompleted + added
 	if !row.ManifestSealed {
+		var err error
 		count, err = tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(roundID)).Count(ctx)
 		if err != nil {
-			return 0, err
+			return err
 		}
 	}
 	if n, err := tx.JobRound.Update().Where(jobround.IDEQ(roundID), jobround.JobIDEQ(jobID), jobround.SegmentCompletedEQ(row.SegmentCompleted)).SetSegmentCompleted(count).Save(ctx); err != nil {
-		return 0, err
+		return err
 	} else if n != 1 {
-		return 0, ErrManifest
+		return ErrManifest
 	}
 	after := EffectiveProgress(row.Status, int64(row.SegmentTotal), int64(count))
 	if delta := after - before; delta != 0 {
 		if n, err := tx.Job.Update().Where(job.IDEQ(jobID)).AddProgressCompleted(delta).Save(ctx); err != nil {
-			return 0, err
+			return err
 		} else if n != 1 {
-			return 0, ErrStopped
+			return ErrStopped
 		}
 	}
-	return added, nil
+	return nil
 }
 
 // Empty metadata is a completion notification, not a conflicting identity.
@@ -329,12 +373,12 @@ func SetRoundStatus(ctx context.Context, tx *ent.Client, roundID int, allowed []
 	} else {
 		u.SetFinishedAt(timeutil.NowUTC())
 	}
-	if err := u.Exec(ctx); err != nil {
+	if err := u.Select(jobround.FieldID).Exec(ctx); err != nil {
 		return err
 	}
 	delta := EffectiveProgress(status, int64(row.SegmentTotal), int64(row.SegmentCompleted)) - before
 	if delta != 0 {
-		return tx.Job.UpdateOneID(row.JobID).AddProgressCompleted(delta).Exec(ctx)
+		return tx.Job.UpdateOneID(row.JobID).AddProgressCompleted(delta).Select("id").Exec(ctx)
 	}
 	return nil
 }
@@ -352,7 +396,7 @@ func InitializeTotal(ctx context.Context, tx *ent.Client, jobID, roundID, total 
 	if row.ManifestSealed || row.SegmentTotal > 0 {
 		return nil
 	}
-	if err := tx.JobRound.UpdateOneID(roundID).SetSegmentTotal(total).SetStartedAt(timeutil.NowUTC()).Exec(ctx); err != nil {
+	if err := tx.JobRound.UpdateOneID(roundID).SetSegmentTotal(total).SetStartedAt(timeutil.NowUTC()).Select("id").Exec(ctx); err != nil {
 		return err
 	}
 	return ReconcileJob(ctx, tx, jobID)

@@ -305,7 +305,7 @@ func (r *DBReporter) StageStart(name string, total int) {
 				return err
 			}
 			if round == nil {
-				return tx.Job.UpdateOneID(r.jobID).AddProgressTotal(int64(total)).Exec(ctx)
+				return tx.Job.UpdateOneID(r.jobID).AddProgressTotal(int64(total)).Select("id").Exec(ctx)
 			}
 			if err := workstate.InitializeTotal(ctx, tx, r.jobID, round.rowID, total); err != nil {
 				return err
@@ -789,22 +789,20 @@ func (r *DBReporter) writeFlush(ctx context.Context, writes []checkpointWrite, j
 			return err
 		}
 		for _, w := range writes {
-			for start := 0; start < len(w.ids) || start == 0; start += 16 {
-				var facts [16]workstate.Confirmation
-				end := min(start+len(facts), len(w.ids))
-				for i, id := range w.ids[start:end] {
-					facts[i] = workstate.Confirmation{SegmentID: id}
+			_, err := workstate.ConfirmIDStream(ctx, tx, r.jobID, w.round.rowID, func(visit func([]int) error) error {
+				for start := 0; start < len(w.ids); start += 16 {
+					if err := visit(w.ids[start:min(start+16, len(w.ids))]); err != nil {
+						return err
+					}
 				}
-				if _, err := workstate.Confirm(ctx, tx, r.jobID, w.round.rowID, facts[:end-start]); err != nil {
-					return err
-				}
-				if end == len(w.ids) {
-					break
-				}
+				return nil
+			})
+			if err != nil {
+				return err
 			}
 		}
 		if jobDelta > 0 {
-			return tx.Job.UpdateOneID(r.jobID).AddProgressCompleted(int64(jobDelta)).Exec(ctx)
+			return tx.Job.UpdateOneID(r.jobID).AddProgressCompleted(int64(jobDelta)).Select("id").Exec(ctx)
 		}
 		return nil
 	})

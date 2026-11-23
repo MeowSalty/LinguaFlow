@@ -12,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequestinputmember"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workresponsemember"
@@ -317,16 +318,37 @@ func (s *Store) captureResponse(ctx context.Context, in CapturedResponse) error 
 			if err != nil {
 				return err
 			}
+			if len(rows) != min(start+16, r.PromotionCount)-start {
+				return ErrManifest
+			}
+			ids := make([]int, 0, len(rows))
 			for _, m := range rows {
-				w, err := member(ctx, tx, in.Scope, m.SegmentID)
-				if err != nil {
-					return err
+				ids = append(ids, m.SegmentID)
+			}
+			members, err := tx.WorkItem.Query().Where(workitem.JobRoundIDEQ(in.Scope.RoundID), workitem.SegmentIDIn(ids...), workitem.JobIDEQ(in.Scope.JobID), workitem.ResourceIDEQ(in.Scope.ResourceID)).Select(workitem.FieldID, workitem.FieldState, workitem.FieldRetryEpoch, workitem.FieldCandidateID, workitem.FieldResponseRequestID).All(ctx)
+			if err != nil {
+				return err
+			}
+			if len(members) != len(ids) {
+				return ErrManifest
+			}
+			groups := make(map[string][]int)
+			for _, w := range members {
+				if w.RetryEpoch != in.Scope.RetryEpoch {
+					return ErrStopped
 				}
 				if w.State == "resolved" || w.CandidateID != "" || w.ResponseRequestID != "" && w.ResponseRequestID != in.RequestID {
 					return ErrStale
 				}
-				if err := tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(true).SetState("response_pending").SetResponseRequestID(in.RequestID).Exec(ctx); err != nil {
+				groups[w.State] = append(groups[w.State], w.ID)
+			}
+			for state, ids := range groups {
+				n, err := tx.WorkItem.Update().Where(workitem.IDIn(ids...), workitem.JobIDEQ(in.Scope.JobID), workitem.ResourceIDEQ(in.Scope.ResourceID), workitem.JobRoundIDEQ(in.Scope.RoundID), workitem.RetryEpochEQ(in.Scope.RetryEpoch), workitem.StateEQ(state), workitem.CandidateIDEQ(""), workitem.Or(workitem.ResponseRequestIDEQ(""), workitem.ResponseRequestIDEQ(in.RequestID))).SetMemberOwned(true).SetState("response_pending").SetResponseRequestID(in.RequestID).Save(ctx)
+				if err != nil {
 					return err
+				}
+				if n != len(ids) {
+					return ErrStale
 				}
 			}
 		}
@@ -339,7 +361,7 @@ func (s *Store) captureResponse(ctx context.Context, in CapturedResponse) error 
 		if _, err := recordRequestAccountingTx(ctx, tx, accounting, result); err != nil {
 			return err
 		}
-		return tx.WorkRequest.UpdateOneID(r.ID).SetCapturePayload(in.Payload).SetCaptureBytes(int64(len(in.Payload))).SetResponseDigest(digest).SetResponseTruncated(in.Truncated).SetPromotionState("capture_pending").SetHandoffAt(time.Now().UTC()).AddMemberStorageBytes(int64(len(in.Payload))).Exec(ctx)
+		return tx.WorkRequest.UpdateOneID(r.ID).SetCapturePayload(in.Payload).SetCaptureBytes(int64(len(in.Payload))).SetResponseDigest(digest).SetResponseTruncated(in.Truncated).SetPromotionState("capture_pending").SetHandoffAt(time.Now().UTC()).AddMemberStorageBytes(int64(len(in.Payload))).Select("id").Exec(ctx)
 	})
 	return s.finishUnknown(ctx, identity.JobID, err, check)
 }
@@ -449,16 +471,34 @@ func (s *Store) publishOutputs(ctx context.Context, in OutputPublication) error 
 			return ErrManifest
 		}
 		var added, storage int64
+		builders := make([]*ent.WorkResponseMemberCreate, 0, len(in.Members))
+		var pageBytes int64
+		flush := func() error {
+			if len(builders) == 0 {
+				return nil
+			}
+			err := tx.WorkResponseMember.CreateBulk(builders...).Exec(ctx)
+			builders = builders[:0]
+			pageBytes = 0
+			return err
+		}
 		for i, m := range in.Members {
 			if m.Key.Ordinal != r.ArchiveCursor+i || m.Key.RequestID != r.Identity || m.Key.CaptureEpoch != r.RetryEpoch || int64(len(m.Payload)) != m.Bytes || memberPayloadDigest(ctx, m.Payload) != m.Digest {
 				return ErrManifest
 			}
-			if _, err := tx.WorkResponseMember.Create().SetRequestID(r.ID).SetOrdinal(m.Key.Ordinal).SetPayload(m.Payload).SetPayloadBytes(m.Bytes).SetPayloadDigest(m.Digest).Save(ctx); err != nil {
-				return err
+			if len(builders) > 0 && pageBytes+m.Bytes > bulkJSONBytes {
+				if err := flush(); err != nil {
+					return err
+				}
 			}
+			builders = append(builders, tx.WorkResponseMember.Create().SetRequestID(r.ID).SetOrdinal(m.Key.Ordinal).SetPayload(m.Payload).SetPayloadBytes(m.Bytes).SetPayloadDigest(m.Digest))
+			pageBytes += m.Bytes
 			added += m.Bytes
 			backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "output_write", Bytes: m.Bytes, Rows: 1})
 			storage += m.Bytes + int64(len(m.Digest))
+		}
+		if err := flush(); err != nil {
+			return err
 		}
 		u := tx.WorkRequest.UpdateOneID(r.ID).SetArchiveCursor(in.Next).SetArchiveDigest(in.Digest).AddOutputMemberBytes(added).AddModelOutputBytes(added).AddMemberStorageBytes(storage)
 		if in.Complete {
@@ -468,7 +508,7 @@ func (s *Store) publishOutputs(ctx context.Context, in OutputPublication) error 
 			u.SetPromotionState("outputs_ready").SetPublicKind(workrequest.PublicKindEntries).ClearCapturePayload().SetCaptureBytes(0).SetResponseGlossary(in.Glossary).SetPublicDigest(memberPayloadDigest(ctx, in.Glossary)).AddPublicBytes(int64(len(in.Glossary))).AddMemberStorageBytes(int64(len(in.Glossary)) - r.CaptureBytes)
 		}
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "checkpoint_write", Rows: 1})
-		return u.Exec(ctx)
+		return u.Select(workrequest.FieldID).Exec(ctx)
 	})
 	return s.finishUnknown(ctx, identity.JobID, err, check)
 }
@@ -554,7 +594,7 @@ func (s *Store) PublishMemberBusiness(ctx context.Context, id string, receipt []
 		} else {
 			update.SetGlossaryReceipt(receipt)
 		}
-		return update.Exec(ctx)
+		return update.Select(workrequest.FieldID).Exec(ctx)
 	})
 	if _, inside := ctx.Value(businessTransactionKey{}).(*ent.Client); inside {
 		return err
@@ -578,6 +618,16 @@ func saveInputMembersTx(ctx context.Context, tx *ent.Client, r *ent.WorkRequest,
 	if err != nil {
 		return err
 	}
+	builders := make([]*ent.WorkRequestInputMemberCreate, 0, 16)
+	flush := func() error {
+		if len(builders) == 0 {
+			return nil
+		}
+		err := tx.WorkRequestInputMember.CreateBulk(builders...).Exec(ctx)
+		builders = builders[:0]
+		return err
+	}
+	var pageBytes int64
 	for i, m := range in.InputMembers {
 		if !expected[m.SegmentID] || promptIDs[m.PromptID] || candidateIDs[m.CandidateID] || m.Key.CaptureEpoch != in.Scope.RetryEpoch || m.Key.Ordinal != i || m.Key.RequestID != r.Identity || m.PromptID == "" || m.CandidateID == "" || len(m.Payload) == 0 || m.Digest != memberPayloadDigest(ctx, m.Payload) {
 			return ErrManifest
@@ -589,14 +639,30 @@ func saveInputMembersTx(ctx context.Context, tx *ent.Client, r *ent.WorkRequest,
 		if pd == "" {
 			pd = stringDigest(m.BaselineTarget)
 		}
-		if _, err := tx.WorkRequestInputMember.Create().SetRequestID(r.ID).SetOrdinal(i).SetPromptID(m.PromptID).SetSegmentID(m.SegmentID).SetSegmentIndex(m.Index).SetWorkID(m.WorkID).SetCandidateID(m.CandidateID).SetBaselineVersion(m.BaselineVersion).SetBaselineDigest(pd).SetBaselineTargetIsNull(m.BaselineTarget == nil).SetBaselineStatus(m.BaselineStatus).SetSourceGeneration(in.Scope.SourceGeneration).SetNillableSourceRevisionID(in.Scope.SourceRevisionID).SetPayload(m.Payload).SetPayloadBytes(int64(len(m.Payload))).SetPayloadDigest(m.Digest).Save(ctx); err != nil {
-			return err
+		// Preserve valid oversized singleton inputs while keeping multi-member
+		// SQL submissions within the existing payload window.
+		if len(builders) > 0 && pageBytes+int64(len(m.Payload)) > bulkJSONBytes {
+			if err := flush(); err != nil {
+				return err
+			}
+			pageBytes = 0
+		}
+		builders = append(builders, tx.WorkRequestInputMember.Create().SetRequestID(r.ID).SetOrdinal(i).SetPromptID(m.PromptID).SetSegmentID(m.SegmentID).SetSegmentIndex(m.Index).SetWorkID(m.WorkID).SetCandidateID(m.CandidateID).SetBaselineVersion(m.BaselineVersion).SetBaselineDigest(pd).SetBaselineTargetIsNull(m.BaselineTarget == nil).SetBaselineStatus(m.BaselineStatus).SetSourceGeneration(in.Scope.SourceGeneration).SetNillableSourceRevisionID(in.Scope.SourceRevisionID).SetPayload(m.Payload).SetPayloadBytes(int64(len(m.Payload))).SetPayloadDigest(m.Digest))
+		pageBytes += int64(len(m.Payload))
+		if len(builders) == 16 {
+			if err := flush(); err != nil {
+				return err
+			}
+			pageBytes = 0
 		}
 		n += int64(len(m.Payload))
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "freeze", Operation: "input_write", Bytes: int64(len(m.Payload)), Rows: 1})
 		storage += int64(len(m.Payload) + len(m.PromptID) + len(m.WorkID) + len(m.CandidateID) + len(pd) + len(m.BaselineStatus) + len(m.Digest))
 	}
-	return tx.WorkRequest.UpdateOneID(r.ID).SetRequestMetadataBytes(metadataBytes).SetMemberMode(in.MemberMode).SetMemberFormat(in.MemberFormat).SetSourceLang(in.SourceLang).SetTargetLang(in.TargetLang).SetTextMode(in.TextMode).SetMemberPool(in.MemberPool).SetMemberAttempt(in.MemberAttempt).SetSnapshotDigest(in.SnapshotDigest).SetFreezeDigest(in.InputDigest).SetResponseFormatVersion(execution.ResponseFormatVersion).SetPromotionCount(len(in.InputMembers)).SetRemainingMembers(len(in.InputMembers)).SetBusinessBound(in.BusinessBound).SetInputMemberBytes(n).SetMemberStorageBytes(storage).SetPromotionState("inputs_ready").Exec(ctx)
+	if err := flush(); err != nil {
+		return err
+	}
+	return tx.WorkRequest.UpdateOneID(r.ID).SetRequestMetadataBytes(metadataBytes).SetMemberMode(in.MemberMode).SetMemberFormat(in.MemberFormat).SetSourceLang(in.SourceLang).SetTargetLang(in.TargetLang).SetTextMode(in.TextMode).SetMemberPool(in.MemberPool).SetMemberAttempt(in.MemberAttempt).SetSnapshotDigest(in.SnapshotDigest).SetFreezeDigest(in.InputDigest).SetResponseFormatVersion(execution.ResponseFormatVersion).SetPromotionCount(len(in.InputMembers)).SetRemainingMembers(len(in.InputMembers)).SetBusinessBound(in.BusinessBound).SetInputMemberBytes(n).SetMemberStorageBytes(storage).SetPromotionState("inputs_ready").Select("id").Exec(ctx)
 }
 
 func memberStateError(format string, args ...any) error {

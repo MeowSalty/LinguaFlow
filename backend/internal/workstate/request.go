@@ -163,7 +163,7 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 					return err
 				}
 				growthBefore = candidate.GrowthReserved
-				if err := tx.WorkCandidate.UpdateOneID(candidate.ID).SetGrowthReserved(true).Exec(ctx); err != nil {
+				if err := tx.WorkCandidate.UpdateOneID(candidate.ID).SetGrowthReserved(true).Select("id").Exec(ctx); err != nil {
 					return err
 				}
 			}

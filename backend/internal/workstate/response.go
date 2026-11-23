@@ -229,7 +229,7 @@ func (s *Store) promoteMember(ctx context.Context, in MemberPromotion) error {
 		if cursorErr != nil {
 			return fmt.Errorf("promote_member cursor_transition request=%s ordinal=%d next_main=%d next_alignment=%d next_network=%d: %w", in.Key.RequestID, in.Key.Ordinal, next.MainAttempts, next.AlignmentAttempts, next.NetworkAttempts, cursorErr)
 		}
-		if err := tx.WorkItem.UpdateOneID(w.ID).SetResponseRequestID("").Exec(ctx); err != nil {
+		if err := tx.WorkItem.UpdateOneID(w.ID).SetResponseRequestID("").Select("id").Exec(ctx); err != nil {
 			return err
 		}
 		var candidateBytes int64
@@ -237,10 +237,10 @@ func (s *Store) promoteMember(ctx context.Context, in MemberPromotion) error {
 			candidateBytes = int64(len(in.Candidate.Payload))
 		}
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "promotion_write", Bytes: candidateBytes, Rows: 3})
-		if err := tx.WorkResponseMember.UpdateOneID(output.ID).SetState(state).SetFailure(failure).SetOutcomeKind(in.Outcome.Code()).SetOutcomeLimit(in.Outcome.Limit).SetOutcomeObserved(in.Outcome.Observed).SetCandidateDigest(candidateDigest).SetCandidateVersion(version).ClearPayload().SetPayloadBytes(0).ClearCorrectedPayload().SetCorrectedBytes(0).Exec(ctx); err != nil {
+		if err := tx.WorkResponseMember.UpdateOneID(output.ID).SetState(state).SetFailure(failure).SetOutcomeKind(in.Outcome.Code()).SetOutcomeLimit(in.Outcome.Limit).SetOutcomeObserved(in.Outcome.Observed).SetCandidateDigest(candidateDigest).SetCandidateVersion(version).ClearPayload().SetPayloadBytes(0).ClearCorrectedPayload().SetCorrectedBytes(0).Select("id").Exec(ctx); err != nil {
 			return err
 		}
-		if err := tx.WorkRequestInputMember.UpdateOneID(input.ID).ClearPayload().SetPayloadBytes(0).Exec(ctx); err != nil {
+		if err := tx.WorkRequestInputMember.UpdateOneID(input.ID).ClearPayload().SetPayloadBytes(0).Select("id").Exec(ctx); err != nil {
 			return err
 		}
 		retired := input.PayloadBytes + output.PayloadBytes + output.CorrectedBytes
@@ -249,7 +249,7 @@ func (s *Store) promoteMember(ctx context.Context, in MemberPromotion) error {
 			// Receipt is retained as audit data in member_storage_bytes.
 			u.SetPromotionState("promoted").SetPublicKind(workrequest.PublicKindNone).ClearResponseGlossary().SetPublicBytes(0).SetBusinessBound(0)
 		}
-		if err := u.Exec(ctx); err != nil {
+		if err := u.Select(workrequest.FieldID).Exec(ctx); err != nil {
 			return err
 		}
 		if in.Key.Ordinal+1 == r.PromotionCount {

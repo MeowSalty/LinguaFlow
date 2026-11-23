@@ -322,7 +322,7 @@ func (s *Store) SavePool(ctx context.Context, scope Scope, pool int) error {
 		if pool < row.PoolIndex {
 			return ErrStale
 		}
-		return tx.JobRound.UpdateOneID(row.ID).SetPoolIndex(pool).Exec(ctx)
+		return tx.JobRound.UpdateOneID(row.ID).SetPoolIndex(pool).Select("id").Exec(ctx)
 	})
 	return s.finishUnknown(ctx, scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
 		row, err := tx.JobRound.Get(ctx, scope.RoundID)
@@ -482,7 +482,7 @@ func saveCandidateWithLockedMember(ctx context.Context, tx *ent.Client, c Candid
 		if c.Version != old.Version+1 || w.CandidateID != c.ID {
 			return ErrCandidateVersion
 		}
-		if err := tx.WorkCandidate.UpdateOneID(old.ID).SetVersion(c.Version).SetDtoVersion(c.DTOVersion).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).SetPipelineHeader(c.PipelineHeader).Exec(ctx); err != nil {
+		if err := tx.WorkCandidate.UpdateOneID(old.ID).SetVersion(c.Version).SetDtoVersion(c.DTOVersion).SetState(c.State).SetPayload(c.Payload).SetPayloadBytes(int64(len(c.Payload))).SetPipelineHeader(c.PipelineHeader).Select("id").Exec(ctx); err != nil {
 			return err
 		}
 	} else {
@@ -502,7 +502,7 @@ func saveCandidateWithLockedMember(ctx context.Context, tx *ent.Client, c Candid
 			return err
 		}
 	}
-	return tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(true).SetCandidateID(c.ID).SetState("candidate").Exec(ctx)
+	return tx.WorkItem.UpdateOneID(w.ID).SetMemberOwned(true).SetCandidateID(c.ID).SetState("candidate").Select("id").Exec(ctx)
 }
 
 // guardCandidateHandoff permits saves backed by a request admitted in the
