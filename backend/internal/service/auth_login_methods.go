@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authtransaction"
@@ -250,7 +252,7 @@ func (s *ExternalAuthService) SetInitialPassword(ctx context.Context, userID int
 		if err = revokeUserSessions(ctx, c, userID, timeutil.Normalize(s.now())); err != nil {
 			return err
 		}
-		if err = c.User.UpdateOneID(userID).SetPasswordHash(passwordHash).Exec(ctx); err != nil {
+		if err = c.User.UpdateOneID(userID).SetPasswordHash(passwordHash).Select("id").Exec(ctx); err != nil {
 			return err
 		}
 		return recordAuditEvent(ctx, c, AuditEvent{ActorUserID: userID, Action: "account.password.set", ResourceType: "user", ResourceID: userID, VisibilityScope: "personal"})
@@ -293,7 +295,7 @@ func (s *ExternalAuthService) DeletePassword(ctx context.Context, userID int, ra
 		if err = revokeUserSessions(ctx, c, userID, now); err != nil {
 			return err
 		}
-		if err = c.User.UpdateOneID(userID).ClearPasswordHash().Exec(ctx); err != nil {
+		if err = c.User.UpdateOneID(userID).ClearPasswordHash().Select("id").Exec(ctx); err != nil {
 			return err
 		}
 		return recordAuditEvent(ctx, c, AuditEvent{ActorUserID: userID, Action: "account.password.deleted", ResourceType: "user", ResourceID: userID, VisibilityScope: "personal"})
@@ -303,26 +305,50 @@ func (s *ExternalAuthService) DeletePassword(ctx context.Context, userID int, ra
 // CleanupExpired removes short-lived proofs and provider profile data. Terminal
 // rows remain until the original deadline so retries stay unambiguously invalid.
 func (s *ExternalAuthService) CleanupExpired(ctx context.Context) error {
-	s.cleanupMu.Lock()
+	// A maintenance tick does not queue behind an already running tick.
+	if !s.cleanupMu.TryLock() {
+		return nil
+	}
 	defer s.cleanupMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	now := timeutil.Normalize(s.now())
-	if err := s.cleanupRuleEvidence(ctx, now); err != nil {
-		return err
+	var result error
+	for _, cleanup := range []func(context.Context) error{
+		func(ctx context.Context) error { return s.cleanupSessionEvidence(ctx, now, false) },
+		func(ctx context.Context) error { return s.cleanupSessionEvidence(ctx, now, true) },
+		func(ctx context.Context) error { return s.cleanupBindingEvidence(ctx, now) },
+		func(ctx context.Context) error {
+			ids, err := s.client.AuthTransaction.Query().Where(authtransaction.ExpiresAtLTE(now)).Order(ent.Asc(authtransaction.FieldExpiresAt), ent.Asc(authtransaction.FieldID)).Limit(authenticationCleanupBatch).IDs(ctx)
+			if err != nil || len(ids) == 0 {
+				return err
+			}
+			_, err = s.client.AuthTransaction.Delete().Where(authtransaction.IDIn(ids...), authtransaction.ExpiresAtLTE(now)).Exec(ctx)
+			return err
+		},
+		func(ctx context.Context) error {
+			ids, err := s.client.ReauthenticationProof.Query().Where(reauthenticationproof.ExpiresAtLTE(now)).Order(ent.Asc(reauthenticationproof.FieldExpiresAt), ent.Asc(reauthenticationproof.FieldID)).Limit(authenticationCleanupBatch).IDs(ctx)
+			if err != nil || len(ids) == 0 {
+				return err
+			}
+			_, err = s.client.ReauthenticationProof.Delete().Where(reauthenticationproof.IDIn(ids...), reauthenticationproof.ExpiresAtLTE(now)).Exec(ctx)
+			return err
+		},
+		func(ctx context.Context) error { return s.collectConnectionSnapshots(ctx, now) },
+	} {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(result, err)
+		}
+		// Six 1.5-second wall quotas fit within the ten-second tick. Reserve
+		// 500ms of each quota for joined cleanup, including a stuck rollback.
+		wallDeadline := time.Now().Add(1500 * time.Millisecond)
+		if deadline, ok := ctx.Deadline(); ok && deadline.Before(wallDeadline) {
+			wallDeadline = deadline
+		}
+		categoryCtx, categoryCancel := context.WithDeadline(ctx, wallDeadline.Add(-500*time.Millisecond))
+		categoryCtx = database.WithJoinedCleanupDeadline(categoryCtx, wallDeadline)
+		result = errors.Join(result, cleanup(categoryCtx))
+		categoryCancel()
 	}
-	expired, err := s.client.AuthTransaction.Query().Where(authtransaction.ExpiresAtLTE(now)).Limit(256).IDs(ctx)
-	if err != nil {
-		return err
-	}
-	if _, err := s.client.AuthTransaction.Delete().Where(authtransaction.IDIn(expired...)).Exec(ctx); err != nil {
-		return err
-	}
-	if err := s.collectConnectionSnapshots(ctx, now); err != nil {
-		return err
-	}
-	proofs, err := s.client.ReauthenticationProof.Query().Where(reauthenticationproof.ExpiresAtLTE(now)).Limit(256).IDs(ctx)
-	if err != nil {
-		return err
-	}
-	_, err = s.client.ReauthenticationProof.Delete().Where(reauthenticationproof.IDIn(proofs...)).Exec(ctx)
-	return err
+	return result
 }

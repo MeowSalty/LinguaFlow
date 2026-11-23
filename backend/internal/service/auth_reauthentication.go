@@ -128,7 +128,7 @@ func (s *ExternalAuthService) Reauthenticate(ctx context.Context, userID int, in
 			if !matches || observed.PasswordHash == "" || account.PasswordHash != observed.PasswordHash || account.AuthVersion != observed.AuthVersion || !account.Active || !p.canLogin() {
 				return ErrInvalidCredentials
 			}
-			if err := c.User.UpdateOneID(account.ID).SetPasswordVerifiedHash(hash.Full(account.PasswordHash)).SetPasswordVerifiedAt(s.now()).Exec(ctx); err != nil {
+			if err := c.User.UpdateOneID(account.ID).SetPasswordVerifiedHash(hash.Full(account.PasswordHash)).SetPasswordVerifiedAt(s.now()).Select("id").Exec(ctx); err != nil {
 				return err
 			}
 			result, err = s.issueReauthenticationProof(ctx, c, account, "password", PasswordConnectionID, input.Action, input.TargetID, timeutil.Normalize(s.now()))

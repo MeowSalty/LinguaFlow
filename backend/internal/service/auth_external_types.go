@@ -39,18 +39,19 @@ type OIDCProtocol interface {
 }
 
 type ExternalAuthService struct {
-	cleanupMu      sync.Mutex
-	cleanupAfter   string
-	gate           *authhttp.Gate
-	client         *ent.Client
-	auth           *AuthService
-	keys           *credential.Keyring
-	cfg            config.AuthDeploymentConfig
-	corsOrigins    []string
-	protocol       OIDCProtocol
-	oauth2Protocol OAuth2Protocol
-	now            func() time.Time
-	rand           io.Reader
+	cleanupMu           sync.Mutex
+	cleanupAfter        string
+	cleanupBindingAfter bindingEvidenceCursor
+	gate                *authhttp.Gate
+	client              *ent.Client
+	auth                *AuthService
+	keys                *credential.Keyring
+	cfg                 config.AuthDeploymentConfig
+	corsOrigins         []string
+	protocol            OIDCProtocol
+	oauth2Protocol      OAuth2Protocol
+	now                 func() time.Time
+	rand                io.Reader
 }
 
 type externalActorContextKey struct{}

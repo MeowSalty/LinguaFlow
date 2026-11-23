@@ -159,7 +159,7 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if err != nil {
 				return err
 			}
-			if err = c.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(p.Connection.AuthGeneration).SetVerifiedLoginPolicyRevision(p.Policy.LoginPolicyRevision).SetEvidence(loginEvidence(p, current.Evidence)).Exec(ctx); err != nil {
+			if err = c.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(p.Connection.AuthGeneration).SetVerifiedLoginPolicyRevision(p.Policy.LoginPolicyRevision).SetEvidence(loginEvidence(p, current.Evidence)).Select("id").Exec(ctx); err != nil {
 				return err
 			}
 			if err = s.finishExchange(ctx, c, current.ID, input.Ticket); err != nil {
@@ -204,7 +204,7 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if err != nil {
 				return err
 			}
-			if err = c.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(authenticatedAt).SetVerifiedAuthGeneration(p.Connection.AuthGeneration).SetVerifiedLoginPolicyRevision(p.Policy.LoginPolicyRevision).SetEvidence(loginEvidence(p, current.Evidence)).Exec(ctx); err != nil {
+			if err = c.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(authenticatedAt).SetVerifiedAuthGeneration(p.Connection.AuthGeneration).SetVerifiedLoginPolicyRevision(p.Policy.LoginPolicyRevision).SetEvidence(loginEvidence(p, current.Evidence)).Select("id").Exec(ctx); err != nil {
 				return err
 			}
 			if err = s.finishExchange(ctx, c, current.ID, input.Ticket); err != nil {
@@ -227,7 +227,7 @@ func (s *ExternalAuthService) Exchange(ctx context.Context, actorID *int, input 
 			if err = s.validateTestLifecycle(ctx, c, current); err != nil {
 				return err
 			}
-			if err = c.AuthTransaction.UpdateOneID(current.ID).SetTestValidatedAt(now).Exec(ctx); err != nil {
+			if err = c.AuthTransaction.UpdateOneID(current.ID).SetTestValidatedAt(now).Select("id").Exec(ctx); err != nil {
 				return err
 			}
 			if err = s.finishExchange(ctx, c, current.ID, input.Ticket); err != nil {
