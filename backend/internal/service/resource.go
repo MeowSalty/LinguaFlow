@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"entgo.io/ent/dialect/sql"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
@@ -233,24 +235,31 @@ func (s *ResourceService) PrecheckResources(ctx context.Context, actorUserID, pr
 		}
 		seenPaths[resourcePath] = struct{}{}
 
-		// 检查与已有资源冲突
-		existing, err := s.FindResourceByPath(ctx, projectID, resourcePath)
-		if err != nil {
-			return nil, fmt.Errorf("检查资源路径冲突失败：%w", err)
-		}
-		if existing != nil {
-			results = append(results, PrecheckFileResult{
-				Path:             resourcePath,
-				Action:           "conflict",
-				ExistingResource: existing,
-			})
-			continue
-		}
-
 		results = append(results, PrecheckFileResult{
 			Path:   resourcePath,
 			Action: "create",
 		})
+	}
+	uniquePaths := make([]string, 0, len(seenPaths))
+	for path := range seenPaths {
+		uniquePaths = append(uniquePaths, path)
+	}
+	existing := make(map[string]*ent.Resource, len(uniquePaths))
+	for start := 0; start < len(uniquePaths); start += 500 {
+		end := min(start+500, len(uniquePaths))
+		rows, err := s.client.Resource.Query().Where(resource.ProjectIDEQ(projectID), resource.PathIn(uniquePaths[start:end]...)).All(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("检查资源路径冲突失败：%w", err)
+		}
+		for _, row := range rows {
+			existing[row.Path] = row
+		}
+	}
+	for i := range results {
+		if results[i].Action == "create" && existing[results[i].Path] != nil {
+			results[i].Action = "conflict"
+			results[i].ExistingResource = existing[results[i].Path]
+		}
 	}
 	return results, nil
 }
@@ -299,7 +308,11 @@ func (s *ResourceService) ListResources(ctx context.Context, actorUserID, projec
 		return nil, err
 	}
 
-	progress, err := s.listResourceProgress(ctx, projectID)
+	ids := make([]int, 0, len(resources))
+	for _, row := range resources {
+		ids = append(ids, row.ID)
+	}
+	progress, err := s.ListResourcesProgress(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -307,10 +320,13 @@ func (s *ResourceService) ListResources(ctx context.Context, actorUserID, projec
 	result := make([]ResourceWithProgress, 0, len(resources))
 	for _, r := range resources {
 		p := progress[r.ID]
+		if p == nil {
+			p = &ResourceProgress{}
+		}
 		result = append(result, ResourceWithProgress{
 			Resource:           r,
-			TranslatedSegments: p[0],
-			ApprovedSegments:   p[1],
+			TranslatedSegments: p.Translated,
+			ApprovedSegments:   p.Approved,
 		})
 	}
 	return result, nil
@@ -318,6 +334,19 @@ func (s *ResourceService) ListResources(ctx context.Context, actorUserID, projec
 
 // GetResource 获取单个资源详情，附带翻译进度。
 func (s *ResourceService) GetResource(ctx context.Context, actorUserID, projectID, resourceID int) (*ResourceWithProgress, error) {
+	res, err := s.GetResourceIdentity(ctx, actorUserID, projectID, resourceID)
+	if err != nil {
+		return nil, err
+	}
+	translated, approved, err := s.listSingleResourceProgress(ctx, resourceID)
+	if err != nil {
+		return nil, err
+	}
+	return &ResourceWithProgress{Resource: res, TranslatedSegments: translated, ApprovedSegments: approved}, nil
+}
+
+// GetResourceIdentity authorizes and resolves a resource without reading segments.
+func (s *ResourceService) GetResourceIdentity(ctx context.Context, actorUserID, projectID, resourceID int) (*ent.Resource, error) {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false); err != nil {
 		return nil, err
 	}
@@ -332,16 +361,7 @@ func (s *ResourceService) GetResource(ctx context.Context, actorUserID, projectI
 		return nil, err
 	}
 
-	translated, approved, err := s.listSingleResourceProgress(ctx, resourceID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ResourceWithProgress{
-		Resource:           res,
-		TranslatedSegments: translated,
-		ApprovedSegments:   approved,
-	}, nil
+	return res, nil
 }
 
 // DeleteResource 删除资源文件及其存储。
@@ -527,50 +547,13 @@ type ResourceWithProgress struct {
 	ApprovedSegments   int
 }
 
-// listResourceProgress 查询指定项目下所有资源的段落翻译进度。
-// 返回 map[resource_id]{translated, approved}。
-func (s *ResourceService) listResourceProgress(ctx context.Context, projectID int) (map[int][2]int, error) {
-	rows, err := s.client.Segment.Query().
-		Where(segment.HasResourceWith(resource.ProjectID(projectID))).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("query segment progress: %w", err)
-	}
-
-	progress := make(map[int][2]int)
-	for _, row := range rows {
-		if row.ResourceID == nil {
-			continue
-		}
-		entry := progress[*row.ResourceID]
-		if row.Status == SegmentStatusTranslated || row.Status == SegmentStatusEdited || row.Status == SegmentStatusApproved {
-			entry[0]++ // translated（已翻译）
-		}
-		if row.Status == SegmentStatusApproved {
-			entry[1]++ // approved（已批准）
-		}
-		progress[*row.ResourceID] = entry
-	}
-	return progress, nil
-}
-
 // listSingleResourceProgress 查询单个资源的段落翻译进度。
 func (s *ResourceService) listSingleResourceProgress(ctx context.Context, resourceID int) (translated, approved int, err error) {
-	rows, err := s.client.Segment.Query().
-		Where(segment.ResourceIDEQ(resourceID)).
-		All(ctx)
+	rows, err := s.ListResourcesProgress(ctx, []int{resourceID})
 	if err != nil {
 		return 0, 0, fmt.Errorf("query single resource progress: %w", err)
 	}
-	for _, row := range rows {
-		if row.Status == SegmentStatusTranslated || row.Status == SegmentStatusEdited || row.Status == SegmentStatusApproved {
-			translated++
-		}
-		if row.Status == SegmentStatusApproved {
-			approved++
-		}
-	}
-	return translated, approved, nil
+	return rows[resourceID].Translated, rows[resourceID].Approved, nil
 }
 
 // ResourceProgress 资源翻译进度。
@@ -593,30 +576,33 @@ func (s *ResourceService) ListResourcesProgress(ctx context.Context, resourceIDs
 	if len(resourceIDs) == 0 {
 		return nil, nil
 	}
-	rows, err := s.client.Segment.Query().
-		Where(segment.ResourceIDIn(resourceIDs...)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("query resources progress: %w", err)
-	}
-	raw := make(map[int][2]int)
-	for _, row := range rows {
-		if row.ResourceID == nil {
-			continue
-		}
-		entry := raw[*row.ResourceID]
-		if row.Status == SegmentStatusTranslated || row.Status == SegmentStatusEdited || row.Status == SegmentStatusApproved {
-			entry[0]++
-		}
-		if row.Status == SegmentStatusApproved {
-			entry[1]++
-		}
-		raw[*row.ResourceID] = entry
-	}
 	result := make(map[int]*ResourceProgress, len(resourceIDs))
+	ids := make([]int, 0, len(resourceIDs))
 	for _, id := range resourceIDs {
-		p := raw[id]
-		result[id] = &ResourceProgress{Translated: p[0], Approved: p[1]}
+		if _, exists := result[id]; !exists {
+			result[id] = &ResourceProgress{}
+			ids = append(ids, id)
+		}
+	}
+	for start := 0; start < len(ids); start += 500 {
+		var rows []struct {
+			ResourceID int `json:"resource_id"`
+			Translated int `json:"translated"`
+			Approved   int `json:"approved"`
+		}
+		err := s.client.Segment.Query().Where(segment.ResourceIDIn(ids[start:min(start+500, len(ids))]...)).Modify(func(q *sql.Selector) {
+			status := q.C(segment.FieldStatus)
+			q.Select(q.C(segment.FieldResourceID),
+				sql.As("SUM(CASE WHEN "+status+" IN ('translated','edited','approved') THEN 1 ELSE 0 END)", "translated"),
+				sql.As("SUM(CASE WHEN "+status+" = 'approved' THEN 1 ELSE 0 END)", "approved"),
+			).GroupBy(q.C(segment.FieldResourceID))
+		}).Scan(ctx, &rows)
+		if err != nil {
+			return nil, fmt.Errorf("query resources progress: %w", err)
+		}
+		for _, row := range rows {
+			result[row.ResourceID] = &ResourceProgress{Translated: row.Translated, Approved: row.Approved}
+		}
 	}
 	return result, nil
 }

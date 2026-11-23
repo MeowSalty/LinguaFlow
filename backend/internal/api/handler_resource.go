@@ -532,7 +532,7 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	res, err := s.resourceSvc.GetResource(r.Context(), authUser.User.ID, projectID, resourceID)
+	res, err := s.resourceSvc.GetResourceIdentity(r.Context(), authUser.User.ID, projectID, resourceID)
 	if err != nil {
 		s.writeResourceServiceError(w, r, err)
 		return
@@ -545,7 +545,7 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 	}
 	defer f.Close()
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", contentDisposition(filepath.Base(res.Resource.Path)))
+	w.Header().Set("Content-Disposition", contentDisposition(filepath.Base(res.Path)))
 	_, _ = io.Copy(w, f)
 
 }
@@ -735,20 +735,20 @@ func (s *Server) handleDownloadTranslatedResourceFile(w http.ResponseWriter, r *
 		return
 	}
 
-	res, err := s.resourceSvc.GetResource(r.Context(), authUser.User.ID, projectID, resourceID)
+	res, err := s.resourceSvc.GetResourceIdentity(r.Context(), authUser.User.ID, projectID, resourceID)
 	if err != nil {
 		s.writeResourceServiceError(w, r, err)
 		return
 	}
 
-	filename := safeZipResourceEntryName(res.Resource)
+	filename := safeZipResourceEntryName(res)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", contentDisposition(filename))
 	// 注意：Content-Type 和 Content-Disposition 在渲染前设置。
 	// 如果 Render 已向 w 写入部分数据，后续 header 修改可能无效（headers 已 flush）。
 	// 这与现有 downloadSingleTranslationOutput 的行为一致。
 
-	if err := s.resourceSvc.RenderTranslatedResource(r.Context(), authUser.User.ID, res.Resource, w); err != nil {
+	if err := s.resourceSvc.RenderTranslatedResource(r.Context(), authUser.User.ID, res, w); err != nil {
 		w.Header().Del("Content-Disposition")
 		w.Header().Del("Content-Type")
 		switch {
@@ -761,7 +761,7 @@ func (s *Server) handleDownloadTranslatedResourceFile(w http.ResponseWriter, r *
 				detail = targetMarkupProblemDetail(markupErr.Defects)
 				for _, d := range markupErr.Defects {
 					s.logger.Warn("导出预检发现无法原样交付的译文段落",
-						"resource_id", res.Resource.ID, "segment_id", d.SegmentID,
+						"resource_id", res.ID, "segment_id", d.SegmentID,
 						"location", d.Location, "reason", d.Reason)
 				}
 			}
