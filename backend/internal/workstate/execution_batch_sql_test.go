@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workresponsemember"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"modernc.org/sqlite"
 )
 
@@ -175,6 +176,58 @@ func TestExecutionPageFailureRollsBackSealAndConfirm(t *testing.T) {
 	if !errors.Is(err, ErrManifest) || client.JobRoundSegment.Query().CountX(ctx) != 0 || client.Job.GetX(ctx, scope.JobID).ProgressCompleted != 0 {
 		t.Fatalf("late invalid checkpoint left a prefix: %v", err)
 	}
+}
+
+func TestStorageInventoryBulkSQLPages(t *testing.T) {
+	ctx, client, budget, owned, request, probe, _, _ := storageSQLFixture(t)
+	owned = persistence.WithMetadata(owned, persistence.Metadata{RequestID: request.Identity})
+	const n = 64
+	probe.reset()
+	err := Transaction(owned, client, func(tx *ent.Client) error {
+		for start := 0; start < n; start += 16 {
+			builders := make([]*ent.WorkResponseMemberCreate, 0, 16)
+			for i := start; i < start+16; i++ {
+				payload := []byte(fmt.Sprintf("stored-%d-界", i))
+				builders = append(builders, tx.WorkResponseMember.Create().SetRequestID(request.ID).SetOrdinal(i).SetPayload(payload).SetPayloadBytes(99999).SetPayloadDigest(payloadDigest(payload)))
+			}
+			if err := tx.WorkResponseMember.CreateBulk(builders...).Exec(owned); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	created := probe.stop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberDeltaAudit(t, ctx, budget)
+	probe.reset()
+	err = Transaction(owned, client, func(tx *ent.Client) error {
+		if _, err := tx.WorkResponseMember.Update().Where(workresponsemember.RequestIDEQ(request.ID)).ClearPayload().SetPayloadBytes(0).Save(owned); err != nil {
+			return err
+		}
+		// Repeated touching must preserve the first physical before baseline.
+		_, err := tx.WorkResponseMember.Update().Where(workresponsemember.RequestIDEQ(request.ID)).SetPayloadBytes(0).Save(owned)
+		return err
+	})
+	cleared := probe.stop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberDeltaAudit(t, ctx, budget)
+	countPages := func(s storageSQLSnapshot) int {
+		count := 0
+		for _, call := range s.calls {
+			if strings.HasPrefix(call.query, "SELECT id,") && strings.Contains(call.query, " FROM work_response_members WHERE id IN (") {
+				count++
+			}
+		}
+		return count
+	}
+	if countPages(created) != n/16 || countPages(cleared) != 2*n/16 {
+		t.Fatalf("physical inventory grew per row: create=%d clear=%d", countPages(created), countPages(cleared))
+	}
+	t.Logf("real inventory N=%d create_after_pages=%d clear_first_before_plus_after_pages=%d submissions=%d/%d actual bytes matched despite false payload_bytes", n, countPages(created), countPages(cleared), len(created.calls), len(cleared.calls))
 }
 
 func TestReadStageCountsBatchOneStatement(t *testing.T) {

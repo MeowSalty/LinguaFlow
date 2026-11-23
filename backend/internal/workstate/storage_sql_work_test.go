@@ -227,7 +227,7 @@ func storageSQLFixture(t *testing.T) (context.Context, *ent.Client, *StorageBudg
 	return ctx, client, b, owned, row, probe, credit, faults
 }
 
-func storageSQLUpdate(t *testing.T, client *ent.Client, b *StorageBudget, probe *storageSQLProbe, credit *storageSQLCreditProbe, ctx context.Context, fn func(*ent.Client) error) (storageSQLSnapshot, error) {
+func storageSQLUpdate(t *testing.T, client *ent.Client, b *StorageBudget, probe *storageSQLProbe, credit *storageSQLCreditProbe, ctx context.Context, wantTransactions int, fn func(*ent.Client) error) (storageSQLSnapshot, error) {
 	t.Helper()
 	uncertain, facts := credit.uncertain, credit.metadataFacts
 	probe.reset()
@@ -244,8 +244,8 @@ func storageSQLUpdate(t *testing.T, client *ent.Client, b *StorageBudget, probe 
 	if credit.metadataFacts != facts+1 || len(b.touched) != 0 {
 		t.Error("settlement omitted actual request metadata facts")
 	}
-	if s.begins != 1 || s.commits != 1 {
-		t.Errorf("actual SQL transactions: begin=%d commit=%d", s.begins, s.commits)
+	if s.begins != wantTransactions || s.commits != wantTransactions {
+		t.Errorf("actual SQL transactions: begin=%d commit=%d want=%d", s.begins, s.commits, wantTransactions)
 	}
 	if s.prepares != 0 {
 		t.Errorf("modernc direct QueryContext unexpectedly used external PrepareContext: %d", s.prepares)
@@ -262,12 +262,12 @@ func TestStorageBeforeIdentitySQLWork(t *testing.T) {
 				return tx.WorkRequest.UpdateOneID(row.ID).SetPromotionCursor(0).Exec(writeCtx)
 			}
 		}
-		baseline, err := storageSQLUpdate(t, client, b, probe, credit, owned, write(owned))
+		baseline, err := storageSQLUpdate(t, client, b, probe, credit, owned, 1, write(owned))
 		if err != nil {
 			t.Fatal(err)
 		}
 		trusted := persistence.WithMetadata(owned, persistence.Metadata{Operation: "scalar_update", RequestID: row.Identity})
-		optimized, err := storageSQLUpdate(t, client, b, probe, credit, trusted, write(trusted))
+		optimized, err := storageSQLUpdate(t, client, b, probe, credit, trusted, 1, write(trusted))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -368,7 +368,8 @@ func TestStorageBeforeIdentityUnknownACK(t *testing.T) {
 	before := memberDeltaAudit(t, ctx, b)
 	trusted := persistence.WithMetadata(owned, persistence.Metadata{RequestID: row.Identity})
 	faults.loseACK.Store(true)
-	s, err := storageSQLUpdate(t, client, b, probe, credit, trusted, func(tx *ent.Client) error {
+	// ACK loss requires one additional Job writer-barrier transaction.
+	s, err := storageSQLUpdate(t, client, b, probe, credit, trusted, 2, func(tx *ent.Client) error {
 		return tx.WorkRequest.UpdateOneID(row.ID).SetPromotionCursor(0).Exec(trusted)
 	})
 	if !unknownCommit(err) {
