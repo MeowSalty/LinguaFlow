@@ -3,10 +3,12 @@ package tm
 import (
 	"context"
 	"crypto/sha256"
+	stdsql "database/sql"
 	"encoding/hex"
 	"errors"
 	"strings"
 
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -36,20 +38,15 @@ func (Nop) VisitMatchesBounded(context.Context, string, string, string, *backend
 	return nil
 }
 
-type matchStats struct {
-	Count int64 `sql:"matches"`
-	Bytes int64 `sql:"payload_bytes"`
-}
 type matchHeader struct {
 	ID          int   `sql:"id"`
 	SourceBytes int64 `sql:"source_bytes"`
 	TargetBytes int64 `sql:"target_bytes"`
 }
 
-// SQLite's existing Search matches the exact scoped source hash, returns score
-// one and orders usage DESC/id ASC. A transaction preserves that snapshot and
-// increments every matched usage counter only if the complete visit succeeds.
-// SQL count/byte headers reject oversized input before any Source/Target read.
+// The published unique key permits one exact scoped source-hash match. Read its
+// byte header and body in one snapshot, then update usage only after yield
+// succeeds. PostgreSQL needs repeatable-read isolation for the two reads.
 func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLang string, b *backend.BuildBounds, run func(context.Context, func() error) error, yield func(Match) error) error {
 	if run == nil {
 		run = func(ctx context.Context, fn func() error) error { return backend.RunBuild(ctx, fn) }
@@ -77,7 +74,7 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 	}
 	// ORM/driver internals have no known capacity. The query snapshot and
 	// actual stored string bytes remain part of the input contract.
-	tx, e := s.client.Tx(ctx)
+	tx, e := s.client.BeginTx(ctx, &stdsql.TxOptions{Isolation: stdsql.LevelRepeatableRead})
 	if e != nil {
 		return e
 	}
@@ -85,32 +82,17 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 	base := func() *ent.TMEntryQuery {
 		return tx.TMEntry.Query().Where(tmentry.ScopeKeyEQ(key), tmentry.SourceHashEQ(digest), tmentry.SourceLangEQ(strings.TrimSpace(srcLang)), tmentry.TargetLangEQ(strings.TrimSpace(tgtLang)))
 	}
-	var stats []matchStats
-	e = base().Select().Modify(func(q *sql.Selector) {
-		q.SelectExpr(sql.Expr("COUNT(*) AS matches"), sql.Expr("COALESCE(SUM(length(CAST(source_text AS BLOB))+length(CAST(target_text AS BLOB))),0) AS payload_bytes"))
-	}).Scan(ctx, &stats)
-	if e != nil {
-		return e
-	}
-	if len(stats) != 1 || stats[0].Count < 0 || stats[0].Bytes < 0 {
-		return errors.New("invalid TM match byte header")
-	}
-	if stats[0].Bytes > b.OutputLimit() {
-		return backend.ErrBuildCapacity
-	}
-	count := stats[0].Count
-	if count == 0 {
-		return tx.Commit()
-	}
 	var headers []matchHeader
-	e = base().Order(ent.Desc(tmentry.FieldUsageCount), ent.Asc(tmentry.FieldID)).Select().Modify(func(q *sql.Selector) {
-		q.SelectExpr(sql.Expr("id AS id"), sql.Expr("length(CAST(source_text AS BLOB)) AS source_bytes"), sql.Expr("length(CAST(target_text AS BLOB)) AS target_bytes"))
+	// The second header detects a violated unique-key invariant without an
+	// unbounded header allocation or a separate COUNT query.
+	e = base().Limit(2).Select().Modify(func(q *sql.Selector) {
+		q.SelectExpr(sql.Expr(q.C(tmentry.FieldID)+" AS id"), sql.Expr(matchTextBytes(q, tmentry.FieldSourceText)+" AS source_bytes"), sql.Expr(matchTextBytes(q, tmentry.FieldTargetText)+" AS target_bytes"))
 	}).Scan(ctx, &headers)
 	if e != nil {
 		return e
 	}
-	if int64(len(headers)) != count {
-		return errors.New("TM match header count changed")
+	if len(headers) > 1 {
+		return errors.New("TM match unique key violated")
 	}
 	if e = backend.ReserveSlice[matchHeader](b, int64(cap(headers))); e != nil {
 		return e
@@ -142,10 +124,23 @@ func (s *SQLite) VisitMatchesBounded(ctx context.Context, source, srcLang, tgtLa
 			return e
 		}
 		row = nil
-		if e = tx.TMEntry.UpdateOneID(header.ID).AddUsageCount(1).Exec(ctx); e != nil {
+		// TM entries have no storage mutation hook. This scoped update retains
+		// TimeMixin's updated_at behavior and avoids UpdateOne's entity readback.
+		changed, e := tx.TMEntry.Update().Where(tmentry.IDEQ(header.ID)).AddUsageCount(1).Save(ctx)
+		if e != nil {
 			return e
+		}
+		if changed != 1 {
+			return errors.New("TM usage row disappeared")
 		}
 	}
 	headers = nil
 	return tx.Commit()
+}
+
+func matchTextBytes(q *sql.Selector, column string) string {
+	if q.Dialect() == dialect.Postgres {
+		return "OCTET_LENGTH(" + q.C(column) + ")"
+	}
+	return "LENGTH(CAST(" + q.C(column) + " AS BLOB))"
 }
