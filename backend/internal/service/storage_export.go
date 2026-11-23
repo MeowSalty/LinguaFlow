@@ -34,14 +34,14 @@ func (s *ResourceService) CreateExport(ctx context.Context, actor, projectID, re
 		return task, nil
 	}
 	if task == nil {
-		res, err := s.GetResource(ctx, actor, projectID, resourceID)
+		res, err := s.GetResourceIdentity(ctx, actor, projectID, resourceID)
 		if err != nil {
 			return nil, err
 		}
-		if res.Resource.CurrentSourceRevisionID == nil {
+		if res.CurrentSourceRevisionID == nil {
 			return nil, ErrRepairMismatch
 		}
-		task, err = s.storage.Begin(ctx, actor, projectID, StorageIntent{Kind: "export", IdempotencyKey: key, ResourceID: resourceID, SourceRevisionID: *res.Resource.CurrentSourceRevisionID, SourceGeneration: res.Resource.SourceGeneration, TranslationGeneration: res.Resource.TranslationGeneration})
+		task, err = s.storage.Begin(ctx, actor, projectID, StorageIntent{Kind: "export", IdempotencyKey: key, ResourceID: resourceID, SourceRevisionID: *res.CurrentSourceRevisionID, SourceGeneration: res.SourceGeneration, TranslationGeneration: res.TranslationGeneration})
 		if err != nil {
 			return nil, err
 		}
