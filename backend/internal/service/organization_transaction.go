@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"modernc.org/sqlite"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 )
@@ -41,7 +42,22 @@ func withOrganizationMutation(ctx context.Context, client *ent.Client, orgID int
 }
 
 func withOrganizationTransaction(ctx context.Context, client *ent.Client, mutate func(*ent.Client) error) error {
-	retryDeadline := time.Now().Add(organizationTransactionRetryBudget)
+	wallDeadline := time.Now().Add(organizationTransactionRetryBudget)
+	if cleanupDeadline, cleanupBudgeted := database.JoinedCleanupDeadline(ctx); cleanupBudgeted {
+		if cleanupDeadline.Before(wallDeadline) {
+			wallDeadline = cleanupDeadline
+		}
+	} else {
+		if callerDeadline, ok := ctx.Deadline(); ok && callerDeadline.Before(wallDeadline) {
+			wallDeadline = callerDeadline
+		}
+	}
+	// Cleanup belongs to the same absolute wall budget. An enclosing category
+	// may reserve part of that budget separately from its SQL execution time.
+	ctx = database.WithJoinedCleanupDeadline(ctx, wallDeadline)
+	ctx, cancel := context.WithDeadline(ctx, wallDeadline)
+	defer cancel()
+	ctx = database.WithJoinedRollback(ctx)
 	for attempt := 0; ; attempt++ {
 		if err := organizationTransactionContextError(ctx); err != nil {
 			return err
@@ -56,13 +72,8 @@ func withOrganizationTransaction(ctx context.Context, client *ent.Client, mutate
 		if err == nil || !isOrganizationTransactionConflict(err) {
 			return err
 		}
-		remaining := time.Until(retryDeadline)
-		if deadline, ok := ctx.Deadline(); ok {
-			contextRemaining := time.Until(deadline)
-			if contextRemaining < remaining {
-				remaining = contextRemaining
-			}
-		}
+		deadline, _ := ctx.Deadline()
+		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return errors.Join(organizationTransactionContextError(ctx), err)
 		}
@@ -79,9 +90,6 @@ func withOrganizationTransaction(ctx context.Context, client *ent.Client, mutate
 		}
 		if err := organizationTransactionContextError(ctx); err != nil {
 			return err
-		}
-		if !time.Now().Before(retryDeadline) {
-			return errors.Join(organizationTransactionContextError(ctx), err)
 		}
 	}
 }
@@ -148,9 +156,15 @@ func (e *organizationRollbackError) Error() string {
 	return "organization transaction rollback failed: " + e.rollback.Error() + "; operation: " + e.cause.Error()
 }
 
+func (e *organizationRollbackError) Unwrap() []error { return []error{e.cause, e.rollback} }
+
 func isOrganizationTransactionConflict(err error) bool {
 	var commitErr *organizationCommitError
 	if errors.As(err, &commitErr) {
+		return false
+	}
+	var rollbackErr *organizationRollbackError
+	if errors.As(err, &rollbackErr) {
 		return false
 	}
 	// Do not replay network errors or ambiguous commit outcomes. These codes

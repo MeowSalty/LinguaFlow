@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	sqldriver "database/sql/driver"
 	"errors"
 	"fmt"
 	"net/url"
@@ -215,7 +216,7 @@ func validateSQLiteTimeDSN(dsn string) error {
 // ensureSQLiteTimeFormat runs before any schema or business initialization.
 // The marker describes encoding, not schema completion: failed schema creation
 // can be retried through the normal ent migration path.
-func ensureSQLiteTimeFormat(ctx context.Context, db *sql.DB, autoMigrate bool) error {
+func ensureSQLiteTimeFormat(ctx context.Context, db *sql.DB, autoMigrate bool) (err error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
@@ -247,7 +248,10 @@ func ensureSQLiteTimeFormat(ctx context.Context, db *sql.DB, autoMigrate bool) e
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		_, _ = conn.ExecContext(cleanupCtx, "ROLLBACK")
+		if _, rollbackErr := conn.ExecContext(cleanupCtx, "ROLLBACK"); rollbackErr != nil {
+			_ = conn.Raw(func(any) error { return sqldriver.ErrBadConn })
+			err = errors.Join(err, fmt.Errorf("rollback timestamp format reservation: %w", rollbackErr))
+		}
 	}()
 	if err := CheckMigrationState(ctx, conn, config.DatabaseDriverSQLite); err != nil {
 		return err

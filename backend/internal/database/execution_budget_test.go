@@ -86,3 +86,14 @@ func TestTimeTransactionKeepsCallerDeadlineCause(t *testing.T) {
 		}
 	}
 }
+
+func TestTimeTransactionKeepsShorterCallerExecutionPolicy(t *testing.T) {
+	parent := persistence.WithExecutionTimeout(context.Background(), time.Second)
+	caller := persistence.WithExecutionTimeout(context.Background(), 10*time.Millisecond)
+	tx := &timeTx{Tx: &executionCancelProbe{}, ctx: parent, dialect: dialect.SQLite}
+	start := time.Now()
+	err := tx.Exec(caller, "noop", nil, nil)
+	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 100*time.Millisecond {
+		t.Fatalf("shorter execution policy ignored: %v after %v", err, time.Since(start))
+	}
+}
