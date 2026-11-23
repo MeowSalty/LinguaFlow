@@ -7,7 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"entgo.io/ent/dialect/sql"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 )
 
@@ -32,17 +33,10 @@ func (s *HybridStore) initSeqFromDB() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	count, err := s.entStore.client.SSEEvent.Query().Count(ctx)
-	if err != nil {
-		return fmt.Errorf("query event count: %w", err)
-	}
-	if count == 0 {
-		slog.Info("hybrid_store: no existing events in DB, starting from 0")
-		return nil
-	}
-
 	maxSeq, err := s.entStore.client.SSEEvent.Query().
-		Aggregate(ent.Max(sseevent.FieldSeq)).
+		Aggregate(func(selector *sql.Selector) string {
+			return "COALESCE(" + sql.Max(selector.C(sseevent.FieldSeq)) + ", 0)"
+		}).
 		Int(ctx)
 	if err != nil {
 		return fmt.Errorf("query max seq from DB: %w", err)
