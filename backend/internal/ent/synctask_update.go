@@ -192,6 +192,48 @@ func (_u *SyncTaskUpdate) AddNextSegmentIndex(v int) *SyncTaskUpdate {
 	return _u
 }
 
+// SetTotalUpdated sets the "total_updated" field.
+func (_u *SyncTaskUpdate) SetTotalUpdated(v int) *SyncTaskUpdate {
+	_u.mutation.ResetTotalUpdated()
+	_u.mutation.SetTotalUpdated(v)
+	return _u
+}
+
+// SetNillableTotalUpdated sets the "total_updated" field if the given value is not nil.
+func (_u *SyncTaskUpdate) SetNillableTotalUpdated(v *int) *SyncTaskUpdate {
+	if v != nil {
+		_u.SetTotalUpdated(*v)
+	}
+	return _u
+}
+
+// AddTotalUpdated adds value to the "total_updated" field.
+func (_u *SyncTaskUpdate) AddTotalUpdated(v int) *SyncTaskUpdate {
+	_u.mutation.AddTotalUpdated(v)
+	return _u
+}
+
+// SetTotalSkipped sets the "total_skipped" field.
+func (_u *SyncTaskUpdate) SetTotalSkipped(v int) *SyncTaskUpdate {
+	_u.mutation.ResetTotalSkipped()
+	_u.mutation.SetTotalSkipped(v)
+	return _u
+}
+
+// SetNillableTotalSkipped sets the "total_skipped" field if the given value is not nil.
+func (_u *SyncTaskUpdate) SetNillableTotalSkipped(v *int) *SyncTaskUpdate {
+	if v != nil {
+		_u.SetTotalSkipped(*v)
+	}
+	return _u
+}
+
+// AddTotalSkipped adds value to the "total_skipped" field.
+func (_u *SyncTaskUpdate) AddTotalSkipped(v int) *SyncTaskUpdate {
+	_u.mutation.AddTotalSkipped(v)
+	return _u
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_u *SyncTaskUpdate) SetStartedAt(v time.Time) *SyncTaskUpdate {
 	_u.mutation.SetStartedAt(v)
@@ -222,34 +264,6 @@ func (_u *SyncTaskUpdate) SetStatus(v string) *SyncTaskUpdate {
 func (_u *SyncTaskUpdate) SetNillableStatus(v *string) *SyncTaskUpdate {
 	if v != nil {
 		_u.SetStatus(*v)
-	}
-	return _u
-}
-
-// SetSegmentIds sets the "segment_ids" field.
-func (_u *SyncTaskUpdate) SetSegmentIds(v string) *SyncTaskUpdate {
-	_u.mutation.SetSegmentIds(v)
-	return _u
-}
-
-// SetNillableSegmentIds sets the "segment_ids" field if the given value is not nil.
-func (_u *SyncTaskUpdate) SetNillableSegmentIds(v *string) *SyncTaskUpdate {
-	if v != nil {
-		_u.SetSegmentIds(*v)
-	}
-	return _u
-}
-
-// SetResourceIds sets the "resource_ids" field.
-func (_u *SyncTaskUpdate) SetResourceIds(v string) *SyncTaskUpdate {
-	_u.mutation.SetResourceIds(v)
-	return _u
-}
-
-// SetNillableResourceIds sets the "resource_ids" field if the given value is not nil.
-func (_u *SyncTaskUpdate) SetNillableResourceIds(v *string) *SyncTaskUpdate {
-	if v != nil {
-		_u.SetResourceIds(*v)
 	}
 	return _u
 }
@@ -481,6 +495,16 @@ func (_u *SyncTaskUpdate) check() error {
 			return &ValidationError{Name: "next_segment_index", err: fmt.Errorf(`ent: validator failed for field "SyncTask.next_segment_index": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.TotalUpdated(); ok {
+		if err := synctask.TotalUpdatedValidator(v); err != nil {
+			return &ValidationError{Name: "total_updated", err: fmt.Errorf(`ent: validator failed for field "SyncTask.total_updated": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TotalSkipped(); ok {
+		if err := synctask.TotalSkippedValidator(v); err != nil {
+			return &ValidationError{Name: "total_skipped", err: fmt.Errorf(`ent: validator failed for field "SyncTask.total_skipped": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := synctask.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "SyncTask.status": %w`, err)}
@@ -549,6 +573,18 @@ func (_u *SyncTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedNextSegmentIndex(); ok {
 		_spec.AddField(synctask.FieldNextSegmentIndex, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.TotalUpdated(); ok {
+		_spec.SetField(synctask.FieldTotalUpdated, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTotalUpdated(); ok {
+		_spec.AddField(synctask.FieldTotalUpdated, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.TotalSkipped(); ok {
+		_spec.SetField(synctask.FieldTotalSkipped, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTotalSkipped(); ok {
+		_spec.AddField(synctask.FieldTotalSkipped, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.StartedAt(); ok {
 		_spec.SetField(synctask.FieldStartedAt, field.TypeTime, value)
 	}
@@ -557,12 +593,6 @@ func (_u *SyncTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(synctask.FieldStatus, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.SegmentIds(); ok {
-		_spec.SetField(synctask.FieldSegmentIds, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ResourceIds(); ok {
-		_spec.SetField(synctask.FieldResourceIds, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Result(); ok {
 		_spec.SetField(synctask.FieldResult, field.TypeString, value)
@@ -863,6 +893,48 @@ func (_u *SyncTaskUpdateOne) AddNextSegmentIndex(v int) *SyncTaskUpdateOne {
 	return _u
 }
 
+// SetTotalUpdated sets the "total_updated" field.
+func (_u *SyncTaskUpdateOne) SetTotalUpdated(v int) *SyncTaskUpdateOne {
+	_u.mutation.ResetTotalUpdated()
+	_u.mutation.SetTotalUpdated(v)
+	return _u
+}
+
+// SetNillableTotalUpdated sets the "total_updated" field if the given value is not nil.
+func (_u *SyncTaskUpdateOne) SetNillableTotalUpdated(v *int) *SyncTaskUpdateOne {
+	if v != nil {
+		_u.SetTotalUpdated(*v)
+	}
+	return _u
+}
+
+// AddTotalUpdated adds value to the "total_updated" field.
+func (_u *SyncTaskUpdateOne) AddTotalUpdated(v int) *SyncTaskUpdateOne {
+	_u.mutation.AddTotalUpdated(v)
+	return _u
+}
+
+// SetTotalSkipped sets the "total_skipped" field.
+func (_u *SyncTaskUpdateOne) SetTotalSkipped(v int) *SyncTaskUpdateOne {
+	_u.mutation.ResetTotalSkipped()
+	_u.mutation.SetTotalSkipped(v)
+	return _u
+}
+
+// SetNillableTotalSkipped sets the "total_skipped" field if the given value is not nil.
+func (_u *SyncTaskUpdateOne) SetNillableTotalSkipped(v *int) *SyncTaskUpdateOne {
+	if v != nil {
+		_u.SetTotalSkipped(*v)
+	}
+	return _u
+}
+
+// AddTotalSkipped adds value to the "total_skipped" field.
+func (_u *SyncTaskUpdateOne) AddTotalSkipped(v int) *SyncTaskUpdateOne {
+	_u.mutation.AddTotalSkipped(v)
+	return _u
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_u *SyncTaskUpdateOne) SetStartedAt(v time.Time) *SyncTaskUpdateOne {
 	_u.mutation.SetStartedAt(v)
@@ -893,34 +965,6 @@ func (_u *SyncTaskUpdateOne) SetStatus(v string) *SyncTaskUpdateOne {
 func (_u *SyncTaskUpdateOne) SetNillableStatus(v *string) *SyncTaskUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
-	}
-	return _u
-}
-
-// SetSegmentIds sets the "segment_ids" field.
-func (_u *SyncTaskUpdateOne) SetSegmentIds(v string) *SyncTaskUpdateOne {
-	_u.mutation.SetSegmentIds(v)
-	return _u
-}
-
-// SetNillableSegmentIds sets the "segment_ids" field if the given value is not nil.
-func (_u *SyncTaskUpdateOne) SetNillableSegmentIds(v *string) *SyncTaskUpdateOne {
-	if v != nil {
-		_u.SetSegmentIds(*v)
-	}
-	return _u
-}
-
-// SetResourceIds sets the "resource_ids" field.
-func (_u *SyncTaskUpdateOne) SetResourceIds(v string) *SyncTaskUpdateOne {
-	_u.mutation.SetResourceIds(v)
-	return _u
-}
-
-// SetNillableResourceIds sets the "resource_ids" field if the given value is not nil.
-func (_u *SyncTaskUpdateOne) SetNillableResourceIds(v *string) *SyncTaskUpdateOne {
-	if v != nil {
-		_u.SetResourceIds(*v)
 	}
 	return _u
 }
@@ -1165,6 +1209,16 @@ func (_u *SyncTaskUpdateOne) check() error {
 			return &ValidationError{Name: "next_segment_index", err: fmt.Errorf(`ent: validator failed for field "SyncTask.next_segment_index": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.TotalUpdated(); ok {
+		if err := synctask.TotalUpdatedValidator(v); err != nil {
+			return &ValidationError{Name: "total_updated", err: fmt.Errorf(`ent: validator failed for field "SyncTask.total_updated": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TotalSkipped(); ok {
+		if err := synctask.TotalSkippedValidator(v); err != nil {
+			return &ValidationError{Name: "total_skipped", err: fmt.Errorf(`ent: validator failed for field "SyncTask.total_skipped": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := synctask.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "SyncTask.status": %w`, err)}
@@ -1250,6 +1304,18 @@ func (_u *SyncTaskUpdateOne) sqlSave(ctx context.Context) (_node *SyncTask, err 
 	if value, ok := _u.mutation.AddedNextSegmentIndex(); ok {
 		_spec.AddField(synctask.FieldNextSegmentIndex, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.TotalUpdated(); ok {
+		_spec.SetField(synctask.FieldTotalUpdated, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTotalUpdated(); ok {
+		_spec.AddField(synctask.FieldTotalUpdated, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.TotalSkipped(); ok {
+		_spec.SetField(synctask.FieldTotalSkipped, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedTotalSkipped(); ok {
+		_spec.AddField(synctask.FieldTotalSkipped, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.StartedAt(); ok {
 		_spec.SetField(synctask.FieldStartedAt, field.TypeTime, value)
 	}
@@ -1258,12 +1324,6 @@ func (_u *SyncTaskUpdateOne) sqlSave(ctx context.Context) (_node *SyncTask, err 
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(synctask.FieldStatus, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.SegmentIds(); ok {
-		_spec.SetField(synctask.FieldSegmentIds, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ResourceIds(); ok {
-		_spec.SetField(synctask.FieldResourceIds, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Result(); ok {
 		_spec.SetField(synctask.FieldResult, field.TypeString, value)

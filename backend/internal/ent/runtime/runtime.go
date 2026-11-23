@@ -63,6 +63,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatchitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskresult"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
@@ -2586,12 +2588,68 @@ func init() {
 	synctask.DefaultNextSegmentIndex = synctaskDescNextSegmentIndex.Default.(int)
 	// synctask.NextSegmentIndexValidator is a validator for the "next_segment_index" field. It is called by the builders before save.
 	synctask.NextSegmentIndexValidator = synctaskDescNextSegmentIndex.Validators[0].(func(int) error)
+	// synctaskDescTotalUpdated is the schema descriptor for total_updated field.
+	synctaskDescTotalUpdated := synctaskFields[9].Descriptor()
+	// synctask.DefaultTotalUpdated holds the default value on creation for the total_updated field.
+	synctask.DefaultTotalUpdated = synctaskDescTotalUpdated.Default.(int)
+	// synctask.TotalUpdatedValidator is a validator for the "total_updated" field. It is called by the builders before save.
+	synctask.TotalUpdatedValidator = synctaskDescTotalUpdated.Validators[0].(func(int) error)
+	// synctaskDescTotalSkipped is the schema descriptor for total_skipped field.
+	synctaskDescTotalSkipped := synctaskFields[10].Descriptor()
+	// synctask.DefaultTotalSkipped holds the default value on creation for the total_skipped field.
+	synctask.DefaultTotalSkipped = synctaskDescTotalSkipped.Default.(int)
+	// synctask.TotalSkippedValidator is a validator for the "total_skipped" field. It is called by the builders before save.
+	synctask.TotalSkippedValidator = synctaskDescTotalSkipped.Validators[0].(func(int) error)
 	// synctaskDescStatus is the schema descriptor for status field.
-	synctaskDescStatus := synctaskFields[10].Descriptor()
+	synctaskDescStatus := synctaskFields[12].Descriptor()
 	// synctask.DefaultStatus holds the default value on creation for the status field.
 	synctask.DefaultStatus = synctaskDescStatus.Default.(string)
 	// synctask.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	synctask.StatusValidator = synctaskDescStatus.Validators[0].(func(string) error)
+	synctaskitemFields := schema.SyncTaskItem{}.Fields()
+	_ = synctaskitemFields
+	// synctaskitemDescTaskID is the schema descriptor for task_id field.
+	synctaskitemDescTaskID := synctaskitemFields[0].Descriptor()
+	// synctaskitem.TaskIDValidator is a validator for the "task_id" field. It is called by the builders before save.
+	synctaskitem.TaskIDValidator = synctaskitemDescTaskID.Validators[0].(func(int) error)
+	// synctaskitemDescOrdinal is the schema descriptor for ordinal field.
+	synctaskitemDescOrdinal := synctaskitemFields[1].Descriptor()
+	// synctaskitem.OrdinalValidator is a validator for the "ordinal" field. It is called by the builders before save.
+	synctaskitem.OrdinalValidator = synctaskitemDescOrdinal.Validators[0].(func(int) error)
+	// synctaskitemDescSegmentID is the schema descriptor for segment_id field.
+	synctaskitemDescSegmentID := synctaskitemFields[2].Descriptor()
+	// synctaskitem.SegmentIDValidator is a validator for the "segment_id" field. It is called by the builders before save.
+	synctaskitem.SegmentIDValidator = synctaskitemDescSegmentID.Validators[0].(func(int) error)
+	// synctaskitemDescResourceID is the schema descriptor for resource_id field.
+	synctaskitemDescResourceID := synctaskitemFields[3].Descriptor()
+	// synctaskitem.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
+	synctaskitem.ResourceIDValidator = synctaskitemDescResourceID.Validators[0].(func(int) error)
+	synctaskresultFields := schema.SyncTaskResult{}.Fields()
+	_ = synctaskresultFields
+	// synctaskresultDescTaskID is the schema descriptor for task_id field.
+	synctaskresultDescTaskID := synctaskresultFields[0].Descriptor()
+	// synctaskresult.TaskIDValidator is a validator for the "task_id" field. It is called by the builders before save.
+	synctaskresult.TaskIDValidator = synctaskresultDescTaskID.Validators[0].(func(int) error)
+	// synctaskresultDescResourceID is the schema descriptor for resource_id field.
+	synctaskresultDescResourceID := synctaskresultFields[1].Descriptor()
+	// synctaskresult.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
+	synctaskresult.ResourceIDValidator = synctaskresultDescResourceID.Validators[0].(func(int) error)
+	// synctaskresultDescResourcePath is the schema descriptor for resource_path field.
+	synctaskresultDescResourcePath := synctaskresultFields[2].Descriptor()
+	// synctaskresult.DefaultResourcePath holds the default value on creation for the resource_path field.
+	synctaskresult.DefaultResourcePath = synctaskresultDescResourcePath.Default.(string)
+	// synctaskresultDescUpdatedCount is the schema descriptor for updated_count field.
+	synctaskresultDescUpdatedCount := synctaskresultFields[3].Descriptor()
+	// synctaskresult.DefaultUpdatedCount holds the default value on creation for the updated_count field.
+	synctaskresult.DefaultUpdatedCount = synctaskresultDescUpdatedCount.Default.(int)
+	// synctaskresult.UpdatedCountValidator is a validator for the "updated_count" field. It is called by the builders before save.
+	synctaskresult.UpdatedCountValidator = synctaskresultDescUpdatedCount.Validators[0].(func(int) error)
+	// synctaskresultDescSkippedCount is the schema descriptor for skipped_count field.
+	synctaskresultDescSkippedCount := synctaskresultFields[4].Descriptor()
+	// synctaskresult.DefaultSkippedCount holds the default value on creation for the skipped_count field.
+	synctaskresult.DefaultSkippedCount = synctaskresultDescSkippedCount.Default.(int)
+	// synctaskresult.SkippedCountValidator is a validator for the "skipped_count" field. It is called by the builders before save.
+	synctaskresult.SkippedCountValidator = synctaskresultDescSkippedCount.Validators[0].(func(int) error)
 	systemsettingMixin := schema.SystemSetting{}.Mixin()
 	systemsettingMixinFields0 := systemsettingMixin[0].Fields()
 	_ = systemsettingMixinFields0

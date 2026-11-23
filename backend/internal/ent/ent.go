@@ -69,6 +69,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatchitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskresult"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
@@ -196,6 +198,8 @@ func checkColumn(t, c string) error {
 			storageuploadbatchitem.Table:    storageuploadbatchitem.ValidColumn,
 			storagewrite.Table:              storagewrite.ValidColumn,
 			synctask.Table:                  synctask.ValidColumn,
+			synctaskitem.Table:              synctaskitem.ValidColumn,
+			synctaskresult.Table:            synctaskresult.ValidColumn,
 			systemsetting.Table:             systemsetting.ValidColumn,
 			tmentry.Table:                   tmentry.ValidColumn,
 			translationprompttemplate.Table: translationprompttemplate.ValidColumn,

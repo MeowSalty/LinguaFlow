@@ -277,6 +277,11 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{AuthTransactionsColumns[12], AuthTransactionsColumns[4]},
 			},
+			{
+				Name:    "authtransaction_expires_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{AuthTransactionsColumns[48], AuthTransactionsColumns[0]},
+			},
 		},
 	}
 	// AuthenticationRecoveriesColumns holds the columns for the "authentication_recoveries" table.
@@ -725,6 +730,13 @@ var (
 				OnDelete:   schema.SetNull,
 			},
 		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "exportartifact_project_id_resource_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{ExportArtifactsColumns[4], ExportArtifactsColumns[5], ExportArtifactsColumns[0]},
+			},
+		},
 	}
 	// ExternalIdentitiesColumns holds the columns for the "external_identities" table.
 	ExternalIdentitiesColumns = []*schema.Column{
@@ -785,6 +797,11 @@ var (
 			},
 		},
 		Indexes: []*schema.Index{
+			{
+				Name:    "glossaryentry_project_id_source_key_id",
+				Unique:  false,
+				Columns: []*schema.Column{GlossaryEntriesColumns[10], GlossaryEntriesColumns[3], GlossaryEntriesColumns[0]},
+			},
 			{
 				Name:    "glossaryentry_project_id_source_key",
 				Unique:  true,
@@ -867,6 +884,11 @@ var (
 				Name:    "job_project_id_id",
 				Unique:  false,
 				Columns: []*schema.Column{JobsColumns[19], JobsColumns[0]},
+			},
+			{
+				Name:    "job_status_id",
+				Unique:  false,
+				Columns: []*schema.Column{JobsColumns[6], JobsColumns[0]},
 			},
 			{
 				Name:    "job_updated_at_id",
@@ -1052,6 +1074,7 @@ var (
 		{Name: "verified_auth_generation", Type: field.TypeInt64, Default: 0},
 		{Name: "verified_login_policy_revision", Type: field.TypeInt64, Default: 0},
 		{Name: "evidence", Type: field.TypeJSON, Nullable: true},
+		{Name: "evidence_expires_at", Type: field.TypeTime, Nullable: true},
 		{Name: "connection_id", Type: field.TypeString},
 		{Name: "external_identity_id", Type: field.TypeInt},
 		{Name: "user_id", Type: field.TypeInt},
@@ -1064,19 +1087,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "login_bindings_auth_connections_bindings",
-				Columns:    []*schema.Column{LoginBindingsColumns[8]},
+				Columns:    []*schema.Column{LoginBindingsColumns[9]},
 				RefColumns: []*schema.Column{AuthConnectionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "login_bindings_external_identities_bindings",
-				Columns:    []*schema.Column{LoginBindingsColumns[9]},
+				Columns:    []*schema.Column{LoginBindingsColumns[10]},
 				RefColumns: []*schema.Column{ExternalIdentitiesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "login_bindings_users_login_bindings",
-				Columns:    []*schema.Column{LoginBindingsColumns[10]},
+				Columns:    []*schema.Column{LoginBindingsColumns[11]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1085,7 +1108,12 @@ var (
 			{
 				Name:    "loginbinding_user_id_connection_id",
 				Unique:  true,
-				Columns: []*schema.Column{LoginBindingsColumns[10], LoginBindingsColumns[8]},
+				Columns: []*schema.Column{LoginBindingsColumns[11], LoginBindingsColumns[9]},
+			},
+			{
+				Name:    "loginbinding_evidence_expires_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{LoginBindingsColumns[8], LoginBindingsColumns[0]},
 			},
 		},
 	}
@@ -1122,6 +1150,11 @@ var (
 				Name:    "orgmembership_organization_memberships_user_memberships",
 				Unique:  true,
 				Columns: []*schema.Column{OrgMembershipsColumns[4], OrgMembershipsColumns[5]},
+			},
+			{
+				Name:    "orgmembership_user_memberships_organization_memberships",
+				Unique:  false,
+				Columns: []*schema.Column{OrgMembershipsColumns[5], OrgMembershipsColumns[4]},
 			},
 		},
 	}
@@ -1240,6 +1273,11 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{ReauthenticationProofsColumns[4], ReauthenticationProofsColumns[13]},
 			},
+			{
+				Name:    "reauthenticationproof_expires_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{ReauthenticationProofsColumns[13], ReauthenticationProofsColumns[0]},
+			},
 		},
 	}
 	// RefreshSessionsColumns holds the columns for the "refresh_sessions" table.
@@ -1293,6 +1331,22 @@ var (
 				Name:    "refreshsession_expires_at",
 				Unique:  false,
 				Columns: []*schema.Column{RefreshSessionsColumns[8]},
+			},
+			{
+				Name:    "refreshsession_expires_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{RefreshSessionsColumns[8], RefreshSessionsColumns[0]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "evidence IS NOT NULL",
+				},
+			},
+			{
+				Name:    "refreshsession_revoked_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{RefreshSessionsColumns[9], RefreshSessionsColumns[0]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "evidence IS NOT NULL AND revoked_at IS NOT NULL",
+				},
 			},
 		},
 	}
@@ -1401,6 +1455,11 @@ var (
 				Name:    "sseevent_job_id_seq",
 				Unique:  false,
 				Columns: []*schema.Column{SseEventsColumns[8], SseEventsColumns[1]},
+			},
+			{
+				Name:    "sseevent_seq",
+				Unique:  false,
+				Columns: []*schema.Column{SseEventsColumns[1]},
 			},
 		},
 	}
@@ -1532,6 +1591,11 @@ var (
 				Name:    "sourcerevision_resource_id_current",
 				Unique:  false,
 				Columns: []*schema.Column{SourceRevisionsColumns[3], SourceRevisionsColumns[11]},
+			},
+			{
+				Name:    "sourcerevision_resource_id_deleted_id",
+				Unique:  false,
+				Columns: []*schema.Column{SourceRevisionsColumns[3], SourceRevisionsColumns[12], SourceRevisionsColumns[0]},
 			},
 		},
 	}
@@ -2174,10 +2238,10 @@ var (
 		{Name: "processed_segments", Type: field.TypeInt, Default: 0},
 		{Name: "checkpoint_version", Type: field.TypeInt, Default: 0},
 		{Name: "next_segment_index", Type: field.TypeInt, Default: 0},
+		{Name: "total_updated", Type: field.TypeInt, Default: 0},
+		{Name: "total_skipped", Type: field.TypeInt, Default: 0},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
-		{Name: "segment_ids", Type: field.TypeString, Size: 2147483647},
-		{Name: "resource_ids", Type: field.TypeString, Size: 2147483647},
 		{Name: "result", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "error", Type: field.TypeString, Nullable: true},
 		{Name: "cancelled_at", Type: field.TypeTime, Nullable: true},
@@ -2216,12 +2280,12 @@ var (
 			{
 				Name:    "synctask_project_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{SyncTasksColumns[19], SyncTasksColumns[10]},
+				Columns: []*schema.Column{SyncTasksColumns[19], SyncTasksColumns[12]},
 			},
 			{
 				Name:    "synctask_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{SyncTasksColumns[10], SyncTasksColumns[1]},
+				Columns: []*schema.Column{SyncTasksColumns[12], SyncTasksColumns[1]},
 			},
 			{
 				Name:    "synctask_updated_at_id",
@@ -2231,12 +2295,76 @@ var (
 			{
 				Name:    "synctask_status_updated_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{SyncTasksColumns[10], SyncTasksColumns[2], SyncTasksColumns[0]},
+				Columns: []*schema.Column{SyncTasksColumns[12], SyncTasksColumns[2], SyncTasksColumns[0]},
 			},
 			{
 				Name:    "synctask_status_retention_anchor_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{SyncTasksColumns[10], SyncTasksColumns[17], SyncTasksColumns[0]},
+				Columns: []*schema.Column{SyncTasksColumns[12], SyncTasksColumns[17], SyncTasksColumns[0]},
+			},
+		},
+	}
+	// SyncTaskItemsColumns holds the columns for the "sync_task_items" table.
+	SyncTaskItemsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "ordinal", Type: field.TypeInt},
+		{Name: "segment_id", Type: field.TypeInt},
+		{Name: "resource_id", Type: field.TypeInt},
+		{Name: "task_id", Type: field.TypeInt},
+	}
+	// SyncTaskItemsTable holds the schema information for the "sync_task_items" table.
+	SyncTaskItemsTable = &schema.Table{
+		Name:       "sync_task_items",
+		Columns:    SyncTaskItemsColumns,
+		PrimaryKey: []*schema.Column{SyncTaskItemsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "sync_task_items_sync_tasks_task",
+				Columns:    []*schema.Column{SyncTaskItemsColumns[4]},
+				RefColumns: []*schema.Column{SyncTasksColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "synctaskitem_task_id_ordinal",
+				Unique:  true,
+				Columns: []*schema.Column{SyncTaskItemsColumns[4], SyncTaskItemsColumns[1]},
+			},
+			{
+				Name:    "synctaskitem_task_id_segment_id",
+				Unique:  true,
+				Columns: []*schema.Column{SyncTaskItemsColumns[4], SyncTaskItemsColumns[2]},
+			},
+		},
+	}
+	// SyncTaskResultsColumns holds the columns for the "sync_task_results" table.
+	SyncTaskResultsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "resource_id", Type: field.TypeInt},
+		{Name: "resource_path", Type: field.TypeString, Default: ""},
+		{Name: "updated_count", Type: field.TypeInt, Default: 0},
+		{Name: "skipped_count", Type: field.TypeInt, Default: 0},
+		{Name: "task_id", Type: field.TypeInt},
+	}
+	// SyncTaskResultsTable holds the schema information for the "sync_task_results" table.
+	SyncTaskResultsTable = &schema.Table{
+		Name:       "sync_task_results",
+		Columns:    SyncTaskResultsColumns,
+		PrimaryKey: []*schema.Column{SyncTaskResultsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "sync_task_results_sync_tasks_task",
+				Columns:    []*schema.Column{SyncTaskResultsColumns[5]},
+				RefColumns: []*schema.Column{SyncTasksColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "synctaskresult_task_id_resource_id",
+				Unique:  true,
+				Columns: []*schema.Column{SyncTaskResultsColumns[5], SyncTaskResultsColumns[1]},
 			},
 		},
 	}
@@ -2772,6 +2900,8 @@ var (
 		StorageUploadBatchItemsTable,
 		StorageWritesTable,
 		SyncTasksTable,
+		SyncTaskItemsTable,
+		SyncTaskResultsTable,
 		SystemSettingsTable,
 		TmEntriesTable,
 		TranslationPromptTemplatesTable,
@@ -2928,6 +3058,8 @@ func init() {
 	SyncTasksTable.ForeignKeys[0].RefTable = GlossaryEntriesTable
 	SyncTasksTable.ForeignKeys[1].RefTable = ProjectsTable
 	SyncTasksTable.ForeignKeys[2].RefTable = UsersTable
+	SyncTaskItemsTable.ForeignKeys[0].RefTable = SyncTasksTable
+	SyncTaskResultsTable.ForeignKeys[0].RefTable = SyncTasksTable
 	TmEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
 	TranslationPromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	TranslationPromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable

@@ -139,6 +139,26 @@ func (_u *LoginBindingUpdate) ClearEvidence() *LoginBindingUpdate {
 	return _u
 }
 
+// SetEvidenceExpiresAt sets the "evidence_expires_at" field.
+func (_u *LoginBindingUpdate) SetEvidenceExpiresAt(v time.Time) *LoginBindingUpdate {
+	_u.mutation.SetEvidenceExpiresAt(v)
+	return _u
+}
+
+// SetNillableEvidenceExpiresAt sets the "evidence_expires_at" field if the given value is not nil.
+func (_u *LoginBindingUpdate) SetNillableEvidenceExpiresAt(v *time.Time) *LoginBindingUpdate {
+	if v != nil {
+		_u.SetEvidenceExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearEvidenceExpiresAt clears the value of the "evidence_expires_at" field.
+func (_u *LoginBindingUpdate) ClearEvidenceExpiresAt() *LoginBindingUpdate {
+	_u.mutation.ClearEvidenceExpiresAt()
+	return _u
+}
+
 // AddSessionIDs adds the "sessions" edge to the RefreshSession entity by IDs.
 func (_u *LoginBindingUpdate) AddSessionIDs(ids ...int) *LoginBindingUpdate {
 	_u.mutation.AddSessionIDs(ids...)
@@ -296,6 +316,12 @@ func (_u *LoginBindingUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.EvidenceCleared() {
 		_spec.ClearField(loginbinding.FieldEvidence, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.EvidenceExpiresAt(); ok {
+		_spec.SetField(loginbinding.FieldEvidenceExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.EvidenceExpiresAtCleared() {
+		_spec.ClearField(loginbinding.FieldEvidenceExpiresAt, field.TypeTime)
 	}
 	if _u.mutation.SessionsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -469,6 +495,26 @@ func (_u *LoginBindingUpdateOne) SetNillableEvidence(v *authrules.Evidence) *Log
 // ClearEvidence clears the value of the "evidence" field.
 func (_u *LoginBindingUpdateOne) ClearEvidence() *LoginBindingUpdateOne {
 	_u.mutation.ClearEvidence()
+	return _u
+}
+
+// SetEvidenceExpiresAt sets the "evidence_expires_at" field.
+func (_u *LoginBindingUpdateOne) SetEvidenceExpiresAt(v time.Time) *LoginBindingUpdateOne {
+	_u.mutation.SetEvidenceExpiresAt(v)
+	return _u
+}
+
+// SetNillableEvidenceExpiresAt sets the "evidence_expires_at" field if the given value is not nil.
+func (_u *LoginBindingUpdateOne) SetNillableEvidenceExpiresAt(v *time.Time) *LoginBindingUpdateOne {
+	if v != nil {
+		_u.SetEvidenceExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearEvidenceExpiresAt clears the value of the "evidence_expires_at" field.
+func (_u *LoginBindingUpdateOne) ClearEvidenceExpiresAt() *LoginBindingUpdateOne {
+	_u.mutation.ClearEvidenceExpiresAt()
 	return _u
 }
 
@@ -659,6 +705,12 @@ func (_u *LoginBindingUpdateOne) sqlSave(ctx context.Context) (_node *LoginBindi
 	}
 	if _u.mutation.EvidenceCleared() {
 		_spec.ClearField(loginbinding.FieldEvidence, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.EvidenceExpiresAt(); ok {
+		_spec.SetField(loginbinding.FieldEvidenceExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.EvidenceExpiresAtCleared() {
+		_spec.ClearField(loginbinding.FieldEvidenceExpiresAt, field.TypeTime)
 	}
 	if _u.mutation.SessionsCleared() {
 		edge := &sqlgraph.EdgeSpec{

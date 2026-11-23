@@ -42,6 +42,8 @@ func (GlossaryEntry) Edges() []ent.Edge {
 
 func (GlossaryEntry) Indexes() []ent.Index {
 	return []ent.Index{
+		// Full project lists include both forbidden classes and order by key/id.
+		index.Fields("project_id", "source_key", "id"),
 		index.Fields("project_id", "source_key").
 			Unique().
 			Annotations(entsql.IndexWhere("forbidden = false")),

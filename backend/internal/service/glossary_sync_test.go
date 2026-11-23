@@ -54,10 +54,6 @@ func seedSyncTaskFixture(t *testing.T, format string) (taskID int, seg *ent.Segm
 		t.Fatalf("create segment: %v", err)
 	}
 
-	segmentIDs, err := json.Marshal([]int{seg.ID})
-	if err != nil {
-		t.Fatalf("marshal segment ids: %v", err)
-	}
 	task, err := client.SyncTask.Create().
 		SetProjectID(projectID).
 		SetEntryID(entry.ID).
@@ -66,12 +62,13 @@ func seedSyncTaskFixture(t *testing.T, format string) (taskID int, seg *ent.Segm
 		SetNewTarget("雷霆").
 		SetTotalSegments(1).
 		SetStatus(SyncTaskStatusPending).
-		SetSegmentIds(string(segmentIDs)).
-		SetResourceIds("[]").
+		SetCheckpointVersion(syncCheckpointVersion).
 		Save(context.Background())
 	if err != nil {
 		t.Fatalf("create sync task: %v", err)
 	}
+	client.SyncTaskItem.Create().SetTaskID(task.ID).SetOrdinal(0).SetSegmentID(seg.ID).SetResourceID(res.ID).SaveX(context.Background())
+	client.SyncTaskResult.Create().SetTaskID(task.ID).SetResourceID(res.ID).SaveX(context.Background())
 	return task.ID, seg, client
 }
 

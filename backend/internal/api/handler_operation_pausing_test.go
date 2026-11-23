@@ -231,7 +231,7 @@ func TestOperationsHTTPPausingSummaryFiltersAndBuckets(t *testing.T) {
 	sync := operationAPISeed(t, c, p, u, old)
 	for _, status := range []string{"pending", "failed"} {
 		c.SyncTask.Create().SetProjectID(p.ID).SetActorUserID(u.ID).SetEntryID(sync.EntryID).
-			SetOldTarget("old").SetNewTarget("new").SetTotalSegments(0).SetSegmentIds("[]").SetResourceIds("[]").
+			SetOldTarget("old").SetNewTarget("new").SetTotalSegments(0).
 			SetStatus(status).SetUpdatedAt(now.Add(-time.Hour)).SaveX(ctx)
 	}
 	for _, status := range []storagetask.Status{storagetask.StatusPending, storagetask.StatusRunning, storagetask.StatusWaitingRetry, storagetask.StatusNeedsAction, storagetask.StatusFailed} {

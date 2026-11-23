@@ -29,7 +29,7 @@ func seedOperationSync(t *testing.T, c *ent.Client, projectID, actor int, status
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err := c.SyncTask.Create().SetProjectID(projectID).SetActorUserID(actor).SetEntryID(entry.ID).SetOldTarget("secret-old").SetNewTarget("secret-new").SetSegmentIds("[999]").SetResourceIds("[999]").SetTotalSegments(10).SetProcessedSegments(3).SetStatus(status).SetCreatedAt(at.Add(-time.Hour)).SetUpdatedAt(at).Save(ctx)
+	task, err := c.SyncTask.Create().SetProjectID(projectID).SetActorUserID(actor).SetEntryID(entry.ID).SetOldTarget("secret-old").SetNewTarget("secret-new").SetTotalSegments(10).SetProcessedSegments(3).SetStatus(status).SetCreatedAt(at.Add(-time.Hour)).SetUpdatedAt(at).Save(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

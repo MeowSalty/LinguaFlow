@@ -4,6 +4,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 // ExportArtifact 持久化保存存储相关事实，生命周期独立于业务对象的删除。
@@ -32,4 +33,8 @@ func (ExportArtifact) Edges() []ent.Edge {
 	return []ent.Edge{edge.To("source_revision", SourceRevision.Type).Field("source_revision_id").Unique().Required().Immutable(),
 		edge.To("snapshot_blob", Blob.Type).Field("snapshot_blob_id").Unique(),
 		edge.To("output_blob", Blob.Type).Field("output_blob_id").Unique()}
+}
+
+func (ExportArtifact) Indexes() []ent.Index {
+	return []ent.Index{index.Fields("project_id", "resource_id", "id")}
 }

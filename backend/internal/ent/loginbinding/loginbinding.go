@@ -35,6 +35,8 @@ const (
 	FieldVerifiedLoginPolicyRevision = "verified_login_policy_revision"
 	// FieldEvidence holds the string denoting the evidence field in the database.
 	FieldEvidence = "evidence"
+	// FieldEvidenceExpiresAt holds the string denoting the evidence_expires_at field in the database.
+	FieldEvidenceExpiresAt = "evidence_expires_at"
 	// EdgeUser holds the string denoting the user edge name in mutations.
 	EdgeUser = "user"
 	// EdgeConnection holds the string denoting the connection edge name in mutations.
@@ -88,6 +90,7 @@ var Columns = []string{
 	FieldVerifiedAuthGeneration,
 	FieldVerifiedLoginPolicyRevision,
 	FieldEvidence,
+	FieldEvidenceExpiresAt,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -180,6 +183,11 @@ func ByVerifiedAuthGeneration(opts ...sql.OrderTermOption) OrderOption {
 // ByVerifiedLoginPolicyRevision orders the results by the verified_login_policy_revision field.
 func ByVerifiedLoginPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldVerifiedLoginPolicyRevision, opts...).ToFunc()
+}
+
+// ByEvidenceExpiresAt orders the results by the evidence_expires_at field.
+func ByEvidenceExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEvidenceExpiresAt, opts...).ToFunc()
 }
 
 // ByUserField orders the results by user field.

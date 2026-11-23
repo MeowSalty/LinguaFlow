@@ -30,5 +30,5 @@ func (SourceRevision) Edges() []ent.Edge {
 	return []ent.Edge{edge.To("blob", Blob.Type).Field("source_blob_id").Unique().Required().Immutable()}
 }
 func (SourceRevision) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("resource_id", "current")}
+	return []ent.Index{index.Fields("resource_id", "current"), index.Fields("resource_id", "deleted", "id")}
 }

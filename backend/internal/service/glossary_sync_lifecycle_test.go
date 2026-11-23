@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskresult"
 )
 
 type syncLifecycleFixture struct {
@@ -68,9 +68,9 @@ func TestGlossarySyncLifecycleResourcesAndAuthorization(t *testing.T) {
 			t.Fatal(err)
 		}
 		task := f.client.SyncTask.GetX(ctx, info.TaskID)
-		var actual []int
-		if err := json.Unmarshal([]byte(task.ResourceIds), &actual); err != nil || len(actual) != 1 || actual[0] != f.resourceID {
-			t.Fatalf("actual resources=%s err=%v", task.ResourceIds, err)
+		actual, err := f.client.SyncTaskResult.Query().Where(synctaskresult.TaskIDEQ(task.ID)).Select(synctaskresult.FieldResourceID).Ints(ctx)
+		if err != nil || len(actual) != 1 || actual[0] != f.resourceID {
+			t.Fatalf("actual resources=%v err=%v", actual, err)
 		}
 		if _, err := f.svc.GetSyncTaskStatus(ctx, other.ID, f.projectID, task.ID); !errors.Is(err, ErrForbidden) {
 			t.Fatalf("foreign read=%v", err)
@@ -231,8 +231,13 @@ func TestGlossarySyncLifecycleCancellationAndShutdown(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			persisted := f.client.SyncTask.GetX(ctx, task.ID)
+			if !cancelled.UpdatedAt.Equal(persisted.UpdatedAt) || cancelled.Status != persisted.Status || cancelled.Result != persisted.Result {
+				t.Fatalf("cancel response differs from persisted task: updated_at=%s persisted=%s status=%s/%s result=%q/%q",
+					cancelled.UpdatedAt, persisted.UpdatedAt, cancelled.Status, persisted.Status, cancelled.Result, persisted.Result)
+			}
 			again, err := f.svc.CancelSyncTask(ctx, f.owner, f.projectID, task.ID)
-			if err != nil || !again.UpdatedAt.Equal(cancelled.UpdatedAt) || !again.CancelledAt.Equal(*cancelled.CancelledAt) {
+			if err != nil || !again.UpdatedAt.Equal(cancelled.UpdatedAt) || !again.CancelledAt.Equal(*cancelled.CancelledAt) || again.Status != cancelled.Status || again.Result != cancelled.Result {
 				t.Fatalf("repeat cancel changed task: %v", err)
 			}
 			if err := f.svc.ExecuteSyncTask(ctx, task.ID); err != nil {
@@ -268,7 +273,7 @@ func TestGlossarySyncLifecycleCancellationAndShutdown(t *testing.T) {
 	}
 }
 
-func TestGlossarySyncLifecycleLegacyRecoveryAndMigration(t *testing.T) {
+func TestGlossarySyncLifecycleRejectsUnmigratedOrInvalidCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	f := seedSyncLifecycle(t, testClient(t), 1)
 	var tasks []*ent.SyncTask
@@ -285,7 +290,7 @@ func TestGlossarySyncLifecycleLegacyRecoveryAndMigration(t *testing.T) {
 		case "invalid_version":
 			update.SetCheckpointVersion(9)
 		case "invalid_position":
-			update.SetCheckpointVersion(1).SetNextSegmentIndex(10)
+			update.SetCheckpointVersion(syncCheckpointVersion).SetNextSegmentIndex(10)
 		}
 		tasks = append(tasks, update.SaveX(ctx))
 	}
@@ -300,10 +305,6 @@ func TestGlossarySyncLifecycleLegacyRecoveryAndMigration(t *testing.T) {
 	for i, old := range tasks {
 		row := f.client.SyncTask.GetX(ctx, old.ID)
 		switch i {
-		case 0:
-			if row.Status != SyncTaskStatusPending || row.CheckpointVersion != 1 || row.StartedAt != nil {
-				t.Fatalf("legacy pending=%+v", row)
-			}
 		case 3:
 			if row.Status != old.Status || row.Result != old.Result || !row.UpdatedAt.Equal(old.UpdatedAt) || row.StartedAt != nil {
 				t.Fatalf("history modified=%+v", row)
@@ -314,18 +315,21 @@ func TestGlossarySyncLifecycleLegacyRecoveryAndMigration(t *testing.T) {
 			}
 		}
 	}
+	trusted := f.submit(t)
 	ids, err := f.svc.PendingTaskIDs(ctx, 0, 1)
-	if err != nil || len(ids) != 1 || ids[0] != tasks[0].ID {
+	if err != nil || len(ids) != 1 || ids[0] != trusted.ID {
 		t.Fatalf("pending=%v err=%v", ids, err)
 	}
 	ids, err = f.svc.PendingTaskIDs(ctx, ids[0], 1)
 	if err != nil || len(ids) != 0 {
 		t.Fatalf("pending second page=%v err=%v", ids, err)
 	}
-	old := tasks[0]
 	longPending := f.client.SyncTask.Create().SetProjectID(f.projectID).SetActorUserID(f.owner).SetEntryID(f.entryID).
-		SetOldTarget(old.OldTarget).SetNewTarget(old.NewTarget).SetTotalSegments(old.TotalSegments).
-		SetSegmentIds(old.SegmentIds).SetResourceIds(old.ResourceIds).SetCreatedAt(time.Now().Add(-72 * time.Hour)).SaveX(ctx)
+		SetOldTarget(trusted.OldTarget).SetNewTarget(trusted.NewTarget).SetTotalSegments(trusted.TotalSegments).
+		SetCheckpointVersion(syncCheckpointVersion).SetStatus(SyncTaskStatusPending).
+		SetCreatedAt(time.Now().Add(-72 * time.Hour)).SaveX(ctx)
+	f.client.SyncTaskItem.Create().SetTaskID(longPending.ID).SetOrdinal(0).SetSegmentID(f.segmentIDs[0]).SetResourceID(f.resourceID).SaveX(ctx)
+	f.client.SyncTaskResult.Create().SetTaskID(longPending.ID).SetResourceID(f.resourceID).SaveX(ctx)
 	if err := f.svc.PrepareRecovery(ctx); err != nil {
 		t.Fatal(err)
 	}

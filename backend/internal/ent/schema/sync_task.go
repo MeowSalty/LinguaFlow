@@ -52,7 +52,9 @@ func (SyncTask) Fields() []ent.Field {
 		field.Int("next_segment_index").
 			Default(0).
 			NonNegative().
-			Comment("固定段落 ID 列表的下一处理位置"),
+			Comment("不可变计划中下一待处理 ordinal"),
+		field.Int("total_updated").Default(0).NonNegative().Comment("已提交更新总数"),
+		field.Int("total_skipped").Default(0).NonNegative().Comment("已提交跳过总数，包含已删除目标"),
 		field.Time("started_at").
 			Optional().
 			Nillable().
@@ -61,13 +63,9 @@ func (SyncTask) Fields() []ent.Field {
 			NotEmpty().
 			Default("pending").
 			Comment("任务状态: pending, running, completed, failed, cancelled"),
-		field.Text("segment_ids").
-			Comment("JSON 序列化的段落 ID 列表"),
-		field.Text("resource_ids").
-			Comment("JSON 序列化的资源 ID 列表"),
 		field.Text("result").
 			Optional().
-			Comment("JSON 序列化的结果摘要"),
+			Comment("终态 JSON 结果摘要；运行中结果从子表投影"),
 		field.String("error").
 			Optional().
 			Comment("错误信息"),

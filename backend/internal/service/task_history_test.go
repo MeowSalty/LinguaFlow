@@ -195,7 +195,7 @@ func TestTaskHistorySyncDeletionPreservesGlossary(t *testing.T) {
 	f := newHistoryFixture(t)
 	ctx := context.Background()
 	entry := f.c.GlossaryEntry.Create().SetProjectID(f.p).SetSourceKey("term").SetSource("term").SetTarget("translation").SaveX(ctx)
-	task := f.c.SyncTask.Create().SetProjectID(f.p).SetEntryID(entry.ID).SetActorUserID(f.owner).SetOldTarget("old").SetNewTarget("new").SetTotalSegments(0).SetSegmentIds("[]").SetResourceIds("[]").SetStatus("cancelled").SaveX(ctx)
+	task := f.c.SyncTask.Create().SetProjectID(f.p).SetEntryID(entry.ID).SetActorUserID(f.owner).SetOldTarget("old").SetNewTarget("new").SetTotalSegments(0).SetStatus("cancelled").SaveX(ctx)
 	target := HistoryTarget{OperationGlossarySync, strconv.Itoa(task.ID), f.p}
 	wrong := target
 	wrong.ProjectID++
@@ -357,7 +357,21 @@ func TestTaskHistoryBatchLockWaitConsumesBudget(t *testing.T) {
 }
 
 func TestTaskHistoryCleanupDeadlineRollsBack(t *testing.T) {
-	f := newHistoryFixture(t)
+	// Cancellation may safely discard the only connection of a memory pool.
+	// A file fixture preserves the database so rollback can be verified after
+	// that physical connection is gone, using the same connector as runtime.
+	dsn := filepath.ToSlash(filepath.Join(t.TempDir(), "history.db")) + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	db, err := database.OpenSQLitePool(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	client := ent.NewClient(ent.Driver(database.NewDriver(entsql.OpenDB(dialect.SQLite, db))))
+	t.Cleanup(func() { _ = client.Close() })
+	if err := client.Schema.Create(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	f := historyFixtureWithClient(t, client)
 	ctx := context.Background()
 	j := f.job(t, "completed", 40)
 	f.c.SSEEvent.Create().SetJobID(j.ID).SetSeq(1).SetType("batch").SetLevel("info").SetMessage("keep").SaveX(ctx)

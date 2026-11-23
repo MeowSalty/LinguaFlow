@@ -2,17 +2,17 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskresult"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tasklife"
@@ -24,7 +24,7 @@ var (
 	ErrSyncTaskStateConflict = errors.New("sync task state conflict")
 )
 
-const syncCheckpointVersion = 1
+const syncCheckpointVersion = 2
 const syncBatchSize = 100
 const syncRecoveryFailure = "术语同步恢复失败：缺少可信批次检查点，已提交内容保留，请重新分析后创建新任务"
 
@@ -74,48 +74,37 @@ func (s *GlossarySyncService) SubmitSyncTask(ctx context.Context, actorUserID, p
 		return nil, ErrInvalidInput
 	}
 	var info *SyncTaskInfo
-	err := s.projects.mutateProject(ctx, actorUserID, projectID, func(client *ent.Client, _ *ent.Project) error {
-		entry, err := client.GlossaryEntry.Query().Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).Only(ctx)
-		if ent.IsNotFound(err) {
-			return ErrGlossaryEntryNotFound
+	err := s.withSyncPlanTransaction(ctx, actorUserID, projectID, func(client *ent.Client) error {
+		info = nil
+		b, err := backend.NewBuildBoundsFromContext(ctx, 0, min(executionInputState(ctx).limit, DefaultExecutionInputBytes))
+		if err != nil {
+			return err
 		}
+		defer b.CloseRetired()
+		if err := reserveSyncProjection(b, int64(len(input.OldTarget))+int64(len(input.NewTarget)), 1, 0); err != nil {
+			return err
+		}
+		entry, err := loadSyncPlanEntry(ctx, client, projectID, entryID, b)
 		if err != nil {
 			return err
 		}
 		if err := validateSyncResources(ctx, client, projectID, input.ResourceIDs); err != nil {
 			return err
 		}
-		txService := *s
-		txService.client = client
-		affected, err := txService.findAffectedSegments(ctx, projectID, entry.Source, entry.CaseSensitive, input.OldTarget, input.ResourceIDs)
+		task, err := client.SyncTask.Create().SetProjectID(projectID).SetEntryID(entryID).SetActorUserID(actorUserID).
+			SetOldTarget(input.OldTarget).SetNewTarget(input.NewTarget).SetTotalSegments(0).
+			SetStatus(SyncTaskStatusPending).SetCheckpointVersion(syncCheckpointVersion).Save(ctx)
 		if err != nil {
 			return err
 		}
-		if len(affected) == 0 {
+		total, err := createSyncPlan(ctx, client, task, entry, input.ResourceIDs)
+		if err != nil {
+			return err
+		}
+		if total == 0 {
 			return ErrNoAffectedSegments
 		}
-		ids := make([]int, len(affected))
-		for i, row := range affected {
-			ids[i] = row.ID
-		}
-		idsJSON, err := json.Marshal(ids)
-		if err != nil {
-			return err
-		}
-		resourceJSON, err := json.Marshal(syncResourceIDs(affected))
-		if err != nil {
-			return err
-		}
-		resultJSON, err := json.Marshal(glossarySyncResultJSON{Resources: []*GlossarySyncExecuteResourceResult{}})
-		if err != nil {
-			return err
-		}
-		task, err := client.SyncTask.Create().SetProjectID(projectID).SetEntryID(entryID).SetActorUserID(actorUserID).
-			SetOldTarget(input.OldTarget).SetNewTarget(input.NewTarget).SetTotalSegments(len(ids)).
-			SetProcessedSegments(0).SetStatus(SyncTaskStatusPending).SetSegmentIds(string(idsJSON)).
-			SetResourceIds(string(resourceJSON)).SetCheckpointVersion(syncCheckpointVersion).SetNextSegmentIndex(0).
-			SetResult(string(resultJSON)).Save(ctx)
-		if err != nil {
+		if _, err := client.SyncTask.Update().Where(synctask.IDEQ(task.ID)).SetTotalSegments(total).Save(ctx); err != nil {
 			return err
 		}
 		info = &SyncTaskInfo{TaskID: task.ID, Status: task.Status, StatusURL: fmt.Sprintf("/projects/%d/sync-tasks/%d", projectID, task.ID)}
@@ -131,11 +120,20 @@ func (s *GlossarySyncService) GetSyncTaskStatus(ctx context.Context, actorUserID
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false); err != nil {
 		return nil, err
 	}
-	return getProjectSyncTask(ctx, s.client, projectID, taskID)
+	var task *ent.SyncTask
+	err := s.withSyncSnapshotTransaction(ctx, func(client *ent.Client) error {
+		var err error
+		task, err = getProjectSyncTask(ctx, client, projectID, taskID)
+		if err != nil {
+			return err
+		}
+		return hydrateSyncTaskResult(ctx, client, task)
+	})
+	return task, err
 }
 
 func getProjectSyncTask(ctx context.Context, client *ent.Client, projectID, taskID int) (*ent.SyncTask, error) {
-	task, err := client.SyncTask.Query().Where(synctask.IDEQ(taskID), synctask.ProjectIDEQ(projectID)).Only(ctx)
+	task, err := client.SyncTask.Query().Where(synctask.IDEQ(taskID), synctask.ProjectIDEQ(projectID)).Select(syncTaskHeaderFields...).Only(ctx)
 	if ent.IsNotFound(err) {
 		return nil, ErrSyncTaskNotFound
 	}
@@ -162,7 +160,7 @@ func (s *GlossarySyncService) CancelSyncTask(ctx context.Context, actorUserID, p
 		if s.cancelTask != nil {
 			s.cancelTask(taskID)
 		}
-		return current, nil
+		return s.GetSyncTaskStatus(ctx, actorUserID, projectID, taskID)
 	}
 	if current.Status == SyncTaskStatusCompleted || current.Status == SyncTaskStatusFailed {
 		return nil, ErrSyncTaskStateConflict
@@ -185,6 +183,20 @@ func (s *GlossarySyncService) CancelSyncTask(ctx context.Context, actorUserID, p
 		if task.Status != SyncTaskStatusCancelled {
 			return ErrSyncTaskStateConflict
 		}
+		stored, err := syncResultSnapshot(ctx, client, task)
+		if err != nil {
+			return err
+		}
+		if _, err := client.SyncTask.Update().Where(synctask.IDEQ(taskID)).SetResult(stored).Save(ctx); err != nil {
+			return err
+		}
+		// Persisting the summary also advances updated_at. Return the final
+		// header so a repeated cancellation observes the same committed state.
+		task, err = getProjectSyncTask(ctx, client, projectID, taskID)
+		if err != nil {
+			return err
+		}
+		task.Result = stored
 		return nil
 	})
 	if err == nil && s.cancelTask != nil {
@@ -193,109 +205,18 @@ func (s *GlossarySyncService) CancelSyncTask(ctx context.Context, actorUserID, p
 	return task, err
 }
 
-// decodeSyncCheckpoint 独立于仍存在的行数校验进度：已删除的工作清单条目
-// 仍会作为必须跳过的位置保留。
-func decodeSyncCheckpoint(task *ent.SyncTask) ([]int, []int, *GlossarySyncResult, error) {
-	var ids, resources []int
-	if err := json.Unmarshal([]byte(task.SegmentIds), &ids); err != nil {
-		return nil, nil, nil, err
-	}
-	if len(ids) != task.TotalSegments || len(ids) == 0 {
-		return nil, nil, nil, errors.New("invalid work list length")
-	}
-	for i, id := range ids {
-		if id <= 0 || i > 0 && ids[i-1] >= id {
-			return nil, nil, nil, errors.New("invalid ordered work list")
-		}
-	}
-	if task.CheckpointVersion != syncCheckpointVersion || task.NextSegmentIndex < 0 || task.NextSegmentIndex > len(ids) || task.ProcessedSegments != task.NextSegmentIndex {
-		return nil, nil, nil, errors.New("invalid checkpoint version or position")
-	}
-	if err := json.Unmarshal([]byte(task.ResourceIds), &resources); err != nil {
-		return nil, nil, nil, err
-	}
-	for i, id := range resources {
-		if id <= 0 || i > 0 && resources[i-1] >= id {
-			return nil, nil, nil, errors.New("invalid resource lock set")
-		}
-	}
-	var stored *glossarySyncResultJSON
-	if err := json.Unmarshal([]byte(task.Result), &stored); err != nil {
-		return nil, nil, nil, err
-	}
-	if stored == nil {
-		return nil, nil, nil, errors.New("missing accumulated result")
-	}
-	if stored.TotalUpdated < 0 || stored.TotalSkipped < 0 || stored.TotalUpdated > task.NextSegmentIndex || stored.TotalSkipped != task.NextSegmentIndex-stored.TotalUpdated {
-		return nil, nil, nil, errors.New("invalid accumulated result")
-	}
-	result := &GlossarySyncResult{TotalUpdated: stored.TotalUpdated, TotalSkipped: stored.TotalSkipped, Resources: make(map[int]*GlossarySyncExecuteResourceResult)}
-	resourceUpdates, resourceSkipped := 0, 0
-	for _, row := range stored.Resources {
-		if row == nil || row.ResourceID <= 0 || row.UpdatedCount < 0 || row.SkippedCount < 0 || result.Resources[row.ResourceID] != nil {
-			return nil, nil, nil, errors.New("invalid resource result")
-		}
-		at := sort.SearchInts(resources, row.ResourceID)
-		if at == len(resources) || resources[at] != row.ResourceID || row.UpdatedCount > stored.TotalUpdated-resourceUpdates || row.SkippedCount > stored.TotalSkipped-resourceSkipped {
-			return nil, nil, nil, errors.New("inconsistent resource result")
-		}
-		resourceUpdates += row.UpdatedCount
-		resourceSkipped += row.SkippedCount
-		result.Resources[row.ResourceID] = row
-	}
-	if resourceUpdates != stored.TotalUpdated {
-		return nil, nil, nil, errors.New("incomplete resource update result")
-	}
-	return ids, resources, result, nil
-}
-
-func encodeSyncResult(result *GlossarySyncResult) (string, error) {
-	resources := make([]*GlossarySyncExecuteResourceResult, 0, len(result.Resources))
-	for _, stats := range result.Resources {
-		resources = append(resources, stats)
-	}
-	sort.Slice(resources, func(i, j int) bool { return resources[i].ResourceID < resources[j].ResourceID })
-	data, err := json.Marshal(glossarySyncResultJSON{TotalUpdated: result.TotalUpdated, TotalSkipped: result.TotalSkipped, Resources: resources})
-	return string(data), err
-}
-
-// prepareSyncTask 在持有任务行写锁时被调用。它绝不
-// 猜测遗留 running 任务在进程停止前已提交了多少。
+// prepareSyncTask validates the final checkpoint model. Published JSON plans are
+// converted once by database migration before runners start; runtime never guesses.
 func prepareSyncTask(ctx context.Context, client *ent.Client, task *ent.SyncTask) (*ent.SyncTask, error) {
-	if task.CheckpointVersion == 0 && task.Status == SyncTaskStatusPending && task.ProcessedSegments == 0 && task.NextSegmentIndex == 0 && task.Result == "" && task.StartedAt == nil && task.CancelledAt == nil {
-		var ids []int
-		if err := json.Unmarshal([]byte(task.SegmentIds), &ids); err == nil && len(ids) > 0 && len(ids) == task.TotalSegments {
-			valid := true
-			for i, id := range ids {
-				if id <= 0 || i > 0 && ids[i-1] >= id {
-					valid = false
-				}
-			}
-			if valid {
-				rows, err := client.Segment.Query().Where(segment.IDIn(ids...), segment.HasResourceWith(resource.ProjectIDEQ(task.ProjectID))).All(ctx)
-				if err != nil {
-					return nil, err
-				}
-				resources, err := json.Marshal(syncResourceIDs(rows))
-				if err != nil {
-					return nil, err
-				}
-				result, err := encodeSyncResult(&GlossarySyncResult{Resources: map[int]*GlossarySyncExecuteResourceResult{}})
-				if err != nil {
-					return nil, err
-				}
-				task, err = client.SyncTask.UpdateOneID(task.ID).SetCheckpointVersion(syncCheckpointVersion).SetNextSegmentIndex(0).
-					SetResourceIds(string(resources)).SetResult(result).Save(ctx)
-				if err != nil {
-					return nil, err
-				}
-			}
+	if err := validateSyncPlanSummary(ctx, client, task); err != nil {
+		if !errors.Is(err, errInvalidSyncCheckpoint) {
+			return nil, err
 		}
-	}
-	if _, _, _, err := decodeSyncCheckpoint(task); err != nil {
 		now := timeutil.NowUTC()
-		return client.SyncTask.UpdateOneID(task.ID).Where(synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).
+		_, err = client.SyncTask.Update().Where(synctask.IDEQ(task.ID), synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).
 			SetStatus(SyncTaskStatusFailed).SetError(syncRecoveryFailure).SetFinishedAt(now).SetRetentionAnchorAt(now).Save(ctx)
+		task.Status, task.Error, task.FinishedAt, task.RetentionAnchorAt = SyncTaskStatusFailed, syncRecoveryFailure, &now, &now
+		return task, err
 	}
 	return task, nil
 }
@@ -331,7 +252,7 @@ func (s *GlossarySyncService) PrepareRecovery(ctx context.Context) error {
 					if err != nil || count == 0 {
 						return err
 					}
-					task, err := client.SyncTask.Get(ctx, id)
+					task, err := client.SyncTask.Query().Where(synctask.IDEQ(id)).Select(syncTaskHeaderFields...).Only(ctx)
 					if err != nil {
 						return err
 					}
@@ -404,7 +325,7 @@ func (s *GlossarySyncService) ExecuteSyncTask(ctx context.Context, taskID int) e
 			if err != nil || count == 0 {
 				return err
 			}
-			task, err := client.SyncTask.Get(ctx, taskID)
+			task, err := client.SyncTask.Query().Where(synctask.IDEQ(taskID)).Select(syncTaskHeaderFields...).Only(ctx)
 			if err != nil {
 				return err
 			}
@@ -415,11 +336,11 @@ func (s *GlossarySyncService) ExecuteSyncTask(ctx context.Context, taskID int) e
 			if task.Status != SyncTaskStatusPending {
 				return nil
 			}
-			update := client.SyncTask.UpdateOneID(taskID).Where(synctask.StatusEQ(SyncTaskStatusPending)).SetStatus(SyncTaskStatusRunning).ClearFinishedAt().ClearRetentionAnchorAt()
+			update := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.StatusEQ(SyncTaskStatusPending)).SetStatus(SyncTaskStatusRunning).ClearFinishedAt().ClearRetentionAnchorAt()
 			if task.StartedAt == nil {
 				update.SetStartedAt(timeutil.NowUTC())
 			}
-			if err := update.Exec(ctx); err != nil {
+			if _, err := update.Save(ctx); err != nil {
 				return err
 			}
 			claimed = true
@@ -453,7 +374,7 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 	}
 	defer guard.Release()
 	done := false
-	err = withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
+	err = s.withSyncSnapshotTransaction(ctx, func(client *ent.Client) error {
 		done = false
 		// 首条语句在任何快照读取之前获取写锁。因此已提交的
 		// 取消会阻止其后所有段落写入。
@@ -465,25 +386,32 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 			done = true
 			return nil
 		}
-		task, err := client.SyncTask.Get(ctx, taskID)
+		task, err := client.SyncTask.Query().Where(synctask.IDEQ(taskID)).Select(syncTaskHeaderFields...).Only(ctx)
 		if err != nil {
 			return err
 		}
-		ids, resourceIDs, result, err := decodeSyncCheckpoint(task)
+		plan, err := syncPlanPage(ctx, client, task)
 		if err != nil {
 			return err
 		}
-		entry, err := client.GlossaryEntry.Query().Where(glossaryentry.IDEQ(task.EntryID), glossaryentry.ProjectIDEQ(task.ProjectID)).Only(ctx)
+		b, err := backend.NewBuildBoundsFromContext(ctx, DefaultExecutionInputBytes, min(executionInputState(ctx).limit, DefaultExecutionInputBytes))
 		if err != nil {
 			return err
 		}
-		projectRow, err := client.Project.Get(ctx, task.ProjectID)
-		if err != nil {
-			return err
+		defer b.CloseRetired()
+		batchIDs := make([]int, 0, len(plan))
+		resourceSet := make(map[int]bool, len(plan))
+		for _, item := range plan {
+			batchIDs = append(batchIDs, item.SegmentID)
+			if item.ResourceID > 0 {
+				resourceSet[item.ResourceID] = true
+			}
 		}
-		end := min(task.NextSegmentIndex+syncBatchSize, len(ids))
-		batchIDs := ids[task.NextSegmentIndex:end]
-		rows, err := client.Segment.Query().Where(segment.IDIn(batchIDs...), segment.HasResourceWith(resource.ProjectIDEQ(task.ProjectID))).All(ctx)
+		resourceIDs := make([]int, 0, len(resourceSet))
+		for id := range resourceSet {
+			resourceIDs = append(resourceIDs, id)
+		}
+		entry, projectRow, rows, resources, err := loadSyncBatchBodies(ctx, client, task, batchIDs, resourceIDs, b)
 		if err != nil {
 			return err
 		}
@@ -491,20 +419,19 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 		for _, row := range rows {
 			byID[row.ID] = row
 		}
-		batchResourceIDs := syncResourceIDs(rows)
-		lockedResourceIDs := make([]int, 0, len(batchResourceIDs))
-		for _, id := range batchResourceIDs {
-			at := sort.SearchInts(resourceIDs, id)
-			if at < len(resourceIDs) && resourceIDs[at] == id {
-				lockedResourceIDs = append(lockedResourceIDs, id)
-			}
-		}
-		resources, err := client.Resource.Query().Where(resource.IDIn(lockedResourceIDs...), resource.ProjectIDEQ(task.ProjectID)).All(ctx)
+		storedResults, err := client.SyncTaskResult.Query().Where(synctaskresult.TaskIDEQ(task.ID), synctaskresult.ResourceIDIn(resourceIDs...)).
+			Select(synctaskresult.FieldID, synctaskresult.FieldResourceID, synctaskresult.FieldUpdatedCount, synctaskresult.FieldSkippedCount).All(ctx)
 		if err != nil {
 			return err
 		}
+		if len(storedResults) != len(resourceIDs) {
+			return errors.New("sync plan resource missing from fixed lock set")
+		}
+		result := &GlossarySyncResult{TotalUpdated: task.TotalUpdated, TotalSkipped: task.TotalSkipped, Resources: make(map[int]*GlossarySyncExecuteResourceResult, len(resourceIDs))}
+		for _, row := range storedResults {
+			result.Resources[row.ResourceID] = &GlossarySyncExecuteResourceResult{ResourceID: row.ResourceID, UpdatedCount: row.UpdatedCount, SkippedCount: row.SkippedCount}
+		}
 		byResource := make(map[int]*ent.Resource, len(resources))
-		sort.Slice(resources, func(i, j int) bool { return resources[i].ID < resources[j].ID })
 		for _, row := range resources {
 			if err := GuardSourceGeneration(ctx, client, row.ID, row.SourceGeneration); err != nil {
 				return err
@@ -512,9 +439,9 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 			byResource[row.ID] = row
 		}
 		advanced := make(map[int]bool, len(resources))
-		for _, id := range batchIDs {
-			row := byID[id]
-			if row == nil || row.ResourceID == nil || byResource[*row.ResourceID] == nil {
+		for _, item := range plan {
+			row := byID[item.SegmentID]
+			if row == nil || row.ResourceID == nil || *row.ResourceID != item.ResourceID || byResource[item.ResourceID] == nil {
 				result.TotalSkipped++
 				continue
 			}
@@ -524,22 +451,36 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 				stats = &GlossarySyncExecuteResourceResult{ResourceID: res.ID, ResourcePath: res.Path}
 				result.Resources[res.ID] = stats
 			}
+			if stats.UpdatedCount+stats.SkippedCount == 0 {
+				stats.ResourcePath = res.Path
+			}
 			skip := func() { result.TotalSkipped++; stats.SkippedCount++ }
 			if row.TargetText == nil || !syncSegmentMatches(row, entry) {
 				skip()
 				continue
 			}
-			newText, replaced, _ := glossary.SafeReplace(*row.TargetText, task.OldTarget, task.NewTarget, projectRow.TargetLang)
+			newText, replaced, err := glossary.SafeReplaceBounded(b, *row.TargetText, task.OldTarget, task.NewTarget, projectRow.TargetLang, b.OutputLimit())
+			if err != nil {
+				return err
+			}
 			if !replaced && !entry.CaseSensitive {
-				newText, replaced = glossary.CaseInsensitiveReplace(*row.TargetText, task.OldTarget, task.NewTarget)
+				newText, replaced, err = syncCaseInsensitiveReplace(b, *row.TargetText, task.OldTarget, task.NewTarget)
+				if err != nil {
+					return err
+				}
 			}
 			if !replaced {
 				skip()
 				continue
 			}
-			if markup.RequiresWellFormedTargets(res.Format) && markup.ValidateFragment(newText) != nil {
-				skip()
-				continue
+			if markup.RequiresWellFormedTargets(res.Format) {
+				if err := markup.ValidateFragmentBounded(b, newText); err != nil {
+					if errors.Is(err, backend.ErrBuildCapacity) {
+						return err
+					}
+					skip()
+					continue
+				}
 			}
 			if !advanced[res.ID] {
 				if err := AdvanceTranslationGeneration(ctx, client, res.ID, res.SourceGeneration); err != nil {
@@ -562,18 +503,32 @@ func (s *GlossarySyncService) executeSyncBatch(ctx context.Context, taskID int) 
 			result.TotalUpdated++
 			stats.UpdatedCount++
 		}
-		stored, err := encodeSyncResult(result)
-		if err != nil {
-			return err
+		for _, previous := range storedResults {
+			stats := result.Resources[previous.ResourceID]
+			u := client.SyncTaskResult.Update().Where(synctaskresult.IDEQ(previous.ID)).SetUpdatedCount(stats.UpdatedCount).SetSkippedCount(stats.SkippedCount)
+			if previous.UpdatedCount+previous.SkippedCount == 0 && stats.UpdatedCount+stats.SkippedCount > 0 {
+				u.SetResourcePath(stats.ResourcePath)
+			}
+			if stats.UpdatedCount != previous.UpdatedCount || stats.SkippedCount != previous.SkippedCount {
+				if _, err := u.Save(ctx); err != nil {
+					return err
+				}
+			}
 		}
-		update := client.SyncTask.UpdateOneID(taskID).Where(synctask.StatusEQ(SyncTaskStatusRunning)).
-			SetProcessedSegments(end).SetNextSegmentIndex(end).SetResult(stored)
-		done = end == len(ids)
+		end := task.NextSegmentIndex + len(plan)
+		update := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.StatusEQ(SyncTaskStatusRunning)).
+			SetProcessedSegments(end).SetNextSegmentIndex(end).SetTotalUpdated(result.TotalUpdated).SetTotalSkipped(result.TotalSkipped)
+		done = end == task.TotalSegments
 		if done {
+			task.TotalUpdated, task.TotalSkipped = result.TotalUpdated, result.TotalSkipped
+			stored, err := syncResultSnapshot(ctx, client, task)
+			if err != nil {
+				return err
+			}
 			now := timeutil.NowUTC()
-			update.SetStatus(SyncTaskStatusCompleted).SetFinishedAt(now).SetRetentionAnchorAt(now)
+			update.SetResult(stored).SetStatus(SyncTaskStatusCompleted).SetFinishedAt(now).SetRetentionAnchorAt(now)
 		}
-		if err := update.Exec(ctx); err != nil {
+		if _, err := update.Save(ctx); err != nil {
 			return err
 		}
 		if done && s.auditSvc != nil {
@@ -600,7 +555,7 @@ func syncSegmentMatches(row *ent.Segment, entry *ent.GlossaryEntry) bool {
 	if entry.CaseSensitive {
 		return strings.Contains(row.SourceText, entry.Source)
 	}
-	return strings.Contains(strings.ToLower(row.SourceText), strings.ToLower(entry.Source))
+	return syncContainsFold(row.SourceText, entry.Source)
 }
 
 // FailSyncTask 不会把关闭或已持久化的终态变成失败。
@@ -620,8 +575,22 @@ func (s *GlossarySyncService) FailSyncTask(ctx context.Context, taskID int, caus
 	s.logger.Error("sync task failed", "task_id", taskID, "error", cause)
 	err = withOrganizationTransaction(ctx, s.client, func(client *ent.Client) error {
 		now := timeutil.NowUTC()
-		_, err := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).
+		count, err := client.SyncTask.Update().Where(synctask.IDEQ(taskID), synctask.StatusIn(SyncTaskStatusPending, SyncTaskStatusRunning)).
 			SetStatus(SyncTaskStatusFailed).SetError(cause.Error()).SetFinishedAt(now).SetRetentionAnchorAt(now).Save(ctx)
+		if err != nil || count == 0 {
+			return err
+		}
+		task, err := client.SyncTask.Query().Where(synctask.IDEQ(taskID)).Select(syncTaskHeaderFields...).Only(ctx)
+		if err != nil {
+			return err
+		}
+		stored, summaryErr := syncResultSnapshot(ctx, client, task)
+		if summaryErr != nil {
+			// A corrupt/oversized summary cannot erase a valid failure transition.
+			s.logger.Warn("sync failure summary unavailable", "task_id", taskID, "error", summaryErr)
+			return nil
+		}
+		_, err = client.SyncTask.Update().Where(synctask.IDEQ(taskID)).SetResult(stored).Save(ctx)
 		return err
 	})
 	if err != nil {
