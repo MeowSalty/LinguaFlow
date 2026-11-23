@@ -31,7 +31,7 @@ const (
 
 // Open 创建并验证共享的 database/sql 连接池及 ent client。
 func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, error) {
-	sqlDriver, entDialect, err := driverSettings(cfg.Database.Driver)
+	_, entDialect, err := driverSettings(cfg.Database.Driver)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -50,7 +50,7 @@ func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, 
 		if probe != nil {
 			defer probe.Close()
 		}
-		db, err = sql.Open(sqlDriver, cfg.DatabaseDSN())
+		db, err = OpenSQLitePool(cfg.DatabaseDSN())
 	} else {
 		var pgConfig *pgx.ConnConfig
 		pgConfig, err = pgx.ParseConfig(cfg.DatabaseDSN())
@@ -61,10 +61,11 @@ func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, 
 				}
 			}
 			pgConfig.RuntimeParams["timezone"] = "UTC"
-			db = stdlib.OpenDB(*pgConfig, stdlib.OptionAfterConnect(func(_ context.Context, conn *pgx.Conn) error {
+			connector := stdlib.GetConnector(*pgConfig, stdlib.OptionAfterConnect(func(_ context.Context, conn *pgx.Conn) error {
 				conn.TypeMap().RegisterType(&pgtype.Type{Name: "timestamptz", OID: pgtype.TimestamptzOID, Codec: &pgtype.TimestamptzCodec{ScanLocation: time.UTC}})
 				return nil
 			}))
+			db = sql.OpenDB(ObserveConnector(connector, entDialect))
 		}
 	}
 	if err != nil {
@@ -82,22 +83,37 @@ func Open(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *ent.Client, 
 		err = db.PingContext(pingCtx)
 	}
 	if err != nil {
-		_ = db.Close()
+		_ = closeSQLitePoolAfterUse(db)
 		return nil, nil, databaseError(cfg.Database.Driver, "ping", err)
 	}
 	if err := checkMigrationState(ctx, db, cfg.Database.Driver); err != nil {
-		_ = db.Close()
+		_ = closeSQLitePoolAfterUse(db)
 		return nil, nil, fmt.Errorf("check migration state: %w", err)
+	}
+	if err := CheckPublishedDataFormat(ctx, db, cfg.Database.Driver, cfg.AutoMigrate); err != nil {
+		// Preserve the specific published account-upgrade refusal. A missing
+		// persistence marker must not suggest automatic conversion of accounts
+		// that this server has never supported converting at runtime.
+		if conn, connErr := db.Conn(ctx); connErr == nil {
+			_, accountErr := inspectAuthFormat(ctx, conn, cfg.Database.Driver)
+			_ = conn.Close()
+			if errors.Is(accountErr, ErrAuthFormatUnsupported) {
+				_ = closeSQLitePoolAfterUse(db)
+				return nil, nil, accountErr
+			}
+		}
+		_ = closeSQLitePoolAfterUse(db)
+		return nil, nil, err
 	}
 
 	if entDialect == dialect.SQLite {
 		if err := ensureSQLiteTimeFormat(ctx, db, cfg.AutoMigrate); err != nil {
-			_ = db.Close()
+			_ = closeSQLitePoolAfterUse(db)
 			return nil, nil, databaseError(cfg.Database.Driver, "check timestamp format", err)
 		}
 	}
 	if err := ensureAuthFormat(ctx, db, cfg.Database.Driver, cfg.AutoMigrate); err != nil {
-		_ = db.Close()
+		_ = closeSQLitePoolAfterUse(db)
 		return nil, nil, fmt.Errorf("check account database format: %w", err)
 	}
 	driver := NewDriver(entsql.OpenDB(entDialect, db))

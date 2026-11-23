@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"entgo.io/ent/dialect"
 	"errors"
 	"fmt"
 
@@ -15,6 +16,60 @@ import (
 const CurrentDataVersion = 3
 
 var ErrDataMigrationRequired = errors.New("database data migration required; start a compatible server version with auto_migrate enabled")
+
+// PreflightDataVersion accepts only supported upgrade starts and runs before
+// schema or persistent-format conversion. New/empty databases have no identity.
+func PreflightDataVersion(ctx context.Context, client *ent.Client) error {
+	query := "SELECT COUNT(*),COALESCE(SUM(CASE WHEN type='table' THEN 1 ELSE 0 END),0) FROM sqlite_schema WHERE name='instance_initializations'"
+	if client.DialectName() == dialect.Postgres {
+		query = "SELECT COUNT(*),COALESCE(SUM(CASE WHEN c.relkind='r' THEN 1 ELSE 0 END),0) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname='instance_initializations'"
+	}
+	rows, err := client.QueryContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	var count, tables int
+	if rows.Next() {
+		err = rows.Scan(&count, &tables)
+	} else {
+		err = ErrInstanceIncomplete
+	}
+	if err := errors.Join(err, rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	if count == 0 {
+		return nil
+	}
+	if count != 1 || tables != 1 {
+		return ErrInstanceIncomplete
+	}
+	rows, err = client.QueryContext(ctx, "SELECT id,version,data_version FROM instance_initializations LIMIT 2")
+	if err != nil {
+		return fmt.Errorf("%w: invalid initialization data version", ErrDataMigrationRequired)
+	}
+	defer rows.Close()
+	count = 0
+	for rows.Next() {
+		var id, version, dataVersion int
+		if err := rows.Scan(&id, &version, &dataVersion); err != nil {
+			return ErrDataMigrationRequired
+		}
+		if id != 1 || version != InitializationVersion {
+			return ErrInstanceIncomplete
+		}
+		if dataVersion < 0 || dataVersion > CurrentDataVersion {
+			return ErrDataMigrationRequired
+		}
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if count > 1 {
+		return ErrInstanceIncomplete
+	}
+	return nil
+}
 
 // MigrateData upgrades existing initialized instances. Empty instances are left
 // for explicit initialization; this entry point never creates an identity.

@@ -111,7 +111,7 @@ func Steps(ctx context.Context, db *sql.DB, p *Plan) ([]string, string, error) {
 		if id != p.ID || digest != Digest(p) || signature != p.TargetSignature || build != p.Build || !validStep(step) || BaselineDigest(p) == "" || baseline.String != BaselineDigest(p) {
 			return nil, "", Fail(Incompatible, "invalid database step receipt")
 		}
-		if seen[step] || (step == "ready" && !ValidHex(result.String, 64)) || (step != "ready" && result.String != "") {
+		if seen[step] || !validStepResult(step, result.String) {
 			return nil, "", Fail(Incompatible, "invalid step result evidence")
 		}
 		seen[step] = true
@@ -275,7 +275,9 @@ func Step(ctx context.Context, db *sql.DB, driver string, p *Plan, step string, 
 	return StepWithResult(ctx, db, driver, p, step, func(c *ent.Client) (string, error) { return "", change(c) })
 }
 
-// StepWithResult makes the final business digest durable with the ready receipt.
+// StepWithResult binds a schema projection or final business digest to its
+// transaction. Empty historical schema receipts remain readable for status;
+// their original tool is required to finish that older target representation.
 func StepWithResult(ctx context.Context, db *sql.DB, driver string, p *Plan, step string, change func(*ent.Client) (string, error)) error {
 	if !validStep(step) {
 		return Fail(Incompatible, "unknown database step")
@@ -320,11 +322,8 @@ func StepWithResult(ctx context.Context, db *sql.DB, driver string, p *Plan, ste
 		if err != nil {
 			return err
 		}
-		if step == "ready" && !ValidHex(result, 64) {
-			return Fail(Incompatible, "ready requires a verified business result digest")
-		}
-		if step != "ready" && result != "" {
-			return Fail(Incompatible, "only ready may publish a business result digest")
+		if !validStepResult(step, result) {
+			return Fail(Incompatible, "step result must be a verified schema projection or ready business digest")
 		}
 		finalState, err := checkReservation(ctx, tx, p)
 		if err != nil {
@@ -350,6 +349,55 @@ func StepWithResult(ctx context.Context, db *sql.DB, driver string, p *Plan, ste
 		_, err = tx.ExecContext(ctx, bind(driver, "INSERT INTO "+stepsTable+" (operation_id,step,plan_digest,target_signature,build,committed_at,baseline_digest,result_digest) VALUES (?,?,?,?,?,?,?,?)"), p.ID, step, Digest(p), p.TargetSignature, p.Build, time.Now().UTC().Format(time.RFC3339Nano), BaselineDigest(p), result)
 		return err
 	})
+}
+
+func validStepResult(step, result string) bool {
+	switch step {
+	case "ready":
+		return ValidHex(result, 64)
+	case "schema":
+		return result == "" || ValidHex(result, 64)
+	default:
+		return result == ""
+	}
+}
+
+type receiptQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+// StepResultDigest reads only a receipt already bound to this immutable plan,
+// build, target and source baseline. It never endorses current target values.
+func StepResultDigest(ctx context.Context, q receiptQueryer, p *Plan, step string) (string, error) {
+	if step != "schema" && step != "ready" {
+		return "", Fail(Incompatible, "step has no projection digest")
+	}
+	rows, err := q.QueryContext(ctx, bind(p.Source.Driver, "SELECT plan_digest,target_signature,build,baseline_digest,result_digest FROM "+stepsTable+" WHERE operation_id=? AND step=? LIMIT 2"), p.ID, step)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	count := 0
+	result := ""
+	for rows.Next() {
+		var planDigest, signature, build string
+		var baseline, value sql.NullString
+		if err := rows.Scan(&planDigest, &signature, &build, &baseline, &value); err != nil {
+			return "", err
+		}
+		if planDigest != Digest(p) || signature != p.TargetSignature || build != p.Build || baseline.String != BaselineDigest(p) || BaselineDigest(p) == "" {
+			return "", Fail(Incompatible, "projection receipt was replaced")
+		}
+		result = value.String
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if count != 1 || !ValidHex(result, 64) {
+		return "", Fail(Incompatible, "schema projection receipt is unavailable; use the exact released tool build recorded in plan.json to finish or restore that operation before starting this version with auto_migrate=true")
+	}
+	return result, nil
 }
 
 func ensureReceiptColumns(ctx context.Context, tx *sql.Tx, driver string) error {

@@ -17,6 +17,7 @@ import (
 
 	entschema "entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/migrate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/operation"
@@ -27,6 +28,39 @@ import (
 
 type baselineQueryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func baselineProjection(ctx context.Context, q baselineQueryer, driver, table string, columns []string) (string, error) {
+	if table != "sync_tasks" {
+		return quotedColumns(columns), nil
+	}
+	query := "SELECT name FROM pragma_table_info($1)"
+	if driver == "postgres" {
+		query = "SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=$1"
+	}
+	rows, err := q.QueryContext(ctx, query, table)
+	if err != nil {
+		return "", err
+	}
+	current := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err = rows.Scan(&name); err != nil {
+			break
+		}
+		current[name] = true
+	}
+	if err := errors.Join(err, rows.Err(), rows.Close()); err != nil {
+		return "", err
+	}
+	projection := make([]string, len(columns))
+	for i, name := range columns {
+		projection[i] = quoteIdentifier(name)
+		if (name == "segment_ids" || name == "resource_ids") && !current[name] {
+			projection[i] = "NULL AS " + quoteIdentifier(name)
+		}
+	}
+	return strings.Join(projection, ","), nil
 }
 
 // baselineScan closes the cursor before the next statement on the same transaction.
@@ -254,6 +288,26 @@ func captureTableBaseline(ctx context.Context, q baselineQueryer, p *operation.P
 
 func expectedMutableValues(ctx context.Context, q baselineQueryer, p *operation.Plan, table string, id int, row map[string]any, conversionTime time.Time) (map[string]any, error) {
 	values := map[string]any{}
+	if table == "sync_tasks" {
+		if _, legacy := row["segment_ids"]; legacy {
+			// The before digests retain evidence for the removed serialized
+			// vectors; the final representation is checked by conversion and
+			// the target shape, rather than retaining duplicate runtime columns.
+			values["segment_ids"], values["resource_ids"] = nil, nil
+			status := stringValue(row["status"])
+			if status == "pending" || status == "running" {
+				trusted, message := database.PublishedSyncRecovery(database.PublishedSyncCheckpoint{Status: status, SegmentIDs: stringValue(row["segment_ids"]), ResourceIDs: stringValue(row["resource_ids"]), Result: stringValue(row["result"]), TotalSegments: int(int64Value(row["total_segments"])), ProcessedSegments: int(int64Value(row["processed_segments"])), CheckpointVersion: int(int64Value(row["checkpoint_version"])), NextSegmentIndex: int(int64Value(row["next_segment_index"])), Started: row["started_at"] != nil, Cancelled: row["cancelled_at"] != nil})
+				if trusted {
+					values["checkpoint_version"] = int64(2)
+					values["result"] = ""
+				} else {
+					values["status"] = "failed"
+					values["error"] = message
+					values["finished_at"], values["retention_anchor_at"], values["updated_at"] = sqliteConversionTime(p.Source.Driver, conversionTime), sqliteConversionTime(p.Source.Driver, conversionTime), sqliteConversionTime(p.Source.Driver, conversionTime)
+				}
+			}
+		}
+	}
 	if table == "storage_path_claims" {
 		var generation int64
 		err := baselineScan(ctx, q, "SELECT sp.execution_generation FROM storage_spaces sp JOIN storage_connections co ON co.id=sp.connection_id WHERE sp.id="+placeholders(p.Source.Driver, 1)+" AND co.driver='s3' AND sp.lifecycle<>'removed' AND sp.bucket<>''", []any{row["space_id"]}, &generation)
@@ -670,7 +724,11 @@ func verifyBaselineQuery(ctx context.Context, q baselineQueryer, p *operation.Pl
 		keysHash, preservedHash := sha256.New(), sha256.New()
 		writeBaselineHash(keysHash, evidence.PrimaryKey)
 		writeBaselineHash(preservedHash, evidence.Columns)
-		query := "SELECT " + quotedColumns(evidence.Columns) + " FROM " + quoteIdentifier(evidence.Name)
+		projection, err := baselineProjection(ctx, q, p.Source.Driver, evidence.Name, evidence.Columns)
+		if err != nil {
+			return nil, err
+		}
+		query := "SELECT " + projection + " FROM " + quoteIdentifier(evidence.Name)
 		if evidence.NumericID {
 			query += fmt.Sprintf(" WHERE %s<=%d", quoteIdentifier(evidence.PrimaryKey[0]), evidence.MaxID)
 		}
@@ -807,6 +865,9 @@ func verifyReadyAuthentication(ctx context.Context, q baselineQueryer, driver st
 	var version int
 	if err := baselineScan(ctx, q, "SELECT version FROM linguaflow_auth_format WHERE id=1", nil, &version); err != nil || version != 1 {
 		return operation.Fail(operation.BaselineChanged, "ready authentication format marker is invalid")
+	}
+	if err := database.CheckPublishedDataFormat(ctx, q, driver, false); err != nil {
+		return err
 	}
 	for _, table := range []string{"auth_connections", "local_account_policies"} {
 		var count int64

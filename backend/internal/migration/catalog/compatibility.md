@@ -1,5 +1,68 @@
 # Migration compatibility register
 
+<a id="sync-plan-v017"></a>
+## COMPAT(sync-plan-v017): published checkpoint and evidence conversion
+
+This entry was rechecked on 2026-11-23 against GitHub's latest release,
+v0.17.5, published 2026-11-22, peeled commit
+`4f0e80f395271a73aa0474867512fccdbd0db726`. That release contains the JSON
+SyncTask plan, checkpoint 1, accumulated result, and login-binding evidence.
+The conversion is first introduced by the pending backend release after
+v0.17.5. Review it before that next formal backend release and when the
+minimum directly supported data version changes; review is not removal.
+
+Supported starts are v0.17.5's completed AuthFormat 1 database through
+explicit startup with `auto_migrate=true`, and the already supported v0.15
+frozen source through its protected offline route. Runtime code uses the
+final child tables and scalar counts only. No compatibility is promised for
+intermediate unpublished relational models.
+
+`internal/database/published_data.go` is the one-time migration entry and
+decoder. After append-only schema preparation, one transaction expands a
+validated active checkpoint 1 into immutable ordinal/resource rows, copies
+accumulated counts, clears the active serialized result, projects binding
+expiry, removes the two serialized plan columns, and commits persistence
+format 1. Deleted or moved targets retain their positions and cannot enlarge
+the original resource lock set. Safe unstarted checkpoint 0 pending tasks
+are initialized under the released preparation rules; other untrusted
+active tasks fail under the released recovery contract, preserving committed
+translations and the original result. Terminal result/status/time remain
+historical facts. Invalid nonempty evidence rejects the whole conversion;
+zero/missing expiry remains NULL, and PostgreSQL rounds expiry upward to
+microseconds. Failed conversion leaves the unique old plan and marker state
+intact so a repaired source can retry.
+
+The v0.15 schema transaction uses its original baseline and fixed conversion
+time to declare removed-vector tombstones and finite recovery changes. Its
+existing schema receipt also binds the derived child identities, paths,
+counts, task scalars and original binding expiry within source ID bounds.
+Ready, resume and repeated schema calls compare that committed receipt;
+they cannot silently re-endorse the current target. Supported old operations
+with an empty schema digest remain recognizable read-only, and must use the
+exact original build recorded in `plan.json` to finish or restore before
+the explicit startup upgrade. Existing build/target gates remain mandatory.
+
+Retirement requires documenting a new minimum direct upgrade start and
+resolving every supported old database, interrupted operation and historical
+backup obligation. For starts no longer supported directly, retain an
+obtainable, runnable, verified transition release/tool and recovery path;
+Git history alone is insufficient. Reject unsupported formats before any
+schema/business write, and include the minimum version, transition procedure
+and support-window change in release notes. Local migration success,
+elapsed releases or reaching the review date do not permit removal.
+
+Required evidence covers new/partial initialization, supported direct and
+protected starts, trusted/untrusted/terminal checkpoints, deleted positions,
+invalid evidence and late-write rollback/retry, precision, future-format
+pre-write refusal, legal idempotent recovery, and changed derived/source
+facts on SQLite and isolated live PostgreSQL. Tests live in
+`internal/database/published_data_test.go`,
+`internal/migration/upgrade/v015/published_sync_test.go` and
+`internal/cli/published_storage_upgrade_test.go`; test existence alone does
+not establish a passing backend/provider cell.
+
+## Historical compatibility baseline
+
 Baseline rechecked 2026-10-24: v0.16.0, commit e2284dea6ccbc69513e7b38aa0755d19271e5af7,
 released 2026-10-23 22:16:55 +08:00. The upgrade source remains v0.15.0,
 commit 6b264ad5d8b88295c397204eacaa0838cfc97a69. Auth1/data3 and the unified

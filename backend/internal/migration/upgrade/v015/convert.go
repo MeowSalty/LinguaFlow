@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/localaccountpolicy"
@@ -21,37 +22,62 @@ import (
 // SQLite needs a full users rebuild: append-only schema creation would retain
 // the old email unique constraint. PostgreSQL uses explicit constraint DDL.
 func ConvertSchema(ctx context.Context, db *sql.DB, p *operation.Plan) error {
-	return operation.Step(ctx, db, p.Source.Driver, p, "schema", func(c *ent.Client) error {
-		var allocations []allocationEvidence
-		if p.Source.Driver == "sqlite" {
-			var err error
-			allocations, err = sqliteAllocations(ctx, c)
-			if err != nil {
-				return err
-			}
+	converted := false
+	err := operation.StepWithResult(ctx, db, p.Source.Driver, p, "schema", func(c *ent.Client) (string, error) {
+		if err := convertSchemaInTransaction(ctx, c, p); err != nil {
+			return "", err
 		}
-		if _, err := c.ExecContext(ctx, "DELETE FROM refresh_tokens"); err != nil {
-			return err
+		digest, err := publishedProjectionDigest(ctx, c, p)
+		if err == nil {
+			converted = true
 		}
-		if p.Source.Driver == "sqlite" {
-			if err := rebuildSQLiteUsers(ctx, c, p); err != nil {
-				return err
-			}
-		} else if p.Source.Driver == "postgres" {
-			if err := alterPostgresUsers(ctx, c); err != nil {
-				return err
-			}
-		} else {
-			return operation.Fail(operation.UnsupportedTarget, "unsupported database driver")
-		}
-		if err := c.Schema.Create(ctx); err != nil {
-			return err
-		}
-		if p.Source.Driver == "sqlite" {
-			return restoreSQLiteAllocations(ctx, c, allocations)
-		}
-		return nil
+		return digest, err
 	})
+	if err != nil {
+		return err
+	}
+	if !converted {
+		return verifyPublishedProjection(ctx, db, p)
+	}
+	return nil
+}
+
+func convertSchemaInTransaction(ctx context.Context, c *ent.Client, p *operation.Plan) error {
+	if err := database.CheckPublishedDataFormat(ctx, c, p.Source.Driver, true); err != nil {
+		return err
+	}
+	var allocations []allocationEvidence
+	if p.Source.Driver == "sqlite" {
+		var err error
+		allocations, err = sqliteAllocations(ctx, c)
+		if err != nil {
+			return err
+		}
+	}
+	if _, err := c.ExecContext(ctx, "DELETE FROM refresh_tokens"); err != nil {
+		return err
+	}
+	if p.Source.Driver == "sqlite" {
+		if err := rebuildSQLiteUsers(ctx, c, p); err != nil {
+			return err
+		}
+	} else if p.Source.Driver == "postgres" {
+		if err := alterPostgresUsers(ctx, c); err != nil {
+			return err
+		}
+	} else {
+		return operation.Fail(operation.UnsupportedTarget, "unsupported database driver")
+	}
+	if err := database.CreatePublishedSchema(ctx, c, p.Source.Driver); err != nil {
+		return err
+	}
+	if err := database.MigratePublishedDataForUpgrade(ctx, c, p.Source.Driver, p.Baseline.ConversionTime); err != nil {
+		return err
+	}
+	if p.Source.Driver == "sqlite" {
+		return restoreSQLiteAllocations(ctx, c, allocations)
+	}
+	return nil
 }
 
 const sqliteUsersDDL = `CREATE TABLE users (
@@ -226,6 +252,9 @@ func ConvertHistory(ctx context.Context, db *sql.DB, p *operation.Plan) error {
 // metadata in the same transaction, after the caller has verified the target.
 func Complete(ctx context.Context, db *sql.DB, p *operation.Plan, verify func(*ent.Client) error) error {
 	return operation.StepWithResult(ctx, db, p.Source.Driver, p, "ready", func(c *ent.Client) (string, error) {
+		if err := verifyPublishedProjection(ctx, c, p); err != nil {
+			return "", err
+		}
 		if err := service.MigrateData(ctx, c); err != nil {
 			return "", err
 		}

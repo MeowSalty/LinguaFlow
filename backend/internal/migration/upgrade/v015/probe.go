@@ -15,6 +15,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/migrate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/migration/operation"
@@ -110,7 +111,16 @@ func probe(ctx context.Context, db *sql.DB, driver string, p *operation.Plan, ma
 	if err := inspectMigrationState(ctx, tx, tables, p); err != nil {
 		return nil, err
 	}
+	if err := database.CheckPublishedDataFormat(ctx, tx, driver, true); err != nil {
+		return nil, err
+	}
 	marked := hasTable(tables, "linguaflow_auth_format")
+	if marked && !hasTable(tables, "linguaflow_persistence_format") {
+		// Storage operates on a completed current schema. This supported
+		// published source must first complete the runtime data conversion;
+		// inspect/plan never initialize its missing marker or child tables.
+		return nil, database.ErrPersistenceMigrationRequired
+	}
 	want := source.Tables
 	if marked {
 		if err := singletonVersion(ctx, tx, "linguaflow_auth_format", 1); err != nil {
@@ -393,7 +403,7 @@ func placeholder(driver string) string {
 func matchTables(actual []actualTable, expected []*schema.Table, driver string) error {
 	byName := map[string]actualTable{}
 	for _, t := range actual {
-		if t.Name == "linguaflow_auth_format" || t.Name == "linguaflow_migration_state" || t.Name == "linguaflow_migration_steps" {
+		if t.Name == "linguaflow_auth_format" || t.Name == "linguaflow_persistence_format" || t.Name == "linguaflow_migration_state" || t.Name == "linguaflow_migration_steps" {
 			continue
 		}
 		byName[t.Name] = t
