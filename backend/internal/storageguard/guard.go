@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -44,14 +45,21 @@ func Check(ctx context.Context, c *ent.Client, spaceID int, mode Mode, retiremen
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := checkLoaded(ctx, c, conn, sp, mode, retirementID); err != nil {
+		return nil, nil, err
+	}
+	return conn, sp, nil
+}
+
+func checkLoaded(ctx context.Context, c *ent.Client, conn *ent.StorageConnection, sp *ent.StorageSpace, mode Mode, retirementID int) error {
 	if conn.Lifecycle == storageconnection.LifecycleRemoved || sp.Lifecycle == storagespace.LifecycleRemoved {
-		return nil, nil, ErrRemoved
+		return ErrRemoved
 	}
 	if conn.Status != storageconnection.StatusEnabled || sp.Status == storagespace.StatusDisabled {
-		return nil, nil, storage.ErrPermission
+		return storage.ErrPermission
 	}
 	if mode == NewUse && (conn.Lifecycle != storageconnection.LifecycleAvailable || sp.Lifecycle != storagespace.LifecycleAvailable) {
-		return nil, nil, ErrRetiring
+		return ErrRetiring
 	}
 	parent := sp.RetirementID
 	if parent == nil {
@@ -60,21 +68,21 @@ func Check(ctx context.Context, c *ent.Client, spaceID int, mode Mode, retiremen
 	if parent != nil {
 		r, e := c.StorageRetirement.Get(ctx, *parent)
 		if e != nil {
-			return nil, nil, e
+			return e
 		}
 		if r.Phase == "waiting_configuration" || r.Phase == "completed" {
-			return nil, nil, ErrRetiring
+			return ErrRetiring
 		}
 		if r.Phase == "finalizing" && (mode != Cleanup || retirementID != r.ID) {
-			return nil, nil, ErrRetiring
+			return ErrRetiring
 		}
 		if retirementID != 0 && retirementID != r.ID {
-			return nil, nil, ErrConflict
+			return ErrConflict
 		}
 	} else if retirementID != 0 {
-		return nil, nil, ErrConflict
+		return ErrConflict
 	}
-	return conn, sp, nil
+	return nil
 }
 
 // LockConnection must run inside the caller's transaction before inspecting
@@ -110,6 +118,107 @@ func Gate(ctx context.Context, c *ent.Client, spaceID int, mode Mode) error {
 	}
 	_, _, e = Check(ctx, c, spaceID, mode, 0)
 	return e
+}
+
+// GatedSpace contains facts reloaded after the parent and child locks.
+type GatedSpace struct {
+	Connection *ent.StorageConnection
+	Space      *ent.StorageSpace
+}
+
+// GateMany participates in the caller's transaction. It locks each unique
+// connection, then each unique space, in ascending ID order. Discovery before
+// locking is advisory; a changed parent is rejected after the locks. Queries
+// use fixed ID pages, and no-op lock writes preserve business generations.
+func GateMany(ctx context.Context, c *ent.Client, spaceIDs []int, mode Mode) (map[int]GatedSpace, error) {
+	const pageSize = 256
+	unique := make(map[int]bool, len(spaceIDs))
+	for _, id := range spaceIDs {
+		if id < 1 {
+			return nil, ErrConflict
+		}
+		unique[id] = true
+	}
+	ids := make([]int, 0, len(unique))
+	for id := range unique {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	discovered := make(map[int]int, len(ids))
+	parents := map[int]bool{}
+	for start := 0; start < len(ids); start += pageSize {
+		page := ids[start:min(start+pageSize, len(ids))]
+		rows, err := c.StorageSpace.Query().Where(storagespace.IDIn(page...)).Select(storagespace.FieldID, storagespace.FieldConnectionID).All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) != len(page) {
+			return nil, ErrConflict
+		}
+		for _, row := range rows {
+			discovered[row.ID] = row.ConnectionID
+			parents[row.ConnectionID] = true
+		}
+	}
+	connections := make([]int, 0, len(parents))
+	for id := range parents {
+		connections = append(connections, id)
+	}
+	sort.Ints(connections)
+	for _, id := range connections {
+		if err := LockConnection(ctx, c, id); err != nil {
+			return nil, err
+		}
+	}
+	for _, id := range ids {
+		result, err := c.ExecContext(ctx, fmt.Sprintf("UPDATE storage_spaces SET management_generation=management_generation WHERE id=%d", id))
+		if err != nil {
+			return nil, err
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return nil, err
+		}
+		if n != 1 {
+			return nil, ErrConflict
+		}
+	}
+	byConnection := make(map[int]*ent.StorageConnection, len(connections))
+	for start := 0; start < len(connections); start += pageSize {
+		page := connections[start:min(start+pageSize, len(connections))]
+		rows, err := c.StorageConnection.Query().Where(storageconnection.IDIn(page...)).All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) != len(page) {
+			return nil, ErrConflict
+		}
+		for _, row := range rows {
+			byConnection[row.ID] = row
+		}
+	}
+	result := make(map[int]GatedSpace, len(ids))
+	for start := 0; start < len(ids); start += pageSize {
+		page := ids[start:min(start+pageSize, len(ids))]
+		rows, err := c.StorageSpace.Query().Where(storagespace.IDIn(page...)).All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) != len(page) {
+			return nil, ErrConflict
+		}
+		for _, row := range rows {
+			if row.ConnectionID != discovered[row.ID] {
+				return nil, ErrConflict
+			}
+			conn := byConnection[row.ConnectionID]
+			if err := checkLoaded(ctx, c, conn, row, mode, 0); err != nil {
+				return nil, err
+			}
+			result[row.ID] = GatedSpace{Connection: conn, Space: row}
+		}
+	}
+	return result, nil
 }
 
 // LockNamespace serializes prefix allocation even when a bucket has no claims.
