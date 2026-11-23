@@ -133,7 +133,7 @@ func (s *StorageRetirementService) Create(ctx context.Context, actor int, key st
 			}
 			id = r.ID
 			if target.TargetKind == "connection" {
-				if err = tx.StorageConnection.UpdateOneID(target.TargetID).SetLifecycle(storageconnection.LifecycleRetiring).SetRetirementID(id).AddManagementGeneration(1).AddExecutionGeneration(1).Exec(ctx); err != nil {
+				if err = tx.StorageConnection.UpdateOneID(target.TargetID).SetLifecycle(storageconnection.LifecycleRetiring).SetRetirementID(id).AddManagementGeneration(1).AddExecutionGeneration(1).Select(storageconnection.FieldID).Exec(ctx); err != nil {
 					return err
 				}
 			}
@@ -517,7 +517,7 @@ func (s *StorageRetirementService) ProcessOne(ctx context.Context, id int) error
 		return err
 	}
 	if r.StartedAt == nil {
-		if err = s.client.StorageRetirement.UpdateOneID(id).SetStartedAt(now).Exec(ctx); err != nil {
+		if err = s.client.StorageRetirement.UpdateOneID(id).SetStartedAt(now).Select(storageretirement.FieldID).Exec(ctx); err != nil {
 			return err
 		}
 	}
@@ -607,7 +607,7 @@ func (s *StorageRetirementService) advance(ctx context.Context, r *ent.StorageRe
 			return err
 		}
 		state := storageretiremententry.Status(task.Status)
-		if err = s.client.StorageRetirementEntry.UpdateOneID(entry.ID).SetStatus(state).SetErrorCode(task.ErrorCode).Exec(ctx); err != nil {
+		if err = s.client.StorageRetirementEntry.UpdateOneID(entry.ID).SetStatus(state).SetErrorCode(task.ErrorCode).Select(storageretiremententry.FieldID).Exec(ctx); err != nil {
 			return err
 		}
 		if task.Status == storagetask.StatusNeedsAction || task.Status == storagetask.StatusFailed || task.Status == storagetask.StatusCancelled {
@@ -618,7 +618,7 @@ func (s *StorageRetirementService) advance(ctx context.Context, r *ent.StorageRe
 			if needs {
 				return retirementChildError(task.ErrorCode)
 			}
-			if err = s.client.StorageRetirementEntry.UpdateOneID(entry.ID).SetStatus(storageretiremententry.StatusCompleted).SetErrorCode("").Exec(ctx); err != nil {
+			if err = s.client.StorageRetirementEntry.UpdateOneID(entry.ID).SetStatus(storageretiremententry.StatusCompleted).SetErrorCode("").Select(storageretiremententry.FieldID).Exec(ctx); err != nil {
 				return err
 			}
 			continue
@@ -686,11 +686,11 @@ func (s *StorageRetirementService) advance(ctx context.Context, r *ent.StorageRe
 				return err
 			}
 			for _, sp := range target.Spaces {
-				if err = tx.StorageSpace.UpdateOneID(sp.SpaceID).AddExecutionGeneration(1).Exec(ctx); err != nil {
+				if err = tx.StorageSpace.UpdateOneID(sp.SpaceID).AddExecutionGeneration(1).Select(storagespace.FieldID).Exec(ctx); err != nil {
 					return err
 				}
 			}
-			return tx.StorageRetirement.UpdateOneID(r.ID).SetPhase(storageretirement.PhaseFinalizing).SetStatus(storageretirement.StatusPending).AddGeneration(1).ClearNextCheckAt().SetErrorCode("").Exec(ctx)
+			return tx.StorageRetirement.UpdateOneID(r.ID).SetPhase(storageretirement.PhaseFinalizing).SetStatus(storageretirement.StatusPending).AddGeneration(1).ClearNextCheckAt().SetErrorCode("").Select(storageretirement.FieldID).Exec(ctx)
 		})
 	})
 }
@@ -814,7 +814,7 @@ func (s *StorageRetirementService) cancelAccepted(ctx context.Context, r *ent.St
 					return err
 				}
 			}
-			return tx.StorageRetirement.UpdateOneID(r.ID).SetStatus(storageretirement.StatusCancelled).SetFinishedAt(time.Now().UTC()).ClearNextCheckAt().SetErrorCode("").AddGeneration(1).Exec(ctx)
+			return tx.StorageRetirement.UpdateOneID(r.ID).SetStatus(storageretirement.StatusCancelled).SetFinishedAt(time.Now().UTC()).ClearNextCheckAt().SetErrorCode("").AddGeneration(1).Select(storageretirement.FieldID).Exec(ctx)
 		})
 	})
 }
@@ -877,11 +877,11 @@ func (s *StorageRetirementService) complete(ctx context.Context, id int) error {
 				return err
 			}
 			if target.TargetKind == "connection" {
-				if err = tx.StorageConnection.UpdateOneID(target.TargetID).SetLifecycle(storageconnection.LifecycleRemoved).SetActiveAuthGeneration(0).SetRemovedAt(time.Now().UTC()).SetRemovedBy(r.ActorID).AddManagementGeneration(1).AddExecutionGeneration(1).Exec(ctx); err != nil {
+				if err = tx.StorageConnection.UpdateOneID(target.TargetID).SetLifecycle(storageconnection.LifecycleRemoved).SetActiveAuthGeneration(0).SetRemovedAt(time.Now().UTC()).SetRemovedBy(r.ActorID).AddManagementGeneration(1).AddExecutionGeneration(1).Select(storageconnection.FieldID).Exec(ctx); err != nil {
 					return err
 				}
 			}
-			if err = tx.StorageRetirement.UpdateOneID(id).SetStatus(storageretirement.StatusCompleted).SetPhase(storageretirement.PhaseCompleted).SetFinishedAt(time.Now().UTC()).ClearNextCheckAt().SetErrorCode("").AddGeneration(1).Exec(ctx); err != nil {
+			if err = tx.StorageRetirement.UpdateOneID(id).SetStatus(storageretirement.StatusCompleted).SetPhase(storageretirement.PhaseCompleted).SetFinishedAt(time.Now().UTC()).ClearNextCheckAt().SetErrorCode("").AddGeneration(1).Select(storageretirement.FieldID).Exec(ctx); err != nil {
 				return err
 			}
 			return recordAuditEvent(ctx, tx, AuditEvent{ActorUserID: r.ActorID, Action: "storage.retirement.complete", ResourceType: "storage_retirement", ResourceID: id})
