@@ -69,6 +69,9 @@ func PrepareBaseline(ctx context.Context, db *sql.DB, p *operation.Plan, j *oper
 // Preparing alone still requires every original row and mutable value intact.
 func CheckProgress(ctx context.Context, db *sql.DB, p *operation.Plan, steps []string) error {
 	if contains(steps, "schema") {
+		if err := verifyPublishedProjection(ctx, db, p); err != nil {
+			return err
+		}
 		return VerifyShape(ctx, db, p)
 	}
 	probe, err := ProbeOperation(ctx, db, p.Source.Driver, p, "")

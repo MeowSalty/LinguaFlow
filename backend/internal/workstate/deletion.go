@@ -113,7 +113,7 @@ func BeforeDeleteSegments(ctx context.Context, tx *ent.Client, ids []int) error 
 		if removed == 0 {
 			continue
 		}
-		if err := tx.JobRound.UpdateOneID(row.ID).SetSegmentTotal(row.SegmentTotal - removed).Exec(ctx); err != nil {
+		if err := tx.JobRound.UpdateOneID(row.ID).SetSegmentTotal(row.SegmentTotal - removed).Select("id").Exec(ctx); err != nil {
 			return err
 		}
 	}

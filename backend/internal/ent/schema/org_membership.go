@@ -37,5 +37,8 @@ func (OrgMembership) Edges() []ent.Edge {
 func (OrgMembership) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Edges("organization", "user").Unique(),
+		// Actor permission scopes read memberships by user much more often than
+		// membership identities change. Preserve the forward unique contract.
+		index.Edges("user", "organization"),
 	}
 }

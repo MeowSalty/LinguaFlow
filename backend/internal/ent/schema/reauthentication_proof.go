@@ -27,5 +27,5 @@ func (ReauthenticationProof) Fields() []ent.Field {
 	}
 }
 func (ReauthenticationProof) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("user_id", "expires_at")}
+	return []ent.Index{index.Fields("user_id", "expires_at"), index.Fields("expires_at", "id")}
 }

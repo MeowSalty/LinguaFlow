@@ -56,10 +56,10 @@ func (s *Store) RetireCandidate(ctx context.Context, scope Scope, id string, ver
 		if successor.State == "stale" {
 			state = "stale"
 		}
-		if err := tx.WorkCandidate.UpdateOneID(candidate.ID).SetState(state).ClearPayload().SetGrowthReserved(false).SetPayloadBytes(0).Exec(ctx); err != nil {
+		if err := tx.WorkCandidate.UpdateOneID(candidate.ID).SetState(state).ClearPayload().SetGrowthReserved(false).SetPayloadBytes(0).Select("id").Exec(ctx); err != nil {
 			return err
 		}
-		if err := tx.WorkItem.UpdateOneID(w.ID).SetCandidateID("").Exec(ctx); err != nil {
+		if err := tx.WorkItem.UpdateOneID(w.ID).SetCandidateID("").Select("id").Exec(ctx); err != nil {
 			return err
 		}
 		if successor.State == "pending" {

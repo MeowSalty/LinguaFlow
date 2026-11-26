@@ -2,6 +2,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -35,5 +36,8 @@ func (RefreshSession) Edges() []ent.Edge {
 	}
 }
 func (RefreshSession) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("user_id"), index.Fields("expires_at")}
+	return []ent.Index{index.Fields("user_id"), index.Fields("expires_at"),
+		index.Fields("expires_at", "id").Annotations(entsql.IndexWhere("evidence IS NOT NULL")),
+		index.Fields("revoked_at", "id").Annotations(entsql.IndexWhere("evidence IS NOT NULL AND revoked_at IS NOT NULL")),
+	}
 }

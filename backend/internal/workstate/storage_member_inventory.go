@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -164,16 +165,33 @@ func (b *StorageBudget) recordStorageBefore(ctx context.Context, client *ent.Cli
 			if err != nil {
 				return key, false, err
 			}
-			for _, n := range ids {
-				k := storageRowKey{table: table, id: n}
-				if _, exists := b.changes[k]; exists {
+			page := make([]int, 0, storageInventoryPage)
+			flush := func() error {
+				facts, err := b.Source.storageInventoryByIDs(ctx, client, table, page)
+				if err != nil {
+					return err
+				}
+				for _, id := range page {
+					b.changes[storageRowKey{table: table, id: id}] = storageRowChange{before: facts[id].bytes}
+				}
+				page = page[:0]
+				return nil
+			}
+			for _, id := range ids {
+				if _, exists := b.changes[storageRowKey{table: table, id: id}]; exists {
 					continue
 				}
-				size, err := b.Source.storageRowBytes(ctx, client, k)
-				if err != nil {
+				page = append(page, id)
+				if len(page) == storageInventoryPage {
+					if err := flush(); err != nil {
+						return key, false, err
+					}
+				}
+			}
+			if len(page) > 0 {
+				if err := flush(); err != nil {
 					return key, false, err
 				}
-				b.changes[k] = storageRowChange{before: size}
 			}
 		}
 		return key, false, nil
@@ -215,12 +233,33 @@ func (b *StorageBudget) actualChangedStorage(ctx context.Context) (int64, error)
 	if !ok {
 		return 0, fmt.Errorf("storage inventory requires SQL client")
 	}
-	for key, change := range b.changes {
-		after, err := b.Source.storageRowBytes(ctx, client, key)
-		if err != nil {
-			return 0, err
+	byTable := make(map[string][]int)
+	for key := range b.changes {
+		byTable[key.table] = append(byTable[key.table], key.id)
+	}
+	for table, ids := range byTable {
+		sort.Ints(ids)
+		// Preserve the conservative singleton path, including its fault and
+		// identity proof boundaries. Bulk writes settle one query per page.
+		if len(ids) == 1 {
+			key := storageRowKey{table: table, id: ids[0]}
+			after, err := b.Source.storageRowBytes(ctx, client, key)
+			if err != nil {
+				return 0, err
+			}
+			delta += after - b.changes[key].before
+			continue
 		}
-		delta += after - change.before
+		for start := 0; start < len(ids); start += storageInventoryPage {
+			page := ids[start:min(start+storageInventoryPage, len(ids))]
+			facts, err := b.Source.storageInventoryByIDs(ctx, client, table, page)
+			if err != nil {
+				return 0, err
+			}
+			for _, id := range page {
+				delta += facts[id].bytes - b.changes[storageRowKey{table: table, id: id}].before
+			}
+		}
 	}
 	if delta < 0 && -delta > b.before {
 		return 0, fmt.Errorf("invalid storage inventory delta")

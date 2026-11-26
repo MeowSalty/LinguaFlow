@@ -121,7 +121,7 @@ func (s *StorageRetirementService) Detail(ctx context.Context, actor, id, cursor
 	if err != nil {
 		return nil, err
 	}
-	inv, err := s.inventory(ctx, s.client, target)
+	dependencies, err := s.dependencyProjection(ctx, s.client, target)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (s *StorageRetirementService) Detail(ctx context.Context, actor, id, cursor
 		}
 		projects = append(projects, item)
 	}
-	data, err := json.Marshal(inv.Dependencies)
+	data, err := json.Marshal(dependencies)
 	if err != nil {
 		return nil, err
 	}

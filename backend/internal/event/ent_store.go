@@ -14,12 +14,17 @@ import (
 )
 
 type EntEventStore struct {
-	client *ent.Client
-	driver string
+	client        *ent.Client
+	driver        string
+	appendTimeout time.Duration
 }
 
+// Synchronous appends have no queue to flush: returning joins the database
+// operation before the broker broadcasts, or explicitly degrades to memory.
+const eventWriteTimeout = 5 * time.Second
+
 func NewEntEventStore(client *ent.Client, driver string) *EntEventStore {
-	return &EntEventStore{client: client, driver: driver}
+	return &EntEventStore{client: client, driver: driver, appendTimeout: eventWriteTimeout}
 }
 
 // NormalizeTime matches the database's precision before a published event is
@@ -34,7 +39,8 @@ func (s *EntEventStore) NormalizeTime(t time.Time) time.Time {
 }
 
 func (s *EntEventStore) Append(jobID int, evt Event) (int64, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), s.writeTimeout())
+	defer cancel()
 	metadata := map[string]any{}
 	if evt.Metadata != nil {
 		metadata = evt.Metadata
@@ -182,7 +188,8 @@ func (s *EntEventStore) LatestSeq(ctx context.Context, jobID int) (int64, bool, 
 }
 
 func (s *EntEventStore) Purge(jobID int) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), s.writeTimeout())
+	defer cancel()
 	deleted, err := s.client.SSEEvent.Delete().
 		Where(sseevent.JobIDEQ(jobID)).
 		Exec(ctx)
@@ -191,6 +198,13 @@ func (s *EntEventStore) Purge(jobID int) {
 		return
 	}
 	slog.Debug("ent_event_store: purged events", "job_id", jobID, "count", deleted)
+}
+
+func (s *EntEventStore) writeTimeout() time.Duration {
+	if s.appendTimeout <= 0 {
+		return eventWriteTimeout
+	}
+	return s.appendTimeout
 }
 
 func strPtr(s string) *string {

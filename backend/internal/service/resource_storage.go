@@ -302,7 +302,7 @@ func (s *ResourceService) PreviewSourceUpdate(ctx context.Context, actor, projec
 	if err = storageTerminalError(task); err != nil {
 		return nil, err
 	}
-	res, err := s.GetResource(ctx, actor, projectID, resourceID)
+	res, err := s.GetResourceIdentity(ctx, actor, projectID, resourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +335,7 @@ func (s *ResourceService) PreviewSourceUpdate(ctx context.Context, actor, projec
 		return nil, err
 	}
 	defer stage.Close()
-	items, err := s.parseStoredSegments(ctx, stage.File, res.Resource.Format)
+	items, err := s.parseStoredSegments(ctx, stage.File, res.Format)
 	if err != nil {
 		_ = s.storage.failWrite(ctx, stage.Write.ID, err)
 		return nil, err

@@ -39,5 +39,6 @@ func (SSEEvent) Edges() []ent.Edge {
 func (SSEEvent) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("job_id", "seq"),
+		index.Fields("seq"),
 	}
 }

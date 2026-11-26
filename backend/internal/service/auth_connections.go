@@ -368,7 +368,7 @@ func (s *ExternalAuthService) UploadConnectionLogo(ctx context.Context, actorID 
 		if err := saveExternalSnapshot(ctx, c, id, next, p.Policy.LoginPolicyRevision, &cfg, policyInput(p.Policy)); err != nil {
 			return err
 		}
-		if err := c.AuthConnection.UpdateOneID(id).SetAggregateRevision(next).SetCurrentRevision(next).Exec(ctx); err != nil {
+		if err := c.AuthConnection.UpdateOneID(id).SetAggregateRevision(next).SetCurrentRevision(next).Select("id").Exec(ctx); err != nil {
 			return err
 		}
 		return recordAuditEvent(ctx, c, AuditEvent{ActorUserID: actorID, Action: "admin.auth_connection.logo_saved", ResourceType: "auth_connection", Metadata: map[string]any{"connection_id": id, "revision": next}})

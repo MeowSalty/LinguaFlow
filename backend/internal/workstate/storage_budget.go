@@ -400,6 +400,21 @@ func (b *StorageBudget) settlePendingLocked(ctx context.Context) error {
 	if !b.pending {
 		return nil
 	}
+	if b.pendingConfirmation == nil && unknownCommit(b.pendingErr) && !storageRollbackKnown(b.pendingErr) {
+		client, ok := b.Source.DB.(*ent.Client)
+		if !ok {
+			return fmt.Errorf("pending storage writer requires SQL client")
+		}
+		// An independent WAL reader can see old byte totals while the original
+		// native Commit still owns its write lock. Join that writer before using
+		// inventory to release capacity, without treating byte absence as a
+		// canonical proof that the write did not commit.
+		if _, err := VerifyCommitConfirmation(ctx, client, b.Scope.JobID, func(context.Context, *ent.Client) (bool, error) {
+			return true, nil
+		}); err != nil {
+			return fmt.Errorf("pending storage writer completion: %w", err)
+		}
+	}
 	if b.pendingConfirmation != nil {
 		confirmed, err := b.pendingConfirmation(ctx)
 		if err != nil {

@@ -246,7 +246,7 @@ func applyTestCapability(cfg *ent.AuthConnectionRevision, row *ent.AuthTransacti
 	cfg.AppliedTestID = row.ID
 }
 func markConnectionTestApplied(ctx context.Context, c *ent.Client, row *ent.AuthTransaction, revision int64) error {
-	return c.AuthTransaction.UpdateOneID(row.ID).SetTestAppliedRevision(revision).Exec(ctx)
+	return c.AuthTransaction.UpdateOneID(row.ID).SetTestAppliedRevision(revision).Select("id").Exec(ctx)
 }
 
 func (s *ExternalAuthService) enterProvider(ctx context.Context, p externalConnection) (context.Context, func(), error) {

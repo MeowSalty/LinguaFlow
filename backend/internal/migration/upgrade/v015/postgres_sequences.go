@@ -62,6 +62,14 @@ WHERE n.nspname='public' AND c.relkind='S' ORDER BY c.relname`)
 		if err := tx.QueryRowContext(ctx, "SELECT MAX("+quoteIdentifier(sequence.Column)+") FROM "+quoteIdentifier("public")+"."+quoteIdentifier(sequence.Table)).Scan(&max); err != nil {
 			return nil, err
 		}
+		// The released initializer uses SetID(1) for these immutable
+		// singletons, leaving their otherwise owned sequences uncalled. They
+		// never allocate a second row. Keep the exact sequence in fingerprints
+		// and baseline evidence; ordinary allocators still need a safe next ID.
+		fixedSingleton := (sequence.Table == "instance_initializations" || sequence.Table == "local_account_policies") && sequence.Column == "id" && sequence.Start == 1 && sequence.Minimum == 1 && sequence.Increment == 1 && sequence.Last == 1 && !sequence.Called && max.Valid && max.Int64 == 1
+		if fixedSingleton {
+			continue
+		}
 		if max.Valid && (!sequence.Called && sequence.Last <= max.Int64 || sequence.Called && (sequence.Last > sequence.Maximum-sequence.Increment || sequence.Last+sequence.Increment <= max.Int64)) {
 			return nil, operation.Fail(operation.UnsupportedSource, fmt.Sprintf("PostgreSQL sequence for %s does not preserve allocation after original IDs", sequence.Table))
 		}

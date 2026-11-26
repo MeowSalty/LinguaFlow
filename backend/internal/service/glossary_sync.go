@@ -160,21 +160,29 @@ func (s *GlossarySyncService) AnalyzeSyncImpact(
 	}
 
 	// 2. 两阶段匹配查询受影响的段落
-	affected, err := s.findAffectedSegments(ctx, projectID, entry.Source, entry.CaseSensitive, input.OldTarget, input.ResourceIDs)
-	if err != nil {
-		return nil, fmt.Errorf("find affected segments: %w", err)
-	}
-
-	// 3. 按资源分组统计
 	resourceMap := make(map[int]*GlossarySyncImpactResource)
-	for _, seg := range affected {
-		resID := *seg.ResourceID
-		if _, ok := resourceMap[resID]; !ok {
-			resourceMap[resID] = &GlossarySyncImpactResource{
-				ResourceID: resID,
-			}
+	total := 0
+	for after := 0; ; {
+		affected, err := affectedSegmentsQuery(s.client, projectID, entry.Source, entry.CaseSensitive, input.OldTarget, input.ResourceIDs).
+			Where(segment.IDGT(after)).Order(ent.Asc(segment.FieldID)).Limit(syncBatchSize).
+			Select(segment.FieldID, segment.FieldResourceID).All(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("find affected segments: %w", err)
 		}
-		resourceMap[resID].AffectedCount++
+		if len(affected) == 0 {
+			break
+		}
+		for _, seg := range affected {
+			resID := *seg.ResourceID
+			if _, ok := resourceMap[resID]; !ok {
+				resourceMap[resID] = &GlossarySyncImpactResource{
+					ResourceID: resID,
+				}
+			}
+			resourceMap[resID].AffectedCount++
+		}
+		total += len(affected)
+		after = affected[len(affected)-1].ID
 	}
 
 	// 4. 获取资源路径
@@ -194,22 +202,23 @@ func (s *GlossarySyncService) AnalyzeSyncImpact(
 	return &GlossarySyncImpactResult{
 		OldTarget:     input.OldTarget,
 		NewTarget:     input.NewTarget,
-		TotalAffected: len(affected),
+		TotalAffected: total,
 		Resources:     resources,
 	}, nil
 }
 
 // --- 两阶段匹配 ---
 
-// findAffectedSegments 两阶段匹配查询受影响的段落
-func (s *GlossarySyncService) findAffectedSegments(
-	ctx context.Context,
+// affectedSegmentsQuery leaves matching in SQL and lets callers select only
+// identities in fixed-size pages; neither submission nor analysis loads bodies.
+func affectedSegmentsQuery(
+	client *ent.Client,
 	projectID int,
 	source string,
 	caseSensitive bool,
 	oldTarget string,
 	resourceIDs []int,
-) ([]*ent.Segment, error) {
+) *ent.SegmentQuery {
 
 	// 基础查询条件
 	predicates := []predicate.Segment{
@@ -239,13 +248,5 @@ func (s *GlossarySyncService) findAffectedSegments(
 		predicates = append(predicates, segment.TargetTextContainsFold(oldTarget))
 	}
 
-	segments, err := s.client.Segment.Query().
-		Where(predicates...).
-		Order(ent.Asc(segment.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return segments, nil
+	return client.Segment.Query().Where(predicates...)
 }

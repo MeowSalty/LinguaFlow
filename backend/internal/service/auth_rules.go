@@ -6,10 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/authrules"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/authconnection"
@@ -21,48 +21,94 @@ import (
 
 var ErrAuthenticationRuleDenied = errors.New("authentication rule denied")
 
-func (s *ExternalAuthService) cleanupRuleEvidence(ctx context.Context, now time.Time) error {
-	ids, err := s.client.RefreshSession.Query().Where(refreshsession.EvidenceNotNil(), refreshsession.Or(refreshsession.ExpiresAtLTE(now), refreshsession.RevokedAtNotNil())).IDs(ctx)
+const authenticationCleanupBatch = 256
+const authenticationBindingCleanupBatch = 64
+
+type bindingEvidenceCursor struct {
+	expiresAt time.Time
+	id        int
+}
+
+func (s *ExternalAuthService) cleanupSessionEvidence(ctx context.Context, now time.Time, revoked bool) error {
+	query := s.client.RefreshSession.Query().Where(refreshsession.EvidenceNotNil())
+	condition := sql.LTE(refreshsession.FieldExpiresAt, now)
+	if revoked {
+		query.Where(refreshsession.RevokedAtNotNil()).Order(ent.Asc(refreshsession.FieldRevokedAt), ent.Asc(refreshsession.FieldID))
+		condition = sql.NotNull(refreshsession.FieldRevokedAt)
+	} else {
+		query.Where(refreshsession.ExpiresAtLTE(now)).Order(ent.Asc(refreshsession.FieldExpiresAt), ent.Asc(refreshsession.FieldID))
+	}
+	ids, err := query.Limit(authenticationCleanupBatch).IDs(ctx)
 	if err != nil {
 		return err
 	}
-	for _, id := range ids {
-		if _, err = s.client.ExecContext(ctx, fmt.Sprintf("UPDATE refresh_sessions SET evidence=NULL WHERE id=%d", id)); err != nil {
+	if len(ids) == 0 {
+		return nil
+	}
+	// Session evidence is immutable to ordinary callers. Retention alone can
+	// erase it; recheck eligibility in the write rather than trusting a read.
+	statement, args := sql.Dialect(s.client.DialectName()).Update(refreshsession.Table).
+		Set(refreshsession.FieldEvidence, nil).
+		Where(sql.And(sql.InInts(refreshsession.FieldID, ids...), sql.NotNull(refreshsession.FieldEvidence), condition)).Query()
+	_, err = s.client.ExecContext(ctx, statement, args...)
+	return err
+}
+
+func (s *ExternalAuthService) cleanupBindingEvidence(ctx context.Context, now time.Time) error {
+	query := s.client.LoginBinding.Query().Where(loginbinding.EvidenceExpiresAtLTE(now))
+	if cursor := s.cleanupBindingAfter; cursor.id > 0 {
+		query.Where(loginbinding.Or(loginbinding.EvidenceExpiresAtGT(cursor.expiresAt), loginbinding.And(loginbinding.EvidenceExpiresAtEQ(cursor.expiresAt), loginbinding.IDGT(cursor.id))))
+	}
+	bindings, err := query.Order(ent.Asc(loginbinding.FieldEvidenceExpiresAt), ent.Asc(loginbinding.FieldID)).
+		Select(loginbinding.FieldID, loginbinding.FieldConnectionID, loginbinding.FieldUserID, loginbinding.FieldEvidenceExpiresAt).
+		Limit(authenticationBindingCleanupBatch).All(ctx)
+	if err != nil {
+		return err
+	}
+	if len(bindings) == 0 {
+		s.cleanupBindingAfter = bindingEvidenceCursor{}
+		return nil
+	}
+	last := bindings[len(bindings)-1]
+	s.cleanupBindingAfter = bindingEvidenceCursor{expiresAt: *last.EvidenceExpiresAt, id: last.ID}
+	if len(bindings) < authenticationBindingCleanupBatch {
+		s.cleanupBindingAfter = bindingEvidenceCursor{}
+	}
+	// Keep independent keyset progress even if this batch is blocked. A future
+	// pass wraps and revisits it without starving later expired evidence.
+	connections, users, ids := map[string]bool{}, map[int]bool{}, make([]int, 0, len(bindings))
+	for _, binding := range bindings {
+		connections[binding.ConnectionID], users[binding.UserID] = true, true
+		ids = append(ids, binding.ID)
+	}
+	return withOrganizationTransaction(ctx, s.client, func(c *ent.Client) error {
+		connectionIDs, userIDs := make([]string, 0, len(connections)), make([]int, 0, len(users))
+		for id := range connections {
+			connectionIDs = append(connectionIDs, id)
+		}
+		for id := range users {
+			userIDs = append(userIDs, id)
+		}
+		sort.Strings(connectionIDs)
+		sort.Ints(userIDs)
+		if err := lockPasswordConnection(ctx, c); err != nil {
 			return err
 		}
-	}
-	bindings, err := s.client.LoginBinding.Query().Where(loginbinding.EvidenceNotNil()).All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, binding := range bindings {
-		if !binding.Evidence.ExpiresAt.IsZero() && !now.Before(binding.Evidence.ExpiresAt) {
-			// Serialize against a fresh login replacing this evidence.
-			err = withOrganizationTransaction(ctx, s.client, func(c *ent.Client) error {
-				if err := lockAuthConnection(ctx, c, binding.ConnectionID); err != nil {
-					return err
-				}
-				if err := lockAuthUser(ctx, c, binding.UserID); err != nil {
-					return err
-				}
-				b, e := c.LoginBinding.Get(ctx, binding.ID)
-				if ent.IsNotFound(e) {
-					return nil
-				}
-				if e != nil {
-					return e
-				}
-				if !b.Evidence.ExpiresAt.IsZero() && !now.Before(b.Evidence.ExpiresAt) {
-					return c.LoginBinding.UpdateOneID(b.ID).ClearEvidence().Exec(ctx)
-				}
-				return nil
-			})
-			if err != nil {
+		for _, id := range connectionIDs {
+			if err := lockExternalSource(ctx, c, id); err != nil {
 				return err
 			}
 		}
-	}
-	return nil
+		for _, id := range userIDs {
+			if err := lockAuthUser(ctx, c, id); err != nil {
+				return err
+			}
+		}
+		// Fresh login changes evidence and its indexed expiry atomically under
+		// these same locks. The conditional bulk update cannot erase its result.
+		_, err := c.LoginBinding.Update().Where(loginbinding.IDIn(ids...), loginbinding.EvidenceExpiresAtLTE(now)).ClearEvidence().Save(ctx)
+		return err
+	})
 }
 
 type AuthRulesPreviewInput struct {

@@ -149,6 +149,9 @@ func (s *TaskHistoryService) CanDelete(ctx context.Context, actor int, kind stri
 	if s == nil || kind == OperationStorage || !historyTerminal(status) || s.blocked() || s.lifecycle.Busy(kind, id) {
 		return false
 	}
+	if page, ok := ctx.Value(historyDeleteObservationKey{}).(historyDeleteObservation); ok && page.actor == actor {
+		return page.projects[projectID]
+	}
 	p, err := s.projects.requireProjectAccess(ctx, actor, projectID, true)
 	return err == nil && p.StorageState == "active"
 }

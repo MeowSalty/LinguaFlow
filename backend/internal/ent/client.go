@@ -72,6 +72,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatchitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskresult"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
@@ -205,6 +207,10 @@ type Client struct {
 	StorageWrite *StorageWriteClient
 	// SyncTask is the client for interacting with the SyncTask builders.
 	SyncTask *SyncTaskClient
+	// SyncTaskItem is the client for interacting with the SyncTaskItem builders.
+	SyncTaskItem *SyncTaskItemClient
+	// SyncTaskResult is the client for interacting with the SyncTaskResult builders.
+	SyncTaskResult *SyncTaskResultClient
 	// SystemSetting is the client for interacting with the SystemSetting builders.
 	SystemSetting *SystemSettingClient
 	// TMEntry is the client for interacting with the TMEntry builders.
@@ -293,6 +299,8 @@ func (c *Client) init() {
 	c.StorageUploadBatchItem = NewStorageUploadBatchItemClient(c.config)
 	c.StorageWrite = NewStorageWriteClient(c.config)
 	c.SyncTask = NewSyncTaskClient(c.config)
+	c.SyncTaskItem = NewSyncTaskItemClient(c.config)
+	c.SyncTaskResult = NewSyncTaskResultClient(c.config)
 	c.SystemSetting = NewSystemSettingClient(c.config)
 	c.TMEntry = NewTMEntryClient(c.config)
 	c.TranslationPromptTemplate = NewTranslationPromptTemplateClient(c.config)
@@ -452,6 +460,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		StorageUploadBatchItem:    NewStorageUploadBatchItemClient(cfg),
 		StorageWrite:              NewStorageWriteClient(cfg),
 		SyncTask:                  NewSyncTaskClient(cfg),
+		SyncTaskItem:              NewSyncTaskItemClient(cfg),
+		SyncTaskResult:            NewSyncTaskResultClient(cfg),
 		SystemSetting:             NewSystemSettingClient(cfg),
 		TMEntry:                   NewTMEntryClient(cfg),
 		TranslationPromptTemplate: NewTranslationPromptTemplateClient(cfg),
@@ -538,6 +548,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		StorageUploadBatchItem:    NewStorageUploadBatchItemClient(cfg),
 		StorageWrite:              NewStorageWriteClient(cfg),
 		SyncTask:                  NewSyncTaskClient(cfg),
+		SyncTaskItem:              NewSyncTaskItemClient(cfg),
+		SyncTaskResult:            NewSyncTaskResultClient(cfg),
 		SystemSetting:             NewSystemSettingClient(cfg),
 		TMEntry:                   NewTMEntryClient(cfg),
 		TranslationPromptTemplate: NewTranslationPromptTemplateClient(cfg),
@@ -592,9 +604,9 @@ func (c *Client) Use(hooks ...Hook) {
 		c.StorageNamespace, c.StoragePathClaim, c.StorageReservation,
 		c.StorageRetirement, c.StorageRetirementEntry, c.StorageSpace, c.StorageTask,
 		c.StorageUploadBatch, c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask,
-		c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
-		c.WorkCandidate, c.WorkItem, c.WorkRequest, c.WorkRequestInputMember,
-		c.WorkResponseMember,
+		c.SyncTaskItem, c.SyncTaskResult, c.SystemSetting, c.TMEntry,
+		c.TranslationPromptTemplate, c.UsageRecord, c.User, c.WorkCandidate,
+		c.WorkItem, c.WorkRequest, c.WorkRequestInputMember, c.WorkResponseMember,
 	} {
 		n.Use(hooks...)
 	}
@@ -619,9 +631,9 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.StorageNamespace, c.StoragePathClaim, c.StorageReservation,
 		c.StorageRetirement, c.StorageRetirementEntry, c.StorageSpace, c.StorageTask,
 		c.StorageUploadBatch, c.StorageUploadBatchItem, c.StorageWrite, c.SyncTask,
-		c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate, c.UsageRecord, c.User,
-		c.WorkCandidate, c.WorkItem, c.WorkRequest, c.WorkRequestInputMember,
-		c.WorkResponseMember,
+		c.SyncTaskItem, c.SyncTaskResult, c.SystemSetting, c.TMEntry,
+		c.TranslationPromptTemplate, c.UsageRecord, c.User, c.WorkCandidate,
+		c.WorkItem, c.WorkRequest, c.WorkRequestInputMember, c.WorkResponseMember,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -744,6 +756,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.StorageWrite.mutate(ctx, m)
 	case *SyncTaskMutation:
 		return c.SyncTask.mutate(ctx, m)
+	case *SyncTaskItemMutation:
+		return c.SyncTaskItem.mutate(ctx, m)
+	case *SyncTaskResultMutation:
+		return c.SyncTaskResult.mutate(ctx, m)
 	case *SystemSettingMutation:
 		return c.SystemSetting.mutate(ctx, m)
 	case *TMEntryMutation:
@@ -10212,6 +10228,304 @@ func (c *SyncTaskClient) mutate(ctx context.Context, m *SyncTaskMutation) (Value
 	}
 }
 
+// SyncTaskItemClient is a client for the SyncTaskItem schema.
+type SyncTaskItemClient struct {
+	config
+}
+
+// NewSyncTaskItemClient returns a client for the SyncTaskItem from the given config.
+func NewSyncTaskItemClient(c config) *SyncTaskItemClient {
+	return &SyncTaskItemClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `synctaskitem.Hooks(f(g(h())))`.
+func (c *SyncTaskItemClient) Use(hooks ...Hook) {
+	c.hooks.SyncTaskItem = append(c.hooks.SyncTaskItem, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `synctaskitem.Intercept(f(g(h())))`.
+func (c *SyncTaskItemClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SyncTaskItem = append(c.inters.SyncTaskItem, interceptors...)
+}
+
+// Create returns a builder for creating a SyncTaskItem entity.
+func (c *SyncTaskItemClient) Create() *SyncTaskItemCreate {
+	mutation := newSyncTaskItemMutation(c.config, OpCreate)
+	return &SyncTaskItemCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SyncTaskItem entities.
+func (c *SyncTaskItemClient) CreateBulk(builders ...*SyncTaskItemCreate) *SyncTaskItemCreateBulk {
+	return &SyncTaskItemCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SyncTaskItemClient) MapCreateBulk(slice any, setFunc func(*SyncTaskItemCreate, int)) *SyncTaskItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SyncTaskItemCreateBulk{err: fmt.Errorf("calling to SyncTaskItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SyncTaskItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SyncTaskItemCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SyncTaskItem.
+func (c *SyncTaskItemClient) Update() *SyncTaskItemUpdate {
+	mutation := newSyncTaskItemMutation(c.config, OpUpdate)
+	return &SyncTaskItemUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SyncTaskItemClient) UpdateOne(_m *SyncTaskItem) *SyncTaskItemUpdateOne {
+	mutation := newSyncTaskItemMutation(c.config, OpUpdateOne, withSyncTaskItem(_m))
+	return &SyncTaskItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SyncTaskItemClient) UpdateOneID(id int) *SyncTaskItemUpdateOne {
+	mutation := newSyncTaskItemMutation(c.config, OpUpdateOne, withSyncTaskItemID(id))
+	return &SyncTaskItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SyncTaskItem.
+func (c *SyncTaskItemClient) Delete() *SyncTaskItemDelete {
+	mutation := newSyncTaskItemMutation(c.config, OpDelete)
+	return &SyncTaskItemDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SyncTaskItemClient) DeleteOne(_m *SyncTaskItem) *SyncTaskItemDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SyncTaskItemClient) DeleteOneID(id int) *SyncTaskItemDeleteOne {
+	builder := c.Delete().Where(synctaskitem.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SyncTaskItemDeleteOne{builder}
+}
+
+// Query returns a query builder for SyncTaskItem.
+func (c *SyncTaskItemClient) Query() *SyncTaskItemQuery {
+	return &SyncTaskItemQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSyncTaskItem},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SyncTaskItem entity by its id.
+func (c *SyncTaskItemClient) Get(ctx context.Context, id int) (*SyncTaskItem, error) {
+	return c.Query().Where(synctaskitem.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SyncTaskItemClient) GetX(ctx context.Context, id int) *SyncTaskItem {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryTask queries the task edge of a SyncTaskItem.
+func (c *SyncTaskItemClient) QueryTask(_m *SyncTaskItem) *SyncTaskQuery {
+	query := (&SyncTaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(synctaskitem.Table, synctaskitem.FieldID, id),
+			sqlgraph.To(synctask.Table, synctask.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, synctaskitem.TaskTable, synctaskitem.TaskColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *SyncTaskItemClient) Hooks() []Hook {
+	return c.hooks.SyncTaskItem
+}
+
+// Interceptors returns the client interceptors.
+func (c *SyncTaskItemClient) Interceptors() []Interceptor {
+	return c.inters.SyncTaskItem
+}
+
+func (c *SyncTaskItemClient) mutate(ctx context.Context, m *SyncTaskItemMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SyncTaskItemCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SyncTaskItemUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SyncTaskItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SyncTaskItemDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SyncTaskItem mutation op: %q", m.Op())
+	}
+}
+
+// SyncTaskResultClient is a client for the SyncTaskResult schema.
+type SyncTaskResultClient struct {
+	config
+}
+
+// NewSyncTaskResultClient returns a client for the SyncTaskResult from the given config.
+func NewSyncTaskResultClient(c config) *SyncTaskResultClient {
+	return &SyncTaskResultClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `synctaskresult.Hooks(f(g(h())))`.
+func (c *SyncTaskResultClient) Use(hooks ...Hook) {
+	c.hooks.SyncTaskResult = append(c.hooks.SyncTaskResult, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `synctaskresult.Intercept(f(g(h())))`.
+func (c *SyncTaskResultClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SyncTaskResult = append(c.inters.SyncTaskResult, interceptors...)
+}
+
+// Create returns a builder for creating a SyncTaskResult entity.
+func (c *SyncTaskResultClient) Create() *SyncTaskResultCreate {
+	mutation := newSyncTaskResultMutation(c.config, OpCreate)
+	return &SyncTaskResultCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SyncTaskResult entities.
+func (c *SyncTaskResultClient) CreateBulk(builders ...*SyncTaskResultCreate) *SyncTaskResultCreateBulk {
+	return &SyncTaskResultCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SyncTaskResultClient) MapCreateBulk(slice any, setFunc func(*SyncTaskResultCreate, int)) *SyncTaskResultCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SyncTaskResultCreateBulk{err: fmt.Errorf("calling to SyncTaskResultClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SyncTaskResultCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SyncTaskResultCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SyncTaskResult.
+func (c *SyncTaskResultClient) Update() *SyncTaskResultUpdate {
+	mutation := newSyncTaskResultMutation(c.config, OpUpdate)
+	return &SyncTaskResultUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SyncTaskResultClient) UpdateOne(_m *SyncTaskResult) *SyncTaskResultUpdateOne {
+	mutation := newSyncTaskResultMutation(c.config, OpUpdateOne, withSyncTaskResult(_m))
+	return &SyncTaskResultUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SyncTaskResultClient) UpdateOneID(id int) *SyncTaskResultUpdateOne {
+	mutation := newSyncTaskResultMutation(c.config, OpUpdateOne, withSyncTaskResultID(id))
+	return &SyncTaskResultUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SyncTaskResult.
+func (c *SyncTaskResultClient) Delete() *SyncTaskResultDelete {
+	mutation := newSyncTaskResultMutation(c.config, OpDelete)
+	return &SyncTaskResultDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SyncTaskResultClient) DeleteOne(_m *SyncTaskResult) *SyncTaskResultDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SyncTaskResultClient) DeleteOneID(id int) *SyncTaskResultDeleteOne {
+	builder := c.Delete().Where(synctaskresult.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SyncTaskResultDeleteOne{builder}
+}
+
+// Query returns a query builder for SyncTaskResult.
+func (c *SyncTaskResultClient) Query() *SyncTaskResultQuery {
+	return &SyncTaskResultQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSyncTaskResult},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SyncTaskResult entity by its id.
+func (c *SyncTaskResultClient) Get(ctx context.Context, id int) (*SyncTaskResult, error) {
+	return c.Query().Where(synctaskresult.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SyncTaskResultClient) GetX(ctx context.Context, id int) *SyncTaskResult {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryTask queries the task edge of a SyncTaskResult.
+func (c *SyncTaskResultClient) QueryTask(_m *SyncTaskResult) *SyncTaskQuery {
+	query := (&SyncTaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(synctaskresult.Table, synctaskresult.FieldID, id),
+			sqlgraph.To(synctask.Table, synctask.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, synctaskresult.TaskTable, synctaskresult.TaskColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *SyncTaskResultClient) Hooks() []Hook {
+	return c.hooks.SyncTaskResult
+}
+
+// Interceptors returns the client interceptors.
+func (c *SyncTaskResultClient) Interceptors() []Interceptor {
+	return c.inters.SyncTaskResult
+}
+
+func (c *SyncTaskResultClient) mutate(ctx context.Context, m *SyncTaskResultMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SyncTaskResultCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SyncTaskResultUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SyncTaskResultUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SyncTaskResultDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SyncTaskResult mutation op: %q", m.Op())
+	}
+}
+
 // SystemSettingClient is a client for the SystemSetting schema.
 type SystemSettingClient struct {
 	config
@@ -12086,9 +12400,9 @@ type (
 		StorageConnection, StorageMigrationItem, StorageNamespace, StoragePathClaim,
 		StorageReservation, StorageRetirement, StorageRetirementEntry, StorageSpace,
 		StorageTask, StorageUploadBatch, StorageUploadBatchItem, StorageWrite,
-		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord, User,
-		WorkCandidate, WorkItem, WorkRequest, WorkRequestInputMember,
-		WorkResponseMember []ent.Hook
+		SyncTask, SyncTaskItem, SyncTaskResult, SystemSetting, TMEntry,
+		TranslationPromptTemplate, UsageRecord, User, WorkCandidate, WorkItem,
+		WorkRequest, WorkRequestInputMember, WorkResponseMember []ent.Hook
 	}
 	inters struct {
 		ActivityLog, AuthChannelPolicy, AuthConnection, AuthConnectionRevision,
@@ -12104,9 +12418,9 @@ type (
 		StorageConnection, StorageMigrationItem, StorageNamespace, StoragePathClaim,
 		StorageReservation, StorageRetirement, StorageRetirementEntry, StorageSpace,
 		StorageTask, StorageUploadBatch, StorageUploadBatchItem, StorageWrite,
-		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord, User,
-		WorkCandidate, WorkItem, WorkRequest, WorkRequestInputMember,
-		WorkResponseMember []ent.Interceptor
+		SyncTask, SyncTaskItem, SyncTaskResult, SystemSetting, TMEntry,
+		TranslationPromptTemplate, UsageRecord, User, WorkCandidate, WorkItem,
+		WorkRequest, WorkRequestInputMember, WorkResponseMember []ent.Interceptor
 	}
 )
 

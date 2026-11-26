@@ -71,6 +71,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storageuploadbatchitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagewrite"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskitem"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctaskresult"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
@@ -151,6 +153,8 @@ const (
 	TypeStorageUploadBatchItem    = "StorageUploadBatchItem"
 	TypeStorageWrite              = "StorageWrite"
 	TypeSyncTask                  = "SyncTask"
+	TypeSyncTaskItem              = "SyncTaskItem"
+	TypeSyncTaskResult            = "SyncTaskResult"
 	TypeSystemSetting             = "SystemSetting"
 	TypeTMEntry                   = "TMEntry"
 	TypeTranslationPromptTemplate = "TranslationPromptTemplate"
@@ -33795,6 +33799,7 @@ type LoginBindingMutation struct {
 	verified_login_policy_revision    *int64
 	addverified_login_policy_revision *int64
 	evidence                          *authrules.Evidence
+	evidence_expires_at               *time.Time
 	clearedFields                     map[string]struct{}
 	user                              *int
 	cleareduser                       bool
@@ -34347,6 +34352,55 @@ func (m *LoginBindingMutation) ResetEvidence() {
 	delete(m.clearedFields, loginbinding.FieldEvidence)
 }
 
+// SetEvidenceExpiresAt sets the "evidence_expires_at" field.
+func (m *LoginBindingMutation) SetEvidenceExpiresAt(t time.Time) {
+	m.evidence_expires_at = &t
+}
+
+// EvidenceExpiresAt returns the value of the "evidence_expires_at" field in the mutation.
+func (m *LoginBindingMutation) EvidenceExpiresAt() (r time.Time, exists bool) {
+	v := m.evidence_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEvidenceExpiresAt returns the old "evidence_expires_at" field's value of the LoginBinding entity.
+// If the LoginBinding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *LoginBindingMutation) OldEvidenceExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEvidenceExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEvidenceExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEvidenceExpiresAt: %w", err)
+	}
+	return oldValue.EvidenceExpiresAt, nil
+}
+
+// ClearEvidenceExpiresAt clears the value of the "evidence_expires_at" field.
+func (m *LoginBindingMutation) ClearEvidenceExpiresAt() {
+	m.evidence_expires_at = nil
+	m.clearedFields[loginbinding.FieldEvidenceExpiresAt] = struct{}{}
+}
+
+// EvidenceExpiresAtCleared returns if the "evidence_expires_at" field was cleared in this mutation.
+func (m *LoginBindingMutation) EvidenceExpiresAtCleared() bool {
+	_, ok := m.clearedFields[loginbinding.FieldEvidenceExpiresAt]
+	return ok
+}
+
+// ResetEvidenceExpiresAt resets all changes to the "evidence_expires_at" field.
+func (m *LoginBindingMutation) ResetEvidenceExpiresAt() {
+	m.evidence_expires_at = nil
+	delete(m.clearedFields, loginbinding.FieldEvidenceExpiresAt)
+}
+
 // ClearUser clears the "user" edge to the User entity.
 func (m *LoginBindingMutation) ClearUser() {
 	m.cleareduser = true
@@ -34516,7 +34570,7 @@ func (m *LoginBindingMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *LoginBindingMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.created_at != nil {
 		fields = append(fields, loginbinding.FieldCreatedAt)
 	}
@@ -34547,6 +34601,9 @@ func (m *LoginBindingMutation) Fields() []string {
 	if m.evidence != nil {
 		fields = append(fields, loginbinding.FieldEvidence)
 	}
+	if m.evidence_expires_at != nil {
+		fields = append(fields, loginbinding.FieldEvidenceExpiresAt)
+	}
 	return fields
 }
 
@@ -34575,6 +34632,8 @@ func (m *LoginBindingMutation) Field(name string) (ent.Value, bool) {
 		return m.VerifiedLoginPolicyRevision()
 	case loginbinding.FieldEvidence:
 		return m.Evidence()
+	case loginbinding.FieldEvidenceExpiresAt:
+		return m.EvidenceExpiresAt()
 	}
 	return nil, false
 }
@@ -34604,6 +34663,8 @@ func (m *LoginBindingMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldVerifiedLoginPolicyRevision(ctx)
 	case loginbinding.FieldEvidence:
 		return m.OldEvidence(ctx)
+	case loginbinding.FieldEvidenceExpiresAt:
+		return m.OldEvidenceExpiresAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown LoginBinding field %s", name)
 }
@@ -34683,6 +34744,13 @@ func (m *LoginBindingMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetEvidence(v)
 		return nil
+	case loginbinding.FieldEvidenceExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEvidenceExpiresAt(v)
+		return nil
 	}
 	return fmt.Errorf("unknown LoginBinding field %s", name)
 }
@@ -34749,6 +34817,9 @@ func (m *LoginBindingMutation) ClearedFields() []string {
 	if m.FieldCleared(loginbinding.FieldEvidence) {
 		fields = append(fields, loginbinding.FieldEvidence)
 	}
+	if m.FieldCleared(loginbinding.FieldEvidenceExpiresAt) {
+		fields = append(fields, loginbinding.FieldEvidenceExpiresAt)
+	}
 	return fields
 }
 
@@ -34771,6 +34842,9 @@ func (m *LoginBindingMutation) ClearField(name string) error {
 		return nil
 	case loginbinding.FieldEvidence:
 		m.ClearEvidence()
+		return nil
+	case loginbinding.FieldEvidenceExpiresAt:
+		m.ClearEvidenceExpiresAt()
 		return nil
 	}
 	return fmt.Errorf("unknown LoginBinding nullable field %s", name)
@@ -34809,6 +34883,9 @@ func (m *LoginBindingMutation) ResetField(name string) error {
 		return nil
 	case loginbinding.FieldEvidence:
 		m.ResetEvidence()
+		return nil
+	case loginbinding.FieldEvidenceExpiresAt:
+		m.ResetEvidenceExpiresAt()
 		return nil
 	}
 	return fmt.Errorf("unknown LoginBinding field %s", name)
@@ -70036,10 +70113,12 @@ type SyncTaskMutation struct {
 	addcheckpoint_version *int
 	next_segment_index    *int
 	addnext_segment_index *int
+	total_updated         *int
+	addtotal_updated      *int
+	total_skipped         *int
+	addtotal_skipped      *int
 	started_at            *time.Time
 	status                *string
-	segment_ids           *string
-	resource_ids          *string
 	result                *string
 	error                 *string
 	cancelled_at          *time.Time
@@ -70631,6 +70710,118 @@ func (m *SyncTaskMutation) ResetNextSegmentIndex() {
 	m.addnext_segment_index = nil
 }
 
+// SetTotalUpdated sets the "total_updated" field.
+func (m *SyncTaskMutation) SetTotalUpdated(i int) {
+	m.total_updated = &i
+	m.addtotal_updated = nil
+}
+
+// TotalUpdated returns the value of the "total_updated" field in the mutation.
+func (m *SyncTaskMutation) TotalUpdated() (r int, exists bool) {
+	v := m.total_updated
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotalUpdated returns the old "total_updated" field's value of the SyncTask entity.
+// If the SyncTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskMutation) OldTotalUpdated(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotalUpdated is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotalUpdated requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotalUpdated: %w", err)
+	}
+	return oldValue.TotalUpdated, nil
+}
+
+// AddTotalUpdated adds i to the "total_updated" field.
+func (m *SyncTaskMutation) AddTotalUpdated(i int) {
+	if m.addtotal_updated != nil {
+		*m.addtotal_updated += i
+	} else {
+		m.addtotal_updated = &i
+	}
+}
+
+// AddedTotalUpdated returns the value that was added to the "total_updated" field in this mutation.
+func (m *SyncTaskMutation) AddedTotalUpdated() (r int, exists bool) {
+	v := m.addtotal_updated
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTotalUpdated resets all changes to the "total_updated" field.
+func (m *SyncTaskMutation) ResetTotalUpdated() {
+	m.total_updated = nil
+	m.addtotal_updated = nil
+}
+
+// SetTotalSkipped sets the "total_skipped" field.
+func (m *SyncTaskMutation) SetTotalSkipped(i int) {
+	m.total_skipped = &i
+	m.addtotal_skipped = nil
+}
+
+// TotalSkipped returns the value of the "total_skipped" field in the mutation.
+func (m *SyncTaskMutation) TotalSkipped() (r int, exists bool) {
+	v := m.total_skipped
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotalSkipped returns the old "total_skipped" field's value of the SyncTask entity.
+// If the SyncTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskMutation) OldTotalSkipped(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotalSkipped is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotalSkipped requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotalSkipped: %w", err)
+	}
+	return oldValue.TotalSkipped, nil
+}
+
+// AddTotalSkipped adds i to the "total_skipped" field.
+func (m *SyncTaskMutation) AddTotalSkipped(i int) {
+	if m.addtotal_skipped != nil {
+		*m.addtotal_skipped += i
+	} else {
+		m.addtotal_skipped = &i
+	}
+}
+
+// AddedTotalSkipped returns the value that was added to the "total_skipped" field in this mutation.
+func (m *SyncTaskMutation) AddedTotalSkipped() (r int, exists bool) {
+	v := m.addtotal_skipped
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTotalSkipped resets all changes to the "total_skipped" field.
+func (m *SyncTaskMutation) ResetTotalSkipped() {
+	m.total_skipped = nil
+	m.addtotal_skipped = nil
+}
+
 // SetStartedAt sets the "started_at" field.
 func (m *SyncTaskMutation) SetStartedAt(t time.Time) {
 	m.started_at = &t
@@ -70714,78 +70905,6 @@ func (m *SyncTaskMutation) OldStatus(ctx context.Context) (v string, err error) 
 // ResetStatus resets all changes to the "status" field.
 func (m *SyncTaskMutation) ResetStatus() {
 	m.status = nil
-}
-
-// SetSegmentIds sets the "segment_ids" field.
-func (m *SyncTaskMutation) SetSegmentIds(s string) {
-	m.segment_ids = &s
-}
-
-// SegmentIds returns the value of the "segment_ids" field in the mutation.
-func (m *SyncTaskMutation) SegmentIds() (r string, exists bool) {
-	v := m.segment_ids
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldSegmentIds returns the old "segment_ids" field's value of the SyncTask entity.
-// If the SyncTask object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SyncTaskMutation) OldSegmentIds(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldSegmentIds is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldSegmentIds requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldSegmentIds: %w", err)
-	}
-	return oldValue.SegmentIds, nil
-}
-
-// ResetSegmentIds resets all changes to the "segment_ids" field.
-func (m *SyncTaskMutation) ResetSegmentIds() {
-	m.segment_ids = nil
-}
-
-// SetResourceIds sets the "resource_ids" field.
-func (m *SyncTaskMutation) SetResourceIds(s string) {
-	m.resource_ids = &s
-}
-
-// ResourceIds returns the value of the "resource_ids" field in the mutation.
-func (m *SyncTaskMutation) ResourceIds() (r string, exists bool) {
-	v := m.resource_ids
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldResourceIds returns the old "resource_ids" field's value of the SyncTask entity.
-// If the SyncTask object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SyncTaskMutation) OldResourceIds(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldResourceIds is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldResourceIds requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldResourceIds: %w", err)
-	}
-	return oldValue.ResourceIds, nil
-}
-
-// ResetResourceIds resets all changes to the "resource_ids" field.
-func (m *SyncTaskMutation) ResetResourceIds() {
-	m.resource_ids = nil
 }
 
 // SetResult sets the "result" field.
@@ -71195,17 +71314,17 @@ func (m *SyncTaskMutation) Fields() []string {
 	if m.next_segment_index != nil {
 		fields = append(fields, synctask.FieldNextSegmentIndex)
 	}
+	if m.total_updated != nil {
+		fields = append(fields, synctask.FieldTotalUpdated)
+	}
+	if m.total_skipped != nil {
+		fields = append(fields, synctask.FieldTotalSkipped)
+	}
 	if m.started_at != nil {
 		fields = append(fields, synctask.FieldStartedAt)
 	}
 	if m.status != nil {
 		fields = append(fields, synctask.FieldStatus)
-	}
-	if m.segment_ids != nil {
-		fields = append(fields, synctask.FieldSegmentIds)
-	}
-	if m.resource_ids != nil {
-		fields = append(fields, synctask.FieldResourceIds)
 	}
 	if m.result != nil {
 		fields = append(fields, synctask.FieldResult)
@@ -71252,14 +71371,14 @@ func (m *SyncTaskMutation) Field(name string) (ent.Value, bool) {
 		return m.CheckpointVersion()
 	case synctask.FieldNextSegmentIndex:
 		return m.NextSegmentIndex()
+	case synctask.FieldTotalUpdated:
+		return m.TotalUpdated()
+	case synctask.FieldTotalSkipped:
+		return m.TotalSkipped()
 	case synctask.FieldStartedAt:
 		return m.StartedAt()
 	case synctask.FieldStatus:
 		return m.Status()
-	case synctask.FieldSegmentIds:
-		return m.SegmentIds()
-	case synctask.FieldResourceIds:
-		return m.ResourceIds()
 	case synctask.FieldResult:
 		return m.Result()
 	case synctask.FieldError:
@@ -71301,14 +71420,14 @@ func (m *SyncTaskMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldCheckpointVersion(ctx)
 	case synctask.FieldNextSegmentIndex:
 		return m.OldNextSegmentIndex(ctx)
+	case synctask.FieldTotalUpdated:
+		return m.OldTotalUpdated(ctx)
+	case synctask.FieldTotalSkipped:
+		return m.OldTotalSkipped(ctx)
 	case synctask.FieldStartedAt:
 		return m.OldStartedAt(ctx)
 	case synctask.FieldStatus:
 		return m.OldStatus(ctx)
-	case synctask.FieldSegmentIds:
-		return m.OldSegmentIds(ctx)
-	case synctask.FieldResourceIds:
-		return m.OldResourceIds(ctx)
 	case synctask.FieldResult:
 		return m.OldResult(ctx)
 	case synctask.FieldError:
@@ -71405,6 +71524,20 @@ func (m *SyncTaskMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetNextSegmentIndex(v)
 		return nil
+	case synctask.FieldTotalUpdated:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotalUpdated(v)
+		return nil
+	case synctask.FieldTotalSkipped:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotalSkipped(v)
+		return nil
 	case synctask.FieldStartedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -71418,20 +71551,6 @@ func (m *SyncTaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
-		return nil
-	case synctask.FieldSegmentIds:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetSegmentIds(v)
-		return nil
-	case synctask.FieldResourceIds:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetResourceIds(v)
 		return nil
 	case synctask.FieldResult:
 		v, ok := value.(string)
@@ -71488,6 +71607,12 @@ func (m *SyncTaskMutation) AddedFields() []string {
 	if m.addnext_segment_index != nil {
 		fields = append(fields, synctask.FieldNextSegmentIndex)
 	}
+	if m.addtotal_updated != nil {
+		fields = append(fields, synctask.FieldTotalUpdated)
+	}
+	if m.addtotal_skipped != nil {
+		fields = append(fields, synctask.FieldTotalSkipped)
+	}
 	return fields
 }
 
@@ -71504,6 +71629,10 @@ func (m *SyncTaskMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedCheckpointVersion()
 	case synctask.FieldNextSegmentIndex:
 		return m.AddedNextSegmentIndex()
+	case synctask.FieldTotalUpdated:
+		return m.AddedTotalUpdated()
+	case synctask.FieldTotalSkipped:
+		return m.AddedTotalSkipped()
 	}
 	return nil, false
 }
@@ -71540,6 +71669,20 @@ func (m *SyncTaskMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddNextSegmentIndex(v)
+		return nil
+	case synctask.FieldTotalUpdated:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotalUpdated(v)
+		return nil
+	case synctask.FieldTotalSkipped:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotalSkipped(v)
 		return nil
 	}
 	return fmt.Errorf("unknown SyncTask numeric field %s", name)
@@ -71640,17 +71783,17 @@ func (m *SyncTaskMutation) ResetField(name string) error {
 	case synctask.FieldNextSegmentIndex:
 		m.ResetNextSegmentIndex()
 		return nil
+	case synctask.FieldTotalUpdated:
+		m.ResetTotalUpdated()
+		return nil
+	case synctask.FieldTotalSkipped:
+		m.ResetTotalSkipped()
+		return nil
 	case synctask.FieldStartedAt:
 		m.ResetStartedAt()
 		return nil
 	case synctask.FieldStatus:
 		m.ResetStatus()
-		return nil
-	case synctask.FieldSegmentIds:
-		m.ResetSegmentIds()
-		return nil
-	case synctask.FieldResourceIds:
-		m.ResetResourceIds()
 		return nil
 	case synctask.FieldResult:
 		m.ResetResult()
@@ -71779,6 +71922,1348 @@ func (m *SyncTaskMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown SyncTask edge %s", name)
+}
+
+// SyncTaskItemMutation represents an operation that mutates the SyncTaskItem nodes in the graph.
+type SyncTaskItemMutation struct {
+	config
+	op             Op
+	typ            string
+	id             *int
+	ordinal        *int
+	addordinal     *int
+	segment_id     *int
+	addsegment_id  *int
+	resource_id    *int
+	addresource_id *int
+	clearedFields  map[string]struct{}
+	task           *int
+	clearedtask    bool
+	done           bool
+	oldValue       func(context.Context) (*SyncTaskItem, error)
+	predicates     []predicate.SyncTaskItem
+}
+
+var _ ent.Mutation = (*SyncTaskItemMutation)(nil)
+
+// synctaskitemOption allows management of the mutation configuration using functional options.
+type synctaskitemOption func(*SyncTaskItemMutation)
+
+// newSyncTaskItemMutation creates new mutation for the SyncTaskItem entity.
+func newSyncTaskItemMutation(c config, op Op, opts ...synctaskitemOption) *SyncTaskItemMutation {
+	m := &SyncTaskItemMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSyncTaskItem,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSyncTaskItemID sets the ID field of the mutation.
+func withSyncTaskItemID(id int) synctaskitemOption {
+	return func(m *SyncTaskItemMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SyncTaskItem
+		)
+		m.oldValue = func(ctx context.Context) (*SyncTaskItem, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SyncTaskItem.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSyncTaskItem sets the old SyncTaskItem of the mutation.
+func withSyncTaskItem(node *SyncTaskItem) synctaskitemOption {
+	return func(m *SyncTaskItemMutation) {
+		m.oldValue = func(context.Context) (*SyncTaskItem, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SyncTaskItemMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SyncTaskItemMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SyncTaskItemMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SyncTaskItemMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SyncTaskItem.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetTaskID sets the "task_id" field.
+func (m *SyncTaskItemMutation) SetTaskID(i int) {
+	m.task = &i
+}
+
+// TaskID returns the value of the "task_id" field in the mutation.
+func (m *SyncTaskItemMutation) TaskID() (r int, exists bool) {
+	v := m.task
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTaskID returns the old "task_id" field's value of the SyncTaskItem entity.
+// If the SyncTaskItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskItemMutation) OldTaskID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTaskID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTaskID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTaskID: %w", err)
+	}
+	return oldValue.TaskID, nil
+}
+
+// ResetTaskID resets all changes to the "task_id" field.
+func (m *SyncTaskItemMutation) ResetTaskID() {
+	m.task = nil
+}
+
+// SetOrdinal sets the "ordinal" field.
+func (m *SyncTaskItemMutation) SetOrdinal(i int) {
+	m.ordinal = &i
+	m.addordinal = nil
+}
+
+// Ordinal returns the value of the "ordinal" field in the mutation.
+func (m *SyncTaskItemMutation) Ordinal() (r int, exists bool) {
+	v := m.ordinal
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOrdinal returns the old "ordinal" field's value of the SyncTaskItem entity.
+// If the SyncTaskItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskItemMutation) OldOrdinal(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOrdinal is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOrdinal requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOrdinal: %w", err)
+	}
+	return oldValue.Ordinal, nil
+}
+
+// AddOrdinal adds i to the "ordinal" field.
+func (m *SyncTaskItemMutation) AddOrdinal(i int) {
+	if m.addordinal != nil {
+		*m.addordinal += i
+	} else {
+		m.addordinal = &i
+	}
+}
+
+// AddedOrdinal returns the value that was added to the "ordinal" field in this mutation.
+func (m *SyncTaskItemMutation) AddedOrdinal() (r int, exists bool) {
+	v := m.addordinal
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOrdinal resets all changes to the "ordinal" field.
+func (m *SyncTaskItemMutation) ResetOrdinal() {
+	m.ordinal = nil
+	m.addordinal = nil
+}
+
+// SetSegmentID sets the "segment_id" field.
+func (m *SyncTaskItemMutation) SetSegmentID(i int) {
+	m.segment_id = &i
+	m.addsegment_id = nil
+}
+
+// SegmentID returns the value of the "segment_id" field in the mutation.
+func (m *SyncTaskItemMutation) SegmentID() (r int, exists bool) {
+	v := m.segment_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSegmentID returns the old "segment_id" field's value of the SyncTaskItem entity.
+// If the SyncTaskItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskItemMutation) OldSegmentID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSegmentID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSegmentID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSegmentID: %w", err)
+	}
+	return oldValue.SegmentID, nil
+}
+
+// AddSegmentID adds i to the "segment_id" field.
+func (m *SyncTaskItemMutation) AddSegmentID(i int) {
+	if m.addsegment_id != nil {
+		*m.addsegment_id += i
+	} else {
+		m.addsegment_id = &i
+	}
+}
+
+// AddedSegmentID returns the value that was added to the "segment_id" field in this mutation.
+func (m *SyncTaskItemMutation) AddedSegmentID() (r int, exists bool) {
+	v := m.addsegment_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSegmentID resets all changes to the "segment_id" field.
+func (m *SyncTaskItemMutation) ResetSegmentID() {
+	m.segment_id = nil
+	m.addsegment_id = nil
+}
+
+// SetResourceID sets the "resource_id" field.
+func (m *SyncTaskItemMutation) SetResourceID(i int) {
+	m.resource_id = &i
+	m.addresource_id = nil
+}
+
+// ResourceID returns the value of the "resource_id" field in the mutation.
+func (m *SyncTaskItemMutation) ResourceID() (r int, exists bool) {
+	v := m.resource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourceID returns the old "resource_id" field's value of the SyncTaskItem entity.
+// If the SyncTaskItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskItemMutation) OldResourceID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourceID: %w", err)
+	}
+	return oldValue.ResourceID, nil
+}
+
+// AddResourceID adds i to the "resource_id" field.
+func (m *SyncTaskItemMutation) AddResourceID(i int) {
+	if m.addresource_id != nil {
+		*m.addresource_id += i
+	} else {
+		m.addresource_id = &i
+	}
+}
+
+// AddedResourceID returns the value that was added to the "resource_id" field in this mutation.
+func (m *SyncTaskItemMutation) AddedResourceID() (r int, exists bool) {
+	v := m.addresource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetResourceID resets all changes to the "resource_id" field.
+func (m *SyncTaskItemMutation) ResetResourceID() {
+	m.resource_id = nil
+	m.addresource_id = nil
+}
+
+// ClearTask clears the "task" edge to the SyncTask entity.
+func (m *SyncTaskItemMutation) ClearTask() {
+	m.clearedtask = true
+	m.clearedFields[synctaskitem.FieldTaskID] = struct{}{}
+}
+
+// TaskCleared reports if the "task" edge to the SyncTask entity was cleared.
+func (m *SyncTaskItemMutation) TaskCleared() bool {
+	return m.clearedtask
+}
+
+// TaskIDs returns the "task" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// TaskID instead. It exists only for internal usage by the builders.
+func (m *SyncTaskItemMutation) TaskIDs() (ids []int) {
+	if id := m.task; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetTask resets all changes to the "task" edge.
+func (m *SyncTaskItemMutation) ResetTask() {
+	m.task = nil
+	m.clearedtask = false
+}
+
+// Where appends a list predicates to the SyncTaskItemMutation builder.
+func (m *SyncTaskItemMutation) Where(ps ...predicate.SyncTaskItem) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SyncTaskItemMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SyncTaskItemMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SyncTaskItem, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SyncTaskItemMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SyncTaskItemMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SyncTaskItem).
+func (m *SyncTaskItemMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SyncTaskItemMutation) Fields() []string {
+	fields := make([]string, 0, 4)
+	if m.task != nil {
+		fields = append(fields, synctaskitem.FieldTaskID)
+	}
+	if m.ordinal != nil {
+		fields = append(fields, synctaskitem.FieldOrdinal)
+	}
+	if m.segment_id != nil {
+		fields = append(fields, synctaskitem.FieldSegmentID)
+	}
+	if m.resource_id != nil {
+		fields = append(fields, synctaskitem.FieldResourceID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SyncTaskItemMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case synctaskitem.FieldTaskID:
+		return m.TaskID()
+	case synctaskitem.FieldOrdinal:
+		return m.Ordinal()
+	case synctaskitem.FieldSegmentID:
+		return m.SegmentID()
+	case synctaskitem.FieldResourceID:
+		return m.ResourceID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SyncTaskItemMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case synctaskitem.FieldTaskID:
+		return m.OldTaskID(ctx)
+	case synctaskitem.FieldOrdinal:
+		return m.OldOrdinal(ctx)
+	case synctaskitem.FieldSegmentID:
+		return m.OldSegmentID(ctx)
+	case synctaskitem.FieldResourceID:
+		return m.OldResourceID(ctx)
+	}
+	return nil, fmt.Errorf("unknown SyncTaskItem field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SyncTaskItemMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case synctaskitem.FieldTaskID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTaskID(v)
+		return nil
+	case synctaskitem.FieldOrdinal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOrdinal(v)
+		return nil
+	case synctaskitem.FieldSegmentID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSegmentID(v)
+		return nil
+	case synctaskitem.FieldResourceID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourceID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskItem field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SyncTaskItemMutation) AddedFields() []string {
+	var fields []string
+	if m.addordinal != nil {
+		fields = append(fields, synctaskitem.FieldOrdinal)
+	}
+	if m.addsegment_id != nil {
+		fields = append(fields, synctaskitem.FieldSegmentID)
+	}
+	if m.addresource_id != nil {
+		fields = append(fields, synctaskitem.FieldResourceID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SyncTaskItemMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case synctaskitem.FieldOrdinal:
+		return m.AddedOrdinal()
+	case synctaskitem.FieldSegmentID:
+		return m.AddedSegmentID()
+	case synctaskitem.FieldResourceID:
+		return m.AddedResourceID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SyncTaskItemMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case synctaskitem.FieldOrdinal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOrdinal(v)
+		return nil
+	case synctaskitem.FieldSegmentID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSegmentID(v)
+		return nil
+	case synctaskitem.FieldResourceID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddResourceID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskItem numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SyncTaskItemMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SyncTaskItemMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SyncTaskItemMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown SyncTaskItem nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SyncTaskItemMutation) ResetField(name string) error {
+	switch name {
+	case synctaskitem.FieldTaskID:
+		m.ResetTaskID()
+		return nil
+	case synctaskitem.FieldOrdinal:
+		m.ResetOrdinal()
+		return nil
+	case synctaskitem.FieldSegmentID:
+		m.ResetSegmentID()
+		return nil
+	case synctaskitem.FieldResourceID:
+		m.ResetResourceID()
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskItem field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SyncTaskItemMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.task != nil {
+		edges = append(edges, synctaskitem.EdgeTask)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SyncTaskItemMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case synctaskitem.EdgeTask:
+		if id := m.task; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SyncTaskItemMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SyncTaskItemMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SyncTaskItemMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedtask {
+		edges = append(edges, synctaskitem.EdgeTask)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SyncTaskItemMutation) EdgeCleared(name string) bool {
+	switch name {
+	case synctaskitem.EdgeTask:
+		return m.clearedtask
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SyncTaskItemMutation) ClearEdge(name string) error {
+	switch name {
+	case synctaskitem.EdgeTask:
+		m.ClearTask()
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskItem unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SyncTaskItemMutation) ResetEdge(name string) error {
+	switch name {
+	case synctaskitem.EdgeTask:
+		m.ResetTask()
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskItem edge %s", name)
+}
+
+// SyncTaskResultMutation represents an operation that mutates the SyncTaskResult nodes in the graph.
+type SyncTaskResultMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int
+	resource_id      *int
+	addresource_id   *int
+	resource_path    *string
+	updated_count    *int
+	addupdated_count *int
+	skipped_count    *int
+	addskipped_count *int
+	clearedFields    map[string]struct{}
+	task             *int
+	clearedtask      bool
+	done             bool
+	oldValue         func(context.Context) (*SyncTaskResult, error)
+	predicates       []predicate.SyncTaskResult
+}
+
+var _ ent.Mutation = (*SyncTaskResultMutation)(nil)
+
+// synctaskresultOption allows management of the mutation configuration using functional options.
+type synctaskresultOption func(*SyncTaskResultMutation)
+
+// newSyncTaskResultMutation creates new mutation for the SyncTaskResult entity.
+func newSyncTaskResultMutation(c config, op Op, opts ...synctaskresultOption) *SyncTaskResultMutation {
+	m := &SyncTaskResultMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSyncTaskResult,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSyncTaskResultID sets the ID field of the mutation.
+func withSyncTaskResultID(id int) synctaskresultOption {
+	return func(m *SyncTaskResultMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SyncTaskResult
+		)
+		m.oldValue = func(ctx context.Context) (*SyncTaskResult, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SyncTaskResult.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSyncTaskResult sets the old SyncTaskResult of the mutation.
+func withSyncTaskResult(node *SyncTaskResult) synctaskresultOption {
+	return func(m *SyncTaskResultMutation) {
+		m.oldValue = func(context.Context) (*SyncTaskResult, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SyncTaskResultMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SyncTaskResultMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SyncTaskResultMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SyncTaskResultMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SyncTaskResult.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetTaskID sets the "task_id" field.
+func (m *SyncTaskResultMutation) SetTaskID(i int) {
+	m.task = &i
+}
+
+// TaskID returns the value of the "task_id" field in the mutation.
+func (m *SyncTaskResultMutation) TaskID() (r int, exists bool) {
+	v := m.task
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTaskID returns the old "task_id" field's value of the SyncTaskResult entity.
+// If the SyncTaskResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskResultMutation) OldTaskID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTaskID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTaskID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTaskID: %w", err)
+	}
+	return oldValue.TaskID, nil
+}
+
+// ResetTaskID resets all changes to the "task_id" field.
+func (m *SyncTaskResultMutation) ResetTaskID() {
+	m.task = nil
+}
+
+// SetResourceID sets the "resource_id" field.
+func (m *SyncTaskResultMutation) SetResourceID(i int) {
+	m.resource_id = &i
+	m.addresource_id = nil
+}
+
+// ResourceID returns the value of the "resource_id" field in the mutation.
+func (m *SyncTaskResultMutation) ResourceID() (r int, exists bool) {
+	v := m.resource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourceID returns the old "resource_id" field's value of the SyncTaskResult entity.
+// If the SyncTaskResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskResultMutation) OldResourceID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourceID: %w", err)
+	}
+	return oldValue.ResourceID, nil
+}
+
+// AddResourceID adds i to the "resource_id" field.
+func (m *SyncTaskResultMutation) AddResourceID(i int) {
+	if m.addresource_id != nil {
+		*m.addresource_id += i
+	} else {
+		m.addresource_id = &i
+	}
+}
+
+// AddedResourceID returns the value that was added to the "resource_id" field in this mutation.
+func (m *SyncTaskResultMutation) AddedResourceID() (r int, exists bool) {
+	v := m.addresource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetResourceID resets all changes to the "resource_id" field.
+func (m *SyncTaskResultMutation) ResetResourceID() {
+	m.resource_id = nil
+	m.addresource_id = nil
+}
+
+// SetResourcePath sets the "resource_path" field.
+func (m *SyncTaskResultMutation) SetResourcePath(s string) {
+	m.resource_path = &s
+}
+
+// ResourcePath returns the value of the "resource_path" field in the mutation.
+func (m *SyncTaskResultMutation) ResourcePath() (r string, exists bool) {
+	v := m.resource_path
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourcePath returns the old "resource_path" field's value of the SyncTaskResult entity.
+// If the SyncTaskResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskResultMutation) OldResourcePath(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourcePath is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourcePath requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourcePath: %w", err)
+	}
+	return oldValue.ResourcePath, nil
+}
+
+// ResetResourcePath resets all changes to the "resource_path" field.
+func (m *SyncTaskResultMutation) ResetResourcePath() {
+	m.resource_path = nil
+}
+
+// SetUpdatedCount sets the "updated_count" field.
+func (m *SyncTaskResultMutation) SetUpdatedCount(i int) {
+	m.updated_count = &i
+	m.addupdated_count = nil
+}
+
+// UpdatedCount returns the value of the "updated_count" field in the mutation.
+func (m *SyncTaskResultMutation) UpdatedCount() (r int, exists bool) {
+	v := m.updated_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedCount returns the old "updated_count" field's value of the SyncTaskResult entity.
+// If the SyncTaskResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskResultMutation) OldUpdatedCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedCount: %w", err)
+	}
+	return oldValue.UpdatedCount, nil
+}
+
+// AddUpdatedCount adds i to the "updated_count" field.
+func (m *SyncTaskResultMutation) AddUpdatedCount(i int) {
+	if m.addupdated_count != nil {
+		*m.addupdated_count += i
+	} else {
+		m.addupdated_count = &i
+	}
+}
+
+// AddedUpdatedCount returns the value that was added to the "updated_count" field in this mutation.
+func (m *SyncTaskResultMutation) AddedUpdatedCount() (r int, exists bool) {
+	v := m.addupdated_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUpdatedCount resets all changes to the "updated_count" field.
+func (m *SyncTaskResultMutation) ResetUpdatedCount() {
+	m.updated_count = nil
+	m.addupdated_count = nil
+}
+
+// SetSkippedCount sets the "skipped_count" field.
+func (m *SyncTaskResultMutation) SetSkippedCount(i int) {
+	m.skipped_count = &i
+	m.addskipped_count = nil
+}
+
+// SkippedCount returns the value of the "skipped_count" field in the mutation.
+func (m *SyncTaskResultMutation) SkippedCount() (r int, exists bool) {
+	v := m.skipped_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSkippedCount returns the old "skipped_count" field's value of the SyncTaskResult entity.
+// If the SyncTaskResult object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SyncTaskResultMutation) OldSkippedCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSkippedCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSkippedCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSkippedCount: %w", err)
+	}
+	return oldValue.SkippedCount, nil
+}
+
+// AddSkippedCount adds i to the "skipped_count" field.
+func (m *SyncTaskResultMutation) AddSkippedCount(i int) {
+	if m.addskipped_count != nil {
+		*m.addskipped_count += i
+	} else {
+		m.addskipped_count = &i
+	}
+}
+
+// AddedSkippedCount returns the value that was added to the "skipped_count" field in this mutation.
+func (m *SyncTaskResultMutation) AddedSkippedCount() (r int, exists bool) {
+	v := m.addskipped_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSkippedCount resets all changes to the "skipped_count" field.
+func (m *SyncTaskResultMutation) ResetSkippedCount() {
+	m.skipped_count = nil
+	m.addskipped_count = nil
+}
+
+// ClearTask clears the "task" edge to the SyncTask entity.
+func (m *SyncTaskResultMutation) ClearTask() {
+	m.clearedtask = true
+	m.clearedFields[synctaskresult.FieldTaskID] = struct{}{}
+}
+
+// TaskCleared reports if the "task" edge to the SyncTask entity was cleared.
+func (m *SyncTaskResultMutation) TaskCleared() bool {
+	return m.clearedtask
+}
+
+// TaskIDs returns the "task" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// TaskID instead. It exists only for internal usage by the builders.
+func (m *SyncTaskResultMutation) TaskIDs() (ids []int) {
+	if id := m.task; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetTask resets all changes to the "task" edge.
+func (m *SyncTaskResultMutation) ResetTask() {
+	m.task = nil
+	m.clearedtask = false
+}
+
+// Where appends a list predicates to the SyncTaskResultMutation builder.
+func (m *SyncTaskResultMutation) Where(ps ...predicate.SyncTaskResult) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SyncTaskResultMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SyncTaskResultMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SyncTaskResult, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SyncTaskResultMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SyncTaskResultMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SyncTaskResult).
+func (m *SyncTaskResultMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SyncTaskResultMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.task != nil {
+		fields = append(fields, synctaskresult.FieldTaskID)
+	}
+	if m.resource_id != nil {
+		fields = append(fields, synctaskresult.FieldResourceID)
+	}
+	if m.resource_path != nil {
+		fields = append(fields, synctaskresult.FieldResourcePath)
+	}
+	if m.updated_count != nil {
+		fields = append(fields, synctaskresult.FieldUpdatedCount)
+	}
+	if m.skipped_count != nil {
+		fields = append(fields, synctaskresult.FieldSkippedCount)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SyncTaskResultMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case synctaskresult.FieldTaskID:
+		return m.TaskID()
+	case synctaskresult.FieldResourceID:
+		return m.ResourceID()
+	case synctaskresult.FieldResourcePath:
+		return m.ResourcePath()
+	case synctaskresult.FieldUpdatedCount:
+		return m.UpdatedCount()
+	case synctaskresult.FieldSkippedCount:
+		return m.SkippedCount()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SyncTaskResultMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case synctaskresult.FieldTaskID:
+		return m.OldTaskID(ctx)
+	case synctaskresult.FieldResourceID:
+		return m.OldResourceID(ctx)
+	case synctaskresult.FieldResourcePath:
+		return m.OldResourcePath(ctx)
+	case synctaskresult.FieldUpdatedCount:
+		return m.OldUpdatedCount(ctx)
+	case synctaskresult.FieldSkippedCount:
+		return m.OldSkippedCount(ctx)
+	}
+	return nil, fmt.Errorf("unknown SyncTaskResult field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SyncTaskResultMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case synctaskresult.FieldTaskID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTaskID(v)
+		return nil
+	case synctaskresult.FieldResourceID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourceID(v)
+		return nil
+	case synctaskresult.FieldResourcePath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourcePath(v)
+		return nil
+	case synctaskresult.FieldUpdatedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedCount(v)
+		return nil
+	case synctaskresult.FieldSkippedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSkippedCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskResult field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SyncTaskResultMutation) AddedFields() []string {
+	var fields []string
+	if m.addresource_id != nil {
+		fields = append(fields, synctaskresult.FieldResourceID)
+	}
+	if m.addupdated_count != nil {
+		fields = append(fields, synctaskresult.FieldUpdatedCount)
+	}
+	if m.addskipped_count != nil {
+		fields = append(fields, synctaskresult.FieldSkippedCount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SyncTaskResultMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case synctaskresult.FieldResourceID:
+		return m.AddedResourceID()
+	case synctaskresult.FieldUpdatedCount:
+		return m.AddedUpdatedCount()
+	case synctaskresult.FieldSkippedCount:
+		return m.AddedSkippedCount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SyncTaskResultMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case synctaskresult.FieldResourceID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddResourceID(v)
+		return nil
+	case synctaskresult.FieldUpdatedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUpdatedCount(v)
+		return nil
+	case synctaskresult.FieldSkippedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSkippedCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskResult numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SyncTaskResultMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SyncTaskResultMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SyncTaskResultMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown SyncTaskResult nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SyncTaskResultMutation) ResetField(name string) error {
+	switch name {
+	case synctaskresult.FieldTaskID:
+		m.ResetTaskID()
+		return nil
+	case synctaskresult.FieldResourceID:
+		m.ResetResourceID()
+		return nil
+	case synctaskresult.FieldResourcePath:
+		m.ResetResourcePath()
+		return nil
+	case synctaskresult.FieldUpdatedCount:
+		m.ResetUpdatedCount()
+		return nil
+	case synctaskresult.FieldSkippedCount:
+		m.ResetSkippedCount()
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskResult field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SyncTaskResultMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.task != nil {
+		edges = append(edges, synctaskresult.EdgeTask)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SyncTaskResultMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case synctaskresult.EdgeTask:
+		if id := m.task; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SyncTaskResultMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SyncTaskResultMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SyncTaskResultMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedtask {
+		edges = append(edges, synctaskresult.EdgeTask)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SyncTaskResultMutation) EdgeCleared(name string) bool {
+	switch name {
+	case synctaskresult.EdgeTask:
+		return m.clearedtask
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SyncTaskResultMutation) ClearEdge(name string) error {
+	switch name {
+	case synctaskresult.EdgeTask:
+		m.ClearTask()
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskResult unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SyncTaskResultMutation) ResetEdge(name string) error {
+	switch name {
+	case synctaskresult.EdgeTask:
+		m.ResetTask()
+		return nil
+	}
+	return fmt.Errorf("unknown SyncTaskResult edge %s", name)
 }
 
 // SystemSettingMutation represents an operation that mutates the SystemSetting nodes in the graph.

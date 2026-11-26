@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"entgo.io/ent/dialect"
@@ -20,12 +21,13 @@ import (
 // parameters alike. Use NewDriver for every ent client, including test clients.
 type TimeDriver struct {
 	dialect.Driver
-	statsMu  sync.Mutex
-	statsAt  time.Time
-	previous sql.DBStats
+	statsMu   sync.Mutex
+	statsAt   time.Time
+	statsNext atomic.Int64
+	previous  sql.DBStats
 }
 
-func (d *TimeDriver) observePool() {
+func (d *TimeDriver) observePool(ctx context.Context) {
 	driver, ok := d.Driver.(*entsql.Driver)
 	if !ok {
 		return
@@ -34,33 +36,21 @@ func (d *TimeDriver) observePool() {
 	if !ok {
 		return
 	}
-	d.statsMu.Lock()
-	defer d.statsMu.Unlock()
 	now := time.Now()
-	if now.Sub(d.statsAt) < 30*time.Second {
+	next := d.statsNext.Load()
+	if now.UnixNano() < next || !d.statsNext.CompareAndSwap(next, now.Add(30*time.Second).UnixNano()) {
 		return
 	}
+	d.statsMu.Lock()
+	defer d.statsMu.Unlock()
 	s := db.Stats()
+	persistence.ObservePoolWait(ctx, d.Dialect(), s.WaitCount-d.previous.WaitCount, s.WaitDuration-d.previous.WaitDuration)
 	slog.Default().Debug("database pool", "open", s.OpenConnections, "in_use", s.InUse, "idle", s.Idle, "wait_count", s.WaitCount, "wait_count_delta", s.WaitCount-d.previous.WaitCount, "wait_ms_delta", (s.WaitDuration - d.previous.WaitDuration).Milliseconds())
 	d.previous = s
 	d.statsAt = now
 }
 func observeSQL(ctx context.Context, phase string, start time.Time, err error, dialect string) {
 	persistence.ObserveTransaction(persistence.WithDialect(ctx, dialect), phase, "", time.Since(start), err)
-}
-
-type budgetRows struct {
-	entsql.ColumnScanner
-	cancel context.CancelFunc
-}
-
-func (r budgetRows) Close() error { err := r.ColumnScanner.Close(); r.cancel(); return err }
-func bindRowsBudget(v any, cancel context.CancelFunc, err error) {
-	if rows, ok := v.(*entsql.Rows); err == nil && ok && rows.ColumnScanner != nil {
-		rows.ColumnScanner = budgetRows{rows.ColumnScanner, cancel}
-	} else {
-		cancel()
-	}
 }
 
 type contextSQL interface {
@@ -75,7 +65,7 @@ func (d *TimeDriver) ExecContext(ctx context.Context, query string, args ...any)
 		defer cancel()
 	}
 	start := time.Now()
-	defer func() { observeSQL(ctx, "exec", start, err, d.Dialect()); d.observePool() }()
+	defer func() { observeSQL(ctx, "exec", start, err, d.Dialect()); d.observePool(ctx) }()
 	driver, ok := d.Driver.(contextSQL)
 	if !ok {
 		return nil, fmt.Errorf("database driver does not support ExecContext")
@@ -84,8 +74,18 @@ func (d *TimeDriver) ExecContext(ctx context.Context, query string, args ...any)
 }
 
 func (d *TimeDriver) QueryContext(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
+	if persistence.ExecutionOwned(ctx) {
+		var cancel context.CancelFunc
+		ctx, cancel = newStatementContext(ctx, ctx)
+		ctx = context.WithValue(ctx, rawRowsBudgetKey{}, cancel)
+		defer func() {
+			if err != nil {
+				cancel()
+			}
+		}()
+	}
 	start := time.Now()
-	defer func() { observeSQL(ctx, "query", start, err, d.Dialect()); d.observePool() }()
+	defer func() { observeSQL(ctx, "query", start, err, d.Dialect()); d.observePool(ctx) }()
 	driver, ok := d.Driver.(contextSQL)
 	if !ok {
 		return nil, fmt.Errorf("database driver does not support QueryContext")
@@ -95,6 +95,17 @@ func (d *TimeDriver) QueryContext(ctx context.Context, query string, args ...any
 
 func NewDriver(driver dialect.Driver) *TimeDriver { return &TimeDriver{Driver: driver} }
 
+func (d *TimeDriver) Close() error {
+	if driver, ok := d.Driver.(*entsql.Driver); ok {
+		if db, ok := driver.Conn.ExecQuerier.(*sql.DB); ok {
+			if _, tracked := sqlitePools.Load(db); tracked {
+				return closeSQLitePoolAfterUse(db)
+			}
+		}
+	}
+	return d.Driver.Close()
+}
+
 func (d *TimeDriver) Exec(ctx context.Context, query string, args, v any) (err error) {
 	if persistence.ExecutionOwned(ctx) {
 		var cancel context.CancelFunc
@@ -102,18 +113,23 @@ func (d *TimeDriver) Exec(ctx context.Context, query string, args, v any) (err e
 		defer cancel()
 	}
 	start := time.Now()
-	defer func() { observeSQL(ctx, "exec", start, err, d.Dialect()); d.observePool() }()
+	defer func() { observeSQL(ctx, "exec", start, err, d.Dialect()); d.observePool(ctx) }()
 	return d.Driver.Exec(ctx, query, timeArgs(d.Dialect(), args), v)
 }
 
 func (d *TimeDriver) Query(ctx context.Context, query string, args, v any) (err error) {
 	if persistence.ExecutionOwned(ctx) {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, persistence.ExecutionTimeout(ctx))
-		defer func() { bindRowsBudget(v, cancel, err) }()
+		ctx, cancel = newStatementContext(ctx, ctx)
+		ctx = context.WithValue(ctx, rawRowsBudgetKey{}, cancel)
+		defer func() {
+			if err != nil {
+				cancel()
+			}
+		}()
 	}
 	start := time.Now()
-	defer func() { observeSQL(ctx, "query", start, err, d.Dialect()); d.observePool() }()
+	defer func() { observeSQL(ctx, "query", start, err, d.Dialect()); d.observePool(ctx) }()
 	return d.Driver.Query(ctx, query, timeArgs(d.Dialect(), args), v)
 }
 
@@ -179,25 +195,19 @@ func (c transactionQueryContext) Value(key any) any {
 	}
 	return c.Context.Value(key)
 }
-func (t *timeTx) queryContext(ctx context.Context) context.Context {
-	if t.ctx == nil {
-		return ctx
+func (t *timeTx) queryContext(caller context.Context) (context.Context, context.CancelFunc) {
+	parent := t.ctx
+	if parent == nil {
+		parent = caller
 	}
-	if ctx.Err() != nil {
-		return ctx
-	}
-	at, ok := ctx.Deadline()
-	txAt, txOK := t.ctx.Deadline()
-	if ok && (!txOK || at.Before(txAt)) {
-		return ctx
-	}
-	return transactionQueryContext{t.ctx, ctx}
+	return newStatementContext(parent, caller)
 }
 
 func (t *timeTx) ExecContext(ctx context.Context, query string, args ...any) (result sql.Result, err error) {
 	caller := ctx
-	ctx = t.queryContext(ctx)
-	defer func() { err = t.cancellationError(err, caller) }()
+	ctx, cancel := t.queryContext(ctx)
+	defer cancel()
+	defer func() { err = t.cancellationError(err, caller, ctx) }()
 	start := time.Now()
 	defer func() { observeSQL(ctx, "exec", start, err, t.dialect) }()
 	tx, ok := t.Tx.(contextSQL)
@@ -209,8 +219,14 @@ func (t *timeTx) ExecContext(ctx context.Context, query string, args ...any) (re
 
 func (t *timeTx) QueryContext(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
 	caller := ctx
-	ctx = t.queryContext(ctx)
-	defer func() { err = t.cancellationError(err, caller) }()
+	ctx, cancel := t.queryContext(ctx)
+	ctx = context.WithValue(ctx, rawRowsBudgetKey{}, cancel)
+	defer func() {
+		if err != nil {
+			cancel()
+		}
+	}()
+	defer func() { err = t.cancellationError(err, caller, ctx) }()
 	start := time.Now()
 	defer func() { observeSQL(ctx, "query", start, err, t.dialect) }()
 	tx, ok := t.Tx.(contextSQL)
@@ -222,14 +238,9 @@ func (t *timeTx) QueryContext(ctx context.Context, query string, args ...any) (r
 
 func (t *timeTx) Exec(ctx context.Context, query string, args, v any) (err error) {
 	caller := ctx
-	defer func() { err = t.cancellationError(err, caller) }()
-	ctx = t.queryContext(ctx)
-	if persistence.ExecutionOwned(caller) || t.ctx != nil && persistence.ExecutionOwned(t.ctx) {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithCancel(ctx)
-		stop := context.AfterFunc(caller, cancel)
-		defer func() { stop(); cancel() }()
-	}
+	ctx, cancel := t.queryContext(ctx)
+	defer cancel()
+	defer func() { err = t.cancellationError(err, caller, ctx) }()
 	start := time.Now()
 	defer func() { observeSQL(ctx, "exec", start, err, t.dialect) }()
 	return t.Tx.Exec(ctx, query, timeArgs(t.dialect, args), v)
@@ -237,20 +248,23 @@ func (t *timeTx) Exec(ctx context.Context, query string, args, v any) (err error
 
 func (t *timeTx) Query(ctx context.Context, query string, args, v any) (err error) {
 	caller := ctx
-	defer func() { err = t.cancellationError(err, caller) }()
-	ctx = t.queryContext(ctx)
-	if persistence.ExecutionOwned(caller) || t.ctx != nil && persistence.ExecutionOwned(t.ctx) {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithCancel(ctx)
-		stop := context.AfterFunc(caller, cancel)
-		defer func() { bindRowsBudget(v, func() { stop(); cancel() }, err) }()
-	}
+	ctx, cancel := t.queryContext(ctx)
+	// ent's schema adapter requires ColumnScanner to remain a concrete
+	// *database/sql.Rows. Let the real driver's Rows.Close own cancellation
+	// instead of replacing that scanner with an ORM-level wrapper.
+	ctx = context.WithValue(ctx, rawRowsBudgetKey{}, cancel)
+	defer func() {
+		if err != nil {
+			cancel()
+		}
+	}()
+	defer func() { err = t.cancellationError(err, caller, ctx) }()
 	start := time.Now()
 	defer func() { observeSQL(ctx, "query", start, err, t.dialect) }()
 	return t.Tx.Query(ctx, query, timeArgs(t.dialect, args), v)
 }
 
-func (t *timeTx) cancellationError(err error, caller context.Context) error {
+func (t *timeTx) cancellationError(err error, caller, statement context.Context) error {
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
@@ -259,6 +273,9 @@ func (t *timeTx) cancellationError(err error, caller context.Context) error {
 	}
 	if t.ctx != nil && t.ctx.Err() != nil {
 		err = errors.Join(err, t.ctx.Err())
+	}
+	if statement.Err() != nil {
+		err = errors.Join(err, statement.Err())
 	}
 	return err
 }

@@ -40,17 +40,17 @@ type SyncTask struct {
 	ProcessedSegments int `json:"processed_segments,omitempty"`
 	// 批次检查点版本，0 表示历史未验证记录
 	CheckpointVersion int `json:"checkpoint_version,omitempty"`
-	// 固定段落 ID 列表的下一处理位置
+	// 不可变计划中下一待处理 ordinal
 	NextSegmentIndex int `json:"next_segment_index,omitempty"`
+	// 已提交更新总数
+	TotalUpdated int `json:"total_updated,omitempty"`
+	// 已提交跳过总数，包含已删除目标
+	TotalSkipped int `json:"total_skipped,omitempty"`
 	// 首次成功认领时间，历史记录可以未知
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	// 任务状态: pending, running, completed, failed, cancelled
 	Status string `json:"status,omitempty"`
-	// JSON 序列化的段落 ID 列表
-	SegmentIds string `json:"segment_ids,omitempty"`
-	// JSON 序列化的资源 ID 列表
-	ResourceIds string `json:"resource_ids,omitempty"`
-	// JSON 序列化的结果摘要
+	// 终态 JSON 结果摘要；运行中结果从子表投影
 	Result string `json:"result,omitempty"`
 	// 错误信息
 	Error string `json:"error,omitempty"`
@@ -117,9 +117,9 @@ func (*SyncTask) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case synctask.FieldID, synctask.FieldProjectID, synctask.FieldEntryID, synctask.FieldActorUserID, synctask.FieldTotalSegments, synctask.FieldProcessedSegments, synctask.FieldCheckpointVersion, synctask.FieldNextSegmentIndex:
+		case synctask.FieldID, synctask.FieldProjectID, synctask.FieldEntryID, synctask.FieldActorUserID, synctask.FieldTotalSegments, synctask.FieldProcessedSegments, synctask.FieldCheckpointVersion, synctask.FieldNextSegmentIndex, synctask.FieldTotalUpdated, synctask.FieldTotalSkipped:
 			values[i] = new(sql.NullInt64)
-		case synctask.FieldOldTarget, synctask.FieldNewTarget, synctask.FieldStatus, synctask.FieldSegmentIds, synctask.FieldResourceIds, synctask.FieldResult, synctask.FieldError:
+		case synctask.FieldOldTarget, synctask.FieldNewTarget, synctask.FieldStatus, synctask.FieldResult, synctask.FieldError:
 			values[i] = new(sql.NullString)
 		case synctask.FieldCreatedAt, synctask.FieldUpdatedAt, synctask.FieldStartedAt, synctask.FieldCancelledAt, synctask.FieldFinishedAt, synctask.FieldRetentionAnchorAt:
 			values[i] = new(sql.NullTime)
@@ -210,6 +210,18 @@ func (_m *SyncTask) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.NextSegmentIndex = int(value.Int64)
 			}
+		case synctask.FieldTotalUpdated:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field total_updated", values[i])
+			} else if value.Valid {
+				_m.TotalUpdated = int(value.Int64)
+			}
+		case synctask.FieldTotalSkipped:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field total_skipped", values[i])
+			} else if value.Valid {
+				_m.TotalSkipped = int(value.Int64)
+			}
 		case synctask.FieldStartedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field started_at", values[i])
@@ -222,18 +234,6 @@ func (_m *SyncTask) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
-			}
-		case synctask.FieldSegmentIds:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field segment_ids", values[i])
-			} else if value.Valid {
-				_m.SegmentIds = value.String
-			}
-		case synctask.FieldResourceIds:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field resource_ids", values[i])
-			} else if value.Valid {
-				_m.ResourceIds = value.String
 			}
 		case synctask.FieldResult:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -352,6 +352,12 @@ func (_m *SyncTask) String() string {
 	builder.WriteString("next_segment_index=")
 	builder.WriteString(fmt.Sprintf("%v", _m.NextSegmentIndex))
 	builder.WriteString(", ")
+	builder.WriteString("total_updated=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TotalUpdated))
+	builder.WriteString(", ")
+	builder.WriteString("total_skipped=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TotalSkipped))
+	builder.WriteString(", ")
 	if v := _m.StartedAt; v != nil {
 		builder.WriteString("started_at=")
 		builder.WriteString(v.Format(time.ANSIC))
@@ -359,12 +365,6 @@ func (_m *SyncTask) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
-	builder.WriteString(", ")
-	builder.WriteString("segment_ids=")
-	builder.WriteString(_m.SegmentIds)
-	builder.WriteString(", ")
-	builder.WriteString("resource_ids=")
-	builder.WriteString(_m.ResourceIds)
 	builder.WriteString(", ")
 	builder.WriteString("result=")
 	builder.WriteString(_m.Result)

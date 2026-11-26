@@ -69,5 +69,5 @@ func (AuthTransaction) Edges() []ent.Edge {
 	return []ent.Edge{edge.From("connection", AuthConnection.Type).Ref("transactions").Field("connection_id").Unique().Required().Immutable()}
 }
 func (AuthTransaction) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("status", "expires_at"), index.Fields("user_id", "status")}
+	return []ent.Index{index.Fields("status", "expires_at"), index.Fields("user_id", "status"), index.Fields("expires_at", "id")}
 }

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backuppin"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
@@ -171,12 +173,16 @@ type retirementDependencySet struct {
 	identities map[string]bool
 }
 
-func newRetirementDependencySet() *retirementDependencySet {
-	return &retirementDependencySet{items: map[string]*RetirementDependency{}, identities: map[string]bool{}}
+func newRetirementDependencySet(collectIdentities bool) *retirementDependencySet {
+	set := &retirementDependencySet{items: map[string]*RetirementDependency{}}
+	if collectIdentities {
+		set.identities = map[string]bool{}
+	}
+	return set
 }
 
 func (s *retirementDependencySet) add(kind, status string, projectID, spaceID, migrationTaskID int, protectedBytes int64, nextCheckAt *time.Time, identity string, reasons ...string) {
-	if identity != "" {
+	if identity != "" && s.identities != nil {
 		s.identities[kind+"|"+identity] = true
 	}
 	key := fmt.Sprintf("%s|%d|%d|%d|%s", kind, projectID, spaceID, migrationTaskID, status)
@@ -404,39 +410,41 @@ func sortedIntKeys(m map[int]bool) []int {
 	return out
 }
 
+const retirementIdentityPageSize = 256
+
+func retirementUniqueIDs(ids []int) []int {
+	unique := make(map[int]bool, len(ids))
+	for _, id := range ids {
+		unique[id] = true
+	}
+	return sortedIntKeys(unique)
+}
+
 // retirementKeyedProjects 按 BlobLocation / DeletionEntry 找出真实仍绑定该范围的项目。
 func (s *StorageRetirementService) retirementKeyedProjects(ctx context.Context, client *ent.Client, spaces []int) (map[int]bool, error) {
 	found := map[int]bool{}
 	if len(spaces) == 0 {
 		return found, nil
 	}
-	locations, err := client.BlobLocation.Query().Where(bloblocation.SpaceIDIn(spaces...), bloblocation.StatusNotIn(bloblocation.StatusDeleted)).Select(bloblocation.FieldBlobID).All(ctx)
+	// Project scope needs distinct project identities, not every location ID.
+	// The subquery includes retired/candidate/deleting locations as before.
+	projectIDs, err := client.Blob.Query().Where(func(selector *sql.Selector) {
+		locations := sql.Dialect(selector.Dialect()).Select(bloblocation.FieldBlobID).From(sql.Table(bloblocation.Table)).
+			Where(sql.And(sql.InInts(bloblocation.FieldSpaceID, spaces...), sql.NEQ(bloblocation.FieldStatus, string(bloblocation.StatusDeleted))))
+		selector.Where(sql.In(selector.C(blob.FieldID), locations))
+	}, blob.ProjectIDGT(0)).Unique(true).Select(blob.FieldProjectID).Ints(ctx)
 	if err != nil {
 		return nil, err
 	}
-	blobIDs := make([]int, 0, len(locations))
-	for _, location := range locations {
-		if location.BlobID != nil {
-			blobIDs = append(blobIDs, *location.BlobID)
-		}
+	for _, id := range projectIDs {
+		found[id] = true
 	}
-	if len(blobIDs) > 0 {
-		blobs, err := client.Blob.Query().Where(blob.IDIn(blobIDs...)).Select(blob.FieldID, blob.FieldProjectID).All(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range blobs {
-			if row.ProjectID > 0 {
-				found[row.ProjectID] = true
-			}
-		}
-	}
-	entries, err := client.DeletionEntry.Query().Where(deletionentry.ProjectIDGT(0), deletionentry.StatusNEQ(deletionentry.StatusDone), deletionentry.HasLocationWith(bloblocation.SpaceIDIn(spaces...))).Select(deletionentry.FieldProjectID).All(ctx)
+	entryProjects, err := client.DeletionEntry.Query().Where(deletionentry.ProjectIDGT(0), deletionentry.StatusNEQ(deletionentry.StatusDone), deletionentry.HasLocationWith(bloblocation.SpaceIDIn(spaces...))).Unique(true).Select(deletionentry.FieldProjectID).Ints(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, entry := range entries {
-		found[entry.ProjectID] = true
+	for _, id := range entryProjects {
+		found[id] = true
 	}
 	return found, nil
 }
@@ -503,6 +511,22 @@ func retirementContains(values []int, want int) bool {
 // inventory 是权威只读依赖扫描。它不做任何写入、不发起远端请求、不读取协调器忙碌状态
 // (主线程会在 ioGuard.Exclusive 内调用本函数)。分页只应用于授权投影,不影响此处的完整判定。
 func (s *StorageRetirementService) inventory(ctx context.Context, client *ent.Client, target RetirementTarget) (*retirementInventory, error) {
+	return s.scanInventory(ctx, client, target, true)
+}
+
+// dependencyProjection retains every dependency and ledger check but omits
+// object identities and the confirmation fingerprint unused by Detail. It is
+// a browsing projection only; transitions still recompute inventory inside
+// Exclusive with their transaction locks.
+func (s *StorageRetirementService) dependencyProjection(ctx context.Context, client *ent.Client, target RetirementTarget) ([]RetirementDependency, error) {
+	inv, err := s.scanInventory(ctx, client, target, false)
+	if err != nil {
+		return nil, err
+	}
+	return inv.Dependencies, nil
+}
+
+func (s *StorageRetirementService) scanInventory(ctx context.Context, client *ent.Client, target RetirementTarget, fingerprint bool) (*retirementInventory, error) {
 	if s.local || client == nil {
 		return nil, storage.ErrUnsupported
 	}
@@ -523,7 +547,7 @@ func (s *StorageRetirementService) inventory(ctx context.Context, client *ent.Cl
 	spaces := s.retirementScopeSpaces(target)
 	scope := retirementSpaceSet(target)
 	now := time.Now().UTC()
-	deps := newRetirementDependencySet()
+	deps := newRetirementDependencySet(fingerprint)
 	var nextCheck *time.Time
 	observe := func(candidate *time.Time) {
 		if candidate == nil {
@@ -623,8 +647,10 @@ func (s *StorageRetirementService) inventory(ctx context.Context, client *ent.Cl
 		}
 	}
 	blobToProject := map[int]int{}
-	if len(locationBlobIDs) > 0 {
-		rows, err := client.Blob.Query().Where(blob.IDIn(locationBlobIDs...)).Select(blob.FieldID, blob.FieldProjectID).All(ctx)
+	locationBlobIDs = retirementUniqueIDs(locationBlobIDs)
+	for start := 0; start < len(locationBlobIDs); start += retirementIdentityPageSize {
+		page := locationBlobIDs[start:min(start+retirementIdentityPageSize, len(locationBlobIDs))]
+		rows, err := client.Blob.Query().Where(blob.IDIn(page...)).Select(blob.FieldID, blob.FieldProjectID).All(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -663,8 +689,9 @@ func (s *StorageRetirementService) inventory(ctx context.Context, client *ent.Cl
 		businessWriteIDs = append(businessWriteIDs, write.ID)
 	}
 	reservations := map[int]*ent.StorageReservation{}
-	if len(businessWriteIDs) > 0 {
-		rows, err := client.StorageReservation.Query().Where(storagereservation.WriteIDIn(businessWriteIDs...)).All(ctx)
+	for start := 0; start < len(businessWriteIDs); start += retirementIdentityPageSize {
+		page := businessWriteIDs[start:min(start+retirementIdentityPageSize, len(businessWriteIDs))]
+		rows, err := client.StorageReservation.Query().Where(storagereservation.WriteIDIn(page...)).All(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -818,7 +845,9 @@ func (s *StorageRetirementService) inventory(ctx context.Context, client *ent.Cl
 	}
 
 	inv.Dependencies = deps.sorted()
-	inv.identities = deps.identityKeys()
+	if fingerprint {
+		inv.identities = deps.identityKeys()
+	}
 	for _, dep := range inv.Dependencies {
 		if retirementDependencyBlocks(dep) {
 			inv.Blocking = true
@@ -839,18 +868,23 @@ func (s *StorageRetirementService) inventory(ctx context.Context, client *ent.Cl
 			inv.HasUsage = true
 		}
 	}
-	for _, sp := range spaceRows {
-		inv.identities = append(inv.identities, fmt.Sprintf("ledger:%d:%d:%d:%d:%d", sp.ID, sp.ReservedBytes, sp.CandidateBytes, sp.LiveBytes, sp.PendingDeleteBytes))
+	if fingerprint {
+		for _, sp := range spaceRows {
+			inv.identities = append(inv.identities, fmt.Sprintf("ledger:%d:%d:%d:%d:%d", sp.ID, sp.ReservedBytes, sp.CandidateBytes, sp.LiveBytes, sp.PendingDeleteBytes))
+		}
 	}
 	if nextCheck != nil && nextCheck.After(now) {
 		value := *nextCheck
 		inv.NextCheckAt = &value
 	}
-	fingerprint, err := s.retirementInventoryFingerprint(ctx, client, target, conn, inv)
+	if !fingerprint {
+		return inv, nil
+	}
+	value, err := s.retirementInventoryFingerprint(ctx, client, target, conn, inv)
 	if err != nil {
 		return nil, err
 	}
-	inv.Fingerprint = fingerprint
+	inv.Fingerprint = value
 	return inv, nil
 }
 
@@ -870,12 +904,13 @@ func retirementFinalLedgerBalanced(ctx context.Context, c *ent.Client, spaces []
 			byID[w.ID] = w
 		}
 	}
-	if len(ids) > 0 {
-		rows, err := c.StorageReservation.Query().Where(storagereservation.WriteIDIn(ids...)).All(ctx)
+	for start := 0; start < len(ids); start += retirementIdentityPageSize {
+		page := ids[start:min(start+retirementIdentityPageSize, len(ids))]
+		rows, err := c.StorageReservation.Query().Where(storagereservation.WriteIDIn(page...)).All(ctx)
 		if err != nil {
 			return false, err
 		}
-		if len(rows) != len(ids) {
+		if len(rows) != len(page) {
 			return false, nil
 		}
 		for _, res := range rows {
@@ -1028,12 +1063,15 @@ func retirementFillLocations(ctx context.Context, client *ent.Client, known map[
 	if len(missing) == 0 {
 		return nil
 	}
-	rows, err := client.BlobLocation.Query().Where(bloblocation.IDIn(missing...)).All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, row := range rows {
-		known[row.ID] = row
+	missing = retirementUniqueIDs(missing)
+	for start := 0; start < len(missing); start += retirementIdentityPageSize {
+		rows, err := client.BlobLocation.Query().Where(bloblocation.IDIn(missing[start:min(start+retirementIdentityPageSize, len(missing))]...)).All(ctx)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			known[row.ID] = row
+		}
 	}
 	return nil
 }

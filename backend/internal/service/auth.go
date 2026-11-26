@@ -466,7 +466,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID int, currentPas
 		if err := revokeUserSessions(ctx, tx, userID, timeutil.Normalize(s.now())); err != nil {
 			return err
 		}
-		if err := tx.User.UpdateOneID(userID).SetPasswordHash(passwordHash).Exec(ctx); err != nil {
+		if err := tx.User.UpdateOneID(userID).SetPasswordHash(passwordHash).Select("id").Exec(ctx); err != nil {
 			return err
 		}
 		return recordAuditEvent(ctx, tx, AuditEvent{ActorUserID: userID, Action: "account.password.changed", ResourceType: "user", ResourceID: userID, VisibilityScope: "personal", Metadata: map[string]any{"auth_version": account.AuthVersion + 1, "connection_id": PasswordConnectionID}})
@@ -476,7 +476,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID int, currentPas
 // Caller owns connection/user locks and has verified credentials and policy.
 func (s *AuthService) createSession(ctx context.Context, tx *ent.Client, account *ent.User, p passwordPolicy, chain *ent.RefreshSession) (*Session, error) {
 	if chain == nil {
-		if err := tx.User.UpdateOneID(account.ID).SetPasswordVerifiedHash(hash.Full(account.PasswordHash)).SetPasswordVerifiedAt(s.now()).Exec(ctx); err != nil {
+		if err := tx.User.UpdateOneID(account.ID).SetPasswordVerifiedHash(hash.Full(account.PasswordHash)).SetPasswordVerifiedAt(s.now()).Select("id").Exec(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -497,7 +497,7 @@ func (s *AuthService) createSessionForConnection(ctx context.Context, tx *ent.Cl
 				evidence = evidences[0]
 			}
 			create.SetEvidence(evidence)
-			if err := tx.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(connection.AuthGeneration).SetVerifiedLoginPolicyRevision(policyRevision).SetEvidence(evidence).Exec(ctx); err != nil {
+			if err := tx.LoginBinding.UpdateOneID(binding.ID).SetLastUsedAt(now).SetLastVerifiedAt(now).SetVerifiedAuthGeneration(connection.AuthGeneration).SetVerifiedLoginPolicyRevision(policyRevision).SetEvidence(evidence).Select("id").Exec(ctx); err != nil {
 				return nil, err
 			}
 		}

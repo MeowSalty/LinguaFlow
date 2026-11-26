@@ -177,6 +177,12 @@ type StorageWrite func(*sql.Selector)
 // SyncTask is the predicate function for synctask builders.
 type SyncTask func(*sql.Selector)
 
+// SyncTaskItem is the predicate function for synctaskitem builders.
+type SyncTaskItem func(*sql.Selector)
+
+// SyncTaskResult is the predicate function for synctaskresult builders.
+type SyncTaskResult func(*sql.Selector)
+
 // SystemSetting is the predicate function for systemsetting builders.
 type SystemSetting func(*sql.Selector)
 

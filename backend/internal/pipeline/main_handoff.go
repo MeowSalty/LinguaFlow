@@ -560,6 +560,27 @@ func handlerRetry(h stagedHandler) backend.RetryPolicy {
 func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, source *Document, input *preparedMainDocument, indices []int, pool, attempt int, reservation string, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporter progress.Reporter) (e stagedEvent) {
 	parentCtx := ctx
 	e = stagedEvent{main: true, indices: indices, cursors: map[int]WorkCursor{}}
+	// A failed provider call can leave the durable cursor at the end of the
+	// in-flight retry budget. The scheduler still owns the batch, so advance its
+	// pool before creating a request session; otherwise ReserveRequest debits
+	// the same members once more and returns ErrBudget as a misleading storage
+	// failure.
+	if attempt >= transientBudgetFor(round.Retry) {
+		var transitions []CursorTransition
+		for _, idx := range indices {
+			cursor := WorkCursor{Pool: pool + 1, State: "pending"}
+			transitions = append(transitions, CursorTransition{Index: idx, Cursor: cursor})
+			e.cursors[idx] = cursor
+		}
+		if err := runtime.SaveNamed(ctx, persistence.Metadata{Operation: "pool_advance", Class: persistence.Reliable, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
+			return store.Cursors(saveCtx, transitions)
+		}); err != nil {
+			e.err = err
+		}
+		input.close()
+		runtime.Window.Release(reservation)
+		return e
+	}
 	session := &requestSession{runtime: runtime, store: store, reporter: reporter, intent: RequestIntent{ID: reservation, Stage: backend.RequestStageMain, Indices: indices, Pool: pool, Attempt: attempt, Phase: "main", RoundIndex: prepareIntent(h, store, backend.RequestStageMain).RoundIndex, ResourceID: storeResourceID(store)}}
 	ctx = session.Context(ctx)
 	defer runtime.Admission.ObserveOwned("freeze", reservation, 0)

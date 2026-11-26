@@ -2,10 +2,8 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sort"
 	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -134,7 +132,7 @@ func (r *SyncTaskRunner) processTask(ctx context.Context, taskID int) error {
 	}()
 
 	// 加载任务获取受影响的 ResourceIDs
-	task, err := r.client.SyncTask.Get(taskCtx, taskID)
+	task, err := r.client.SyncTask.Query().Where(synctask.IDEQ(taskID)).Select(synctask.FieldStatus).Only(taskCtx)
 	if err != nil {
 		return fmt.Errorf("load sync task for resource lock: %w", err)
 	}
@@ -142,46 +140,33 @@ func (r *SyncTaskRunner) processTask(ctx context.Context, taskID int) error {
 		return nil
 	}
 
-	// 解析 resource_ids 并按顺序获取锁（防止死锁）
-	var resourceIDs []int
-	if task.ResourceIds == "" {
-		return r.failTask(taskCtx, taskID, fmt.Errorf("sync task %d has no resource_ids", taskID))
-	}
-	if err := json.Unmarshal([]byte(task.ResourceIds), &resourceIDs); err != nil {
-		return r.failTask(taskCtx, taskID, fmt.Errorf("sync task %d: parse resource_ids: %w", taskID, err))
-	}
-	sort.Ints(resourceIDs)
-	unique := resourceIDs[:0]
-	for _, id := range resourceIDs {
-		if id <= 0 {
-			return r.failTask(taskCtx, taskID, fmt.Errorf("sync task %d has invalid resource_ids", taskID))
-		}
-		if len(unique) == 0 || unique[len(unique)-1] != id {
-			unique = append(unique, id)
-		}
-	}
-	resourceIDs = unique
-
-	// 获取所有受影响 Resource 的锁
-	releases := make([]func(), 0, len(resourceIDs))
-	for _, resourceID := range resourceIDs {
-		if r.resMutex != nil {
-			release, err := r.resMutex.Acquire(taskCtx, resourceID)
-			if err != nil {
-				// 释放已获取的锁
-				for _, rel := range releases {
-					rel()
-				}
-				return fmt.Errorf("acquire resource lock %d: %w", resourceID, err)
-			}
-			releases = append(releases, release)
-		}
-	}
+	// Read the immutable lock membership in ID pages. Keep every acquired lock
+	// until execution finishes, just as the published runner did.
+	var releases []func()
 	defer func() {
 		for _, rel := range releases {
 			rel()
 		}
 	}()
+	for after := 0; ; {
+		resourceIDs, err := r.syncSvc.SyncTaskResourceIDs(taskCtx, taskID, after, 100)
+		if err != nil {
+			return r.failTask(taskCtx, taskID, err)
+		}
+		if len(resourceIDs) == 0 {
+			break
+		}
+		for _, resourceID := range resourceIDs {
+			if r.resMutex != nil {
+				release, err := r.resMutex.Acquire(taskCtx, resourceID)
+				if err != nil {
+					return fmt.Errorf("acquire resource lock %d: %w", resourceID, err)
+				}
+				releases = append(releases, release)
+			}
+		}
+		after = resourceIDs[len(resourceIDs)-1]
+	}
 
 	return r.syncSvc.ExecuteSyncTask(taskCtx, taskID)
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/blob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bloblocation"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sourcerevision"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagespace"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/storagetask"
@@ -534,28 +535,67 @@ type SourceVersionRecord struct {
 }
 
 func (s *ResourceService) Versions(ctx context.Context, actor, projectID, resourceID int) ([]SourceVersionRecord, error) {
-	if _, e := s.GetResource(ctx, actor, projectID, resourceID); e != nil {
+	if _, e := s.GetResourceIdentity(ctx, actor, projectID, resourceID); e != nil {
 		return nil, e
 	}
-	revs, e := s.client.SourceRevision.Query().Where(sourcerevision.ProjectIDEQ(projectID), sourcerevision.ResourceIDEQ(resourceID), sourcerevision.DeletedEQ(false)).Order(ent.Desc(sourcerevision.FieldID)).All(ctx)
+	revs, e := s.client.SourceRevision.Query().Where(sourcerevision.ProjectIDEQ(projectID), sourcerevision.ResourceIDEQ(resourceID), sourcerevision.DeletedEQ(false)).Select(sourcerevision.FieldID, sourcerevision.FieldSourceBlobID, sourcerevision.FieldVerificationState, sourcerevision.FieldFormat, sourcerevision.FieldParserVersion, sourcerevision.FieldCurrent, sourcerevision.FieldSize, sourcerevision.FieldSha256).Order(ent.Desc(sourcerevision.FieldID)).All(ctx)
 	if e != nil {
 		return nil, e
 	}
 	out := make([]SourceVersionRecord, 0, len(revs))
-	for _, rev := range revs {
-		b, e := s.client.Blob.Get(ctx, rev.SourceBlobID)
+	// The public versions response contains all retained revisions. Bound each
+	// dependency query rather than changing that published response contract.
+	for start := 0; start < len(revs); start += 500 {
+		batch := revs[start:min(start+500, len(revs))]
+		ids := make([]int, 0, len(batch))
+		for _, rev := range batch {
+			ids = append(ids, rev.SourceBlobID)
+		}
+		rows, e := s.client.Blob.Query().Where(blob.IDIn(ids...)).Select(blob.FieldID, blob.FieldActiveLocationID, blob.FieldLocationGeneration).All(ctx)
 		if e != nil {
 			return nil, e
 		}
-		health := "unknown"
-		if b.ActiveLocationID != nil {
-			l, e := s.client.BlobLocation.Get(ctx, *b.ActiveLocationID)
+		blobs := make(map[int]*ent.Blob, len(rows))
+		locationIDs := make([]int, 0, len(rows))
+		for _, row := range rows {
+			blobs[row.ID] = row
+			if row.ActiveLocationID != nil {
+				locationIDs = append(locationIDs, *row.ActiveLocationID)
+			}
+		}
+		locations := make(map[int]*ent.BlobLocation, len(locationIDs))
+		if len(locationIDs) > 0 {
+			rows, e := s.client.BlobLocation.Query().Where(bloblocation.IDIn(locationIDs...)).Select(bloblocation.FieldID, bloblocation.FieldIntegrity).All(ctx)
 			if e != nil {
 				return nil, e
 			}
-			health = string(l.Integrity)
+			for _, row := range rows {
+				locations[row.ID] = row
+			}
 		}
-		out = append(out, SourceVersionRecord{rev.ID, string(rev.VerificationState), rev.Format, rev.ParserVersion, rev.Current, rev.Size, rev.Sha256, b.LocationGeneration, health})
+		for _, rev := range batch {
+			b := blobs[rev.SourceBlobID]
+			if b == nil {
+				// Preserve the original entity-specific NotFound error and
+				// tolerate metadata appearing between these observations.
+				b, e = s.client.Blob.Get(ctx, rev.SourceBlobID)
+				if e != nil {
+					return nil, e
+				}
+			}
+			health := "unknown"
+			if b.ActiveLocationID != nil {
+				l := locations[*b.ActiveLocationID]
+				if l == nil {
+					l, e = s.client.BlobLocation.Get(ctx, *b.ActiveLocationID)
+					if e != nil {
+						return nil, e
+					}
+				}
+				health = string(l.Integrity)
+			}
+			out = append(out, SourceVersionRecord{rev.ID, string(rev.VerificationState), rev.Format, rev.ParserVersion, rev.Current, rev.Size, rev.Sha256, b.LocationGeneration, health})
+		}
 	}
 	return out, nil
 }

@@ -18,7 +18,7 @@ func operationAPISeed(t *testing.T, c *ent.Client, p *ent.Project, u *ent.User, 
 	t.Helper()
 	ctx := context.Background()
 	entry := c.GlossaryEntry.Create().SetProjectID(p.ID).SetSource("term").SetSourceKey("term").SetTarget("private-new-target").SaveX(ctx)
-	return c.SyncTask.Create().SetProjectID(p.ID).SetActorUserID(u.ID).SetEntryID(entry.ID).SetOldTarget("private-old-target").SetNewTarget("private-new-target").SetStatus("running").SetSegmentIds("[321]").SetResourceIds("[654]").SetTotalSegments(12).SetProcessedSegments(4).SetError("private-error").SetUpdatedAt(at).SaveX(ctx)
+	return c.SyncTask.Create().SetProjectID(p.ID).SetActorUserID(u.ID).SetEntryID(entry.ID).SetOldTarget("private-old-target").SetNewTarget("private-new-target").SetStatus("running").SetTotalSegments(12).SetProcessedSegments(4).SetError("private-error").SetUpdatedAt(at).SaveX(ctx)
 }
 func TestOperationsHTTPProjectionAndLegacyCompatibility(t *testing.T) {
 	s, c, u := jobQueryTestServer(t)

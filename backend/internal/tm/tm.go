@@ -1,5 +1,4 @@
-// Package tm 定义翻译记忆接口。MVP 仅提供 Nop 实现。
-// 完整实现需引入 SQLite 与相似度算法（fuzzy match），待后续阶段。
+// Package tm 定义翻译记忆接口，提供按项目和语言精确匹配的数据库实现。
 package tm
 
 import "context"

@@ -195,7 +195,7 @@ func (s *ExternalAuthService) UpdateConnection(ctx context.Context, actorID int,
 		if err = s.persistConnectionSnapshot(ctx, c, p, next, actorID); err != nil {
 			return err
 		}
-		if err = c.AuthConnection.UpdateOneID(id).SetCurrentRevision(next).SetAggregateRevision(next).SetAuthGeneration(generation).Exec(ctx); err != nil {
+		if err = c.AuthConnection.UpdateOneID(id).SetCurrentRevision(next).SetAggregateRevision(next).SetAuthGeneration(generation).Select("id").Exec(ctx); err != nil {
 			return err
 		}
 		if proof != nil {

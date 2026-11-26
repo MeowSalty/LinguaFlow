@@ -131,9 +131,16 @@ func prepareDatabase(ctx context.Context, cfg *config.ServerConfig) (*sql.DB, *e
 		return nil, nil, nil, err
 	}
 	cleanup := func() error { return errors.Join(client.Close(), db.Close()) }
+	if err := service.PreflightDataVersion(ctx, client); err != nil {
+		_ = cleanup()
+		return nil, nil, nil, err
+	}
 	if cfg.AutoMigrate {
 		err = database.WithMigrationLock(ctx, db, cfg.Database.Driver, func(migrationClient *ent.Client) error {
-			if err := migrationClient.Schema.Create(ctx); err != nil {
+			if err := database.CreatePublishedSchema(ctx, migrationClient, cfg.Database.Driver); err != nil {
+				return err
+			}
+			if err := database.MigratePublishedData(ctx, migrationClient, cfg.Database.Driver); err != nil {
 				return err
 			}
 			if err := service.MigrateHistoryVisibility(ctx, migrationClient); err != nil {

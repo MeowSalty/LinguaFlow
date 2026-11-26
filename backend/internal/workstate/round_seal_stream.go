@@ -30,15 +30,12 @@ func (s *Store) SealRoundStream(ctx context.Context, scope Scope, total int, wal
 			}
 			return false, err
 		}
-		err = walk(func(id int) error {
-			ok, err := tx.WorkItem.Query().Where(workitem.JobRoundIDEQ(scope.RoundID), workitem.SegmentIDEQ(id)).Exist(ctx)
-			if err != nil {
-				return err
+		err = walkManifestPages(total, walk, func(ids []int) error {
+			count, err := tx.WorkItem.Query().Where(workitem.JobRoundIDEQ(scope.RoundID), workitem.SegmentIDIn(ids...)).Count(ctx)
+			if err == nil && count != len(ids) {
+				err = ErrManifest
 			}
-			if !ok {
-				return ErrManifest
-			}
-			return nil
+			return err
 		})
 		return err == nil, err
 	}
@@ -58,49 +55,33 @@ func (s *Store) SealRoundStream(ctx context.Context, scope Scope, total int, wal
 		if total < 0 || r.SegmentTotal > 0 && r.SegmentTotal != total {
 			return ErrManifest
 		}
-		builders := make([]*ent.WorkItemCreate, 0, 16)
-		seen := 0
-		flush := func() error {
-			if len(builders) == 0 {
-				return nil
-			}
-			err := tx.WorkItem.CreateBulk(builders...).Exec(ctx)
-			builders = builders[:0]
-			return err
-		}
-		err = walk(func(id int) error {
-			if id < 1 {
-				return ErrManifest
-			}
-			valid, err := tx.Segment.Query().Where(segment.IDEQ(id), segment.ResourceIDEQ(scope.ResourceID)).Exist(ctx)
+		err = walkManifestPages(total, walk, func(ids []int) error {
+			valid, err := tx.Segment.Query().Where(segment.IDIn(ids...), segment.ResourceIDEQ(scope.ResourceID)).Count(ctx)
 			if err != nil {
 				return err
 			}
-			if !valid {
+			if valid != len(ids) {
 				return ErrManifest
 			}
-			done, err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(scope.RoundID), jobroundsegment.SegmentIDEQ(id)).Exist(ctx)
+			completed, err := tx.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(scope.RoundID), jobroundsegment.SegmentIDIn(ids...)).Select(jobroundsegment.FieldSegmentID).All(ctx)
 			if err != nil {
 				return err
 			}
-			state := "pending"
-			if done {
-				state = "resolved"
+			done := make(map[int]bool, len(completed))
+			for _, row := range completed {
+				done[row.SegmentID] = true
 			}
-			builders = append(builders, tx.WorkItem.Create().SetJobID(scope.JobID).SetResourceID(scope.ResourceID).SetJobRoundID(scope.RoundID).SetSegmentID(id).SetRetryEpoch(scope.RetryEpoch).SetState(state))
-			seen++
-			if len(builders) == 16 {
-				return flush()
+			builders := make([]*ent.WorkItemCreate, 0, len(ids))
+			for _, id := range ids {
+				state := "pending"
+				if done[id] {
+					state = "resolved"
+				}
+				builders = append(builders, tx.WorkItem.Create().SetJobID(scope.JobID).SetResourceID(scope.ResourceID).SetJobRoundID(scope.RoundID).SetSegmentID(id).SetRetryEpoch(scope.RetryEpoch).SetState(state))
 			}
-			return nil
+			return tx.WorkItem.CreateBulk(builders...).Exec(ctx)
 		})
 		if err != nil {
-			return err
-		}
-		if seen != total {
-			return ErrManifest
-		}
-		if err = flush(); err != nil {
 			return err
 		}
 		n, err := tx.JobRound.Update().Where(jobround.IDEQ(scope.RoundID), jobround.ManifestSealedEQ(false)).SetManifestVersion(1).SetManifestSealed(true).SetSegmentTotal(total).Save(ctx)
@@ -113,4 +94,36 @@ func (s *Store) SealRoundStream(ctx context.Context, scope Scope, total int, wal
 		return Calibrate(ctx, tx, scope.JobID)
 	})
 	return s.finishUnknown(ctx, scope.JobID, err, verify)
+}
+
+// A manifest page contains only fixed-size IDs. Retain the whole-round
+// transaction so neither dispatch nor recovery can observe a partial seal.
+func walkManifestPages(total int, walk func(func(int) error) error, visit func([]int) error) error {
+	var page [16]int
+	used, seen := 0, 0
+	err := walk(func(id int) error {
+		if id < 1 || seen >= total {
+			return ErrManifest
+		}
+		page[used] = id
+		used++
+		seen++
+		if used == len(page) {
+			if err := visit(page[:used]); err != nil {
+				return err
+			}
+			used = 0
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if seen != total {
+		return ErrManifest
+	}
+	if used > 0 {
+		return visit(page[:used])
+	}
+	return nil
 }

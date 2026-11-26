@@ -141,6 +141,20 @@ func (_c *LoginBindingCreate) SetNillableEvidence(v *authrules.Evidence) *LoginB
 	return _c
 }
 
+// SetEvidenceExpiresAt sets the "evidence_expires_at" field.
+func (_c *LoginBindingCreate) SetEvidenceExpiresAt(v time.Time) *LoginBindingCreate {
+	_c.mutation.SetEvidenceExpiresAt(v)
+	return _c
+}
+
+// SetNillableEvidenceExpiresAt sets the "evidence_expires_at" field if the given value is not nil.
+func (_c *LoginBindingCreate) SetNillableEvidenceExpiresAt(v *time.Time) *LoginBindingCreate {
+	if v != nil {
+		_c.SetEvidenceExpiresAt(*v)
+	}
+	return _c
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_c *LoginBindingCreate) SetUser(v *User) *LoginBindingCreate {
 	return _c.SetUserID(v.ID)
@@ -343,6 +357,10 @@ func (_c *LoginBindingCreate) createSpec() (*LoginBinding, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Evidence(); ok {
 		_spec.SetField(loginbinding.FieldEvidence, field.TypeJSON, value)
 		_node.Evidence = value
+	}
+	if value, ok := _c.mutation.EvidenceExpiresAt(); ok {
+		_spec.SetField(loginbinding.FieldEvidenceExpiresAt, field.TypeTime, value)
+		_node.EvidenceExpiresAt = &value
 	}
 	if nodes := _c.mutation.UserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

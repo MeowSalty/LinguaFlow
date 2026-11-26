@@ -110,6 +110,16 @@ func NextSegmentIndex(v int) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldEQ(FieldNextSegmentIndex, v))
 }
 
+// TotalUpdated applies equality check predicate on the "total_updated" field. It's identical to TotalUpdatedEQ.
+func TotalUpdated(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldTotalUpdated, v))
+}
+
+// TotalSkipped applies equality check predicate on the "total_skipped" field. It's identical to TotalSkippedEQ.
+func TotalSkipped(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldTotalSkipped, v))
+}
+
 // StartedAt applies equality check predicate on the "started_at" field. It's identical to StartedAtEQ.
 func StartedAt(v time.Time) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldEQ(FieldStartedAt, v))
@@ -118,16 +128,6 @@ func StartedAt(v time.Time) predicate.SyncTask {
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldEQ(FieldStatus, v))
-}
-
-// SegmentIds applies equality check predicate on the "segment_ids" field. It's identical to SegmentIdsEQ.
-func SegmentIds(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldEQ(FieldSegmentIds, v))
-}
-
-// ResourceIds applies equality check predicate on the "resource_ids" field. It's identical to ResourceIdsEQ.
-func ResourceIds(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldEQ(FieldResourceIds, v))
 }
 
 // Result applies equality check predicate on the "result" field. It's identical to ResultEQ.
@@ -585,6 +585,86 @@ func NextSegmentIndexLTE(v int) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldLTE(FieldNextSegmentIndex, v))
 }
 
+// TotalUpdatedEQ applies the EQ predicate on the "total_updated" field.
+func TotalUpdatedEQ(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldTotalUpdated, v))
+}
+
+// TotalUpdatedNEQ applies the NEQ predicate on the "total_updated" field.
+func TotalUpdatedNEQ(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNEQ(FieldTotalUpdated, v))
+}
+
+// TotalUpdatedIn applies the In predicate on the "total_updated" field.
+func TotalUpdatedIn(vs ...int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIn(FieldTotalUpdated, vs...))
+}
+
+// TotalUpdatedNotIn applies the NotIn predicate on the "total_updated" field.
+func TotalUpdatedNotIn(vs ...int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotIn(FieldTotalUpdated, vs...))
+}
+
+// TotalUpdatedGT applies the GT predicate on the "total_updated" field.
+func TotalUpdatedGT(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGT(FieldTotalUpdated, v))
+}
+
+// TotalUpdatedGTE applies the GTE predicate on the "total_updated" field.
+func TotalUpdatedGTE(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGTE(FieldTotalUpdated, v))
+}
+
+// TotalUpdatedLT applies the LT predicate on the "total_updated" field.
+func TotalUpdatedLT(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLT(FieldTotalUpdated, v))
+}
+
+// TotalUpdatedLTE applies the LTE predicate on the "total_updated" field.
+func TotalUpdatedLTE(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLTE(FieldTotalUpdated, v))
+}
+
+// TotalSkippedEQ applies the EQ predicate on the "total_skipped" field.
+func TotalSkippedEQ(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldEQ(FieldTotalSkipped, v))
+}
+
+// TotalSkippedNEQ applies the NEQ predicate on the "total_skipped" field.
+func TotalSkippedNEQ(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNEQ(FieldTotalSkipped, v))
+}
+
+// TotalSkippedIn applies the In predicate on the "total_skipped" field.
+func TotalSkippedIn(vs ...int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldIn(FieldTotalSkipped, vs...))
+}
+
+// TotalSkippedNotIn applies the NotIn predicate on the "total_skipped" field.
+func TotalSkippedNotIn(vs ...int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldNotIn(FieldTotalSkipped, vs...))
+}
+
+// TotalSkippedGT applies the GT predicate on the "total_skipped" field.
+func TotalSkippedGT(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGT(FieldTotalSkipped, v))
+}
+
+// TotalSkippedGTE applies the GTE predicate on the "total_skipped" field.
+func TotalSkippedGTE(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldGTE(FieldTotalSkipped, v))
+}
+
+// TotalSkippedLT applies the LT predicate on the "total_skipped" field.
+func TotalSkippedLT(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLT(FieldTotalSkipped, v))
+}
+
+// TotalSkippedLTE applies the LTE predicate on the "total_skipped" field.
+func TotalSkippedLTE(v int) predicate.SyncTask {
+	return predicate.SyncTask(sql.FieldLTE(FieldTotalSkipped, v))
+}
+
 // StartedAtEQ applies the EQ predicate on the "started_at" field.
 func StartedAtEQ(v time.Time) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldEQ(FieldStartedAt, v))
@@ -698,136 +778,6 @@ func StatusEqualFold(v string) predicate.SyncTask {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.SyncTask {
 	return predicate.SyncTask(sql.FieldContainsFold(FieldStatus, v))
-}
-
-// SegmentIdsEQ applies the EQ predicate on the "segment_ids" field.
-func SegmentIdsEQ(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldEQ(FieldSegmentIds, v))
-}
-
-// SegmentIdsNEQ applies the NEQ predicate on the "segment_ids" field.
-func SegmentIdsNEQ(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldNEQ(FieldSegmentIds, v))
-}
-
-// SegmentIdsIn applies the In predicate on the "segment_ids" field.
-func SegmentIdsIn(vs ...string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldIn(FieldSegmentIds, vs...))
-}
-
-// SegmentIdsNotIn applies the NotIn predicate on the "segment_ids" field.
-func SegmentIdsNotIn(vs ...string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldNotIn(FieldSegmentIds, vs...))
-}
-
-// SegmentIdsGT applies the GT predicate on the "segment_ids" field.
-func SegmentIdsGT(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldGT(FieldSegmentIds, v))
-}
-
-// SegmentIdsGTE applies the GTE predicate on the "segment_ids" field.
-func SegmentIdsGTE(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldGTE(FieldSegmentIds, v))
-}
-
-// SegmentIdsLT applies the LT predicate on the "segment_ids" field.
-func SegmentIdsLT(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldLT(FieldSegmentIds, v))
-}
-
-// SegmentIdsLTE applies the LTE predicate on the "segment_ids" field.
-func SegmentIdsLTE(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldLTE(FieldSegmentIds, v))
-}
-
-// SegmentIdsContains applies the Contains predicate on the "segment_ids" field.
-func SegmentIdsContains(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldContains(FieldSegmentIds, v))
-}
-
-// SegmentIdsHasPrefix applies the HasPrefix predicate on the "segment_ids" field.
-func SegmentIdsHasPrefix(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldHasPrefix(FieldSegmentIds, v))
-}
-
-// SegmentIdsHasSuffix applies the HasSuffix predicate on the "segment_ids" field.
-func SegmentIdsHasSuffix(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldHasSuffix(FieldSegmentIds, v))
-}
-
-// SegmentIdsEqualFold applies the EqualFold predicate on the "segment_ids" field.
-func SegmentIdsEqualFold(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldEqualFold(FieldSegmentIds, v))
-}
-
-// SegmentIdsContainsFold applies the ContainsFold predicate on the "segment_ids" field.
-func SegmentIdsContainsFold(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldContainsFold(FieldSegmentIds, v))
-}
-
-// ResourceIdsEQ applies the EQ predicate on the "resource_ids" field.
-func ResourceIdsEQ(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldEQ(FieldResourceIds, v))
-}
-
-// ResourceIdsNEQ applies the NEQ predicate on the "resource_ids" field.
-func ResourceIdsNEQ(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldNEQ(FieldResourceIds, v))
-}
-
-// ResourceIdsIn applies the In predicate on the "resource_ids" field.
-func ResourceIdsIn(vs ...string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldIn(FieldResourceIds, vs...))
-}
-
-// ResourceIdsNotIn applies the NotIn predicate on the "resource_ids" field.
-func ResourceIdsNotIn(vs ...string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldNotIn(FieldResourceIds, vs...))
-}
-
-// ResourceIdsGT applies the GT predicate on the "resource_ids" field.
-func ResourceIdsGT(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldGT(FieldResourceIds, v))
-}
-
-// ResourceIdsGTE applies the GTE predicate on the "resource_ids" field.
-func ResourceIdsGTE(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldGTE(FieldResourceIds, v))
-}
-
-// ResourceIdsLT applies the LT predicate on the "resource_ids" field.
-func ResourceIdsLT(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldLT(FieldResourceIds, v))
-}
-
-// ResourceIdsLTE applies the LTE predicate on the "resource_ids" field.
-func ResourceIdsLTE(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldLTE(FieldResourceIds, v))
-}
-
-// ResourceIdsContains applies the Contains predicate on the "resource_ids" field.
-func ResourceIdsContains(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldContains(FieldResourceIds, v))
-}
-
-// ResourceIdsHasPrefix applies the HasPrefix predicate on the "resource_ids" field.
-func ResourceIdsHasPrefix(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldHasPrefix(FieldResourceIds, v))
-}
-
-// ResourceIdsHasSuffix applies the HasSuffix predicate on the "resource_ids" field.
-func ResourceIdsHasSuffix(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldHasSuffix(FieldResourceIds, v))
-}
-
-// ResourceIdsEqualFold applies the EqualFold predicate on the "resource_ids" field.
-func ResourceIdsEqualFold(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldEqualFold(FieldResourceIds, v))
-}
-
-// ResourceIdsContainsFold applies the ContainsFold predicate on the "resource_ids" field.
-func ResourceIdsContainsFold(v string) predicate.SyncTask {
-	return predicate.SyncTask(sql.FieldContainsFold(FieldResourceIds, v))
 }
 
 // ResultEQ applies the EQ predicate on the "result" field.

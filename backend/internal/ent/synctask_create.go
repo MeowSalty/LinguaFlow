@@ -129,6 +129,34 @@ func (_c *SyncTaskCreate) SetNillableNextSegmentIndex(v *int) *SyncTaskCreate {
 	return _c
 }
 
+// SetTotalUpdated sets the "total_updated" field.
+func (_c *SyncTaskCreate) SetTotalUpdated(v int) *SyncTaskCreate {
+	_c.mutation.SetTotalUpdated(v)
+	return _c
+}
+
+// SetNillableTotalUpdated sets the "total_updated" field if the given value is not nil.
+func (_c *SyncTaskCreate) SetNillableTotalUpdated(v *int) *SyncTaskCreate {
+	if v != nil {
+		_c.SetTotalUpdated(*v)
+	}
+	return _c
+}
+
+// SetTotalSkipped sets the "total_skipped" field.
+func (_c *SyncTaskCreate) SetTotalSkipped(v int) *SyncTaskCreate {
+	_c.mutation.SetTotalSkipped(v)
+	return _c
+}
+
+// SetNillableTotalSkipped sets the "total_skipped" field if the given value is not nil.
+func (_c *SyncTaskCreate) SetNillableTotalSkipped(v *int) *SyncTaskCreate {
+	if v != nil {
+		_c.SetTotalSkipped(*v)
+	}
+	return _c
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_c *SyncTaskCreate) SetStartedAt(v time.Time) *SyncTaskCreate {
 	_c.mutation.SetStartedAt(v)
@@ -154,18 +182,6 @@ func (_c *SyncTaskCreate) SetNillableStatus(v *string) *SyncTaskCreate {
 	if v != nil {
 		_c.SetStatus(*v)
 	}
-	return _c
-}
-
-// SetSegmentIds sets the "segment_ids" field.
-func (_c *SyncTaskCreate) SetSegmentIds(v string) *SyncTaskCreate {
-	_c.mutation.SetSegmentIds(v)
-	return _c
-}
-
-// SetResourceIds sets the "resource_ids" field.
-func (_c *SyncTaskCreate) SetResourceIds(v string) *SyncTaskCreate {
-	_c.mutation.SetResourceIds(v)
 	return _c
 }
 
@@ -315,6 +331,14 @@ func (_c *SyncTaskCreate) defaults() {
 		v := synctask.DefaultNextSegmentIndex
 		_c.mutation.SetNextSegmentIndex(v)
 	}
+	if _, ok := _c.mutation.TotalUpdated(); !ok {
+		v := synctask.DefaultTotalUpdated
+		_c.mutation.SetTotalUpdated(v)
+	}
+	if _, ok := _c.mutation.TotalSkipped(); !ok {
+		v := synctask.DefaultTotalSkipped
+		_c.mutation.SetTotalSkipped(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := synctask.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -401,6 +425,22 @@ func (_c *SyncTaskCreate) check() error {
 			return &ValidationError{Name: "next_segment_index", err: fmt.Errorf(`ent: validator failed for field "SyncTask.next_segment_index": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.TotalUpdated(); !ok {
+		return &ValidationError{Name: "total_updated", err: errors.New(`ent: missing required field "SyncTask.total_updated"`)}
+	}
+	if v, ok := _c.mutation.TotalUpdated(); ok {
+		if err := synctask.TotalUpdatedValidator(v); err != nil {
+			return &ValidationError{Name: "total_updated", err: fmt.Errorf(`ent: validator failed for field "SyncTask.total_updated": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.TotalSkipped(); !ok {
+		return &ValidationError{Name: "total_skipped", err: errors.New(`ent: missing required field "SyncTask.total_skipped"`)}
+	}
+	if v, ok := _c.mutation.TotalSkipped(); ok {
+		if err := synctask.TotalSkippedValidator(v); err != nil {
+			return &ValidationError{Name: "total_skipped", err: fmt.Errorf(`ent: validator failed for field "SyncTask.total_skipped": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "SyncTask.status"`)}
 	}
@@ -408,12 +448,6 @@ func (_c *SyncTaskCreate) check() error {
 		if err := synctask.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "SyncTask.status": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.SegmentIds(); !ok {
-		return &ValidationError{Name: "segment_ids", err: errors.New(`ent: missing required field "SyncTask.segment_ids"`)}
-	}
-	if _, ok := _c.mutation.ResourceIds(); !ok {
-		return &ValidationError{Name: "resource_ids", err: errors.New(`ent: missing required field "SyncTask.resource_ids"`)}
 	}
 	if len(_c.mutation.ProjectIDs()) == 0 {
 		return &ValidationError{Name: "project", err: errors.New(`ent: missing required edge "SyncTask.project"`)}
@@ -482,6 +516,14 @@ func (_c *SyncTaskCreate) createSpec() (*SyncTask, *sqlgraph.CreateSpec) {
 		_spec.SetField(synctask.FieldNextSegmentIndex, field.TypeInt, value)
 		_node.NextSegmentIndex = value
 	}
+	if value, ok := _c.mutation.TotalUpdated(); ok {
+		_spec.SetField(synctask.FieldTotalUpdated, field.TypeInt, value)
+		_node.TotalUpdated = value
+	}
+	if value, ok := _c.mutation.TotalSkipped(); ok {
+		_spec.SetField(synctask.FieldTotalSkipped, field.TypeInt, value)
+		_node.TotalSkipped = value
+	}
 	if value, ok := _c.mutation.StartedAt(); ok {
 		_spec.SetField(synctask.FieldStartedAt, field.TypeTime, value)
 		_node.StartedAt = &value
@@ -489,14 +531,6 @@ func (_c *SyncTaskCreate) createSpec() (*SyncTask, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(synctask.FieldStatus, field.TypeString, value)
 		_node.Status = value
-	}
-	if value, ok := _c.mutation.SegmentIds(); ok {
-		_spec.SetField(synctask.FieldSegmentIds, field.TypeString, value)
-		_node.SegmentIds = value
-	}
-	if value, ok := _c.mutation.ResourceIds(); ok {
-		_spec.SetField(synctask.FieldResourceIds, field.TypeString, value)
-		_node.ResourceIds = value
 	}
 	if value, ok := _c.mutation.Result(); ok {
 		_spec.SetField(synctask.FieldResult, field.TypeString, value)

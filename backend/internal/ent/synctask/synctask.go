@@ -36,14 +36,14 @@ const (
 	FieldCheckpointVersion = "checkpoint_version"
 	// FieldNextSegmentIndex holds the string denoting the next_segment_index field in the database.
 	FieldNextSegmentIndex = "next_segment_index"
+	// FieldTotalUpdated holds the string denoting the total_updated field in the database.
+	FieldTotalUpdated = "total_updated"
+	// FieldTotalSkipped holds the string denoting the total_skipped field in the database.
+	FieldTotalSkipped = "total_skipped"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
 	FieldStartedAt = "started_at"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
-	// FieldSegmentIds holds the string denoting the segment_ids field in the database.
-	FieldSegmentIds = "segment_ids"
-	// FieldResourceIds holds the string denoting the resource_ids field in the database.
-	FieldResourceIds = "resource_ids"
 	// FieldResult holds the string denoting the result field in the database.
 	FieldResult = "result"
 	// FieldError holds the string denoting the error field in the database.
@@ -99,10 +99,10 @@ var Columns = []string{
 	FieldProcessedSegments,
 	FieldCheckpointVersion,
 	FieldNextSegmentIndex,
+	FieldTotalUpdated,
+	FieldTotalSkipped,
 	FieldStartedAt,
 	FieldStatus,
-	FieldSegmentIds,
-	FieldResourceIds,
 	FieldResult,
 	FieldError,
 	FieldCancelledAt,
@@ -151,6 +151,14 @@ var (
 	DefaultNextSegmentIndex int
 	// NextSegmentIndexValidator is a validator for the "next_segment_index" field. It is called by the builders before save.
 	NextSegmentIndexValidator func(int) error
+	// DefaultTotalUpdated holds the default value on creation for the "total_updated" field.
+	DefaultTotalUpdated int
+	// TotalUpdatedValidator is a validator for the "total_updated" field. It is called by the builders before save.
+	TotalUpdatedValidator func(int) error
+	// DefaultTotalSkipped holds the default value on creation for the "total_skipped" field.
+	DefaultTotalSkipped int
+	// TotalSkippedValidator is a validator for the "total_skipped" field. It is called by the builders before save.
+	TotalSkippedValidator func(int) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -220,6 +228,16 @@ func ByNextSegmentIndex(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldNextSegmentIndex, opts...).ToFunc()
 }
 
+// ByTotalUpdated orders the results by the total_updated field.
+func ByTotalUpdated(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotalUpdated, opts...).ToFunc()
+}
+
+// ByTotalSkipped orders the results by the total_skipped field.
+func ByTotalSkipped(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotalSkipped, opts...).ToFunc()
+}
+
 // ByStartedAt orders the results by the started_at field.
 func ByStartedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStartedAt, opts...).ToFunc()
@@ -228,16 +246,6 @@ func ByStartedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
-}
-
-// BySegmentIds orders the results by the segment_ids field.
-func BySegmentIds(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldSegmentIds, opts...).ToFunc()
-}
-
-// ByResourceIds orders the results by the resource_ids field.
-func ByResourceIds(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldResourceIds, opts...).ToFunc()
 }
 
 // ByResult orders the results by the result field.

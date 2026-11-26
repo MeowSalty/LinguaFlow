@@ -240,14 +240,14 @@ func (s *ResourceService) OriginalFile(ctx context.Context, actor, projectID, re
 	if err := s.ensureStorage(ctx); err != nil {
 		return nil, err
 	}
-	res, err := s.GetResource(ctx, actor, projectID, resourceID)
+	res, err := s.GetResourceIdentity(ctx, actor, projectID, resourceID)
 	if err != nil {
 		return nil, err
 	}
-	if res.Resource.CurrentSourceRevisionID == nil {
+	if res.CurrentSourceRevisionID == nil {
 		return nil, storage.ErrCorrupt
 	}
-	rev, err := s.client.SourceRevision.Get(ctx, *res.Resource.CurrentSourceRevisionID)
+	rev, err := s.client.SourceRevision.Get(ctx, *res.CurrentSourceRevisionID)
 	if err != nil {
 		return nil, err
 	}

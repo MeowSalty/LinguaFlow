@@ -89,10 +89,10 @@ func (s *Store) StageCorrectedMember(ctx context.Context, in OutputMember) error
 			return ErrManifest
 		}
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "correction_write", Bytes: in.Bytes, Rows: 2})
-		if e = tx.WorkResponseMember.UpdateOneID(row.ID).SetCorrectedPayload(in.Payload).SetCorrectedBytes(in.Bytes).SetCorrectedDigest(in.Digest).Exec(ctx); e != nil {
+		if e = tx.WorkResponseMember.UpdateOneID(row.ID).SetCorrectedPayload(in.Payload).SetCorrectedBytes(in.Bytes).SetCorrectedDigest(in.Digest).Select("id").Exec(ctx); e != nil {
 			return e
 		}
-		return tx.WorkRequest.UpdateOneID(r.ID).AddOutputMemberBytes(in.Bytes).AddCorrectionBytes(in.Bytes).AddMemberStorageBytes(in.Bytes + int64(len(in.Digest))).Exec(ctx)
+		return tx.WorkRequest.UpdateOneID(r.ID).AddOutputMemberBytes(in.Bytes).AddCorrectionBytes(in.Bytes).AddMemberStorageBytes(in.Bytes + int64(len(in.Digest))).Select("id").Exec(ctx)
 	})
 }
 func (s *Store) AbortMemberBusiness(ctx context.Context, id string) error {
@@ -111,7 +111,7 @@ func (s *Store) AbortMemberBusiness(ctx context.Context, id string) error {
 				return e
 			}
 			for _, row := range rows {
-				if e = tx.WorkResponseMember.UpdateOneID(row.ID).ClearCorrectedPayload().SetCorrectedBytes(0).SetCorrectedDigest("").Exec(ctx); e != nil {
+				if e = tx.WorkResponseMember.UpdateOneID(row.ID).ClearCorrectedPayload().SetCorrectedBytes(0).SetCorrectedDigest("").Select("id").Exec(ctx); e != nil {
 					return e
 				}
 				retired += row.CorrectedBytes + int64(len(row.CorrectedDigest))
@@ -122,6 +122,6 @@ func (s *Store) AbortMemberBusiness(ctx context.Context, id string) error {
 			return nil
 		}
 		// Payload and digest have distinct actual storage costs.
-		return tx.WorkRequest.UpdateOneID(r.ID).AddOutputMemberBytes(-payload).AddCorrectionBytes(-payload).AddMemberStorageBytes(-retired).Exec(ctx)
+		return tx.WorkRequest.UpdateOneID(r.ID).AddOutputMemberBytes(-payload).AddCorrectionBytes(-payload).AddMemberStorageBytes(-retired).Select("id").Exec(ctx)
 	})
 }

@@ -38,10 +38,10 @@ func exportRebuildable(ctx context.Context, client *ent.Client, a *ent.ExportArt
 }
 
 func (s *ResourceService) ListExportsIncludingDeleted(ctx context.Context, actor, projectID, resourceID int, includeDeleted bool) ([]*ent.ExportArtifact, error) {
-	if _, err := s.GetResource(ctx, actor, projectID, resourceID); err != nil {
+	if _, err := s.GetResourceIdentity(ctx, actor, projectID, resourceID); err != nil {
 		return nil, err
 	}
-	q := s.client.ExportArtifact.Query().Where(exportartifact.ProjectIDEQ(projectID), exportartifact.ResourceIDEQ(resourceID)).Order(ent.Desc(exportartifact.FieldID)).Limit(100)
+	q := s.client.ExportArtifact.Query().Where(exportartifact.ProjectIDEQ(projectID), exportartifact.ResourceIDEQ(resourceID)).Select(exportartifact.FieldID, exportartifact.FieldProjectID, exportartifact.FieldResourceID, exportartifact.FieldSourceRevisionID, exportartifact.FieldSnapshotBlobID, exportartifact.FieldStatus, exportartifact.FieldRendererVersion, exportartifact.FieldFilename, exportartifact.FieldDeletionTaskID).Order(ent.Desc(exportartifact.FieldID)).Limit(100)
 	if !includeDeleted {
 		q.Where(exportartifact.StatusNEQ(exportartifact.StatusDeleted))
 	}
@@ -49,13 +49,60 @@ func (s *ResourceService) ListExportsIncludingDeleted(ctx context.Context, actor
 	if err != nil {
 		return nil, err
 	}
-	for _, a := range rows {
-		a.Rebuildable, err = s.ExportRebuildable(ctx, a)
-		if err != nil {
-			return nil, err
-		}
+	if err := s.populateExportRebuildable(ctx, rows); err != nil {
+		return nil, err
 	}
 	return rows, nil
+}
+
+// populateExportRebuildable observes only metadata required by this response.
+// Actual rebuild execution retains its own fresh validation.
+func (s *ResourceService) populateExportRebuildable(ctx context.Context, rows []*ent.ExportArtifact) error {
+	revisionIDs := make([]int, 0, len(rows))
+	for _, row := range rows {
+		row.Rebuildable = false
+		if row.Status != exportartifact.StatusDeleted && row.SnapshotBlobID != nil && row.RendererVersion == storageRendererVersion {
+			revisionIDs = append(revisionIDs, row.SourceRevisionID)
+		}
+	}
+	if len(revisionIDs) == 0 {
+		return nil
+	}
+	revisions, err := s.client.SourceRevision.Query().Where(sourcerevision.IDIn(revisionIDs...), sourcerevision.DeletedEQ(false)).Select(sourcerevision.FieldID, sourcerevision.FieldProjectID, sourcerevision.FieldResourceID, sourcerevision.FieldSourceBlobID).All(ctx)
+	if err != nil {
+		return err
+	}
+	byID := make(map[int]*ent.SourceRevision, len(revisions))
+	for _, row := range revisions {
+		byID[row.ID] = row
+	}
+	valid := make(map[int]*ent.SourceRevision, len(rows))
+	blobIDs := make([]int, 0, 2*len(rows))
+	for _, row := range rows {
+		rev := byID[row.SourceRevisionID]
+		if row.Status == exportartifact.StatusDeleted || row.SnapshotBlobID == nil || row.RendererVersion != storageRendererVersion || rev == nil || rev.ProjectID != row.ProjectID || rev.ResourceID != row.ResourceID {
+			continue
+		}
+		valid[row.ID] = rev
+		blobIDs = append(blobIDs, *row.SnapshotBlobID, rev.SourceBlobID)
+	}
+	if len(blobIDs) == 0 {
+		return nil
+	}
+	readyIDs, err := s.client.Blob.Query().Where(blob.IDIn(blobIDs...), blob.StatusEQ(blob.StatusReady), blob.ActiveLocationIDNotNil()).IDs(ctx)
+	if err != nil {
+		return err
+	}
+	ready := make(map[int]bool, len(readyIDs))
+	for _, id := range readyIDs {
+		ready[id] = true
+	}
+	for _, row := range rows {
+		if rev := valid[row.ID]; rev != nil {
+			row.Rebuildable = ready[*row.SnapshotBlobID] && ready[rev.SourceBlobID]
+		}
+	}
+	return nil
 }
 
 func (s *StorageService) refreshDeletionTaskCleanup(ctx context.Context) error {

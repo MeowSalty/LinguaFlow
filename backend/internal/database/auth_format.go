@@ -54,9 +54,6 @@ func ensureAuthFormat(ctx context.Context, db *sql.DB, driver string, autoMigrat
 		if _, err := conn.ExecContext(ctx, begin); err != nil {
 			return err
 		}
-		if err := CheckMigrationState(ctx, conn, driver); err != nil {
-			return err
-		}
 		committed := false
 		defer func() {
 			if committed {
@@ -71,6 +68,9 @@ func ensureAuthFormat(ctx context.Context, db *sql.DB, driver string, autoMigrat
 				err = errors.Join(err, fmt.Errorf("rollback account format reservation: %w", rollbackErr))
 			}
 		}()
+		if err := CheckMigrationState(ctx, conn, driver); err != nil {
+			return err
+		}
 		present, err := inspectAuthFormat(ctx, conn, driver)
 		if err != nil {
 			return err
@@ -80,6 +80,14 @@ func ensureAuthFormat(ctx context.Context, db *sql.DB, driver string, autoMigrat
 				return err
 			}
 			if _, err := conn.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s (id, version) VALUES (1, %d)", authFormatTable, AuthFormatVersion)); err != nil {
+				return err
+			}
+			// No application objects exist here. Reserve the current data format
+			// in the same transaction; interrupted schema creation remains safe.
+			if _, err := conn.ExecContext(ctx, persistenceMarkerDDL); err != nil {
+				return err
+			}
+			if _, err := conn.ExecContext(ctx, "INSERT INTO "+persistenceFormatTable+"(id,version) VALUES(1,$1)", PersistenceFormatVersion); err != nil {
 				return err
 			}
 		}

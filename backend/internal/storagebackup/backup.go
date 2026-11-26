@@ -69,6 +69,48 @@ type Space struct {
 }
 type Resolver func(context.Context, int) (storage.Driver, error)
 
+const metadataPageSize = 256
+
+func readyObjects(ctx context.Context, client *ent.Client) ([]*ent.Blob, error) {
+	objects, err := client.Blob.Query().Where(blob.StatusEQ(blob.StatusReady)).
+		Select(blob.FieldID, blob.FieldActiveLocationID, blob.FieldSize, blob.FieldSha256).
+		Order(ent.Asc(blob.FieldID)).Limit(100001).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(objects) > 100000 {
+		return nil, storage.ErrLimit
+	}
+	return objects, nil
+}
+
+func objectLocations(ctx context.Context, client *ent.Client, objects []*ent.Blob) (map[int]*ent.BlobLocation, error) {
+	ids := make([]int, len(objects))
+	for i, object := range objects {
+		if object.ActiveLocationID == nil {
+			return nil, errors.New("ready object is missing its active location")
+		}
+		ids[i] = *object.ActiveLocationID
+	}
+	rows, err := client.BlobLocation.Query().Where(bloblocation.IDIn(ids...)).
+		Select(bloblocation.FieldID, bloblocation.FieldBlobID, bloblocation.FieldSpaceID,
+			bloblocation.FieldObjectKey, bloblocation.FieldProviderVersion, bloblocation.FieldStatus).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int]*ent.BlobLocation, len(rows))
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+	for _, object := range objects {
+		location := byID[*object.ActiveLocationID]
+		if location == nil || location.BlobID == nil || *location.BlobID != object.ID {
+			return nil, errors.New("active location belongs to another object or is missing")
+		}
+	}
+	return byID, nil
+}
+
 // CaptureMetadata 要求调用方的维护闸门在捕获期间暂停 GC 与文件
 // 变更。由此产生的固定记录会存活过该维护窗口。
 func CaptureMetadata(ctx context.Context, client *ent.Client, expires time.Time) (*ent.StorageBackup, *Manifest, error) {
@@ -90,50 +132,77 @@ func CaptureMetadata(ctx context.Context, client *ent.Client, expires time.Time)
 	if err != nil {
 		return nil, nil, err
 	}
-	objects, err := tx.Blob.Query().Where(blob.StatusEQ(blob.StatusReady)).Order(ent.Asc(blob.FieldID)).Limit(100001).All(ctx)
+	objects, err := readyObjects(ctx, tx.Client())
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(objects) > 100000 {
-		return nil, nil, storage.ErrLimit
-	}
 	spaceSeen := map[int]bool{}
-	for _, object := range objects {
-		if object.ActiveLocationID == nil {
-			return nil, nil, errors.New("ready object is missing its active location")
-		}
-		location, err := tx.BlobLocation.Get(ctx, *object.ActiveLocationID)
+	for start := 0; start < len(objects); start += metadataPageSize {
+		locations, err := objectLocations(ctx, tx.Client(), objects[start:min(start+metadataPageSize, len(objects))])
 		if err != nil {
 			return nil, nil, err
 		}
-		if location.BlobID == nil || *location.BlobID != object.ID {
-			return nil, nil, errors.New("active location belongs to another object")
+		for _, location := range locations {
+			spaceSeen[location.SpaceID] = true
 		}
-		if err = storageguard.Gate(ctx, tx.Client(), location.SpaceID, storageguard.NewUse); err != nil {
-			return nil, nil, err
-		}
-		count, err := tx.BlobLocation.Update().Where(bloblocation.IDEQ(location.ID), bloblocation.StatusIn(bloblocation.StatusLive, bloblocation.StatusRetired)).SetStatus(location.Status).Save(ctx)
+	}
+	spaceIDs := make([]int, 0, len(spaceSeen))
+	for id := range spaceSeen {
+		spaceIDs = append(spaceIDs, id)
+	}
+	gated, err := storageguard.GateMany(ctx, tx.Client(), spaceIDs, storageguard.NewUse)
+	if err != nil {
+		return nil, nil, err
+	}
+	spaceSeen = map[int]bool{}
+	for start := 0; start < len(objects); start += metadataPageSize {
+		page := objects[start:min(start+metadataPageSize, len(objects))]
+		// Reload after the gates; discovery never authorizes a pin by itself.
+		locations, err := objectLocations(ctx, tx.Client(), page)
 		if err != nil {
 			return nil, nil, err
 		}
-		if count != 1 {
-			return nil, nil, errors.New("location is already being deleted")
+		live, retired := []int{}, []int{}
+		pins := make([]*ent.BackupPinCreate, 0, len(page))
+		for _, object := range page {
+			location := locations[*object.ActiveLocationID]
+			facts, ok := gated[location.SpaceID]
+			if !ok {
+				return nil, nil, storageguard.ErrConflict
+			}
+			switch location.Status {
+			case bloblocation.StatusLive:
+				live = append(live, location.ID)
+			case bloblocation.StatusRetired:
+				retired = append(retired, location.ID)
+			default:
+				return nil, nil, errors.New("location is already being deleted")
+			}
+			pins = append(pins, tx.BackupPin.Create().SetBackupID(manifest.ID).SetLocationID(location.ID).SetExpiresAt(expires.UTC()))
+			manifest.Objects = append(manifest.Objects, Object{BlobID: object.ID, LocationID: location.ID, SpaceID: location.SpaceID, Key: location.ObjectKey, Version: location.ProviderVersion, Size: object.Size, SHA256: object.Sha256, Status: "unverified"})
+			if !spaceSeen[location.SpaceID] {
+				space, connection := facts.Space, facts.Connection
+				manifest.Spaces = append(manifest.Spaces, Space{ID: space.ID, Identity: space.Identity, MarkerNonce: space.MarkerNonce, ConnectionID: connection.ID, Driver: string(connection.Driver), BackendID: connection.BackendID, Endpoint: connection.Endpoint, Bucket: space.Bucket, Prefix: space.Prefix})
+				spaceSeen[space.ID] = true
+			}
 		}
-		if _, err := tx.BackupPin.Create().SetBackupID(manifest.ID).SetLocationID(location.ID).SetExpiresAt(expires.UTC()).Save(ctx); err != nil {
+		for _, group := range []struct {
+			ids    []int
+			status bloblocation.Status
+		}{{live, bloblocation.StatusLive}, {retired, bloblocation.StatusRetired}} {
+			if len(group.ids) == 0 {
+				continue
+			}
+			count, err := tx.BlobLocation.Update().Where(bloblocation.IDIn(group.ids...), bloblocation.StatusEQ(group.status)).SetStatus(group.status).Save(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+			if count != len(group.ids) {
+				return nil, nil, errors.New("location is already being deleted")
+			}
+		}
+		if err := tx.BackupPin.CreateBulk(pins...).Exec(ctx); err != nil {
 			return nil, nil, err
-		}
-		manifest.Objects = append(manifest.Objects, Object{BlobID: object.ID, LocationID: location.ID, SpaceID: location.SpaceID, Key: location.ObjectKey, Version: location.ProviderVersion, Size: object.Size, SHA256: object.Sha256, Status: "unverified"})
-		if !spaceSeen[location.SpaceID] {
-			space, err := tx.StorageSpace.Get(ctx, location.SpaceID)
-			if err != nil {
-				return nil, nil, err
-			}
-			connection, err := tx.StorageConnection.Get(ctx, space.ConnectionID)
-			if err != nil {
-				return nil, nil, err
-			}
-			manifest.Spaces = append(manifest.Spaces, Space{ID: space.ID, Identity: space.Identity, MarkerNonce: space.MarkerNonce, ConnectionID: connection.ID, Driver: string(connection.Driver), BackendID: connection.BackendID, Endpoint: connection.Endpoint, Bucket: space.Bucket, Prefix: space.Prefix})
-			spaceSeen[space.ID] = true
 		}
 	}
 	llmKeys, err := tx.CredentialVersion.Query().Select(credentialversion.FieldKeyID).Strings(ctx)
@@ -152,7 +221,7 @@ func CaptureMetadata(ctx context.Context, client *ent.Client, expires time.Time)
 		manifest.RequiredKeyIDs = append(manifest.RequiredKeyIDs, id)
 	}
 	sort.Strings(manifest.RequiredKeyIDs)
-	if err := tx.StorageBackup.UpdateOneID(row.ID).SetManifest(toMap(manifest)).Exec(ctx); err != nil {
+	if err := tx.StorageBackup.UpdateOneID(row.ID).SetManifest(toMap(manifest)).Select(storagebackup.FieldID).Exec(ctx); err != nil {
 		return nil, nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -238,7 +307,7 @@ func errorCode(err error) string {
 }
 
 func Save(ctx context.Context, client *ent.Client, rowID int, manifest *Manifest) error {
-	return client.StorageBackup.UpdateOneID(rowID).SetStatus(storagebackup.Status(manifest.Status)).SetManifest(toMap(manifest)).Exec(ctx)
+	return client.StorageBackup.UpdateOneID(rowID).SetStatus(storagebackup.Status(manifest.Status)).SetManifest(toMap(manifest)).Select(storagebackup.FieldID).Exec(ctx)
 }
 
 func CheckReferences(ctx context.Context, client *ent.Client, manifest *Manifest) error {
@@ -249,7 +318,7 @@ func CheckReferences(ctx context.Context, client *ent.Client, manifest *Manifest
 	if !manifest.ExpiresAt.Equal(backup.ExpiresAt) {
 		return errors.New("backup pin retention mismatch")
 	}
-	objects, err := client.Blob.Query().Where(blob.StatusEQ(blob.StatusReady)).Limit(100001).All(ctx)
+	objects, err := readyObjects(ctx, client)
 	if err != nil {
 		return err
 	}
@@ -281,25 +350,39 @@ func CheckReferences(ctx context.Context, client *ent.Client, manifest *Manifest
 			return fmt.Errorf("backup connection %d identity mismatch", connection.ID)
 		}
 	}
-	for _, saved := range manifest.Objects {
-		object := ready[saved.BlobID]
-		if object == nil || object.ActiveLocationID == nil || *object.ActiveLocationID != saved.LocationID || !equalBaseline(object.Size, object.Sha256, saved.Size, saved.SHA256) || !spaces[saved.SpaceID] {
-			return fmt.Errorf("backup object %d baseline mismatch", saved.BlobID)
+	for start := 0; start < len(manifest.Objects); start += metadataPageSize {
+		page := manifest.Objects[start:min(start+metadataPageSize, len(manifest.Objects))]
+		blobs := make([]*ent.Blob, 0, len(page))
+		locationIDs := make([]int, 0, len(page))
+		for _, saved := range page {
+			object := ready[saved.BlobID]
+			if object == nil || object.ActiveLocationID == nil || *object.ActiveLocationID != saved.LocationID || !equalBaseline(object.Size, object.Sha256, saved.Size, saved.SHA256) || !spaces[saved.SpaceID] {
+				return fmt.Errorf("backup object %d baseline mismatch", saved.BlobID)
+			}
+			delete(ready, saved.BlobID)
+			blobs = append(blobs, object)
+			locationIDs = append(locationIDs, saved.LocationID)
 		}
-		delete(ready, saved.BlobID)
-		location, err := client.BlobLocation.Get(ctx, saved.LocationID)
+		locations, err := objectLocations(ctx, client, blobs)
 		if err != nil {
 			return err
 		}
-		if location.BlobID == nil || *location.BlobID != saved.BlobID || location.SpaceID != saved.SpaceID || location.ObjectKey != saved.Key || location.ProviderVersion != saved.Version || location.Status == bloblocation.StatusDeleted || location.Status == bloblocation.StatusDeleting {
-			return fmt.Errorf("backup location %d reference mismatch", saved.LocationID)
-		}
-		pinned, err := client.BackupPin.Query().Where(backuppin.BackupIDEQ(manifest.ID), backuppin.LocationIDEQ(saved.LocationID), backuppin.ExpiresAtGTE(manifest.ExpiresAt)).Exist(ctx)
+		pinnedIDs, err := client.BackupPin.Query().Where(backuppin.BackupIDEQ(manifest.ID), backuppin.LocationIDIn(locationIDs...), backuppin.ExpiresAtGTE(manifest.ExpiresAt)).Select(backuppin.FieldLocationID).Ints(ctx)
 		if err != nil {
 			return err
 		}
-		if !pinned {
-			return errors.New("backup object is missing its durable pin")
+		pinned := make(map[int]bool, len(pinnedIDs))
+		for _, id := range pinnedIDs {
+			pinned[id] = true
+		}
+		for _, saved := range page {
+			location := locations[saved.LocationID]
+			if location.SpaceID != saved.SpaceID || location.ObjectKey != saved.Key || location.ProviderVersion != saved.Version || location.Status == bloblocation.StatusDeleted || location.Status == bloblocation.StatusDeleting {
+				return fmt.Errorf("backup location %d reference mismatch", saved.LocationID)
+			}
+			if !pinned[saved.LocationID] {
+				return errors.New("backup object is missing its durable pin")
+			}
 		}
 	}
 	llmKeys, err := client.CredentialVersion.Query().Select(credentialversion.FieldKeyID).Strings(ctx)

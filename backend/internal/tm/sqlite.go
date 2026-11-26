@@ -8,6 +8,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/hash"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/timeutil"
 )
 
 type Scope struct {
@@ -42,7 +43,7 @@ func (s *SQLite) Search(ctx context.Context, src, srcLang, tgtLang string) ([]Ma
 		return nil, err
 	}
 	rows, err := query.
-		Order(ent.Desc(tmentry.FieldUsageCount), ent.Asc(tmentry.FieldID)).
+		Select(tmentry.FieldID, tmentry.FieldSourceText, tmentry.FieldTargetText).
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -70,44 +71,28 @@ func (s *SQLite) Add(ctx context.Context, src, tgt, srcLang, tgtLang string) err
 	if src == "" || tgt == "" || srcLang == "" || tgtLang == "" {
 		return nil
 	}
-	query, err := s.baseQuery(src, srcLang, tgtLang)
-	if err != nil {
-		return err
-	}
-	existing, err := query.Only(ctx)
-	if err != nil && !ent.IsNotFound(err) {
-		return err
-	}
-	if ent.IsNotFound(err) {
-		return s.createEntry(ctx, src, tgt, srcLang, tgtLang)
-	}
-	if existing.TargetText == tgt && existing.SourceText == src {
-		return nil
-	}
-	return s.client.TMEntry.UpdateOneID(existing.ID).
-		SetSourceText(src).
-		SetTargetText(tgt).
-		Exec(ctx)
-}
-
-func (s *SQLite) createEntry(ctx context.Context, src, tgt, srcLang, tgtLang string) error {
 	key, err := s.scope.key()
 	if err != nil {
 		return err
 	}
-	create := s.client.TMEntry.Create().
-		SetScopeKey(key).
-		SetSourceHash(hash.Full(src)).
-		SetSourceText(src).
-		SetTargetText(tgt).
-		SetSourceLang(srcLang).
-		SetTargetLang(tgtLang).
-		SetProjectID(s.scope.ProjectID)
-	if _, err := create.Save(ctx); err != nil {
-		if ent.IsConstraintError(err) {
-			return nil
-		}
-		return err
+	// Both supported dialects accept numbered parameters. TM has no mutation
+	// or storage hook; explicit defaults retain its published row contract.
+	// Concurrent different translations follow database write order: the last
+	// successful content-changing write wins. A duplicate leaves all fields,
+	// including updated_at, untouched; content changes retain usage and identity.
+	now := timeutil.NowUTC()
+	_, err = s.client.ExecContext(ctx, `INSERT INTO "tm_entries"
+		("created_at", "updated_at", "scope_key", "source_hash", "source_text", "target_text", "source_lang", "target_lang", "usage_count", "project_id")
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9)
+		ON CONFLICT ("scope_key", "source_hash", "source_lang", "target_lang") DO UPDATE SET
+			"source_text" = excluded."source_text",
+			"target_text" = excluded."target_text",
+			"updated_at" = excluded."updated_at"
+		WHERE "tm_entries"."source_text" <> excluded."source_text"
+			OR "tm_entries"."target_text" <> excluded."target_text"`,
+		now, now, key, hash.Full(src), src, tgt, srcLang, tgtLang, s.scope.ProjectID)
+	if err != nil {
+		return fmt.Errorf("tm: upsert entry: %w", err)
 	}
 	return nil
 }
@@ -126,7 +111,7 @@ func (s *SQLite) baseQuery(src, srcLang, tgtLang string) (*ent.TMEntryQuery, err
 }
 
 func (s Scope) key() (string, error) {
-	if s.ProjectID == 0 {
+	if s.ProjectID <= 0 {
 		return "", fmt.Errorf("tm: empty scope")
 	}
 	return fmt.Sprintf("project:%d", s.ProjectID), nil

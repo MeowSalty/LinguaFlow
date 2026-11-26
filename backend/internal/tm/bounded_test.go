@@ -4,7 +4,6 @@ import (
 	"context"
 	stdsql "database/sql"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -30,8 +29,7 @@ func newBoundedTM(t *testing.T, legacyDuplicates bool) (*SQLite, *ent.Client, in
 	if e = client.Schema.Create(context.Background()); e != nil {
 		t.Fatal(e)
 	}
-	// Only this isolated fixture relaxes the modern unique hash index, so the
-	// legacy Search ordering/all-success update contract can be compared.
+	// Only the corruption-refusal test relaxes the published unique index.
 	if legacyDuplicates {
 		if _, e = db.Exec("DROP INDEX tmentry_scope_key_source_hash_source_lang_target_lang"); e != nil {
 			t.Fatal(e)
@@ -68,9 +66,9 @@ func intString(n int) string {
 	return string(b[at:])
 }
 
-func TestBoundedTMOrderAndUsageParity(t *testing.T) {
-	m, client, projectID := newBoundedTM(t, true)
-	ids := []int{addBoundedTMRow(t, client, projectID, "a", 2), addBoundedTMRow(t, client, projectID, "b", 8), addBoundedTMRow(t, client, projectID, "c", 8)}
+func TestBoundedTMExactMatchAndUsageParity(t *testing.T) {
+	m, client, projectID := newBoundedTM(t, false)
+	id := addBoundedTMRow(t, client, projectID, "target", 8)
 	b, _ := backend.NewBuildBounds(1<<20, 1<<20)
 	held := false
 	run := func(_ context.Context, fn func() error) error {
@@ -92,15 +90,11 @@ func TestBoundedTMOrderAndUsageParity(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	want := []Match{{Source: "source", Target: "b", Score: 1}, {Source: "source", Target: "c", Score: 1}, {Source: "source", Target: "a", Score: 1}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got=%v want=%v", got, want)
+	if len(got) != 1 || got[0] != (Match{Source: "source", Target: "target", Score: 1}) {
+		t.Fatalf("matches=%v", got)
 	}
-	for i, id := range ids {
-		row := client.TMEntry.GetX(context.Background(), id)
-		if row.UsageCount != []int{3, 9, 9}[i] {
-			t.Fatalf("usage=%d", row.UsageCount)
-		}
+	if row := client.TMEntry.GetX(context.Background(), id); row.UsageCount != 9 {
+		t.Fatalf("usage=%d", row.UsageCount)
 	}
 }
 
@@ -144,24 +138,29 @@ func TestBoundedTMInputCreditRefusalPrecedesYieldAndUsage(t *testing.T) {
 }
 
 func TestBoundedTMVisitorFailureRollsBackUsage(t *testing.T) {
-	m, client, projectID := newBoundedTM(t, true)
-	ids := []int{addBoundedTMRow(t, client, projectID, "a", 3), addBoundedTMRow(t, client, projectID, "b", 3)}
+	m, client, projectID := newBoundedTM(t, false)
+	id := addBoundedTMRow(t, client, projectID, "target", 3)
 	b, _ := backend.NewBuildBounds(1<<20, 1<<20)
-	calls := 0
 	e := m.VisitMatchesBounded(context.Background(), "source", "en", "zh", b, nil, func(Match) error {
-		calls++
-		if calls == 2 {
-			return backend.ErrBuildCapacity
-		}
-		return nil
+		return backend.ErrBuildCapacity
 	})
 	if !errors.Is(e, backend.ErrBuildCapacity) {
 		t.Fatalf("err=%v", e)
 	}
-	for _, id := range ids {
-		usage, e := client.TMEntry.Query().Where(tmentry.IDEQ(id)).First(context.Background())
-		if e != nil || usage.UsageCount != 3 {
-			t.Fatalf("usage=%v err=%v", usage, e)
-		}
+	usage, e := client.TMEntry.Query().Where(tmentry.IDEQ(id)).First(context.Background())
+	if e != nil || usage.UsageCount != 3 {
+		t.Fatalf("usage=%v err=%v", usage, e)
+	}
+}
+
+func TestBoundedTMRejectsViolatedUniqueKeyBeforeBody(t *testing.T) {
+	m, client, projectID := newBoundedTM(t, true)
+	addBoundedTMRow(t, client, projectID, "a", 3)
+	addBoundedTMRow(t, client, projectID, "b", 3)
+	b, _ := backend.NewBuildBounds(1<<20, 1<<20)
+	yields := 0
+	err := m.VisitMatchesBounded(context.Background(), "source", "en", "zh", b, nil, func(Match) error { yields++; return nil })
+	if err == nil || yields != 0 {
+		t.Fatalf("err=%v yields=%d", err, yields)
 	}
 }

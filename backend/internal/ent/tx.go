@@ -128,6 +128,10 @@ type Tx struct {
 	StorageWrite *StorageWriteClient
 	// SyncTask is the client for interacting with the SyncTask builders.
 	SyncTask *SyncTaskClient
+	// SyncTaskItem is the client for interacting with the SyncTaskItem builders.
+	SyncTaskItem *SyncTaskItemClient
+	// SyncTaskResult is the client for interacting with the SyncTaskResult builders.
+	SyncTaskResult *SyncTaskResultClient
 	// SystemSetting is the client for interacting with the SystemSetting builders.
 	SystemSetting *SystemSettingClient
 	// TMEntry is the client for interacting with the TMEntry builders.
@@ -336,6 +340,8 @@ func (tx *Tx) init() {
 	tx.StorageUploadBatchItem = NewStorageUploadBatchItemClient(tx.config)
 	tx.StorageWrite = NewStorageWriteClient(tx.config)
 	tx.SyncTask = NewSyncTaskClient(tx.config)
+	tx.SyncTaskItem = NewSyncTaskItemClient(tx.config)
+	tx.SyncTaskResult = NewSyncTaskResultClient(tx.config)
 	tx.SystemSetting = NewSystemSettingClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.TranslationPromptTemplate = NewTranslationPromptTemplateClient(tx.config)

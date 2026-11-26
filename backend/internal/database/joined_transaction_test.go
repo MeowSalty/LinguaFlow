@@ -35,6 +35,64 @@ type rollbackJoinTx struct {
 	once sync.Once
 }
 
+type retainedRollbackConnector struct {
+	*rollbackJoinConnector
+	closed chan struct{}
+}
+
+func (c *retainedRollbackConnector) Connect(context.Context) (driver.Conn, error) {
+	return &retainedRollbackConn{rollbackJoinConn: &rollbackJoinConn{c: c.rollbackJoinConnector}, closed: c.closed}, nil
+}
+
+type retainedRollbackConn struct {
+	*rollbackJoinConn
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (*retainedRollbackConn) ResetSession(context.Context) error { return nil }
+func (*retainedRollbackConn) IsValid() bool                      { return true }
+func (c *retainedRollbackConn) Close() error                     { c.once.Do(func() { close(c.closed) }); return nil }
+
+func TestJoinedRollbackDiscardsRetainedGenericDriverAfterCancellation(t *testing.T) {
+	connector := &retainedRollbackConnector{rollbackJoinConnector: &rollbackJoinConnector{entered: make(chan struct{}), release: make(chan struct{})}, closed: make(chan struct{})}
+	db := sql.OpenDB(connector)
+	defer db.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tx, err := beginJoinedTransaction(ctx, db, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	<-connector.entered
+	result := make(chan error, 1)
+	go func() { result <- tx.Rollback() }()
+	select {
+	case err := <-result:
+		close(connector.release)
+		t.Fatal("returned before driver rollback", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(connector.release)
+	select {
+	case err := <-result:
+		if !errors.Is(err, sql.ErrTxDone) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("rollback did not join")
+	}
+	select {
+	case <-connector.closed:
+	default:
+		t.Fatal("uncertain generic connection returned to pool")
+	}
+	if stats := db.Stats(); stats.InUse != 0 {
+		t.Fatalf("generic retained connection leaked: %+v", stats)
+	}
+}
+
 func (*rollbackJoinTx) Commit() error { return nil }
 func (t *rollbackJoinTx) Rollback() error {
 	t.once.Do(func() { close(t.c.entered) })
@@ -76,5 +134,30 @@ func TestJoinedRollbackWaitsForAutomaticDriverRollback(t *testing.T) {
 	}
 	if stats := db.Stats(); stats.InUse != 0 {
 		t.Fatalf("reserved connection leaked: %+v", stats)
+	}
+}
+
+func TestJoinedRollbackSharesOneCleanupBudgetAcrossRepeatedCalls(t *testing.T) {
+	connector := &rollbackJoinConnector{entered: make(chan struct{}), release: make(chan struct{})}
+	db := sql.OpenDB(connector)
+	defer db.Close()
+	tx, err := beginJoinedTransaction(context.Background(), db, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		close(connector.release)
+		select {
+		case <-tx.(*joinedTransaction).done:
+		case <-time.After(time.Second):
+			t.Error("owned cleanup did not finish")
+		}
+	}()
+	if err := tx.Rollback(); !errors.Is(err, ErrTransactionCleanupTimeout) {
+		t.Fatal("stuck rollback was not bounded", err)
+	}
+	start := time.Now()
+	if err := tx.Rollback(); !errors.Is(err, ErrTransactionCleanupTimeout) || time.Since(start) > 100*time.Millisecond {
+		t.Fatalf("repeated rollback reset cleanup budget: %v after %v", err, time.Since(start))
 	}
 }

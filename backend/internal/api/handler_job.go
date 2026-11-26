@@ -159,8 +159,14 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	items := make([]jobResponse, 0, len(jobs))
+	ctx := s.jobSvc.PrepareJobStageObservation(r.Context(), authUser.User.ID, jobs)
+	candidates := make([]service.HistoryDeleteCandidate, 0, len(jobs))
+	for _, row := range jobs {
+		candidates = append(candidates, service.HistoryDeleteCandidate{Kind: "translation", ID: row.ID, ProjectID: row.ProjectID, Status: row.Status})
+	}
+	ctx = s.taskHistory.PrepareDeleteObservation(ctx, authUser.User.ID, candidates)
 	for _, job := range jobs {
-		items = append(items, s.toJobListResponse(r.Context(), authUser.User.ID, job, s.queueInfoForJob(job.ID)))
+		items = append(items, s.toJobListResponse(ctx, authUser.User.ID, job, s.queueInfoForJob(job.ID)))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }

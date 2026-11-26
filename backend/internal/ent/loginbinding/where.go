@@ -100,6 +100,11 @@ func VerifiedLoginPolicyRevision(v int64) predicate.LoginBinding {
 	return predicate.LoginBinding(sql.FieldEQ(FieldVerifiedLoginPolicyRevision, v))
 }
 
+// EvidenceExpiresAt applies equality check predicate on the "evidence_expires_at" field. It's identical to EvidenceExpiresAtEQ.
+func EvidenceExpiresAt(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldEQ(FieldEvidenceExpiresAt, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.LoginBinding {
 	return predicate.LoginBinding(sql.FieldEQ(FieldCreatedAt, v))
@@ -473,6 +478,56 @@ func EvidenceIsNil() predicate.LoginBinding {
 // EvidenceNotNil applies the NotNil predicate on the "evidence" field.
 func EvidenceNotNil() predicate.LoginBinding {
 	return predicate.LoginBinding(sql.FieldNotNull(FieldEvidence))
+}
+
+// EvidenceExpiresAtEQ applies the EQ predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtEQ(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldEQ(FieldEvidenceExpiresAt, v))
+}
+
+// EvidenceExpiresAtNEQ applies the NEQ predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtNEQ(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNEQ(FieldEvidenceExpiresAt, v))
+}
+
+// EvidenceExpiresAtIn applies the In predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtIn(vs ...time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldIn(FieldEvidenceExpiresAt, vs...))
+}
+
+// EvidenceExpiresAtNotIn applies the NotIn predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtNotIn(vs ...time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNotIn(FieldEvidenceExpiresAt, vs...))
+}
+
+// EvidenceExpiresAtGT applies the GT predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtGT(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldGT(FieldEvidenceExpiresAt, v))
+}
+
+// EvidenceExpiresAtGTE applies the GTE predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtGTE(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldGTE(FieldEvidenceExpiresAt, v))
+}
+
+// EvidenceExpiresAtLT applies the LT predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtLT(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldLT(FieldEvidenceExpiresAt, v))
+}
+
+// EvidenceExpiresAtLTE applies the LTE predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtLTE(v time.Time) predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldLTE(FieldEvidenceExpiresAt, v))
+}
+
+// EvidenceExpiresAtIsNil applies the IsNil predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtIsNil() predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldIsNull(FieldEvidenceExpiresAt))
+}
+
+// EvidenceExpiresAtNotNil applies the NotNil predicate on the "evidence_expires_at" field.
+func EvidenceExpiresAtNotNil() predicate.LoginBinding {
+	return predicate.LoginBinding(sql.FieldNotNull(FieldEvidenceExpiresAt))
 }
 
 // HasUser applies the HasEdge predicate on the "user" edge.

@@ -42,6 +42,8 @@ type LoginBinding struct {
 	VerifiedLoginPolicyRevision int64 `json:"verified_login_policy_revision,omitempty"`
 	// Evidence holds the value of the "evidence" field.
 	Evidence authrules.Evidence `json:"-"`
+	// EvidenceExpiresAt holds the value of the "evidence_expires_at" field.
+	EvidenceExpiresAt *time.Time `json:"evidence_expires_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the LoginBindingQuery when eager-loading is set.
 	Edges        LoginBindingEdges `json:"edges"`
@@ -116,7 +118,7 @@ func (*LoginBinding) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case loginbinding.FieldConnectionID:
 			values[i] = new(sql.NullString)
-		case loginbinding.FieldCreatedAt, loginbinding.FieldUpdatedAt, loginbinding.FieldLastUsedAt, loginbinding.FieldLastVerifiedAt:
+		case loginbinding.FieldCreatedAt, loginbinding.FieldUpdatedAt, loginbinding.FieldLastUsedAt, loginbinding.FieldLastVerifiedAt, loginbinding.FieldEvidenceExpiresAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -202,6 +204,13 @@ func (_m *LoginBinding) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.Evidence); err != nil {
 					return fmt.Errorf("unmarshal field evidence: %w", err)
 				}
+			}
+		case loginbinding.FieldEvidenceExpiresAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field evidence_expires_at", values[i])
+			} else if value.Valid {
+				_m.EvidenceExpiresAt = new(time.Time)
+				*_m.EvidenceExpiresAt = value.Time
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -291,6 +300,11 @@ func (_m *LoginBinding) String() string {
 	builder.WriteString(fmt.Sprintf("%v", _m.VerifiedLoginPolicyRevision))
 	builder.WriteString(", ")
 	builder.WriteString("evidence=<sensitive>")
+	builder.WriteString(", ")
+	if v := _m.EvidenceExpiresAt; v != nil {
+		builder.WriteString("evidence_expires_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }

@@ -693,6 +693,30 @@ func (f SyncTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, er
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SyncTaskMutation", m)
 }
 
+// The SyncTaskItemFunc type is an adapter to allow the use of ordinary
+// function as SyncTaskItem mutator.
+type SyncTaskItemFunc func(context.Context, *ent.SyncTaskItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SyncTaskItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SyncTaskItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SyncTaskItemMutation", m)
+}
+
+// The SyncTaskResultFunc type is an adapter to allow the use of ordinary
+// function as SyncTaskResult mutator.
+type SyncTaskResultFunc func(context.Context, *ent.SyncTaskResultMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SyncTaskResultFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SyncTaskResultMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SyncTaskResultMutation", m)
+}
+
 // The SystemSettingFunc type is an adapter to allow the use of ordinary
 // function as SystemSetting mutator.
 type SystemSettingFunc func(context.Context, *ent.SystemSettingMutation) (ent.Value, error)

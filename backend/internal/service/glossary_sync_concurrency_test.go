@@ -88,17 +88,8 @@ func TestGlossarySyncSQLiteSchemaUpgradePreservesHistory(t *testing.T) {
 	client.SyncTask.UpdateOneID(pending.ID).SetResult("").ExecX(ctx)
 	history := f.submit(t)
 	history = client.SyncTask.UpdateOneID(history.ID).SetStatus(SyncTaskStatusCompleted).SaveX(ctx)
-	// Recreate the pre-P4 shape while retaining real historical rows. Running
-	// schema migration afterwards must add fields without replacing their data.
-	for _, statement := range []string{
-		"ALTER TABLE sync_tasks DROP COLUMN started_at",
-		"ALTER TABLE sync_tasks DROP COLUMN checkpoint_version",
-		"ALTER TABLE sync_tasks DROP COLUMN next_segment_index",
-	} {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Published JSON conversion is covered by the database migration tests.
+	// Reapplying the final schema must preserve both the plan and task history.
 	for i := 0; i < 2; i++ {
 		if err := client.Schema.Create(ctx); err != nil {
 			t.Fatal(err)
@@ -108,7 +99,7 @@ func TestGlossarySyncSQLiteSchemaUpgradePreservesHistory(t *testing.T) {
 		}
 	}
 	row := client.SyncTask.GetX(ctx, pending.ID)
-	if row.Status != SyncTaskStatusPending || row.CheckpointVersion != 1 || row.StartedAt != nil || !row.CreatedAt.Equal(pending.CreatedAt) {
+	if row.Status != SyncTaskStatusPending || row.CheckpointVersion != syncCheckpointVersion || row.StartedAt != nil || !row.CreatedAt.Equal(pending.CreatedAt) {
 		t.Fatalf("pending migration=%+v", row)
 	}
 	row = client.SyncTask.GetX(ctx, history.ID)
