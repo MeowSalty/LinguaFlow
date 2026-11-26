@@ -286,6 +286,32 @@ func captureTableBaseline(ctx context.Context, q baselineQueryer, p *operation.P
 	return evidence, changes, nil
 }
 
+func parseSyncTaskInt(value any, field string) (int, error) {
+	var parsed int64
+	var err error
+	switch current := value.(type) {
+	case int:
+		parsed = int64(current)
+	case int64:
+		parsed = current
+	case json.Number:
+		parsed, err = current.Int64()
+	case string:
+		parsed, err = strconv.ParseInt(current, 10, 64)
+	case []byte:
+		parsed, err = strconv.ParseInt(string(current), 10, 64)
+	default:
+		return 0, operation.Fail(operation.UnsupportedSource, "sync_tasks."+field+" must be an integer")
+	}
+	if err != nil {
+		return 0, operation.Fail(operation.UnsupportedSource, "sync_tasks."+field+" is not a valid integer")
+	}
+	if parsed < math.MinInt || parsed > math.MaxInt {
+		return 0, operation.Fail(operation.UnsupportedSource, "sync_tasks."+field+" is outside the int range")
+	}
+	return int(parsed), nil
+}
+
 func expectedMutableValues(ctx context.Context, q baselineQueryer, p *operation.Plan, table string, id int, row map[string]any, conversionTime time.Time) (map[string]any, error) {
 	values := map[string]any{}
 	if table == "sync_tasks" {
@@ -296,7 +322,27 @@ func expectedMutableValues(ctx context.Context, q baselineQueryer, p *operation.
 			values["segment_ids"], values["resource_ids"] = nil, nil
 			status := stringValue(row["status"])
 			if status == "pending" || status == "running" {
-				trusted, message := database.PublishedSyncRecovery(database.PublishedSyncCheckpoint{Status: status, SegmentIDs: stringValue(row["segment_ids"]), ResourceIDs: stringValue(row["resource_ids"]), Result: stringValue(row["result"]), TotalSegments: int(int64Value(row["total_segments"])), ProcessedSegments: int(int64Value(row["processed_segments"])), CheckpointVersion: int(int64Value(row["checkpoint_version"])), NextSegmentIndex: int(int64Value(row["next_segment_index"])), Started: row["started_at"] != nil, Cancelled: row["cancelled_at"] != nil})
+				total, err := parseSyncTaskInt(row["total_segments"], "total_segments")
+				if err != nil {
+					return nil, fmt.Errorf("sync task %d: %w", id, err)
+				}
+				processed, err := parseSyncTaskInt(row["processed_segments"], "processed_segments")
+				if err != nil {
+					return nil, fmt.Errorf("sync task %d: %w", id, err)
+				}
+				checkpoint, err := parseSyncTaskInt(row["checkpoint_version"], "checkpoint_version")
+				if err != nil {
+					return nil, fmt.Errorf("sync task %d: %w", id, err)
+				}
+				next, err := parseSyncTaskInt(row["next_segment_index"], "next_segment_index")
+				if err != nil {
+					return nil, fmt.Errorf("sync task %d: %w", id, err)
+				}
+				trusted, message := database.PublishedSyncRecovery(database.PublishedSyncCheckpoint{
+					Status: status, SegmentIDs: stringValue(row["segment_ids"]), ResourceIDs: stringValue(row["resource_ids"]), Result: stringValue(row["result"]),
+					TotalSegments: total, ProcessedSegments: processed, CheckpointVersion: checkpoint, NextSegmentIndex: next,
+					Started: row["started_at"] != nil, Cancelled: row["cancelled_at"] != nil,
+				})
 				if trusted {
 					values["checkpoint_version"] = int64(2)
 					values["result"] = ""
