@@ -509,3 +509,44 @@ func TestStagedMainContinuesWhileAlignmentIsBlocked(t *testing.T) {
 		t.Fatalf("unexpected retries: main=%d alignment=%d", mainCalls.Load(), alignmentCalls.Load())
 	}
 }
+
+func TestStagedMainAdvancesPoolBeforeRequestBudgetOverflow(t *testing.T) {
+	ctx := context.Background()
+	r := stagedTestRuntime(t, DefaultCandidateLimits())
+	var reserves atomic.Int64
+	memory := NewMemoryRoundStore(nil)
+	store := &runtimeTestStore{RoundStore: memory, reserve: func(ctx context.Context, intent RequestIntent) error {
+		reserves.Add(1)
+		if intent.Pool == 0 && intent.Attempt >= 2 {
+			return errors.New("request attempt budget exhausted")
+		}
+		return memory.Reserve(ctx, intent)
+	}, record: func(ctx context.Context, id string, record RequestRecord) error {
+		return memory.Record(ctx, id, record)
+	}, sent: func(ctx context.Context, id string, record RequestRecord) error {
+		return memory.Record(ctx, id, record)
+	}, complete: func(ctx context.Context, id string, record RequestRecord) error {
+		return memory.Record(ctx, id, record)
+	}}
+	if _, err := memory.Seal(ctx, []int{0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := memory.Cursors(ctx, []CursorTransition{{Index: 0, Cursor: WorkCursor{Pool: 0, Attempt: 2, State: "pending"}}}); err != nil {
+		t.Fatal(err)
+	}
+	main := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+		return &backend.Response{Text: `{"translations":{"1":"translated"}}`}, nil
+	}}
+	h := stagedTestHandler(t, r, main)
+	h.Retry = backend.RetryPolicy{MaxAttempts: 1}
+	result, err := RunStagedRound(ctx, Round{Runtime: r, Store: store, Concurrency: 1, Retry: h.Retry, Handler: h}, newTestDoc(1), store, r, quietLogger(), progress.Nop{})
+	if err != nil {
+		t.Fatalf("run returned an infrastructure error after retry exhaustion: %v", err)
+	}
+	if main.calls.Load() != 1 || reserves.Load() != 1 {
+		t.Fatalf("calls=%d reserves=%d, want one request after pool advance", main.calls.Load(), reserves.Load())
+	}
+	if len(result.Resolved) != 1 || len(result.Unresolved) != 0 {
+		t.Fatalf("result=%+v, want one resolved member", result)
+	}
+}
