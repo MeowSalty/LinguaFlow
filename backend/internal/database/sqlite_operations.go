@@ -17,13 +17,12 @@ var ErrSQLiteOperationPending = errors.New("SQLite operation cancellation return
 var ErrSQLiteConnectionDiscarded = errors.New("SQLite connection quarantined; transaction cannot commit")
 
 type sqliteOperation struct {
-	mu                                 sync.Mutex
-	finished, abandoned, cleanup, stop bool
-	work                               func() (any, error)
-	discard                            func(any)
-	value                              any
-	err                                error
-	done                               chan struct{}
+	mu                      sync.Mutex
+	finished, cleanup, stop bool
+	work                    func() (any, error)
+	value                   any
+	err                     error
+	done                    chan struct{}
 }
 
 type sqliteOperations struct {
@@ -166,9 +165,6 @@ func (c *observedConn) startSQLiteOperations() {
 				value, err = job.work()
 			}
 			job.mu.Lock()
-			if job.abandoned && job.discard != nil && value != nil {
-				job.discard(value)
-			}
 			job.value, job.err, job.finished = value, err, true
 			close(job.done)
 			job.mu.Unlock()
@@ -184,7 +180,7 @@ func (c *observedConn) startSQLiteOperations() {
 	}()
 }
 
-func sqliteCall[T any](c *observedConn, ctx context.Context, cleanup bool, work func() (T, error), discard func(T)) (T, error) {
+func sqliteCall[T any](c *observedConn, ctx context.Context, cleanup bool, work func() (T, error)) (T, error) {
 	var zero T
 	if c.sqlite == nil {
 		return work()
@@ -193,9 +189,6 @@ func sqliteCall[T any](c *observedConn, ctx context.Context, cleanup bool, work 
 		return zero, err
 	}
 	job := &sqliteOperation{done: make(chan struct{}), cleanup: cleanup, work: func() (any, error) { return work() }}
-	if discard != nil {
-		job.discard = func(value any) { discard(value.(T)) }
-	}
 	select {
 	case c.sqlite.jobs <- job:
 	case <-ctx.Done():
@@ -208,7 +201,8 @@ func sqliteCall[T any](c *observedConn, ctx context.Context, cleanup bool, work 
 	case <-ctx.Done():
 		job.mu.Lock()
 		if !job.finished {
-			job.abandoned = true
+			// The worker owns every returned native object, even when its
+			// caller has left. Discard registers its final cleanup job.
 			c.discard()
 			job.mu.Unlock()
 			return zero, errors.Join(ctx.Err(), ErrSQLiteOperationPending)
@@ -225,15 +219,16 @@ func (c *observedConn) cleanupSQLite(work func() error) error {
 	if c.sqlite == nil {
 		return work()
 	}
-	if c.bad.Load() {
+	if c.bad.Load() || c.sqlite.closing.Load() {
 		// database/sql closes rows and prepared statements synchronously after
-		// Next fails. Waiting here would undo the caller's bounded return.
-		go func() {
-			_, _ = sqliteCall(c, context.Background(), true, func() (struct{}, error) { return struct{}{}, work() }, nil)
-		}()
+		// Next fails. The final stop job owns their cleanup; queuing individual
+		// closers would race that job and undo the caller's bounded return.
+		if c.bad.Load() {
+			_ = c.Close()
+		}
 		return nil
 	}
-	_, err := sqliteCall(c, context.Background(), true, func() (struct{}, error) { return struct{}{}, work() }, nil)
+	_, err := sqliteCall(c, context.Background(), true, func() (struct{}, error) { return struct{}{}, work() })
 	return err
 }
 
@@ -265,7 +260,12 @@ func (c *observedConn) Close() error {
 		}()
 	})
 	if c.bad.Load() {
-		return nil
+		select {
+		case <-c.sqlite.closed:
+			return c.sqlite.closeErr
+		default:
+			return nil
+		}
 	}
 	<-c.sqlite.closed
 	return c.sqlite.closeErr

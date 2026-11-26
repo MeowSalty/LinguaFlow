@@ -53,13 +53,13 @@ func (c observedConnector) Connect(ctx context.Context) (driver.Conn, error) {
 		}
 		wrapped.startSQLiteOperations()
 		_, err := sqliteCall(wrapped, ctx, false, func() (struct{}, error) {
-			conn, err := c.Connector.Connect(ctx)
+			conn, err := c.Connector.Connect(wrapped.nativeContext(ctx))
+			wrapped.Conn = conn
 			if err != nil {
 				return struct{}{}, err
 			}
-			wrapped.Conn = conn
 			return struct{}{}, wrapped.initializeBusy(ctx)
-		}, nil)
+		})
 		if err != nil {
 			_ = wrapped.Close()
 			return nil, err
@@ -88,7 +88,23 @@ type observedConn struct {
 	pool             *sqlitePoolOperations
 }
 
-func (c *observedConn) discard() { c.bad.Store(true) }
+func (c *observedConn) discard() {
+	c.bad.Store(true)
+	if c.sqlite != nil {
+		_ = c.Close()
+	}
+}
+
+// SQLite cancellation is owned by sqliteCall. modernc otherwise installs an
+// interrupt callback whose lifetime can overlap subsequent native cleanup.
+// Values still reach the driver; the original context controls observation,
+// busy_timeout and the wrapper's return deadline.
+func (c *observedConn) nativeContext(ctx context.Context) context.Context {
+	if c.sqlite != nil {
+		return context.WithoutCancel(ctx)
+	}
+	return ctx
+}
 func (c *observedConn) isValidNative() bool {
 	if c.bad.Load() {
 		return false
@@ -103,7 +119,7 @@ func (c *observedConn) resetSessionNative(ctx context.Context) error {
 		return driver.ErrBadConn
 	}
 	if r, ok := c.Conn.(driver.SessionResetter); ok {
-		return r.ResetSession(ctx)
+		return r.ResetSession(c.nativeContext(ctx))
 	}
 	return nil
 }
@@ -115,7 +131,7 @@ func (c *observedConn) checkNamedValueNative(v *driver.NamedValue) error {
 }
 func (c *observedConn) pingNative(ctx context.Context) error {
 	if p, ok := c.Conn.(driver.Pinger); ok {
-		return p.Ping(ctx)
+		return p.Ping(c.nativeContext(ctx))
 	}
 	return nil
 }
@@ -133,6 +149,9 @@ func (c *observedConn) newBackupNative(uri string) (*sqlite.Backup, error) {
 func (c *observedConn) prepareNative(query string) (driver.Stmt, error) {
 	stmt, err := c.Conn.Prepare(query)
 	if err != nil {
+		if stmt != nil {
+			err = joinDriverErrors(err, c.wrapStmt(stmt).closeNative())
+		}
 		return nil, err
 	}
 	return c.wrapStmt(stmt), nil
@@ -142,16 +161,20 @@ func (c *observedConn) prepareContextNative(ctx context.Context, query string) (
 		return nil, err
 	}
 	if p, ok := c.Conn.(driver.ConnPrepareContext); ok {
-		stmt, err := p.PrepareContext(ctx, query)
+		stmt, err := p.PrepareContext(c.nativeContext(ctx), query)
+		var wrapped *observedStmt
+		if stmt != nil {
+			wrapped = c.wrapStmt(stmt)
+		}
 		err = c.busyError(ctx, err)
 		err = joinDriverErrors(err, c.restoreBusy(ctx))
 		if err != nil {
-			if stmt != nil {
-				_ = stmt.Close()
+			if wrapped != nil {
+				err = joinDriverErrors(err, wrapped.closeNative())
 			}
 			return nil, err
 		}
-		return c.wrapStmt(stmt), nil
+		return wrapped, nil
 	}
 	stmt, err := c.prepareNative(query)
 	return stmt, joinDriverErrors(err, c.restoreBusy(ctx))
@@ -167,7 +190,7 @@ func (c *observedConn) beginTxNative(ctx context.Context, opts driver.TxOptions)
 	var tx driver.Tx
 	var err error
 	if b, ok := c.Conn.(driver.ConnBeginTx); ok {
-		tx, err = b.BeginTx(ctx, opts)
+		tx, err = b.BeginTx(c.nativeContext(ctx), opts)
 	} else {
 		if opts.Isolation != 0 || opts.ReadOnly {
 			return nil, errors.New("database driver does not support transaction options")
@@ -175,11 +198,18 @@ func (c *observedConn) beginTxNative(ctx context.Context, opts driver.TxOptions)
 		tx, err = c.Conn.Begin()
 	}
 	persistence.ObserveDatabase(ctx, "driver_begin", "", c.dialect, time.Since(start), err, 0)
-	if err != nil {
-		return nil, joinDriverErrors(c.busyError(ctx, err), c.restoreBusy(ctx))
+	var wrapped *observedTransaction
+	if tx != nil {
+		wrapped = &observedTransaction{Tx: tx, conn: c, ctx: ctx, start: start, finished: make(chan struct{})}
+		c.activeTx, c.lastTx = wrapped, wrapped
 	}
-	wrapped := &observedTransaction{Tx: tx, conn: c, ctx: ctx, start: start, finished: make(chan struct{})}
-	c.activeTx, c.lastTx = wrapped, wrapped
+	if err != nil {
+		err = c.busyError(ctx, err)
+		if wrapped != nil {
+			err = joinDriverErrors(err, wrapped.rollbackNative())
+		}
+		return nil, joinDriverErrors(err, c.restoreBusy(ctx))
+	}
 	return wrapped, nil
 }
 func (c *observedConn) execContextNative(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
@@ -191,7 +221,7 @@ func (c *observedConn) execContextNative(ctx context.Context, query string, args
 		return nil, err
 	}
 	start := time.Now()
-	result, err := e.ExecContext(ctx, query, args)
+	result, err := e.ExecContext(c.nativeContext(ctx), query, args)
 	err = c.busyError(ctx, err)
 	if !errors.Is(err, driver.ErrSkip) {
 		persistence.ObserveDatabase(ctx, "driver_exec", "", c.dialect, time.Since(start), err, 0)
@@ -207,17 +237,21 @@ func (c *observedConn) queryContextNative(ctx context.Context, query string, arg
 		return nil, err
 	}
 	start := time.Now()
-	rows, err := q.QueryContext(ctx, query, args)
+	rows, err := q.QueryContext(c.nativeContext(ctx), query, args)
+	var wrapped *observedRows
+	if rows != nil {
+		wrapped = c.wrapRows(ctx, rows, start)
+	}
 	err = c.busyError(ctx, err)
 	if !errors.Is(err, driver.ErrSkip) {
 		persistence.ObserveDatabase(ctx, "driver_query", "", c.dialect, time.Since(start), err, 0)
 	}
 	if err != nil {
+		if wrapped != nil {
+			err = joinDriverErrors(err, wrapped.closeNative())
+		}
 		return nil, joinDriverErrors(err, c.restoreBusy(ctx))
 	}
-	wrapped := newObservedRows(ctx, rows, c.dialect, start)
-	wrapped.conn = c
-	c.trackRows(wrapped)
 	return wrapped, nil
 }
 
@@ -287,10 +321,12 @@ func (c *observedConn) transactionCleanup() (<-chan struct{}, func() error) {
 
 type observedStmt struct {
 	driver.Stmt
-	dialect  string
-	conn     *observedConn
-	closed   bool
-	numInput int
+	dialect      string
+	conn         *observedConn
+	closeOnce    sync.Once
+	closeErr     error
+	nativeClosed atomic.Bool
+	numInput     int
 }
 
 func (s *observedStmt) execNative(args []driver.Value) (driver.Result, error) {
@@ -314,7 +350,11 @@ func (s *observedStmt) execContextNative(ctx context.Context, args []driver.Name
 	var result driver.Result
 	var err error
 	if e, ok := s.Stmt.(driver.StmtExecContext); ok {
-		result, err = e.ExecContext(ctx, args)
+		nativeCtx := ctx
+		if s.conn != nil {
+			nativeCtx = s.conn.nativeContext(ctx)
+		}
+		result, err = e.ExecContext(nativeCtx, args)
 	} else {
 		values := make([]driver.Value, len(args))
 		for i, v := range args {
@@ -338,7 +378,11 @@ func (s *observedStmt) queryContextNative(ctx context.Context, args []driver.Nam
 	var rows driver.Rows
 	var err error
 	if q, ok := s.Stmt.(driver.StmtQueryContext); ok {
-		rows, err = q.QueryContext(ctx, args)
+		nativeCtx := ctx
+		if s.conn != nil {
+			nativeCtx = s.conn.nativeContext(ctx)
+		}
+		rows, err = q.QueryContext(nativeCtx, args)
 	} else {
 		values := make([]driver.Value, len(args))
 		for i, v := range args {
@@ -351,29 +395,43 @@ func (s *observedStmt) queryContextNative(ctx context.Context, args []driver.Nam
 		if s.conn != nil {
 			err = joinDriverErrors(s.conn.busyError(ctx, err), s.conn.restoreBusy(ctx))
 		}
+		if rows != nil {
+			wrapped := s.wrapRows(ctx, rows, start)
+			err = joinDriverErrors(err, wrapped.closeNative())
+		}
 		return nil, err
 	}
-	wrapped := newObservedRows(ctx, rows, s.dialect, start)
-	wrapped.conn = s.conn
+	return s.wrapRows(ctx, rows, start), nil
+}
+
+func (s *observedStmt) wrapRows(ctx context.Context, rows driver.Rows, start time.Time) *observedRows {
 	if s.conn != nil {
-		s.conn.trackRows(wrapped)
+		return s.conn.wrapRows(ctx, rows, start)
 	}
-	return wrapped, nil
+	return newObservedRows(ctx, rows, s.dialect, start)
+}
+
+func (c *observedConn) wrapRows(ctx context.Context, rows driver.Rows, start time.Time) *observedRows {
+	wrapped := newObservedRows(ctx, rows, c.dialect, start)
+	wrapped.conn = c
+	c.trackRows(wrapped)
+	return wrapped
 }
 
 type rawRowsBudgetKey struct{}
 type observedRows struct {
 	driver.Rows
-	ctx      context.Context
-	dialect  string
-	start    time.Time
-	once     sync.Once
-	count    uint64
-	err      error
-	conn     *observedConn
-	closed   bool
-	columns  []string
-	metadata []rowColumnMetadata
+	ctx          context.Context
+	dialect      string
+	start        time.Time
+	closeOnce    sync.Once
+	closeErr     error
+	nativeClosed atomic.Bool
+	count        uint64
+	err          error
+	conn         *observedConn
+	columns      []string
+	metadata     []rowColumnMetadata
 }
 
 func newObservedRows(ctx context.Context, rows driver.Rows, dialect string, start time.Time) *observedRows {
@@ -398,24 +456,21 @@ func (r *observedRows) nextNative(values []driver.Value) error {
 	return err
 }
 func (r *observedRows) closeNative() error {
-	if r.closed {
-		return nil
-	}
-	r.closed = true
-	if r.conn != nil && r.conn.sqlite != nil {
-		delete(r.conn.sqlite.rows, r)
-	}
-	err := r.Rows.Close()
-	if r.conn != nil {
-		err = errors.Join(err, r.conn.restoreBusy(r.ctx))
-	}
-	r.once.Do(func() {
-		persistence.ObserveDatabase(r.ctx, "driver_rows", "close", r.dialect, time.Since(r.start), errors.Join(r.err, err, r.ctx.Err()), r.count)
+	r.closeOnce.Do(func() {
+		r.closeErr = r.Rows.Close()
+		if r.conn != nil {
+			r.closeErr = errors.Join(r.closeErr, r.conn.restoreBusy(r.ctx))
+			if r.conn.sqlite != nil {
+				delete(r.conn.sqlite.rows, r)
+			}
+		}
+		persistence.ObserveDatabase(r.ctx, "driver_rows", "close", r.dialect, time.Since(r.start), errors.Join(r.err, r.closeErr, r.ctx.Err()), r.count)
 		if cancel, ok := r.ctx.Value(rawRowsBudgetKey{}).(context.CancelFunc); ok {
 			cancel()
 		}
+		r.nativeClosed.Store(true)
 	})
-	return err
+	return r.closeErr
 }
 func (r *observedRows) HasNextResultSet() bool {
 	if r.conn != nil && r.conn.sqlite != nil {
@@ -424,7 +479,7 @@ func (r *observedRows) HasNextResultSet() bool {
 				return n.HasNextResultSet(), nil
 			}
 			return false, nil
-		}, nil)
+		})
 		return err == nil && value
 	}
 	if n, ok := r.Rows.(driver.RowsNextResultSet); ok {
@@ -439,7 +494,7 @@ func (r *observedRows) NextResultSet() error {
 				return struct{}{}, n.NextResultSet()
 			}
 			return struct{}{}, io.EOF
-		}, nil)
+		})
 		return err
 	}
 	if n, ok := r.Rows.(driver.RowsNextResultSet); ok {

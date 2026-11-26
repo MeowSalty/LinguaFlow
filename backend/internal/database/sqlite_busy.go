@@ -54,9 +54,12 @@ func (c *observedConn) initializeBusy(ctx context.Context) error {
 		return nil
 	}
 	start := time.Now()
-	rows, err := q.QueryContext(ctx, "PRAGMA busy_timeout", nil)
+	rows, err := q.QueryContext(c.nativeContext(ctx), "PRAGMA busy_timeout", nil)
 	persistence.ObserveDatabase(ctx, "driver_policy_query", "", c.dialect, time.Since(start), err, 0)
 	if err != nil {
+		if rows != nil {
+			err = joinDriverErrors(err, rows.Close())
+		}
 		return err
 	}
 	values := make([]driver.Value, 1)
@@ -128,7 +131,7 @@ func (c *observedConn) setBusy(execCtx, observationCtx context.Context, value in
 		return errors.New("SQLite driver cannot set busy timeout")
 	}
 	start := time.Now()
-	_, err := e.ExecContext(execCtx, fmt.Sprintf("PRAGMA busy_timeout=%d", value), nil)
+	_, err := e.ExecContext(c.nativeContext(execCtx), fmt.Sprintf("PRAGMA busy_timeout=%d", value), nil)
 	persistence.ObserveDatabase(observationCtx, "driver_policy_exec", "", c.dialect, time.Since(start), err, 0)
 	if err == nil {
 		c.busy.current = value
