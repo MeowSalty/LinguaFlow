@@ -637,14 +637,14 @@ func runPool(
 						checkpointCtx = runCtx
 					}
 					if err := barrier.FlushCheckpoint(checkpointCtx); err != nil {
-						failCheckpoint(&StorageError{Err: err})
+						failCheckpoint(&StorageError{Operation: "checkpoint", Err: err})
 						return
 					}
 				} else {
 					reporter.BatchComplete()
 					if checked, ok := reporter.(interface{ StageError() error }); ok {
 						if err := checked.StageError(); err != nil {
-							failCheckpoint(&StorageError{Err: err})
+							failCheckpoint(&StorageError{Operation: "checkpoint", Err: err})
 							return
 						}
 					}

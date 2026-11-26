@@ -873,7 +873,7 @@ func (r *JobRunner) processJobResource(
 	defer func() {
 		if err := reporter.Close(); err != nil {
 			r.logger.Error("job progress final flush failed", "job_id", exec.Job.ID, "job_resource_id", item.ID, "err", err)
-			retErr = errors.Join(retErr, &pipeline.StorageError{Err: err})
+			retErr = errors.Join(retErr, &pipeline.StorageError{Operation: "checkpoint", Err: err})
 		}
 	}()
 

@@ -806,16 +806,53 @@ func (r *ExecutionRuntime) SaveNamed(ctx context.Context, meta persistence.Metad
 		ctx = persistence.WithObserver(ctx, persistence.Fanout(persistence.ObserverFromContext(ctx), r.Observer))
 	}
 	if err := r.saveScheduler().Save(ctx, meta, fn); err != nil {
-		return &StorageError{Err: err}
+		return &StorageError{Operation: meta.Operation, Err: err}
 	}
 	return nil
 }
 
 // StorageError is permanent with respect to model retries. Save already retried
 // transient local failures; returning this error must abort the execution run.
-type StorageError struct{ Err error }
+type StorageError struct {
+	Operation string
+	Err       error
+}
 
-func (e *StorageError) Error() string { return fmt.Sprintf("candidate persistence failed: %v", e.Err) }
+func (e *StorageError) Error() string {
+	// Keep direct legacy constructions compatible; SaveNamed supplies the
+	// operation for all production persistence calls.
+	label := "candidate"
+	switch e.Operation {
+	case "reserve":
+		label = "request reservation"
+	case "record", "sent", "received", "failed", "completed":
+		label = "request accounting"
+	case "abort":
+		label = "request abort"
+	case "candidate":
+		label = "candidate"
+	case "commit":
+		label = "candidate commit"
+	case "retire":
+		label = "candidate retirement"
+	case "checkpoint":
+		label = "checkpoint"
+	case "stage_initialize":
+		label = "round initialization"
+	case "pool_advance":
+		label = "pool advance"
+	case "handoff":
+		label = "response handoff"
+	case "seal":
+		label = "round sealing"
+	case "":
+		// Preserve the legacy candidate-persistence wording for direct
+		// constructions that do not carry operation metadata.
+	default:
+		label = e.Operation
+	}
+	return fmt.Sprintf("%s persistence failed: %v", label, e.Err)
+}
 func (e *StorageError) Unwrap() error { return e.Err }
 func (*StorageError) Permanent() bool { return true }
 func storageFailure(err error) bool   { var s *StorageError; return errors.As(err, &s) }
@@ -904,7 +941,7 @@ func (s *requestSession) finish() (err error) {
 // source remains alive for later consumers. Physical release belongs to finish.
 func (s *requestSession) complete() error {
 	if s.handoffExpired.Load() {
-		return s.fail(&StorageError{Err: context.DeadlineExceeded})
+		return s.fail(&StorageError{Operation: "handoff", Err: context.DeadlineExceeded})
 	}
 	if s.err != nil {
 		return s.err
@@ -1020,7 +1057,7 @@ func (s *requestSession) acquireParse(ctx context.Context) error {
 
 func (s *requestSession) fail(err error) error {
 	if s.handoffExpired.Load() {
-		err = &StorageError{Err: errors.Join(err, context.DeadlineExceeded)}
+		err = &StorageError{Operation: "handoff", Err: errors.Join(err, context.DeadlineExceeded)}
 	}
 	if workDeferred(err) != nil {
 		return err
@@ -1069,7 +1106,7 @@ func (b *requestBackend) Translate(ctx context.Context, req backend.Request) (*b
 		d := workDeferred(err)
 		s, _ := ctx.Value(requestSessionKey{}).(*requestSession)
 		if s != nil && s.handoffExpired.Load() {
-			return nil, s.fail(&StorageError{Err: context.DeadlineExceeded})
+			return nil, s.fail(&StorageError{Operation: "handoff", Err: context.DeadlineExceeded})
 		}
 		canDefer := coordinatorPreparation(ctx) && (s == nil || s.calls == 0)
 		if d == nil || canDefer {

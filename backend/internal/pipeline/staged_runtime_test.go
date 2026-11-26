@@ -17,6 +17,28 @@ type runtimeTestBackend struct {
 	call  func(context.Context) (*backend.Response, error)
 }
 
+func TestStorageErrorNamesPersistenceOperation(t *testing.T) {
+	cause := errors.New("request attempt budget exhausted")
+	for _, tc := range []struct {
+		operation string
+		want      string
+	}{
+		{operation: "reserve", want: "request reservation persistence failed: request attempt budget exhausted"},
+		{operation: "candidate", want: "candidate persistence failed: request attempt budget exhausted"},
+		{operation: "checkpoint", want: "checkpoint persistence failed: request attempt budget exhausted"},
+	} {
+		t.Run(tc.operation, func(t *testing.T) {
+			err := &StorageError{Operation: tc.operation, Err: cause}
+			if got := err.Error(); got != tc.want {
+				t.Fatalf("StorageError.Error() = %q, want %q", got, tc.want)
+			}
+			if !errors.Is(err, cause) {
+				t.Fatal("StorageError no longer unwraps its cause")
+			}
+		})
+	}
+}
+
 func (*runtimeTestBackend) Name() string { return "runtime-test" }
 func (*runtimeTestBackend) Close() error { return nil }
 func (b *runtimeTestBackend) Translate(ctx context.Context, _ backend.Request) (*backend.Response, error) {
