@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -141,6 +142,24 @@ func TestBatchReservationRollsBackEveryMemberOnFinalMemberFailure(t *testing.T) 
 				t.Fatal("rejected batch left an earlier member debited")
 			}
 		})
+	}
+}
+
+func TestRequestBudgetErrorIncludesReservationContext(t *testing.T) {
+	ctx, client, store, _, _, r := batchFixture(t)
+	r.Members[1].LogicalAttempt = 5
+	client.WorkItem.Update().Where(workitem.SegmentIDEQ(r.Members[1].SegmentID)).SetAlignmentAttempts(5).ExecX(ctx)
+	err := store.ReserveRequest(ctx, r)
+	if !errors.Is(err, ErrBudget) {
+		t.Fatalf("reserve=%v, want ErrBudget", err)
+	}
+	for _, want := range []string{"request=batch", "stage=ruby_alignment", "segment=", "alignment_attempts=5", "max=5"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("budget error %q missing %q", err, want)
+		}
+	}
+	if client.WorkRequest.Query().CountX(ctx) != 0 {
+		t.Fatal("rejected request left a persisted reservation")
 	}
 }
 

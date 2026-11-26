@@ -15,6 +15,10 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
 )
 
+func requestBudgetError(r Request, segmentID int, dimension string, current, max int) error {
+	return fmt.Errorf("%w: request=%s stage=%s segment=%d %s=%d max=%d", ErrBudget, r.ID, r.Stage, segmentID, dimension, current, max)
+}
+
 // ReserveRequest debits each member once before admission. Repeating the same
 // identity is idempotent; a new batch identity never refreshes member budgets.
 func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
@@ -100,10 +104,10 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 				alignmentAttempt = members[i].NetworkAttempt == 0
 			}
 			if r.MainAttempt && r.MaxMainAttempts > 0 && w.MainAttempts >= r.MaxMainAttempts {
-				return ErrBudget
+				return requestBudgetError(r, id, "main_attempts", w.MainAttempts, r.MaxMainAttempts)
 			}
 			if alignmentAttempt && r.MaxAlignmentAttempts > 0 && w.AlignmentAttempts >= r.MaxAlignmentAttempts {
-				return ErrBudget
+				return requestBudgetError(r, id, "alignment_attempts", w.AlignmentAttempts, r.MaxAlignmentAttempts)
 			}
 			alignment := alignmentStage(r.Stage)
 			if alignment {
@@ -127,7 +131,7 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 				network = 0
 			}
 			if r.MaxNetworkAttempts > 0 && network >= r.MaxNetworkAttempts {
-				return ErrBudget
+				return requestBudgetError(r, id, "network_attempts", network, r.MaxNetworkAttempts)
 			}
 			network++
 			before := attemptsFromRow(w)
