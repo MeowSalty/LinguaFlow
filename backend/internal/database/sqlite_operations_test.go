@@ -24,10 +24,30 @@ type sqliteOwnershipState struct {
 	closeEntered, closeRelease        chan struct{}
 	closeEnterOnce, closeReleaseOnce  sync.Once
 	closeCalls                        atomic.Int32
+	rowsCloseCalls, stmtCloseCalls    atomic.Int32
+	rollbackCalls, nativeActive       atomic.Int32
+	nativeOverlap                     atomic.Bool
+	rowsCloseErr, stmtCloseErr        error
+	contexts                          chan sqliteNativeContext
+}
+
+type sqliteNativeContext struct {
+	operation string
+	ctx       context.Context
 }
 
 func newSQLiteOwnershipState() *sqliteOwnershipState {
-	return &sqliteOwnershipState{entered: make(chan struct{}), release: make(chan struct{}), closed: make(chan struct{}), arguments: make(chan []byte, 1), bytes: []byte("native")}
+	return &sqliteOwnershipState{entered: make(chan struct{}), release: make(chan struct{}), closed: make(chan struct{}), arguments: make(chan []byte, 1), bytes: []byte("native"), contexts: make(chan sqliteNativeContext, 64)}
+}
+
+func (s *sqliteOwnershipState) native() func() {
+	if s.nativeActive.Add(1) != 1 {
+		s.nativeOverlap.Store(true)
+	}
+	return func() { s.nativeActive.Add(-1) }
+}
+func (s *sqliteOwnershipState) observeContext(operation string, ctx context.Context) {
+	s.contexts <- sqliteNativeContext{operation: operation, ctx: ctx}
 }
 func (s *sqliteOwnershipState) unblock() { s.releaseOnce.Do(func() { close(s.release) }) }
 func (s *sqliteOwnershipState) unblockClose() {
@@ -50,7 +70,8 @@ func (sqliteOwnershipDriver) Open(string) (driver.Conn, error) {
 type sqliteOwnershipConnector struct{ state *sqliteOwnershipState }
 
 func (c sqliteOwnershipConnector) Driver() driver.Driver { return sqliteOwnershipDriver{} }
-func (c sqliteOwnershipConnector) Connect(context.Context) (driver.Conn, error) {
+func (c sqliteOwnershipConnector) Connect(ctx context.Context) (driver.Conn, error) {
+	c.state.observeContext("connect", ctx)
 	return &sqliteOwnershipConn{state: c.state, id: c.state.connects.Add(1)}, nil
 }
 
@@ -59,12 +80,43 @@ type sqliteOwnershipConn struct {
 	id    int32
 }
 
-func (*sqliteOwnershipConn) Prepare(string) (driver.Stmt, error) { return nil, errors.New("unused") }
-func (*sqliteOwnershipConn) Begin() (driver.Tx, error)           { return nil, errors.New("unused") }
-func (*sqliteOwnershipConn) Ping(context.Context) error          { return nil }
-func (*sqliteOwnershipConn) ResetSession(context.Context) error  { return nil }
-func (*sqliteOwnershipConn) IsValid() bool                       { return true }
+func (c *sqliteOwnershipConn) Prepare(query string) (driver.Stmt, error) {
+	return c.PrepareContext(context.Background(), query)
+}
+func (c *sqliteOwnershipConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	defer c.state.native()()
+	c.state.observeContext("prepare", ctx)
+	if query == "blocked_prepare" {
+		c.state.block()
+		c.state.finished.Store(true)
+	}
+	return &sqliteOwnershipStmt{state: c.state, query: query}, nil
+}
+func (c *sqliteOwnershipConn) Begin() (driver.Tx, error) {
+	return c.BeginTx(context.Background(), driver.TxOptions{})
+}
+func (c *sqliteOwnershipConn) BeginTx(ctx context.Context, _ driver.TxOptions) (driver.Tx, error) {
+	defer c.state.native()()
+	c.state.observeContext("begin", ctx)
+	if ctx.Value(sqliteBlockedBeginKey{}) != nil {
+		c.state.block()
+		c.state.finished.Store(true)
+	}
+	return &sqliteOwnershipTx{state: c.state}, nil
+}
+func (c *sqliteOwnershipConn) Ping(ctx context.Context) error {
+	defer c.state.native()()
+	c.state.observeContext("ping", ctx)
+	return nil
+}
+func (c *sqliteOwnershipConn) ResetSession(ctx context.Context) error {
+	defer c.state.native()()
+	c.state.observeContext("reset", ctx)
+	return nil
+}
+func (*sqliteOwnershipConn) IsValid() bool { return true }
 func (c *sqliteOwnershipConn) Close() error {
+	defer c.state.native()()
 	if c.id == 1 {
 		c.state.closeCalls.Add(1)
 		if c.state.closeRelease != nil {
@@ -78,7 +130,9 @@ func (c *sqliteOwnershipConn) Close() error {
 	}
 	return nil
 }
-func (c *sqliteOwnershipConn) ExecContext(_ context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+func (c *sqliteOwnershipConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	defer c.state.native()()
+	c.state.observeContext("exec", ctx)
 	if query == "blocked_write" {
 		c.state.block()
 		c.state.arguments <- append([]byte(nil), args[0].Value.([]byte)...)
@@ -86,8 +140,60 @@ func (c *sqliteOwnershipConn) ExecContext(_ context.Context, query string, args 
 	}
 	return driver.RowsAffected(1), nil
 }
-func (c *sqliteOwnershipConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+func (c *sqliteOwnershipConn) QueryContext(ctx context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+	defer c.state.native()()
+	c.state.observeContext("query", ctx)
+	if query == "blocked_query" {
+		c.state.block()
+		c.state.finished.Store(true)
+	}
 	return &sqliteOwnershipRows{state: c.state, query: query}, nil
+}
+
+type sqliteBlockedBeginKey struct{}
+type sqliteOwnershipTx struct{ state *sqliteOwnershipState }
+
+func (t *sqliteOwnershipTx) Commit() error { defer t.state.native()(); return nil }
+func (t *sqliteOwnershipTx) Rollback() error {
+	defer t.state.native()()
+	t.state.rollbackCalls.Add(1)
+	return nil
+}
+
+type sqliteOwnershipStmt struct {
+	state *sqliteOwnershipState
+	query string
+}
+
+func (*sqliteOwnershipStmt) NumInput() int { return -1 }
+func (s *sqliteOwnershipStmt) Close() error {
+	defer s.state.native()()
+	s.state.stmtCloseCalls.Add(1)
+	return s.state.stmtCloseErr
+}
+func (s *sqliteOwnershipStmt) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), namedValues(args))
+}
+func (s *sqliteOwnershipStmt) Query(args []driver.Value) (driver.Rows, error) {
+	return s.QueryContext(context.Background(), namedValues(args))
+}
+func (s *sqliteOwnershipStmt) ExecContext(ctx context.Context, _ []driver.NamedValue) (driver.Result, error) {
+	defer s.state.native()()
+	s.state.observeContext("prepared_exec", ctx)
+	if s.query == "blocked_prepared_exec" {
+		s.state.block()
+		s.state.finished.Store(true)
+	}
+	return driver.RowsAffected(1), nil
+}
+func (s *sqliteOwnershipStmt) QueryContext(ctx context.Context, _ []driver.NamedValue) (driver.Rows, error) {
+	defer s.state.native()()
+	s.state.observeContext("prepared_query", ctx)
+	if s.query == "blocked_prepared_query" {
+		s.state.block()
+		s.state.finished.Store(true)
+	}
+	return &sqliteOwnershipRows{state: s.state, query: s.query}, nil
 }
 
 type sqliteOwnershipRows struct {
@@ -98,12 +204,20 @@ type sqliteOwnershipRows struct {
 
 func (*sqliteOwnershipRows) Columns() []string { return []string{"value"} }
 func (r *sqliteOwnershipRows) Close() error {
+	defer r.state.native()()
+	if r.query != "PRAGMA busy_timeout" {
+		r.state.rowsCloseCalls.Add(1)
+	}
 	if r.query == "blocked_rows" {
 		clear(r.state.bytes)
+	}
+	if r.query != "PRAGMA busy_timeout" {
+		return r.state.rowsCloseErr
 	}
 	return nil
 }
 func (r *sqliteOwnershipRows) Next(values []driver.Value) error {
+	defer r.state.native()()
 	if r.query == "blocked_rows" {
 		if r.position == 0 {
 			values[0] = r.state.bytes
@@ -193,7 +307,7 @@ func TestSQLiteCanceledOperationKeepsArgumentsPhysicalLimitAndCloseACK(t *testin
 	case <-time.After(time.Second):
 		t.Fatal("physical Close was not acknowledged")
 	}
-	if state.closedEarly.Load() {
+	if state.closedEarly.Load() || state.nativeOverlap.Load() || state.closeCalls.Load() != 1 {
 		t.Fatal("native Close overlapped native work")
 	}
 	if err := db.QueryRowContext(t.Context(), "SELECT 1").Scan(new(int)); err != nil {
@@ -306,7 +420,7 @@ func TestSQLiteCanceledRowsKeepDestinationAndReturnedBytesOwned(t *testing.T) {
 	if string(first) != "native" {
 		t.Fatalf("native Close mutated handed-off bytes: %q", first)
 	}
-	if state.closedEarly.Load() {
+	if state.closedEarly.Load() || state.nativeOverlap.Load() || state.rowsCloseCalls.Load() != 1 || state.closeCalls.Load() != 1 {
 		t.Fatal("native Close overlapped pending Next")
 	}
 }
@@ -354,5 +468,240 @@ func TestSQLiteCommitCanceledBeforeEnqueueAcknowledgesRollback(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatal("canceled pre-enqueue Commit persisted a write")
+	}
+}
+
+func sqliteOwnershipConnection(t *testing.T, state *sqliteOwnershipState, ctx context.Context) *observedConn {
+	t.Helper()
+	conn, err := (observedConnector{Connector: sqliteOwnershipConnector{state}, dialect: dialect.SQLite}).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed := conn.(*observedConn)
+	t.Cleanup(func() {
+		state.unblock()
+		state.unblockClose()
+		_ = observed.Close()
+		select {
+		case <-observed.sqlite.closed:
+		case <-time.After(time.Second):
+			t.Error("native connection cleanup did not finish")
+		}
+	})
+	return observed
+}
+
+func TestSQLiteNativeContextRetainsValuesWithoutCancellation(t *testing.T) {
+	type valueKey struct{}
+	for _, operation := range []string{"exec", "query", "prepare", "begin", "prepared_exec", "prepared_query"} {
+		t.Run(operation, func(t *testing.T) {
+			state := newSQLiteOwnershipState()
+			ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), valueKey{}, "caller value"), time.Second)
+			defer cancel()
+			conn := sqliteOwnershipConnection(t, state, ctx)
+			if err := conn.ResetSession(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := conn.Ping(ctx); err != nil {
+				t.Fatal(err)
+			}
+			var stmt driver.Stmt
+			if operation == "prepared_exec" || operation == "prepared_query" {
+				var err error
+				stmt, err = conn.PrepareContext(ctx, "blocked_"+operation)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			result := make(chan error, 1)
+			go func() {
+				var err error
+				switch operation {
+				case "exec":
+					_, err = conn.ExecContext(ctx, "blocked_write", []driver.NamedValue{{Ordinal: 1, Value: []byte("payload")}})
+				case "query":
+					_, err = conn.QueryContext(ctx, "blocked_query", nil)
+				case "prepare":
+					_, err = conn.PrepareContext(ctx, "blocked_prepare")
+				case "begin":
+					_, err = conn.BeginTx(context.WithValue(ctx, sqliteBlockedBeginKey{}, true), driver.TxOptions{})
+				case "prepared_exec":
+					_, err = stmt.(driver.StmtExecContext).ExecContext(ctx, nil)
+				case "prepared_query":
+					_, err = stmt.(driver.StmtQueryContext).QueryContext(ctx, nil)
+				}
+				result <- err
+			}()
+			select {
+			case <-state.entered:
+			case <-time.After(time.Second):
+				t.Fatal("native operation did not start")
+			}
+			cancel()
+			select {
+			case err := <-result:
+				if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrSQLiteOperationPending) || errors.Is(err, driver.ErrBadConn) {
+					t.Fatal("canceled operation lost its unknown-result contract", err)
+				}
+			case <-time.After(500 * time.Millisecond):
+				t.Fatal("caller cancellation waited for native completion")
+			}
+			if stmt != nil {
+				if err := stmt.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := conn.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if state.closeCalls.Load() != 0 || state.rowsCloseCalls.Load() != 0 || state.stmtCloseCalls.Load() != 0 || state.rollbackCalls.Load() != 0 {
+				t.Fatal("native object closed before pending operation acknowledged completion")
+			}
+			state.unblock()
+			select {
+			case <-conn.sqlite.closed:
+			case <-time.After(time.Second):
+				t.Fatal("final stop job did not finish")
+			}
+			if _, err := conn.ExecContext(context.Background(), "replay", nil); !errors.Is(err, ErrSQLiteConnectionDiscarded) {
+				t.Fatal("quarantined connection accepted another operation", err)
+			}
+			if state.nativeOverlap.Load() || state.closedEarly.Load() || state.closeCalls.Load() != 1 {
+				t.Fatal("native connection cleanup overlapped or ran more than once")
+			}
+			wantRows, wantStmt, wantRollback := int32(0), int32(0), int32(0)
+			switch operation {
+			case "query":
+				wantRows = 1
+			case "prepare", "prepared_exec":
+				wantStmt = 1
+			case "prepared_query":
+				wantRows, wantStmt = 1, 1
+			case "begin":
+				wantRollback = 1
+			}
+			if state.rowsCloseCalls.Load() != wantRows || state.stmtCloseCalls.Load() != wantStmt || state.rollbackCalls.Load() != wantRollback {
+				t.Fatalf("abandoned %s cleanup counts: rows=%d stmt=%d rollback=%d", operation, state.rowsCloseCalls.Load(), state.stmtCloseCalls.Load(), state.rollbackCalls.Load())
+			}
+			seen := make(map[string]bool)
+			for len(state.contexts) > 0 {
+				call := <-state.contexts
+				seen[call.operation] = true
+				if _, deadline := call.ctx.Deadline(); deadline || call.ctx.Done() != nil || call.ctx.Err() != nil || call.ctx.Value(valueKey{}) != "caller value" {
+					t.Errorf("%s native context retained cancellation or lost caller values", call.operation)
+				}
+			}
+			if !seen[operation] || !seen["connect"] || !seen["reset"] || !seen["ping"] {
+				t.Fatal("native context coverage incomplete", seen)
+			}
+		})
+	}
+}
+
+func TestSQLiteNativeCloseErrorsAreCachedOnce(t *testing.T) {
+	for _, object := range []string{"rows", "stmt"} {
+		for _, owner := range []string{"explicit", "connection"} {
+			t.Run(object+"/"+owner, func(t *testing.T) {
+				state := newSQLiteOwnershipState()
+				closeErr := errors.New("native close failed")
+				conn := sqliteOwnershipConnection(t, state, t.Context())
+				var closeObject func() error
+				var calls *atomic.Int32
+				if object == "rows" {
+					state.rowsCloseErr = closeErr
+					rows, err := conn.QueryContext(t.Context(), "rows", nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					closeObject, calls = rows.Close, &state.rowsCloseCalls
+				} else {
+					state.stmtCloseErr = closeErr
+					stmt, err := conn.PrepareContext(t.Context(), "stmt")
+					if err != nil {
+						t.Fatal(err)
+					}
+					closeObject, calls = stmt.Close, &state.stmtCloseCalls
+				}
+				if owner == "explicit" {
+					for range 2 {
+						if err := closeObject(); !errors.Is(err, closeErr) {
+							t.Fatal("explicit Close did not retain native close error", err)
+						}
+					}
+				}
+				err := conn.Close()
+				if owner == "connection" && !errors.Is(err, closeErr) {
+					t.Fatal("final stop job did not report native object close error", err)
+				}
+				for range 2 {
+					if err := closeObject(); !errors.Is(err, closeErr) {
+						t.Fatal("Close after worker stop lost native close error", err)
+					}
+				}
+				if calls.Load() != 1 || state.closeCalls.Load() != 1 || state.nativeOverlap.Load() || len(conn.sqlite.rows) != 0 || len(conn.sqlite.statements) != 0 {
+					t.Fatal("native close lifecycle ran more than once or retained tracked objects")
+				}
+			})
+		}
+	}
+}
+
+func TestSQLiteQuarantineOwnsRowsStmtAndCloseErrors(t *testing.T) {
+	state := newSQLiteOwnershipState()
+	state.rowsCloseErr, state.stmtCloseErr = errors.New("rows close failed"), errors.New("stmt close failed")
+	conn := sqliteOwnershipConnection(t, state, t.Context())
+	stmt, err := conn.PrepareContext(t.Context(), "blocked_rows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	rows, err := stmt.(driver.StmtQueryContext).QueryContext(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := make([]driver.Value, 1)
+	if err := rows.Next(values); err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() { result <- rows.Next(values) }()
+	<-state.entered
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrSQLiteOperationPending) {
+			t.Fatal(err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Rows.Next waited for native completion")
+	}
+	for _, closeObject := range []func() error{rows.Close, stmt.Close, conn.Close} {
+		if err := closeObject(); err != nil {
+			t.Fatal("quarantine Close blocked on or guessed a pending native result", err)
+		}
+	}
+	if state.rowsCloseCalls.Load() != 0 || state.stmtCloseCalls.Load() != 0 || state.closeCalls.Load() != 0 {
+		t.Fatal("explicit Close bypassed pending native ownership")
+	}
+	state.unblock()
+	select {
+	case <-conn.sqlite.closed:
+	case <-time.After(time.Second):
+		t.Fatal("quarantine final stop job did not finish")
+	}
+	for range 2 {
+		if err := rows.Close(); !errors.Is(err, state.rowsCloseErr) {
+			t.Fatal("quarantined rows lost native close error", err)
+		}
+		if err := stmt.Close(); !errors.Is(err, state.stmtCloseErr) {
+			t.Fatal("quarantined statement lost native close error", err)
+		}
+	}
+	if !errors.Is(conn.sqlite.closeErr, state.rowsCloseErr) || !errors.Is(conn.sqlite.closeErr, state.stmtCloseErr) {
+		t.Fatal("final stop job lost native object close errors", conn.sqlite.closeErr)
+	}
+	if state.rowsCloseCalls.Load() != 1 || state.stmtCloseCalls.Load() != 1 || state.closeCalls.Load() != 1 || state.nativeOverlap.Load() || len(conn.sqlite.rows) != 0 || len(conn.sqlite.statements) != 0 {
+		t.Fatal("quarantine cleanup ran more than once, overlapped, or retained tracked objects")
 	}
 }

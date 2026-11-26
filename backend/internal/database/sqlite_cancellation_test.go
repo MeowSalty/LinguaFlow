@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -21,12 +22,19 @@ func TestSQLiteRowsNextCPURetainsCallerDeadline(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() {
-				if err := closeSQLitePoolAfterUse(db); err != nil {
+				start := time.Now()
+				err := closeSQLitePoolAfterUse(db)
+				t.Logf("CPU native pool cleanup: elapsed=%s err=%v", time.Since(start), err)
+				if err != nil {
 					t.Error(err)
 				}
 			}()
 			db.SetMaxOpenConns(1)
-			const query = "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000000) SELECT 1 UNION ALL SELECT count(*) FROM n"
+			// Native CPU work must outlive the caller's deadline, then finish
+			// within the independent cleanup budget even under race detection.
+			// Cancellation intentionally does not interrupt the SQLite driver.
+			t.Logf("CPU native workload: steps=%d", sqliteCPUFixtureSteps)
+			query := fmt.Sprintf("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<%d) SELECT 1 UNION ALL SELECT count(*) FROM n", sqliteCPUFixtureSteps)
 			var stmt *sql.Stmt
 			if prepared {
 				stmt, err = db.PrepareContext(t.Context(), query)
