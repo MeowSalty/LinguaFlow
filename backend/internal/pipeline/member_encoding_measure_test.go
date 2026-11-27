@@ -153,7 +153,7 @@ func TestMeasuredArchivedOutputKeepsItemLimitAndReplacementFacts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			payload, err := encodeArchivedOutput(b, selected, key, limit)
+			payload, err := encodeArchivedOutput(b, &selected, key, limit)
 			if name == "replacement_too_large" {
 				if !errors.Is(err, backend.ErrBuildCapacity) || payload != nil {
 					t.Fatal("oversize replacement escaped the original item limit", err)

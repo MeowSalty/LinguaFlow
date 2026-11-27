@@ -12,7 +12,10 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 func inputMemberTotal(members []InputMemberFrame) int64 {
@@ -76,15 +79,27 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 	defer rawCredit.Release()
 	raw := string(capture.Payload)
 	defer func() { raw = "" }()
+	session, _ := ctx.Value(requestSessionKey{}).(*requestSession)
+	var diagnostic *stagedBatchDiagnostic
+	if session != nil && session.intent.ID == header.ID {
+		diagnostic = session.mainDiagnostic
+	}
 	operation = "prepare_archive"
 	view, err := repair.PrepareArchive(b, raw, header.TextMode, h.ModeName() == "revise", ids, opt)
 	contentFailure := ""
+	parseDiagnostic := ""
+	var parseError *repair.ArchiveContentError
 	if err != nil {
-		var content *repair.ArchiveContentError
-		if !errors.As(err, &content) {
+		if !errors.As(err, &parseError) {
 			return header, err
 		}
-		contentFailure = "invalid model response"
+		contentFailure = invalidModelResponse
+		if promptUpgradeEnabled(h, header) {
+			parseDiagnostic, err = parseFailureDiagnostic(b, parseError.Err, raw)
+			if err != nil {
+				return header, err
+			}
+		}
 	}
 	defer view.Release()
 	defer func() {
@@ -99,8 +114,10 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 	var public []byte
 	var publicAllocation *backend.OwnedAllocation
 	defer func() { publicAllocation.Release() }()
-	if handler, ok := h.(*TranslateHandler); ok && handler.InlineBootstrap && view != nil {
-		entries, e := view.Glossary(b)
+	var entries []prompt.BootstrapEntry
+	if handler, ok := h.(*TranslateHandler); ok && view != nil && handler.InlineBootstrap {
+		var e error
+		entries, e = view.Glossary(b)
 		if e != nil {
 			return header, e
 		}
@@ -126,6 +143,7 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 	for start := header.ArchiveCursor; start < header.MemberCount; start += 16 {
 		count := min(16, header.MemberCount-start)
 		members := make([]OutputMemberFrame, 0, count)
+		partial := false
 		var bounds []*backend.BuildBounds
 		finish := func() {
 			for i := range members {
@@ -143,7 +161,7 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 				return header, e
 			}
 			bounds = append(bounds, mb)
-			selected := archivedOutput{Failure: contentFailure}
+			selected := archivedOutput{Failure: contentFailure, BatchParseFailure: parseError != nil}
 			if view != nil {
 				operation = "select_archive_member"
 				selected, e = view.Member(mb, start+i)
@@ -165,11 +183,12 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 				}
 			}
 			operation = "encode_archive_member"
-			payload, e := encodeArchivedOutput(mb, selected, archiveMemberKey(header, start+i), runtime.Window.limits.ItemBytes)
+			payload, e := encodeArchivedOutput(mb, &selected, archiveMemberKey(header, start+i), runtime.Window.limits.ItemBytes)
 			if e != nil {
 				finish()
 				return header, e
 			}
+			partial = partial || !selected.Outcome.Accepted
 			allocation, e := mb.RetainedAllocation(int64(cap(payload)))
 			if e != nil {
 				finish()
@@ -185,8 +204,12 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 		}
 		next := start + count
 		complete := next == header.MemberCount
+		publication := OutputPublication{Key: archiveMemberKey(header, start), Members: members, Next: next, Digest: digest, Glossary: public, PublicAllocation: publicAllocation, Complete: complete}
+		if complete {
+			publication.ParseDiagnostic = parseDiagnostic
+		}
 		e := runtime.SaveNamed(ctx, persistence.Metadata{Operation: string(persistence.OutputArchive), Class: persistence.Reliable, RequestID: header.ID, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
-			confirmed, confirmationErr := store.PublishOutputs(saveCtx, OutputPublication{Key: archiveMemberKey(header, start), Members: members, Next: next, Digest: digest, Glossary: public, PublicAllocation: publicAllocation, Complete: complete})
+			confirmed, confirmationErr := store.PublishOutputs(saveCtx, publication)
 			if confirmationErr == nil {
 				header = confirmed
 			}
@@ -195,6 +218,35 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 		finish()
 		if e != nil {
 			return header, e
+		}
+		if diagnostic != nil {
+			if partial && diagnostic.event.Stage == "translate" {
+				diagnostic.event.Status = "partial"
+			}
+			if complete {
+				emitMainBatchEvent(ctx, session, func(event *progress.BatchEvent) {
+					event.ReceivedLength = len(raw)
+					event.ReceivedContent, _ = cloneBatchContent(b, raw)
+					event.ResponseContent = event.ReceivedContent
+					if parseError != nil {
+						event.Status = "failed"
+						event.ErrorType = "parse_error"
+						event.ErrorMessage = parseError.Error()
+						event.Repaired = parseError.Repaired
+						event.ShrinkAttempted = event.Stage == "translate" && event.SegmentCount > 1
+					} else {
+						event.Repaired = view.Repaired()
+						if handler, ok := h.(*TranslateHandler); ok && !handler.InlineBootstrap {
+							entries, _ = view.Glossary(b)
+						}
+						if len(entries) > 0 {
+							if _, err := b.MeasureJSONLimited(entries, progress.MaxSSEBatchContentBytes); err == nil {
+								event.AddedGlossary = entries
+							}
+						}
+					}
+				})
+			}
 		}
 		if e = runtime.Admission.RestoreResponseOwnership(header.ID, prepareIntent(h, store, backend.RequestStageMain).RoundIndex, storeResourceID(store), header.Facts(), header.Phase, true); e != nil {
 			return header, e
@@ -208,14 +260,21 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 
 // selected is private to this member. A replacement changes its representation
 // and needs its own measurement before the fixed-size encoder can admit it.
-func encodeArchivedOutput(b *backend.BuildBounds, selected archivedOutput, key MemberKey, limit int64) ([]byte, error) {
+func encodeArchivedOutput(b *backend.BuildBounds, selected *archivedOutput, key MemberKey, limit int64) ([]byte, error) {
+	// Invalid is a parser-only flag. Keep the identity for duplicate checks
+	// and discard the rest so archive recovery cannot verify the malformed row.
+	for i, entry := range selected.RubyOutput {
+		if entry.Invalid {
+			selected.RubyOutput[i] = ruby.OutputEntry{ID: entry.ID, Invalid: true}
+		}
+	}
 	measured, err := b.MeasureJSON(selected)
 	if err != nil {
 		return nil, err
 	}
 	if measured > limit {
 		outcome := MemberOutcome{Key: key, Reason: responsecontract.MemberTooLarge, Limit: limit, Observed: measured}
-		selected = archivedOutput{Failure: outcome.String(), Outcome: outcome}
+		*selected = archivedOutput{Failure: outcome.String(), Outcome: outcome, BatchParseFailure: selected.BatchParseFailure}
 		measured, err = b.MeasureJSON(selected)
 		if err != nil {
 			return nil, err

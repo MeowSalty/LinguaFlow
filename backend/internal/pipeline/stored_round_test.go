@@ -3,132 +3,71 @@ package pipeline
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log/slog"
 	"reflect"
-	"sync"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
-type storedRoundTestStore struct {
-	RoundStore
-	mu          sync.Mutex
-	fail        string
-	intents     []RequestIntent
-	records     []RequestRecord
-	cursorSaved func(int, WorkCursor)
+type nativeStoredRoundTestStore struct {
+	*MemoryRoundStore
+	intent    RequestIntent
+	sent      []RequestIntent
+	received  RequestRecord
+	fail      string
+	onFailure func(WorkCursor)
 }
 
-func (*storedRoundTestStore) ResourceIdentity() int { return 73 }
+func (*nativeStoredRoundTestStore) ResourceIdentity() int { return 73 }
+func (*nativeStoredRoundTestStore) RoundIdentity() int    { return 4 }
 
-func (s *storedRoundTestStore) Seal(ctx context.Context, indices []int) (RoundRecovery, error) {
-	if s.fail == "seal" {
-		return RoundRecovery{}, terminalRuntimeStoreError{errors.New("manifest unavailable")}
+func (s *nativeStoredRoundTestStore) Reserve(ctx context.Context, intent RequestIntent) error {
+	if s.fail == "paused" {
+		return terminalRuntimeStoreError{backend.ErrDispatchPaused}
 	}
-	return s.RoundStore.Seal(ctx, indices)
-}
-
-func (s *storedRoundTestStore) Reserve(_ context.Context, intent RequestIntent) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.fail == "reserve" {
-		return terminalRuntimeStoreError{errors.New("intent unavailable")}
+		return terminalRuntimeStoreError{errors.New("reservation unavailable")}
 	}
-	s.intents = append(s.intents, intent)
+	if err := s.MemoryRoundStore.Reserve(ctx, intent); err != nil {
+		return err
+	}
+	s.intent = RequestIntent{ID: intent.ID, InputDigest: intent.InputDigest, ResourceID: intent.ResourceID,
+		RoundIndex: intent.RoundIndex, BackendID: intent.BackendID, Stage: intent.Stage, Phase: intent.Phase,
+		Pool: intent.Pool, Attempt: intent.Attempt, Indices: append([]int(nil), intent.Indices...)}
+	s.sent = append(s.sent, s.intent)
 	return nil
 }
 
-func (s *storedRoundTestStore) Record(_ context.Context, _ string, record RequestRecord) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *nativeStoredRoundTestStore) Record(ctx context.Context, id string, record RequestRecord) error {
 	if s.fail == "record" && record.State != "sent" {
 		return terminalRuntimeStoreError{errors.New("accounting unavailable")}
 	}
-	if s.fail == "finish" && record.State == "completed" {
-		return terminalRuntimeStoreError{errors.New("handoff confirmation unavailable")}
-	}
-	s.records = append(s.records, record)
-	return nil
-}
-
-func (s *storedRoundTestStore) Cursors(ctx context.Context, transitions []CursorTransition) error {
-	if err := s.RoundStore.Cursors(ctx, transitions); err != nil {
+	if err := s.MemoryRoundStore.Record(ctx, id, record); err != nil {
 		return err
 	}
-	if s.cursorSaved != nil {
-		for _, t := range transitions {
-			s.cursorSaved(t.Index, t.Cursor)
-		}
+	if s.onFailure != nil && record.MainFailure != nil {
+		s.onFailure(*record.MainFailure)
 	}
 	return nil
 }
 
-func (s *storedRoundTestStore) snapshot() ([]RequestIntent, []RequestRecord) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]RequestIntent(nil), s.intents...), append([]RequestRecord(nil), s.records...)
-}
-
-type storedRoundTestHandler struct {
-	backend      backend.Backend
-	build        func([]int, int) ([][]int, error)
-	initialScans atomic.Int64
-	finalized    atomic.Int64
-}
-
-func (*storedRoundTestHandler) ModeName() string { return RoundModeSemanticQA }
-
-func (h *storedRoundTestHandler) BuildBatches(_ context.Context, doc *Document, pending []int, pool int) ([][]int, error) {
-	if pending == nil {
-		h.initialScans.Add(1)
-		pending = make([]int, len(doc.Segments))
-		for i := range pending {
-			pending[i] = i
-		}
+func (s *nativeStoredRoundTestStore) CaptureResponse(ctx context.Context, in CapturedResponse) (MainResponseHeader, error) {
+	if s.fail == "record" {
+		return MainResponseHeader{}, terminalRuntimeStoreError{errors.New("response capture unavailable")}
 	}
-	if h.build != nil {
-		return h.build(pending, pool)
+	header, err := s.MemoryRoundStore.CaptureResponse(ctx, in)
+	if err == nil {
+		s.received = in.Record
 	}
-	batches := make([][]int, len(pending))
-	for i, idx := range pending {
-		batches[i] = []int{idx}
-	}
-	return batches, nil
-}
-
-func (h *storedRoundTestHandler) ProcessBatch(ctx context.Context, doc *Document, indices []int, _ int, _ *slog.Logger) batchResult {
-	if _, err := h.backend.Translate(ctx, backend.Request{System: "inspect", User: fmt.Sprint(indices)}); err != nil {
-		// Existing best-effort handlers may return unresolved for a backend error.
-		// The executor must inspect the session before treating it as a model retry.
-		return batchResult{unresolved: indices}
-	}
-	result := &BatchResult{}
-	for _, idx := range indices {
-		result.Segments = append(result.Segments, TranslatedSegment{Index: idx, ID: doc.Segments[idx].ID, TargetText: doc.Segments[idx].Target})
-	}
-	return batchResult{callbackResult: result}
-}
-
-func (h *storedRoundTestHandler) Finalize(context.Context, *Document, []int) error {
-	h.finalized.Add(1)
-	return nil
-}
-
-type storedRoundTestReporter struct {
-	progress.Nop
-	flush func(context.Context) error
-}
-
-func (r *storedRoundTestReporter) FlushCheckpoint(ctx context.Context) error {
-	if r.flush != nil {
-		return r.flush(ctx)
-	}
-	return nil
+	return header, err
 }
 
 func storedTestExecutionRuntime(t *testing.T) *ExecutionRuntime {
@@ -137,169 +76,185 @@ func storedTestExecutionRuntime(t *testing.T) *ExecutionRuntime {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(a.Close)
-	return NewExecutionRuntime(a, DefaultCandidateLimits(), nil)
+	runtime := NewExecutionRuntime(a, DefaultCandidateLimits(), nil)
+	t.Cleanup(func() {
+		if err := runtime.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	return runtime
 }
 
-func awaitStoredRoundSignal(t *testing.T, ch <-chan struct{}) {
+func awaitStoredRoundSignal(t *testing.T, signal <-chan struct{}) {
 	t.Helper()
 	select {
-	case <-ch:
+	case <-signal:
 	case <-time.After(2 * time.Second):
 		t.Fatal("stored round did not reach the expected barrier")
 	}
 }
 
+func newSuccessfulStoredQAProvider() *runtimeTestBackend {
+	return &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+		return &backend.Response{Text: `{"issues":[]}`}, nil
+	}}
+}
+
+func newNativeStoredQA(t *testing.T, runtime *ExecutionRuntime, provider backend.Backend, retry backend.RetryPolicy) *SemanticQAHandler {
+	t.Helper()
+	return &SemanticQAHandler{Backend: BindRequestBackend(provider, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Retry: retry}
+}
+
+func (s *nativeStoredRoundTestStore) SealCanonical(ctx context.Context, doc *Document) error {
+	if s.fail == "seal" {
+		return terminalRuntimeStoreError{errors.New("seal unavailable")}
+	}
+	return s.MemoryRoundStore.SealCanonical(ctx, doc)
+}
+
+func (s *nativeStoredRoundTestStore) SettleStoredResponse(ctx context.Context, doc *Document, in StoredResponseSettlement) error {
+	if s.fail == "settle" {
+		return terminalRuntimeStoreError{errors.New("settlement unavailable")}
+	}
+	if err := s.MemoryRoundStore.SettleStoredResponse(ctx, doc, in); err != nil {
+		return err
+	}
+	if s.fail == "settled_ack" {
+		return terminalRuntimeStoreError{errors.New("settlement acknowledgement interrupted")}
+	}
+	return nil
+}
+
 func TestStoredRoundStorageFailuresDoNotRetryModel(t *testing.T) {
-	for _, failure := range []string{"seal", "reserve", "record"} {
-		t.Run(failure, func(t *testing.T) {
+	for _, tc := range []struct {
+		fail  string
+		calls int64
+	}{{"seal", 0}, {"reserve", 0}, {"record", 1}, {"settle", 1}} {
+		t.Run(tc.fail, func(t *testing.T) {
 			runtime := storedTestExecutionRuntime(t)
-			store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil), fail: failure}
-			inner := &runtimeTestBackend{}
-			h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
-			var callbacks int
-			result, err := RunRound(context.Background(), Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Retry: backend.RetryPolicy{MaxAttempts: 2}}, newTestDoc(1), func(context.Context, BatchResult) error {
-				callbacks++
-				return nil
-			}, quietLogger(), nil)
+			store := &nativeStoredRoundTestStore{MemoryRoundStore: NewMemoryRoundStore(nil), fail: tc.fail}
+			defer store.Close()
+			provider := newSuccessfulStoredQAProvider()
+			retry := backend.RetryPolicy{MaxAttempts: 2}
+			h := newNativeStoredQA(t, runtime, provider, retry)
+			result, err := RunRound(t.Context(), Round{Runtime: runtime, Store: store, Handler: h, Retry: retry}, semanticQADoc([]string{"translated"}, nil), nil, quietLogger(), nil)
 			var storage *StorageError
-			if !errors.As(err, &storage) || callbacks != 0 || len(result.Resolved) != 0 || h.finalized.Load() != 0 {
-				t.Fatalf("storage failure was treated as model work: result=%+v callbacks=%d err=%v", result, callbacks, err)
+			if !errors.As(err, &storage) || provider.calls.Load() != tc.calls || len(result.Resolved) != 0 {
+				t.Fatalf("result=%+v, err=%v, calls=%d", result, err, provider.calls.Load())
 			}
-			wantCalls := int64(0)
-			if failure == "record" {
-				wantCalls = 1
-			}
-			if got := inner.calls.Load(); got != wantCalls {
-				t.Fatalf("model calls=%d, want %d", got, wantCalls)
-			}
-			if runtime.Admission.Snapshot().PendingResults != 0 || len(runtime.parse) != 0 {
-				t.Fatal("storage failure retained a response reservation")
+			if tc.fail == "settle" {
+				header, err := store.ResponseHeader(t.Context(), store.intent.ID)
+				if err != nil || header.Phase != responsecontract.CapturePending || header.CaptureBytes == 0 {
+					t.Fatalf("failed settlement did not preserve capture: %+v, err=%v", header, err)
+				}
 			}
 		})
 	}
 }
 
-func TestStoredRoundKeepsCompletionThroughCallbackAndCheckpoint(t *testing.T) {
+func TestStoredRoundCallbackFailurePreservesArchiveAndRecovers(t *testing.T) {
 	runtime := storedTestExecutionRuntime(t)
-	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil)}
-	inner := &runtimeTestBackend{}
-	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
-	callbackEntered, callbackRelease := make(chan struct{}), make(chan struct{})
-	checkpointEntered, checkpointRelease := make(chan struct{}), make(chan struct{})
-	reporter := &storedRoundTestReporter{flush: func(ctx context.Context) error {
-		close(checkpointEntered)
-		select {
-		case <-checkpointRelease:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}}
-	station := NewStation(1)
-	if !station.Acquire(context.Background()) {
-		t.Fatal("station setup")
+	store := &nativeStoredRoundTestStore{MemoryRoundStore: NewMemoryRoundStore(nil)}
+	defer store.Close()
+	provider := newSuccessfulStoredQAProvider()
+	retry := backend.RetryPolicy{MaxAttempts: 2}
+	h := newNativeStoredQA(t, runtime, provider, retry)
+	doc := semanticQADoc([]string{"translated"}, nil)
+	ctx := t.Context()
+	failure := errors.New("callback interrupted publication")
+	callbackCalls := 0
+	result, err := RunRound(ctx, Round{Runtime: runtime, Store: store, Handler: h, Retry: retry}, doc, func(context.Context, BatchResult) error {
+		callbackCalls++
+		doc.Segments[0].Issues = []qa.QualityIssue{{Code: qa.IssueCodeGrammar}}
+		return terminalRuntimeStoreError{failure}
+	}, quietLogger(), nil)
+	if !errors.Is(err, failure) || len(result.Resolved) != 0 || callbackCalls != 1 || provider.calls.Load() != 1 || len(doc.Segments[0].Issues) != 0 {
+		t.Fatalf("interrupted callback: result=%+v err=%v callbacks=%d issues=%v", result, err, callbackCalls, doc.Segments[0].Issues)
 	}
-	defer station.Release()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	done := make(chan error, 1)
-	go func() {
-		result, err := RunRound(ctx, Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Slots: station}, newTestDoc(1), func(ctx context.Context, _ BatchResult) error {
-			close(callbackEntered)
-			select {
-			case <-callbackRelease:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}, quietLogger(), reporter)
-		if err == nil && !reflect.DeepEqual(result.Resolved, []int{0}) {
-			err = fmt.Errorf("accepted in-flight work lost on pause: %+v", result)
-		}
-		done <- err
-	}()
-	awaitStoredRoundSignal(t, callbackEntered)
-	assertLifetime := func() {
-		t.Helper()
-		snapshot := runtime.Admission.Snapshot()
-		if snapshot.MainInflight[0] != 0 || snapshot.PendingResults != 1 || runtime.Gate.Inflight() != 0 || len(runtime.parse) != 0 {
-			t.Fatalf("response lifetime: %+v, parsers=%d", snapshot, len(runtime.parse))
-		}
-		_, records := store.snapshot()
-		if len(records) != 2 || records[1].State != "received" {
-			t.Fatalf("response declared completed before checkpoint: %+v", records)
-		}
+	header, err := store.ResponseHeader(ctx, store.intent.ID)
+	if err != nil || header.Phase != responsecontract.CapturePending || header.CaptureBytes == 0 {
+		t.Fatalf("callback failure lost captured response: %+v, err=%v", header, err)
 	}
-	assertLifetime()
-	runtime.Gate.Pause()
-	close(callbackRelease)
-	awaitStoredRoundSignal(t, checkpointEntered)
-	assertLifetime()
-	close(checkpointRelease)
-	if err := awaitRuntimeResult(t, done); err != nil {
-		t.Fatal(err)
+	resumed := storedTestExecutionRuntime(t)
+	h = newNativeStoredQA(t, resumed, provider, retry)
+	result, err = RunRound(ctx, Round{Runtime: resumed, Store: store, Handler: h, Retry: retry}, semanticQADoc([]string{"translated"}, nil), nil, quietLogger(), nil)
+	if err != nil || !reflect.DeepEqual(result.Resolved, []int{0}) || provider.calls.Load() != 1 {
+		t.Fatalf("callback recovery: result=%+v err=%v calls=%d", result, err, provider.calls.Load())
 	}
-	if runtime.Admission.Snapshot().PendingResults != 0 || len(runtime.parse) != 0 || inner.calls.Load() != 1 {
-		t.Fatal("response reservation or dispatch escaped the pause boundary")
+	header, err = store.ResponseHeader(ctx, store.intent.ID)
+	if err != nil || header.Phase != responsecontract.Promoted || header.CaptureBytes != 0 {
+		t.Fatalf("recovered capture not settled: %+v, err=%v", header, err)
 	}
 }
 
-func TestStoredRoundCheckpointFailureAbortsLocally(t *testing.T) {
+func TestStoredRoundRecoversAttemptsAndTerminalMembers(t *testing.T) {
 	runtime := storedTestExecutionRuntime(t)
-	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil)}
-	inner := &runtimeTestBackend{}
-	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
-	reporter := &storedRoundTestReporter{flush: func(context.Context) error {
-		return terminalRuntimeStoreError{errors.New("checkpoint unavailable")}
+	store := &nativeStoredRoundTestStore{MemoryRoundStore: NewMemoryRoundStore(nil)}
+	defer store.Close()
+	store.state = RoundRecovery{Sealed: true, Members: []int{0, 1, 2, 3, 4}, Completed: []int{4}, Cursors: map[int]WorkCursor{
+		0: {Pool: 1, Attempt: 1, State: "pending"},
+		1: {Pool: 0, Attempt: 2, State: "pending"},
+		2: {Pool: 2, State: "unresolved"},
+		3: {Pool: 2, State: "unresolved", Phase: "terminal_failure"},
+		4: {State: "resolved"},
 	}}
-	result, err := RunRound(context.Background(), Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Retry: backend.RetryPolicy{MaxAttempts: 2}}, newTestDoc(2), nil, quietLogger(), reporter)
+	provider := newSuccessfulStoredQAProvider()
+	retry := backend.RetryPolicy{MaxAttempts: 1}
+	h := newNativeStoredQA(t, runtime, provider, retry)
+	h.BatchSize = 1
+	doc := semanticQADoc([]string{"translated", "translated", "translated", "translated", "translated"}, nil)
+	result, err := RunRound(t.Context(), Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Retry: retry}, doc, nil, quietLogger(), nil)
+	if err != nil || !reflect.DeepEqual(result.Resolved, []int{0, 1, 4}) || !reflect.DeepEqual(result.Unresolved, []int{2}) || !reflect.DeepEqual(result.FailedSegments, []int{3}) || provider.calls.Load() != 2 {
+		t.Fatalf("recovered round = %+v, calls=%d, err=%v", result, provider.calls.Load(), err)
+	}
+	if got := store.sent; len(got) != 2 || got[0].Pool != 1 || got[0].Attempt != 0 || !reflect.DeepEqual(got[0].Indices, []int{1}) || got[1].Pool != 1 || got[1].Attempt != 1 || !reflect.DeepEqual(got[1].Indices, []int{0}) {
+		t.Fatalf("recovery did not preserve retry budgets: %+v", got)
+	}
+}
+
+func TestStoredRoundRecoveredSettlementDoesNotReissueAcceptedWork(t *testing.T) {
+	runtime := storedTestExecutionRuntime(t)
+	store := &nativeStoredRoundTestStore{MemoryRoundStore: NewMemoryRoundStore(nil), fail: "settled_ack"}
+	defer store.Close()
+	provider := newSuccessfulStoredQAProvider()
+	ctx := t.Context()
+	h := newNativeStoredQA(t, runtime, provider, backend.RetryPolicy{})
 	var storage *StorageError
-	if !errors.As(err, &storage) || len(result.Resolved) != 0 || h.finalized.Load() != 0 {
-		t.Fatalf("checkpoint failure did not abort: %+v, %v", result, err)
+	_, err := RunRound(ctx, Round{Runtime: runtime, Store: store, Handler: h}, semanticQADoc([]string{"translated"}, nil), nil, quietLogger(), nil)
+	if !errors.As(err, &storage) || provider.calls.Load() != 1 {
+		t.Fatalf("interrupted acknowledgement: err=%v calls=%d", err, provider.calls.Load())
 	}
-	if inner.calls.Load() != 1 || runtime.Admission.Snapshot().PendingResults != 0 {
-		t.Fatalf("checkpoint failure retried the model or leaked capacity: calls=%d", inner.calls.Load())
+	header, err := store.ResponseHeader(ctx, store.intent.ID)
+	if err != nil || header.Phase != responsecontract.Promoted {
+		t.Fatalf("accepted archive state: %+v, err=%v", header, err)
 	}
-	_, records := store.snapshot()
-	if len(records) != 2 || records[1].State != "received" {
-		t.Fatalf("failed checkpoint declared its response completed: %+v", records)
+	resumed := storedTestExecutionRuntime(t)
+	h = newNativeStoredQA(t, resumed, provider, backend.RetryPolicy{})
+	result, err := RunRound(ctx, Round{Runtime: resumed, Store: store, Handler: h}, semanticQADoc([]string{"translated"}, nil), nil, quietLogger(), nil)
+	if err != nil || !reflect.DeepEqual(result.Resolved, []int{0}) || provider.calls.Load() != 1 {
+		t.Fatalf("settled recovery: result=%+v err=%v calls=%d", result, err, provider.calls.Load())
 	}
 }
 
-func TestStoredRoundFinishFailureDoesNotReissueAcceptedWork(t *testing.T) {
+func TestStoredRoundPauseWhileConfirmingLeavesLaterMembersPending(t *testing.T) {
 	runtime := storedTestExecutionRuntime(t)
-	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil), fail: "finish"}
-	inner := &runtimeTestBackend{}
-	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
-	var callbacks int
-	result, err := RunRound(context.Background(), Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Retry: backend.RetryPolicy{MaxAttempts: 2}}, newTestDoc(2), func(context.Context, BatchResult) error {
-		callbacks++
+	store := NewMemoryRoundStore(nil)
+	defer store.Close()
+	provider := newSuccessfulStoredQAProvider()
+	h := newNativeStoredQA(t, runtime, provider, backend.RetryPolicy{MaxAttempts: 1})
+	h.BatchSize = 1
+	reporter := &countingReporter{}
+	ctx := t.Context()
+	result, err := RunRound(ctx, Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Retry: h.Retry}, semanticQADoc([]string{"translated", "translated"}, nil), func(context.Context, BatchResult) error {
+		runtime.Gate.Pause()
 		return nil
-	}, quietLogger(), &storedRoundTestReporter{})
-	var storage *StorageError
-	if !errors.As(err, &storage) || callbacks != 1 || inner.calls.Load() != 1 || len(result.Resolved) != 0 || h.finalized.Load() != 0 {
-		t.Fatalf("handoff failure was treated as model retry: result=%+v calls=%d callbacks=%d err=%v", result, inner.calls.Load(), callbacks, err)
+	}, quietLogger(), reporter)
+	if err != nil || !reflect.DeepEqual(result.Resolved, []int{0}) || !reflect.DeepEqual(result.Unresolved, []int{1}) || provider.calls.Load() != 1 {
+		t.Fatalf("paused confirmation: result=%+v err=%v calls=%d", result, err, provider.calls.Load())
 	}
-	_, records := store.snapshot()
-	if len(records) != 2 || records[1].State != "received" || runtime.Admission.Snapshot().PendingResults != 0 {
-		t.Fatalf("unconfirmed received response lost: %+v", records)
-	}
-}
-
-func TestStoredRoundCallbackFailureLeavesResponseReceived(t *testing.T) {
-	runtime := storedTestExecutionRuntime(t)
-	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil)}
-	inner := &runtimeTestBackend{}
-	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
-	wantErr := errors.New("business writeback failed")
-	result, err := RunRound(context.Background(), Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Retry: backend.RetryPolicy{MaxAttempts: 2}}, newTestDoc(1), func(context.Context, BatchResult) error { return wantErr }, quietLogger(), nil)
-	if !errors.Is(err, wantErr) || inner.calls.Load() != 1 || len(result.Resolved) != 0 || h.finalized.Load() != 0 {
-		t.Fatalf("unconfirmed callback counted as completed: %+v %v", result, err)
-	}
-	_, records := store.snapshot()
-	if len(records) != 2 || records[1].State != "received" || runtime.Admission.Snapshot().PendingResults != 0 {
-		t.Fatalf("failed callback lost its received response: %+v", records)
+	state, err := store.Load(ctx)
+	if err != nil || !reflect.DeepEqual(state.Completed, []int{0}) || state.Cursors[1] != (WorkCursor{}) || reporter.stageStartCalls != 1 || reporter.segmentDones != 1 {
+		t.Fatalf("paused state=%+v stages=%d confirmations=%d err=%v", state, reporter.stageStartCalls, reporter.segmentDones, err)
 	}
 }
 
@@ -308,9 +263,10 @@ func TestStoredRoundRequestUsesFrozenScopeAndUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer a.Close()
 	runtime := NewExecutionRuntime(a, DefaultCandidateLimits(), nil)
-	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil)}
+	defer runtime.Close()
+	store := &nativeStoredRoundTestStore{MemoryRoundStore: NewMemoryRoundStore(nil)}
+	defer store.Close()
 	inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
 		return &backend.Response{Text: `{"issues":[]}`, Usage: backend.Usage{PromptTokens: 17, CompletionTokens: 3}}, nil
 	}}
@@ -319,50 +275,25 @@ func TestStoredRoundRequestUsesFrozenScopeAndUsage(t *testing.T) {
 	if err != nil || len(result.Resolved) != 2 {
 		t.Fatalf("semantic QA result=%+v err=%v", result, err)
 	}
-	intents, records := store.snapshot()
-	if len(intents) != 1 {
-		t.Fatalf("request intents=%+v", intents)
-	}
-	intent := intents[0]
+	intent := store.intent
 	if intent.ID == "" || intent.InputDigest == "" || intent.ResourceID != 73 || intent.RoundIndex != 4 || intent.BackendID != 9 || intent.Stage != backend.RequestStageMain || intent.Phase != "main" || !reflect.DeepEqual(intent.Indices, []int{0, 1}) {
 		t.Fatalf("request identity or scope lost: %+v", intent)
 	}
-	if len(records) != 3 || records[0].State != "sent" || records[1].State != "received" || records[2].State != "completed" || !records[1].UsageKnown || records[1].Usage.PromptTokens != 17 || records[1].Usage.CompletionTokens != 3 {
-		t.Fatalf("request accounting=%+v", records)
+	header, err := store.ResponseHeader(t.Context(), intent.ID)
+	if err != nil || header.Phase != responsecontract.Promoted || header.MemberCount != 2 || header.Cursor != 2 {
+		t.Fatalf("captured response was not settled: header=%+v err=%v", header, err)
 	}
-}
-
-func TestStoredRoundRecoveryPreservesPoolAndAttemptBudget(t *testing.T) {
-	runtime := storedTestExecutionRuntime(t)
-	memory := NewMemoryRoundStore(nil)
-	memory.state = RoundRecovery{Sealed: true, Members: []int{0, 1, 2, 3}, Completed: []int{3}, Cursors: map[int]WorkCursor{
-		0: {Pool: 1, Attempt: 1, State: "pending"},
-		1: {Pool: 0, Attempt: 2, State: "pending"},
-		2: {Pool: 2, State: "unresolved"},
-	}}
-	store := &storedRoundTestStore{RoundStore: memory}
-	inner := &runtimeTestBackend{}
-	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
-	result, err := RunRound(context.Background(), Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Retry: backend.RetryPolicy{MaxAttempts: 1}}, newTestDoc(4), nil, quietLogger(), nil)
-	if err != nil || !reflect.DeepEqual(result.Resolved, []int{0, 1, 3}) || !reflect.DeepEqual(result.Unresolved, []int{2}) {
-		intents, records := store.snapshot()
-		state, _ := store.Load(context.Background())
-		t.Logf("recovery intents=%+v records=%+v cursors=%+v actualCalls=%d", intents, records, state.Cursors, inner.calls.Load())
-		t.Fatalf("recovered round=%+v err=%v", result, err)
-	}
-	intents, _ := store.snapshot()
-	if len(intents) != 2 || intents[0].Pool != 1 || intents[0].Attempt != 0 || !reflect.DeepEqual(intents[0].Indices, []int{1}) || intents[1].Pool != 1 || intents[1].Attempt != 1 || !reflect.DeepEqual(intents[1].Indices, []int{0}) {
-		t.Fatalf("pool or attempt budget reset: %+v", intents)
-	}
-	if h.initialScans.Load() != 0 || inner.calls.Load() != 2 {
-		t.Fatal("sealed recovery rescanned or re-requested completed work")
+	received := store.received
+	if received.State != "received" || !received.UsageKnown || received.Usage.PromptTokens != 17 || received.Usage.CompletionTokens != 3 {
+		t.Fatalf("request accounting=%+v", received)
 	}
 }
 
 func TestStoredRoundPauseRetainsRetryDeadline(t *testing.T) {
 	runtime := storedTestExecutionRuntime(t)
 	memory := NewMemoryRoundStore(nil)
-	store := &storedRoundTestStore{RoundStore: memory, cursorSaved: func(_ int, cursor WorkCursor) {
+	defer memory.Close()
+	store := &nativeStoredRoundTestStore{MemoryRoundStore: memory, onFailure: func(cursor WorkCursor) {
 		if cursor.Attempt == 1 {
 			runtime.Gate.Pause()
 		}
@@ -371,7 +302,7 @@ func TestStoredRoundPauseRetainsRetryDeadline(t *testing.T) {
 		return nil, &backend.StatusError{StatusCode: 429, RetryAfter: time.Hour, Err: errors.New("rate limited")}
 	}}
 	h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Retry: backend.RetryPolicy{MaxAttempts: 1}}
-	start := time.Now()
+	start := time.Now().UTC().Truncate(time.Microsecond)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	result, err := RunRound(ctx, Round{Runtime: runtime, Store: store, Handler: h, Concurrency: 1, Retry: h.Retry}, semanticQADoc([]string{"translated"}, nil), nil, quietLogger(), nil)
@@ -388,26 +319,143 @@ func TestStoredRoundPauseRetainsRetryDeadline(t *testing.T) {
 	}
 }
 
-func TestStoredRoundSealedMembershipCannotDisappear(t *testing.T) {
+func TestStoredSemanticQAPoolEventsFollowActualPools(t *testing.T) {
+	var calls atomic.Int64
+	inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+		switch calls.Add(1) {
+		case 1:
+			return nil, &backend.StatusError{StatusCode: 401, Err: errors.New("unauthorized")}
+		case 2:
+			return nil, &backend.StatusError{StatusCode: 400, Err: errors.New("invalid input")}
+		default:
+			return &backend.Response{Text: `{"issues":[]}`}, nil
+		}
+	}}
+	rep := &recordingPoolObserver{}
+	retry := backend.RetryPolicy{MaxAttempts: 1}
 	runtime := storedTestExecutionRuntime(t)
-	memory := NewMemoryRoundStore(nil)
-	memory.state = RoundRecovery{Sealed: true, Members: []int{0, 1}, Cursors: map[int]WorkCursor{}}
-	inner := &runtimeTestBackend{}
-	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime), build: func([]int, int) ([][]int, error) { return [][]int{{0}}, nil }}
-	_, err := RunRound(context.Background(), Round{Runtime: runtime, Store: memory, Handler: h, Concurrency: 1}, newTestDoc(2), nil, quietLogger(), nil)
-	if err == nil || inner.calls.Load() != 0 {
-		t.Fatalf("incomplete sealed membership dispatched: err=%v calls=%d", err, inner.calls.Load())
+	h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", BatchSize: 1, Retry: retry, Reporter: rep}
+	round := Round{Handler: h, Runtime: runtime, Concurrency: 1, Retry: retry}
+	doc := semanticQADoc([]string{"translated", "translated", "translated"}, nil)
+	result, err := RunRound(t.Context(), round, doc, nil, quietLogger(), rep)
+	if err != nil || !reflect.DeepEqual(result.Resolved, []int{1, 2}) || !reflect.DeepEqual(result.Unresolved, []int{0}) || calls.Load() != 4 {
+		t.Fatalf("result=%+v calls=%d err=%v", result, calls.Load(), err)
+	}
+	want := []progress.PoolEvent{
+		{Mode: RoundModeSemanticQA, PoolIndex: 0, MaxPools: 2, Batches: 3, Pending: 3, ShrinkRate: 1, Phase: "pool_start"},
+		{Mode: RoundModeSemanticQA, PoolIndex: 0, MaxPools: 2, Batches: 3, Pending: 1, ShrinkRate: 1, Phase: "pool_advance"},
+		{Mode: RoundModeSemanticQA, PoolIndex: 1, MaxPools: 2, Batches: 1, Pending: 1, ShrinkRate: 1, Phase: "pool_start"},
+	}
+	if !reflect.DeepEqual(rep.events, want) {
+		t.Fatalf("pool events=%+v want=%+v", rep.events, want)
+	}
+	if len(rep.batches) != 4 || rep.batches[0].HTTPStatus != 401 || rep.batches[1].HTTPStatus != 400 {
+		t.Fatalf("batch events=%+v", rep.batches)
 	}
 }
 
-func TestStoredRoundRecoversTerminalScanFailure(t *testing.T) {
+func TestStoredSemanticQAPauseBeforeDispatchLeavesAttemptPending(t *testing.T) {
 	runtime := storedTestExecutionRuntime(t)
-	memory := NewMemoryRoundStore(nil)
-	memory.state = RoundRecovery{Sealed: true, Members: []int{0}, Cursors: map[int]WorkCursor{0: {Pool: 1, State: "unresolved", Phase: "terminal_failure"}}}
+	store := &nativeStoredRoundTestStore{MemoryRoundStore: NewMemoryRoundStore(nil), fail: "paused"}
+	defer store.Close()
 	inner := &runtimeTestBackend{}
-	h := &storedRoundTestHandler{backend: BindRequestBackend(inner, 9, 0, runtime)}
-	result, err := RunRound(context.Background(), Round{Runtime: runtime, Store: memory, Handler: h, Concurrency: 1}, newTestDoc(1), nil, quietLogger(), nil)
-	if err != nil || !reflect.DeepEqual(result.FailedSegments, []int{0}) || len(result.Unresolved) != 0 || inner.calls.Load() != 0 {
-		t.Fatalf("terminal scan failure lost on recovery: %+v %v", result, err)
+	rep := &recordingPoolObserver{}
+	h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Reporter: rep}
+	result, err := RunRound(t.Context(), Round{Handler: h, Runtime: runtime, Store: store}, semanticQADoc([]string{"translated"}, nil), nil, quietLogger(), rep)
+	if err != nil || !reflect.DeepEqual(result.Unresolved, []int{0}) || inner.calls.Load() != 0 || !runtime.Gate.Paused() || len(rep.batches) != 0 {
+		t.Fatalf("paused result=%+v calls=%d events=%+v err=%v", result, inner.calls.Load(), rep.batches, err)
+	}
+	state, err := store.Load(t.Context())
+	if err != nil || state.Cursors[0] != (WorkCursor{}) {
+		t.Fatalf("undispatched work consumed retry budget: state=%+v err=%v", state, err)
+	}
+}
+
+func TestStoredSemanticQACancellationDoesNotAcknowledgeBatch(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	runtime := storedTestExecutionRuntime(t)
+	inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+		cancel()
+		return nil, context.Canceled
+	}}
+	rep := &recordingPoolObserver{}
+	h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Reporter: rep}
+	callbacks := 0
+	result, err := RunRound(ctx, Round{Handler: h, Runtime: runtime}, semanticQADoc([]string{"translated"}, nil), func(context.Context, BatchResult) error {
+		callbacks++
+		return nil
+	}, quietLogger(), rep)
+	if !errors.Is(err, context.Canceled) || !reflect.DeepEqual(result.Unresolved, []int{0}) || len(result.Resolved) != 0 || len(result.FailedSegments) != 0 || result.FailedBatches != 0 || inner.calls.Load() != 1 || callbacks != 0 || len(rep.batches) != 0 {
+		t.Fatalf("cancelled result=%+v calls=%d callbacks=%d events=%+v err=%v", result, inner.calls.Load(), callbacks, rep.batches, err)
+	}
+}
+
+func TestStoredSemanticQARecordsOnlyProviderFailureWhenAccountingFails(t *testing.T) {
+	providerErr := &backend.StatusError{StatusCode: 503, Err: errors.New("upstream unavailable")}
+	for _, tc := range []struct {
+		name    string
+		callErr error
+	}{
+		{name: "provider and accounting", callErr: providerErr},
+		{name: "accounting only"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runtime := storedTestExecutionRuntime(t)
+			store := &nativeStoredRoundTestStore{MemoryRoundStore: NewMemoryRoundStore(nil), fail: "record"}
+			defer store.Close()
+			inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+				if tc.callErr != nil {
+					return nil, tc.callErr
+				}
+				return &backend.Response{Text: `{"issues":[]}`}, nil
+			}}
+			rep := &recordingPoolObserver{}
+			h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Reporter: rep}
+			_, err := RunRound(t.Context(), Round{Handler: h, Runtime: runtime, Store: store}, semanticQADoc([]string{"translated"}, nil), nil, quietLogger(), rep)
+			var storage *StorageError
+			if !errors.As(err, &storage) || inner.calls.Load() != 1 {
+				t.Fatalf("calls=%d err=%v", inner.calls.Load(), err)
+			}
+			if tc.callErr == nil {
+				if len(rep.batches) != 0 {
+					t.Fatalf("accounting failure emitted provider failure: %+v", rep.batches)
+				}
+				return
+			}
+			if !errors.Is(err, providerErr) || len(rep.batches) != 1 {
+				t.Fatalf("provider failure lost: events=%+v err=%v", rep.batches, err)
+			}
+			event := rep.batches[0]
+			if event.ErrorType != "backend_error" || event.HTTPStatus != 503 || event.ErrorMessage != providerErr.Error() {
+				t.Fatalf("provider failure event=%+v", event)
+			}
+		})
+	}
+}
+
+func TestStoredSemanticQAPublishesBoundedRequestAndResponseDiagnostics(t *testing.T) {
+	runtime := storedTestExecutionRuntime(t)
+	reply := `{"issues":[]}` + strings.Repeat(" ", progress.MaxSSEBatchContentBytes+100)
+	inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+		return &backend.Response{Text: reply}, nil
+	}}
+	rep := &recordingPoolObserver{}
+	h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Reporter: rep}
+	doc := semanticQADoc([]string{"translated"}, nil)
+	doc.Segments[0].Source = strings.Repeat("界", progress.MaxSSEBatchContentBytes/3+100)
+	result, err := RunRound(t.Context(), Round{Handler: h, Runtime: runtime}, doc, nil, quietLogger(), rep)
+	if err != nil || !reflect.DeepEqual(result.Resolved, []int{0}) || len(rep.batches) != 1 {
+		t.Fatalf("result=%+v diagnostics=%d err=%v", result, len(rep.batches), err)
+	}
+	evt := rep.batches[0]
+	if evt.Status != "success" || evt.SystemPrompt == "" || len(evt.JSONSchema) == 0 || evt.ParentRequestID == "" || evt.PoolIndex == nil || *evt.PoolIndex != 0 {
+		t.Fatal("batch diagnostics lost the request context")
+	}
+	if evt.UserMessage != evt.SentContent || len(evt.UserMessage) > progress.MaxSSEBatchContentBytes || evt.SentLength <= len(evt.UserMessage) || !utf8.ValidString(evt.UserMessage) {
+		t.Fatalf("prompt preview bytes=%d original=%d", len(evt.UserMessage), evt.SentLength)
+	}
+	if evt.ResponseContent != evt.ReceivedContent || evt.ResponseContent != reply[:progress.MaxSSEBatchContentBytes] || evt.ReceivedLength != len(reply) || unsafe.StringData(evt.ResponseContent) == unsafe.StringData(reply) {
+		t.Fatalf("response preview bytes=%d original=%d", len(evt.ResponseContent), evt.ReceivedLength)
 	}
 }

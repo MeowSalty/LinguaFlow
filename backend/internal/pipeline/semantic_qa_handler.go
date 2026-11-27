@@ -3,9 +3,7 @@ package pipeline
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"sync/atomic"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -31,9 +29,6 @@ type SemanticQAHandler struct {
 	IssueCodes        []string // 仅 with_issue_codes 生效
 	Reporter          progress.Reporter
 	Logger            *slog.Logger
-
-	// Gate 是任务级暂停闸门（退避重试等待中止信号）；nil 时无暂停语义。
-	Gate *PauseGate
 
 	RoundIndex int // execution plan round index, set by caller
 }
@@ -111,15 +106,15 @@ func (h *SemanticQAHandler) BuildBatches(ctx context.Context, doc *Document, pen
 	return batches, nil
 }
 
-// ProcessBatch 渲染语义质检 prompt → 调用 LLM → 解析 issues。
-// 失败时不返回 callbackResult（batchHandler 跳过写库，原 issue 保留）。
-// 在途重试预算由 executor transientBudget 统一管控（min(max_attempts+1,3)）：
-// 瞬时/解析错误预算内重试，耗尽则 unresolved（交下一池重切 + 末轮跨轮传播换 backend），
-// 可见性由 job_runner 的 warning_message 通道承担。
-// render 失败（确定性配置/模板问题）→ terminalFailure（软警告，不重试）。
-// 致命 401/403 → fatalUnresolved（跳池+跨轮传播）。
+// ProcessBatch renders and dispatches a batch. The response is applied through its capture.
 func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
-	emit := func(evt progress.BatchEvent) { h.emitBatchOutcome(storedProgressEvent(ctx, evt)) }
+	session, _ := ctx.Value(requestSessionKey{}).(*requestSession)
+	if session == nil || !session.stored || len(session.intent.InputMembers) == 0 {
+		return batchResult{err: errors.New("semantic QA requires a frozen request")}
+	}
+	var diagnostic storedBatchDiagnostic
+	defer diagnostic.close()
+	emit := func(evt progress.BatchEvent) { h.emitBatchOutcome(diagnostic.apply(ctx, evt)) }
 	batchStart := time.Now()
 	tried := []string{h.Backend.Name()}
 
@@ -150,8 +145,11 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	}
 	sys, usr := req.System, req.User
 	if renderErr != nil {
+		if storedDispatchDeferred(ctx, renderErr) {
+			return batchResult{deferred: true}
+		}
 		if ctx.Err() != nil {
-			return h.preserveResultBounded(ctx, doc, idxs)
+			return batchResult{deferred: true}
 		}
 		if d := workDeferred(renderErr); d != nil {
 			return batchResult{waitCapacity: d, deferred: true}
@@ -172,101 +170,46 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			ErrorMessage:  renderErr.Error(),
 			RoundIndex:    h.RoundIndex,
 		})
-		return h.terminalFailureBounded(ctx, doc, idxs)
+		return batchResult{failedSegments: idxs}
 	}
 
+	diagnostic.captureRequest(ctx, h.Reporter, req)
 	callStart := time.Now()
 	resp, callErr := h.Backend.Translate(ctx, req)
-	releaseStoredRequestText(ctx, &req, &sys, &usr)
+	if callErr == nil {
+		if !retainStoredBatchDiagnostic(ctx, doc, idxs, h.Reporter, &diagnostic, RoundModeSemanticQA, h.Backend.Name(), req.ResponseFormat, batchStart) {
+			return batchResult{err: errors.New("model response was not captured")}
+		}
+		return batchResult{}
+	}
+	diagnostic.captureResponse(ctx, &req, resp, &sys, &usr)
+	emitBackendFailure := func(err error) {
+		if observedStoredProviderFailure(ctx, h.Backend) {
+			emit(backendErrorBatchEvent(RoundModeSemanticQA, doc, idxs, h.Backend.Name(), tried, err, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+		}
+	}
+	if storedDispatchDeferred(ctx, callErr) {
+		return batchResult{deferred: true}
+	}
 	if storageFailure(callErr) {
+		if providerErr := storedProviderFailure(ctx); providerErr != nil {
+			emitBackendFailure(providerErr)
+		}
 		return batchResult{err: callErr}
 	}
 	if d := workDeferred(callErr); d != nil {
 		return batchResult{waitCapacity: d, deferred: true}
 	}
-	if callErr != nil {
-		// 外部中断：Canceled，或 DeadlineExceeded 且父 ctx 已死（job 取消/外层 deadline）。
-		// 本地 backend timeout 产出 DeadlineExceeded 但父 ctx 仍活，不走此分支。
-		isExternalInterrupt := errors.Is(callErr, context.Canceled) ||
-			(errors.Is(callErr, context.DeadlineExceeded) && ctx.Err() != nil)
-		if isExternalInterrupt {
-			logger.Info("semantic_qa backend interrupted by context",
-				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-			emit(backendErrorBatchEvent(RoundModeSemanticQA, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-			return h.preserveResultBounded(ctx, doc, idxs)
-		}
+	logger.Warn("semantic_qa backend failed", "backend", h.Backend.Name(), "batch_size", len(idxs), "attempt", attempt, "err", callErr)
+	emitBackendFailure(callErr)
+	return batchResult{unresolved: idxs}
+}
 
-		// 本地 backend timeout：父 ctx 仍活，按可重试 backend 错误处理。
-		// IsRetryable 对 DeadlineExceeded 恒返 false，须在此主动闸为可重试。
-		isLocalTimeout := errors.Is(callErr, context.DeadlineExceeded) && ctx.Err() == nil
-
-		// 致命 401/403：跳池（同 backend 重试无意义）+ 跨轮传播换 backend。
-		// 不计入扫描失败软警告（真实配置/权限问题交给下一轮换 backend 接力）。
-		if isFatalBackendError(callErr) {
-			logger.Warn("semantic_qa backend fatal error, deferring to cross-round",
-				"backend", h.Backend.Name(), "batch_size", len(idxs),
-				"attempt", attempt, "err", callErr)
-			emit(backendErrorBatchEvent(RoundModeSemanticQA, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-			return batchResult{fatalUnresolved: idxs}
-		}
-
-		emit(backendErrorBatchEvent(RoundModeSemanticQA, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-
-		// 本地超时 / 5xx / 429 / 裸网络错误可退避重试；外部中断不计入。
-		// 401/403 已在上文 fatalUnresolved 分支提前返回。
-		// 预算内重试；耗尽则 unresolved（交下一池重切，末轮跨轮传播换 backend）。
-		// 预算与 executor transientBudget 同源（transientBudgetFor）。
-		if (isLocalTimeout || backend.IsRetryable(callErr)) && attempt+1 < transientBudgetFor(h.Retry) {
-			if isLocalTimeout {
-				logger.Warn("semantic_qa backend local timeout, will backoff and retry",
-					"backend", h.Backend.Name(), "batch_size", len(idxs),
-					"attempt", attempt, "err", callErr)
-			} else {
-				logger.Warn("semantic_qa backend retryable error, will backoff and retry",
-					"backend", h.Backend.Name(), "batch_size", len(idxs),
-					"attempt", attempt, "err", callErr)
-			}
-			wait := backoffDuration(attempt, h.Retry, callErr)
-			if retry := storedBackoffRetry(ctx, idxs, attempt, wait); retry != nil {
-				return batchResult{retry: retry}
-			}
-			timer := time.NewTimer(wait)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				// 退避期间取消：段保持未解决（不 preserve——preserve 会把
-				// 未完成 QA 段计入 resolved 断点，retry 后被永久跳过）。
-				return batchResult{unresolved: idxs}
-			case <-h.Gate.Done():
-				// 暂停时中止退避等待：段保持未解决，由断点集合覆盖。
-				timer.Stop()
-				return batchResult{unresolved: idxs}
-			case <-timer.C:
-			}
-			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
-		}
-
-		if isLocalTimeout {
-			logger.Warn("semantic_qa backend local timeout exhausted, deferring to next pool",
-				"backend", h.Backend.Name(), "batch_size", len(idxs),
-				"attempt", attempt, "err", callErr)
-		} else {
-			logger.Warn("semantic_qa backend failed terminally, deferring to next pool",
-				"backend", h.Backend.Name(), "batch_size", len(idxs),
-				"attempt", attempt, "err", callErr)
-		}
-		// 预算耗尽：段交下一池重切（更小批次可能因上下文缩减而成功），
-		// 末轮后仍未解决则跨轮传播（可换 backend 接力）。可见性由 job_runner
-		// 的 warning_message 通道承担（与原 terminalFailure 软警告等价，不降级）。
-		// 不计数（段尚未解决，executor 在终态批次时计数），不返回 callbackResult（避免写回空 issue）。
-		return batchResult{unresolved: idxs}
-	}
-
+func (h *SemanticQAHandler) processStoredResponse(ctx context.Context, doc *Document, idxs []int, resp *backend.Response, attempt int, logger *slog.Logger) batchResult {
 	if resp.Truncated {
 		logTruncatedResponse(logger, h.Backend.Name())
 	}
-	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
-	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
+	isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
 
 	var parseRepaired []string
 	var callback *BatchResult
@@ -290,70 +233,36 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		if e != nil {
 			return e
 		}
-		if _, stored := ctx.Value(requestSessionKey{}).(*requestSession); stored {
-			return SealStoredBatchResult(b, callback, b.OutputLimit())
-		}
-		for _, result := range callback.Segments {
-			for _, issue := range result.Issues {
-				doc.Segments[result.Index].Issues, e = backend.AppendNode(b, doc.Segments[result.Index].Issues, issue)
-				if e != nil {
-					return e
-				}
-			}
-		}
-		return nil
+		return SealStoredBatchResult(b, callback, b.OutputLimit())
 	})
 	// 截断响应对 fail-closed stage 恒不采纳：issues 的 partial 会被下游解释为
 	// 「缺失段=已扫描无问题」（假阴性质检）。JSON 模式下 WithoutSalvage 已拒绝
 	// 可检测的截断形态，此处封住两个残余通道——text 协议逐行解析无完整性信号
 	// （截断的已完成行被当作完整结果）、以及截断点恰在完整边界导致解析成功；
 	// 截断即报错走重试/下一池，代价由池预算约束。
-	if parseErr == nil && resp.Truncated {
-		parseErr = fmt.Errorf("response truncated by output token limit: refusing partial issues as complete")
-	}
 	if parseErr != nil {
-		if ctx.Err() != nil {
-			return h.preserveResultBounded(ctx, doc, idxs)
+		if wait := workDeferred(parseErr); wait != nil {
+			return batchResult{deferred: true, waitCapacity: wait}
+		}
+		if ctx.Err() != nil || storedDispatchDeferred(ctx, parseErr) {
+			return batchResult{deferred: true}
 		}
 		logger.Warn("semantic_qa parse failed",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", parseErr,
 			"attempt", attempt, "resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
-		emit(progress.BatchEvent{
-			Stage:           RoundModeSemanticQA,
-			SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
-			SegmentCount:    len(idxs),
-			BackendName:     h.Backend.Name(),
-			Status:          "failed",
-			DurationMs:      time.Since(callStart).Milliseconds(),
-			InputTokens:     resp.Usage.PromptTokens,
-			OutputTokens:    resp.Usage.CompletionTokens,
-			SentContent:     usr,
-			ReceivedContent: resp.Text,
-			TriedBackends:   tried,
-			ErrorType:       "parse_error",
-			ErrorMessage:    parseErr.Error(),
-			Truncated:       resp.Truncated,
-			Repaired:        parseRepaired,
-			RoundIndex:      h.RoundIndex,
-			Attempt:         attempt,
-			SystemPrompt:    sys,
-			UserMessage:     usr,
-			ResponseFormat:  req.ResponseFormat,
-			JSONSchema:      req.JSONSchema,
-			ResponseContent: resp.Text,
-		})
+		emitStoredBatchResponse(ctx, resp, parseErr, parseRepaired, false)
 		// parse 失败：预算内立即再入队（无退避）；耗尽则交下一池重切。
 		// LLM 响应畸形可能因随机性恢复，故预算内走重试通道（与路由表"解析失败→retry"一致）。
 		// 预算耗尽后落 unresolved：换更小批次重切可能成功，末轮仍未解决则跨轮传播换 backend；
 		// 可见性由 job_runner 的 warning_message 通道承担，不依赖 failedSegments 软警告。
 		if errors.Is(parseErr, backend.ErrBuildCapacity) {
-			return batchResult{failedSegments: idxs}
+			return batchResult{failedSegments: idxs, storedParseErr: parseErr}
 		}
 		if attempt+1 < transientBudgetFor(h.Retry) {
-			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
+			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}, storedParseErr: parseErr}
 		}
 		// 不计数（段尚未解决，executor 在终态批次时计数），不返回 callbackResult（避免写回空 issue）。
-		return batchResult{unresolved: idxs}
+		return batchResult{unresolved: idxs, storedParseErr: parseErr}
 	}
 
 	// id → []issue（snippet → Span；定位失败仍保留 MatchedText）
@@ -369,28 +278,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		"prompt_tokens", resp.Usage.PromptTokens,
 		"completion_tokens", resp.Usage.CompletionTokens)
 
-	emit(progress.BatchEvent{
-		Stage:           RoundModeSemanticQA,
-		SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
-		SegmentCount:    len(idxs),
-		BackendName:     h.Backend.Name(),
-		Status:          "success",
-		DurationMs:      time.Since(batchStart).Milliseconds(),
-		InputTokens:     resp.Usage.PromptTokens,
-		OutputTokens:    resp.Usage.CompletionTokens,
-		SentContent:     usr,
-		ReceivedContent: resp.Text,
-		TriedBackends:   tried,
-		Truncated:       resp.Truncated,
-		Repaired:        parseRepaired,
-		RoundIndex:      h.RoundIndex,
-		Attempt:         attempt,
-		SystemPrompt:    sys,
-		UserMessage:     usr,
-		ResponseFormat:  req.ResponseFormat,
-		JSONSchema:      req.JSONSchema,
-		ResponseContent: resp.Text,
-	})
+	emitStoredBatchResponse(ctx, resp, nil, parseRepaired, false)
 
 	return batchResult{
 		callbackResult: callback,
@@ -458,61 +346,4 @@ func (h *SemanticQAHandler) buildSemanticResultBounded(b *backend.BuildBounds, d
 		result.Segments = append(result.Segments, TranslatedSegment{Index: idx, ID: seg.ID, SourceText: seg.Source, TargetText: seg.Target, Issues: newIssues})
 	}
 	return result, total, nil
-}
-
-// preserveResult 不产出新 issue（Issues 为 nil），batchHandler 跳过写库，原 issue 保留。
-// 不设置 failedSegments（用于 ctx 取消等外部中断，不计入扫描失败）。
-// 注意：ctx 取消时本 result 经 cleanup 路径被丢弃，不进入计数/断点登记。
-func (h *SemanticQAHandler) preserveResult(doc *Document, idxs []int) batchResult {
-	callbackSegs := make([]TranslatedSegment, 0, len(idxs))
-	for _, idx := range idxs {
-		seg := &doc.Segments[idx]
-		callbackSegs = append(callbackSegs, TranslatedSegment{
-			Index:      idx,
-			ID:         seg.ID,
-			SourceText: seg.Source,
-			TargetText: seg.Target,
-			Issues:     nil,
-		})
-	}
-	return batchResult{
-		callbackResult: &BatchResult{Segments: callbackSegs},
-	}
-}
-
-func (h *SemanticQAHandler) preserveResultBounded(ctx context.Context, doc *Document, idxs []int) batchResult {
-	var result *BatchResult
-	err := runStoredHandlerBuild(context.WithoutCancel(ctx), func(b *backend.BuildBounds) error {
-		if e := backend.ReserveSlice[TranslatedSegment](b, int64(len(idxs))); e != nil {
-			return e
-		}
-		result = &BatchResult{Segments: make([]TranslatedSegment, 0, len(idxs))}
-		for _, idx := range idxs {
-			seg := &doc.Segments[idx]
-			result.Segments = append(result.Segments, TranslatedSegment{Index: idx, ID: seg.ID, SourceText: seg.Source, TargetText: seg.Target})
-		}
-		if _, stored := ctx.Value(requestSessionKey{}).(*requestSession); stored {
-			return SealStoredBatchResult(b, result, b.OutputLimit())
-		}
-		return nil
-	})
-	if err != nil {
-		return batchResult{unresolved: idxs}
-	}
-	return batchResult{callbackResult: result}
-}
-
-func (h *SemanticQAHandler) terminalFailureBounded(ctx context.Context, doc *Document, idxs []int) batchResult {
-	result := h.preserveResultBounded(ctx, doc, idxs)
-	result.failedSegments = idxs
-	return result
-}
-
-// terminalFailure 在 preserveResult 基础上标记 failedSegments，供 RunRound 累计为软警告。
-// failedSegments 段不计数（executor 将其从 resolved 子集排除——未解决，软警告承担可见性）。
-// 依赖 h.Retry 与 round.Retry 同源，故不再返回 retry。
-func (h *SemanticQAHandler) terminalFailure(doc *Document, idxs []int) batchResult {
-	pr := h.preserveResult(doc, idxs)
-	pr.failedSegments = idxs
-	return pr
 }

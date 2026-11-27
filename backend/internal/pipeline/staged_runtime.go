@@ -126,9 +126,11 @@ func (w *CandidateWindow) prepareResultLocked(n, resourceID int, consumer *Windo
 		return WindowTooLarge, false
 	}
 	stock := w.ledger.PipelineSnapshot().Segments
+	left := len(w.entries)
 	for _, id := range replacements {
 		if e, ok := w.entries[id]; ok {
 			stock -= e.count
+			left--
 		}
 	}
 	// Only recovered, durable inventory without a live consumer can establish
@@ -141,9 +143,11 @@ func (w *CandidateWindow) prepareResultLocked(n, resourceID int, consumer *Windo
 		if n > w.limits.Segments-stock {
 			return WindowBusy, len(w.entries) == 0 && stock > 0
 		}
-		for _, e := range w.entries {
-			if !w.fixedPin(e, consumer) {
-				return WindowBusy, false
+		if left > 0 {
+			for _, e := range w.entries {
+				if !w.fixedPin(e, consumer) {
+					return WindowBusy, false
+				}
 			}
 		}
 	}
@@ -423,7 +427,21 @@ func (w *CandidateWindow) RenameReservation(from, to string) error {
 func (w *CandidateWindow) RestoreRaw(id string, count, resource, round int, consumer *WindowConsumer) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if _, ok := w.entries[id]; ok {
+	if consumer != nil && (consumer.window != w || consumer.resourceID != resource || consumer.roundID != round || resource > 0 && !consumer.active) {
+		return ErrCandidateCapacity
+	}
+	if current, ok := w.entries[id]; ok {
+		if !current.reservation || current.count != count || current.resourceID != resource || current.roundID != round {
+			return ErrCandidateCapacity
+		}
+		if consumer != nil && current.consumer != consumer {
+			if current.consumer != nil && current.consumer.active {
+				return ErrCandidateCapacity
+			}
+			current.consumer = consumer
+			w.entries[id] = current
+			w.signal()
+		}
 		return nil
 	}
 	transferred, err := w.ledger.RestoreBudgetEntryWithTransfer(id, backend.PipelineBudgetEntry{ResourceID: resource, RoundID: round, Count: count, Reservation: true, Durable: true})
@@ -632,6 +650,18 @@ func (r *ExecutionRuntime) Configure(policy RuntimePolicy) {
 	}
 	r.Policy = policy
 	r.Preparation = NewPreparation(r.Admission, policy.PreparePending)
+}
+
+// NewMemoryExecutionRuntime uses the same admission and execution limits as a
+// persisted round. The caller owns the runtime and binds its provider backends.
+func NewMemoryExecutionRuntime(main map[int]int, alignment int, gate *PauseGate) (*ExecutionRuntime, error) {
+	admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{
+		MainConcurrency: main, AlignmentConcurrency: alignment,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return NewExecutionRuntime(admission, DefaultCandidateLimits(), gate), nil
 }
 
 func NewExecutionRuntime(admission *backend.RequestAdmission, limits CandidateLimits, gate *PauseGate) *ExecutionRuntime {
@@ -864,7 +894,13 @@ type responseBackingOwner struct {
 }
 
 type requestSession struct {
+	stored            bool
 	mode              string
+	mainLogger        *slog.Logger
+	mainRetry         backend.RetryPolicy
+	mainDiagnostic    *stagedBatchDiagnostic
+	mainFailure       *WorkCursor
+	providerFailure   error
 	deferred          *WorkDeferred
 	runtime           *ExecutionRuntime
 	store             RoundStore
@@ -932,7 +968,9 @@ func (s *requestSession) finish() (err error) {
 		}
 	}()
 	defer func() {
-		err = errors.Join(err, s.releaseResponse())
+		if releaseErr := s.releaseResponse(); releaseErr != nil {
+			err = joinRequestPersistenceFailure(err, releaseErr)
+		}
 	}()
 	return s.complete()
 }
@@ -1124,11 +1162,15 @@ func (b *requestBackend) Translate(ctx context.Context, req backend.Request) (*b
 	}
 }
 func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
+	session, _ := ctx.Value(requestSessionKey{}).(*requestSession)
+	if session != nil {
+		session.providerFailure = nil
+		session.mainFailure = nil
+	}
 	if err := requestBackendPolicy(ctx, b.inner); err != nil {
 		b.forgetPreparation(ctx)
 		return nil, err
 	}
-	session, _ := ctx.Value(requestSessionKey{}).(*requestSession)
 	if session != nil {
 		if session.err != nil {
 			return nil, session.err
@@ -1271,8 +1313,13 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		}
 	}
 
+	var providerCtx context.Context
 	if err == nil {
-		err = b.runtime.beginDispatch(ctx)
+		providerOwnerCtx := backend.WithProviderResponseOwnership(b.runtime.BuildContext(ctx, responseOwner), b.runtime.Admission, intent.ID, intent.Stage)
+		providerCtx, err = backend.WithProviderResponseAllocation(providerOwnerCtx, b.runtime.responseLimit())
+		if err == nil {
+			err = b.runtime.beginDispatch(ctx)
+		}
 		if err == nil {
 			err = permit.StartDispatch(ctx)
 		}
@@ -1334,14 +1381,22 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 			sentDone <- err
 		}()
 	}
-	providerOwnerCtx := backend.WithProviderResponseOwnership(b.runtime.BuildContext(ctx, responseOwner), b.runtime.Admission, intent.ID, intent.Stage)
-	providerCtx, providerErr := backend.WithProviderResponseAllocation(providerOwnerCtx, b.runtime.responseLimit())
-	if providerErr != nil {
-		return nil, providerErr
-	}
 	resp, callErr := b.inner.Translate(backend.WithAdmittedRequest(providerCtx), req)
+	if session != nil && session.stored && callErr == nil && resp == nil {
+		callErr = errors.New("provider returned no response")
+	}
 	duration := time.Since(start)
 	permit.RequestDone()
+	if session != nil && capturedProviderFailure(ctx, callErr) {
+		session.providerFailure = callErr
+		if session.mainLogger != nil || session.stored {
+			cursor := capturedMainFailureCursor(session.mode, intent, session.mainRetry, callErr)
+			session.mainFailure = &cursor
+		}
+		if session.mainLogger != nil {
+			defer session.reportCapturedMainFailure(ctx, intent, b.inner.Name(), callErr, resp, duration)
+		}
+	}
 	if session != nil && session.store != nil {
 		handoffStart := time.Now()
 		deadline := handoffStart.Add(b.runtime.Policy.HandoffBudget)
@@ -1363,7 +1418,7 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		if sentErr != nil {
 			slog.Default().Warn("sent fact persistence failed", "request_id", intent.ID, "request_phase", "persistence_pending", "error", sentErr)
 		}
-		record := RequestRecord{State: "received", Duration: duration, UsageKnown: resp != nil}
+		record := RequestRecord{State: "received", Duration: duration, UsageKnown: resp != nil, MainFailure: session.mainFailure}
 		if resp != nil {
 			record.Usage = resp.Usage
 		}
@@ -1376,8 +1431,8 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 			record.State = "failed"
 			record.Error = callErr.Error()
 		}
-		if len(record.Error) > 2048 {
-			record.Error = record.Error[:2048]
+		if record.Error != "" {
+			record.Error = diagnosticPrefix(record.Error, 2048)
 		}
 		if callErr == nil && len(intent.InputMembers) > 0 && resp != nil {
 			captureFailure := func(cause error) error {
@@ -1445,16 +1500,14 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 			session.runtime.retainMainOwner(intent.ID, session.permits, nil, providerCtx)
 			session.permits = nil
 
-			if err := emitRawBatchEvent(handoffCtx, session, req, response, b.inner.Name()); err != nil {
-				return nil, session.fail(err)
-			}
+			captureMainBatchDiagnostic(session, saved)
 			progress.NotifyWorkState(session.reporter)
 		} else if err := session.record(handoffCtx, intent.ID, record); err != nil {
-			return nil, session.fail(errors.Join(sentErr, err))
+			return nil, session.fail(joinRequestPersistenceFailure(err, callErr, sentErr))
 		}
 		var uncertain interface{ Uncertain() bool }
 		if errors.As(sentErr, &uncertain) && uncertain.Uncertain() {
-			return nil, session.fail(sentErr)
+			return nil, session.fail(joinRequestPersistenceFailure(sentErr, callErr))
 		}
 		if callErr == nil && session.rawResponse == nil {
 			session.pending = append(session.pending, intent.ID)
@@ -1476,6 +1529,16 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		}
 	}
 	return resp, callErr
+}
+
+func joinRequestPersistenceFailure(saveErr error, causes ...error) error {
+	if saveErr == nil && len(causes) == 1 {
+		return causes[0]
+	}
+	if storage, ok := saveErr.(*StorageError); ok {
+		return &StorageError{Operation: storage.Operation, Err: errors.Join(append([]error{storage.Err}, causes...)...)}
+	}
+	return errors.Join(append([]error{saveErr}, causes...)...)
 }
 
 func (b *requestBackend) forgetPreparation(ctx context.Context) {

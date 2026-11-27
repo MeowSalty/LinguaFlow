@@ -11,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -21,6 +22,7 @@ type Engine struct {
 	reporter          progress.Reporter
 	rounds            []pipeline.Round
 	rubyRetryBackends []backend.Backend
+	memoryBackends    []backend.Backend
 	glossary          glossary.Glossary
 	tm                tm.TranslationMemory
 	saveGlossary      bool
@@ -72,6 +74,24 @@ func NewWithOptions(opts Options) (*Engine, error) {
 
 	roundConfigs := buildRoundConfigs(opts.Rounds, opts.Config)
 	rubyRetryBackends := opts.RubyRetryBackends
+	var ownedMemoryRuntime *pipeline.ExecutionRuntime
+	var memoryBackends []backend.Backend
+	if opts.Runtime == nil {
+		var err error
+		memoryBackends = make([]backend.Backend, 0, len(roundConfigs)+len(rubyRetryBackends))
+		for _, round := range roundConfigs {
+			memoryBackends = append(memoryBackends, round.Backend)
+		}
+		memoryBackends = append(memoryBackends, rubyRetryBackends...)
+		ownedMemoryRuntime, rubyRetryBackends, err = bindMemoryExecution(roundConfigs, rubyRetryBackends)
+		if err != nil {
+			return nil, err
+		}
+		opts.Runtime, opts.OwnRuntime = ownedMemoryRuntime, true
+		if opts.RubyProtocolVersion == 0 {
+			opts.RubyProtocolVersion = ruby.ProtocolV2
+		}
+	}
 
 	rounds, err := buildPipelineRounds(
 		roundConfigs,
@@ -84,7 +104,7 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		opts.RubyRetryAttempts,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("engine: build rounds: %w", err)
+		return nil, errors.Join(fmt.Errorf("engine: build rounds: %w", err), ownedMemoryRuntime.Close())
 	}
 	for i := range rounds {
 		round := &rounds[i]
@@ -108,6 +128,7 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		reporter:          opts.Reporter,
 		rounds:            rounds,
 		rubyRetryBackends: rubyRetryBackends,
+		memoryBackends:    memoryBackends,
 		glossary:          glos,
 		tm:                translationMemory,
 		saveGlossary:      opts.Config.Glossary.Save,
@@ -116,6 +137,30 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		ownRuntime:        opts.OwnRuntime,
 	}
 	return e, nil
+}
+
+func bindMemoryExecution(rounds []RoundConfig, rubyBackends []backend.Backend) (*pipeline.ExecutionRuntime, []backend.Backend, error) {
+	main := make(map[int]int, len(rounds))
+	alignment := 0
+	for i := range rounds {
+		rounds[i].RoundIndex = i
+		main[i] = max(1, rounds[i].Concurrency)
+		if len(rubyBackends) != 0 {
+			alignment = max(alignment, main[i])
+		}
+	}
+	runtime, err := pipeline.NewMemoryExecutionRuntime(main, alignment, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	for i := range rounds {
+		rounds[i].Backend = pipeline.BindRequestBackend(rounds[i].Backend, i+1, i, runtime)
+	}
+	bound := make([]backend.Backend, len(rubyBackends))
+	for i, b := range rubyBackends {
+		bound[i] = pipeline.BindRequestBackend(b, len(rounds)+i+1, 0, runtime)
+	}
+	return runtime, bound, nil
 }
 
 // Close releases backend connections once and retries retirement of an owned runtime.
@@ -137,14 +182,30 @@ func (e *Engine) Close() error {
 func (e *Engine) closeBackends() error {
 	seen := make(map[backend.Backend]struct{})
 	var firstErr error
+	closeBackend := func(b backend.Backend) {
+		if b == nil {
+			return
+		}
+		if _, ok := seen[b]; ok {
+			return
+		}
+		seen[b] = struct{}{}
+		if err := b.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if e.memoryBackends != nil {
+		for _, b := range e.memoryBackends {
+			closeBackend(b)
+		}
+		return firstErr
+	}
 	for _, r := range e.rounds {
 		var b backend.Backend
 		if th, ok := r.Handler.(*pipeline.TranslateHandler); ok {
 			b = th.Backend
 		} else if eh, ok := r.Handler.(*pipeline.ExtractHandler); ok {
-			if len(eh.Backends) > 0 {
-				b = eh.Backends[0]
-			}
+			b = eh.Backend
 		} else if ah, ok := r.Handler.(*pipeline.AdjudicateHandler); ok {
 			b = ah.Backend
 		} else if sh, ok := r.Handler.(*pipeline.SemanticQAHandler); ok {
@@ -154,28 +215,10 @@ func (e *Engine) closeBackends() error {
 		} else if _, ok := r.Handler.(*pipeline.CorrectHandler); ok {
 			// correct 是纯本地轮，无 backend。
 		}
-		if b == nil {
-			continue
-		}
-		if _, ok := seen[b]; ok {
-			continue
-		}
-		seen[b] = struct{}{}
-		if err := b.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
+		closeBackend(b)
 	}
 	for _, b := range e.rubyRetryBackends {
-		if b == nil {
-			continue
-		}
-		if _, ok := seen[b]; ok {
-			continue
-		}
-		seen[b] = struct{}{}
-		if err := b.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
+		closeBackend(b)
 	}
 	return firstErr
 }

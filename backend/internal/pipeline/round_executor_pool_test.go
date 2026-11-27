@@ -63,7 +63,7 @@ func TestRunRound_PoolEventsEmittedOnShrink(t *testing.T) {
 		Shrink:      h.FallbackShrink,
 		Handler:     h,
 	}
-	if _, err := RunRound(context.Background(), round, doc, nil, quietLogger(), rep); err != nil {
+	if _, err := runMemoryTestRound(t, context.Background(), round, doc, nil, quietLogger(), rep); err != nil {
 		t.Fatalf("RunRound: %v", err)
 	}
 
@@ -128,7 +128,7 @@ func TestRunRound_PoolEventsEmittedWithoutShrink(t *testing.T) {
 		Shrink:      0,
 		Handler:     h,
 	}
-	if _, err := RunRound(context.Background(), round, doc, nil, quietLogger(), rep); err != nil {
+	if _, err := runMemoryTestRound(t, context.Background(), round, doc, nil, quietLogger(), rep); err != nil {
 		t.Fatalf("RunRound: %v", err)
 	}
 
@@ -173,7 +173,7 @@ func TestRunRound_PoolObserverNotImplemented(t *testing.T) {
 		Handler:     h,
 	}
 	// 不应 panic
-	if _, err := RunRound(context.Background(), round, doc, nil, quietLogger(), rep); err != nil {
+	if _, err := runMemoryTestRound(t, context.Background(), round, doc, nil, quietLogger(), rep); err != nil {
 		// 错误可接受，重点是未 panic
 		_ = err
 	}

@@ -67,6 +67,7 @@ type memoryResponse struct {
 	stagedCorrections        map[int]OutputMemberFrame
 	stagedCorrectionBackings map[int]*memberBacking
 	publicBacking            *memberBacking
+	parseDiagnosticBacking   *memberBacking
 	publicDigest             [sha256.Size]byte
 	historyAdmission         *backend.RequestAdmission
 	historyOwner             string
@@ -226,8 +227,14 @@ func (s *MemoryRoundStore) AbortRequest(ctx context.Context, id string) (result 
 	r.record.State = "cancelled_before_dispatch"
 	for _, idx := range r.intent.Indices {
 		cur := s.state.Cursors[idx]
-		if r.intent.Stage == backend.RequestStageMain && r.intent.Phase != "prompt_upgrade" {
-			cur.Attempt--
+		if r.intent.Stage == backend.RequestStageMain {
+			if r.intent.Phase == promptUpgradePhase {
+				if strings.HasPrefix(cur.Phase, promptUpgradePrefix) {
+					cur.NetworkAttempt--
+				}
+			} else {
+				cur.Attempt--
+			}
 		}
 		s.state.Cursors[idx] = cur
 	}

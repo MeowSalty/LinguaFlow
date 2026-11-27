@@ -15,15 +15,16 @@ type RoundHandler interface {
 	// 返回的 [][]int 是抽象索引——翻译模式是段落索引，抽取模式也可以是段落索引。
 	BuildBatches(ctx context.Context, doc *Document, pending []int, poolIndex int) ([][]int, error)
 
-	// ProcessBatch 处理单个批次。
-	// idxs 是批次内的索引列表，attempt 是当前重试次数（从 0 开始）。
-	// 返回 batchResult 指示未解决/重试状态。
-	ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult
-
 	// ModeName 返回模式名称，用于进度上报和日志。
 	ModeName() string
 
 	// Finalize 在所有批次完成后执行，接收未解决的索引列表。
 	// 可用于汇总、写回失败索引等操作。
 	Finalize(ctx context.Context, doc *Document, unresolved []int) error
+}
+
+// batchRoundHandler processes stored batches that do not produce staged candidates.
+type batchRoundHandler interface {
+	RoundHandler
+	ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult
 }

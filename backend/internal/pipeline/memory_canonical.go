@@ -43,6 +43,10 @@ func (s *MemoryRoundStore) LoadCanonical(ctx context.Context, doc *Document) (bo
 		}
 		record := s.confirmations[idx]
 		if record == nil {
+			if s.state.Cursors[idx].State == "resolved" {
+				doc.Segments[idx].RoundWork.Completed = true
+				continue
+			}
 			return false, 0, fmt.Errorf("memory completed member has no confirmation")
 		}
 		s.mu.Unlock()

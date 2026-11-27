@@ -5,10 +5,6 @@ import (
 	"sync"
 )
 
-// worker 侧调度原语：准入预算（字节配额 + 资源数上限）。
-// 站位信号量（pipeline.Station）与暂停闸门（pipeline.PauseGate）
-// 定义在 pipeline 包——worker 注入、pipeline 消费，跨层共享同一实例。
-
 // admission 原子准入预算：在途工作配额（字节）+ 在途资源数上限。
 // RSS 保险丝（sysmem.Gate）由 JobRunner 在准入循环中直接调用 Allow()
 // pull 型推进双水位状态机），不在本结构内镜像其状态。

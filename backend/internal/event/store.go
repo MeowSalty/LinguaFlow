@@ -113,21 +113,29 @@ func (s *RingBufferStore) AppendWithSeq(jobID int, evt Event) {
 // ordered ascending by seq. If limit <= 0, all matching events are returned.
 // ctx is accepted for interface symmetry but unused (in-memory scan).
 func (s *RingBufferStore) Replay(ctx context.Context, jobID int, afterSeq int64, limit int) ([]Event, error) {
+	events, _, err := s.replay(ctx, jobID, afterSeq, limit, false)
+	return events, err
+}
+
+// replay tells the hybrid store whether the cursor is inside the retained window.
+// When it is older, the hybrid store still needs the retained events that were
+// unable to reach the database.
+func (s *RingBufferStore) replay(ctx context.Context, jobID int, afterSeq int64, limit int, includePartial bool) ([]Event, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	s.mu.RLock()
 	buf, ok := s.buffers[jobID]
 	s.mu.RUnlock()
 	if !ok {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	buf.mu.RLock()
 	defer buf.mu.RUnlock()
 
 	if buf.count == 0 {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	capacity := len(buf.events)
@@ -141,11 +149,9 @@ func (s *RingBufferStore) Replay(ctx context.Context, jobID int, afterSeq int64,
 	}
 
 	// 当 buffer 溢出时，检查 afterSeq 是否指向被淘汰的事件
-	if buf.count > capacity {
-		oldestSeq := buf.events[start%capacity].Seq
-		if afterSeq < oldestSeq {
-			return nil, nil
-		}
+	cursorInWindow := afterSeq >= buf.events[start%capacity].Seq
+	if !includePartial && buf.count > capacity && !cursorInWindow {
+		return nil, false, nil
 	}
 
 	var result []Event
@@ -159,7 +165,7 @@ func (s *RingBufferStore) Replay(ctx context.Context, jobID int, afterSeq int64,
 			}
 		}
 	}
-	return result, nil
+	return result, cursorInWindow, nil
 }
 
 // LatestSeq returns the highest seq in the job's ring buffer, and false when

@@ -41,3 +41,19 @@ func TestToTranslationBatchDiagnostic_TruncationSignalsZero(t *testing.T) {
 		t.Errorf("ShrinkAttempted = %v, want pointer to false", diagnostic.ShrinkAttempted)
 	}
 }
+
+func TestToTranslationBatchDiagnosticPreservesOriginalLengths(t *testing.T) {
+	event := progress.BatchEvent{
+		Stage: "translate", Status: "success",
+		SystemPrompt: "system", UserMessage: "user", ResponseContent: "response",
+		SystemPromptLength: 200000, SentLength: 210000, ReceivedLength: 220000,
+	}
+	diagnostic := toTranslationBatchDiagnostic(event)
+	if *diagnostic.Request.SystemPromptLength != event.SystemPromptLength || *diagnostic.Request.UserMessageLength != event.SentLength ||
+		*diagnostic.Response.ContentLength != event.ReceivedLength {
+		t.Fatalf("diagnostic lengths = %d/%d/%d", *diagnostic.Request.SystemPromptLength, *diagnostic.Request.UserMessageLength, *diagnostic.Response.ContentLength)
+	}
+	if !*diagnostic.Request.SystemPromptTruncated || !*diagnostic.Request.UserMessageTruncated || !*diagnostic.Response.ContentTruncated {
+		t.Fatalf("diagnostic lost original truncation: %+v", diagnostic)
+	}
+}

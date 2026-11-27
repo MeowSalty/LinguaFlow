@@ -7,12 +7,14 @@ import (
 	"errors"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 var (
 	ErrStale            = errors.New("work baseline is stale")
 	ErrStopped          = errors.New("job does not allow this work")
+	ErrPaused           = errors.New("job is paused")
 	ErrManifest         = errors.New("round work manifest is missing or inconsistent")
 	ErrBudget           = errors.New("request attempt budget exhausted")
 	ErrCandidateVersion = errors.New("candidate version is stale")
@@ -130,6 +132,9 @@ type RequestResult struct {
 	OutputTokens int64
 	DurationMS   int64
 	LastError    string
+	// MainFailure records the disposition of a known provider failure after
+	// dispatch. It shares the request accounting transaction.
+	MainFailure *model.RoundWorkCursor
 }
 
 type Outcome string
@@ -146,6 +151,7 @@ const (
 
 type CommitInput struct {
 	RequireProjectionProof bool
+	DeferIfPaused          bool
 	ConfirmedVersion       int64
 	Scope                  Scope
 	SegmentID              int

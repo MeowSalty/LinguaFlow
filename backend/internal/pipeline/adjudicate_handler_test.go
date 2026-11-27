@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -93,7 +92,7 @@ func TestAdjudicateHandler_BuildBatches_SkipsNonAdjudicableCodes(t *testing.T) {
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_FalsePositiveDismissed(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_FalsePositiveDismissed(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -113,17 +112,16 @@ func TestAdjudicateHandler_ProcessBatch_FalsePositiveDismissed(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.callbackResult == nil {
-		t.Fatal("expected callbackResult")
-	}
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	parsed := decodeCapturedQualityBatch(t, result)
+	issues := parsed.Segments[0].Issues
 	// false_positive 不再剔除，而是打 dismissed 标记保留（审计痕迹）
-	if len(doc.Segments[0].Issues) != 2 {
-		t.Fatalf("issues len=%d want 2 (dismissed kept for audit)", len(doc.Segments[0].Issues))
+	if len(issues) != 2 {
+		t.Fatalf("issues len=%d want 2 (dismissed kept for audit)", len(issues))
 	}
 	var residual, untranslated *qa.QualityIssue
-	for i := range doc.Segments[0].Issues {
-		iss := &doc.Segments[0].Issues[i]
+	for i := range issues {
+		iss := &issues[i]
 		switch iss.Code {
 		case "source_residual":
 			residual = iss
@@ -132,7 +130,7 @@ func TestAdjudicateHandler_ProcessBatch_FalsePositiveDismissed(t *testing.T) {
 		}
 	}
 	if residual == nil || !residual.Dismissed() || residual.Disposition != qa.DispositionDismissed {
-		t.Fatalf("source_residual not dismissed: %#v", doc.Segments[0].Issues)
+		t.Fatalf("source_residual not dismissed: %#v", issues)
 	}
 	if residual.Note != "proper noun" {
 		t.Fatalf("residual note=%q want %q (LLM reason audited)", residual.Note, "proper noun")
@@ -144,15 +142,15 @@ func TestAdjudicateHandler_ProcessBatch_FalsePositiveDismissed(t *testing.T) {
 		t.Fatal("DecidedAt must be set for dismissed issue")
 	}
 	if untranslated == nil || untranslated.Dismissed() || untranslated.Disposition != qa.DispositionPending {
-		t.Fatalf("untranslated should stay pending: %#v", doc.Segments[0].Issues)
+		t.Fatalf("untranslated should stay pending: %#v", issues)
 	}
-	cb := result.callbackResult.Segments
+	cb := parsed.Segments
 	if len(cb) != 1 || len(cb[0].Issues) != 2 {
 		t.Fatalf("callback issues=%v", cb)
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_RealPreserved(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_RealPreserved(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -169,16 +167,15 @@ func TestAdjudicateHandler_ProcessBatch_RealPreserved(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.callbackResult == nil {
-		t.Fatal("expected callbackResult")
-	}
-	if len(doc.Segments[0].Issues) != 1 {
-		t.Fatalf("issues len=%d want 1", len(doc.Segments[0].Issues))
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	parsed := decodeCapturedQualityBatch(t, result)
+	issues := parsed.Segments[0].Issues
+	if len(issues) != 1 {
+		t.Fatalf("issues len=%d want 1", len(issues))
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_ParseFailureDefers(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_ParseFailureDefers(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -192,7 +189,7 @@ func TestAdjudicateHandler_ProcessBatch_ParseFailureDefers(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
 	// 解析失败：段交下一池重切（unresolved），不改 doc（原 issue 保留供下池重判）。
 	if len(doc.Segments[0].Issues) != 1 {
 		t.Fatalf("issues len=%d want 1 preserved in doc", len(doc.Segments[0].Issues))
@@ -206,34 +203,7 @@ func TestAdjudicateHandler_ProcessBatch_ParseFailureDefers(t *testing.T) {
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_BackendErrorDefers(t *testing.T) {
-	doc := adjudicableDoc(
-		[]string{"translated"},
-		[][]qa.QualityIssue{
-			{{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"}},
-		},
-	)
-	// 400 非 401/403（不致命）、非 ≥500/429（不可重试）→ 命中非致命不可重试分支。
-	fb := &fakeBackend{name: "fake", errs: []error{&backend.StatusError{StatusCode: 400, Err: errors.New("bad request")}}}
-	h := &AdjudicateHandler{AdjudicateCodes: qa.DefaultAdjudicateCodes(),
-		Backend:   fb,
-		Renderer:  newAdjudicationRenderer(t),
-		BatchSize: 10,
-		Logger:    quietLogger(),
-	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if !reflect.DeepEqual(result.unresolved, []int{0}) {
-		t.Fatalf("unresolved=%v want [0]", result.unresolved)
-	}
-	if result.callbackResult != nil {
-		t.Fatal("non-fatal backend error must not produce callbackResult (would persist stale issues)")
-	}
-	if len(doc.Segments[0].Issues) != 1 {
-		t.Fatalf("issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
-	}
-}
-
-func TestAdjudicateHandler_ProcessBatch_RenderFailureDefers(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_RenderFailureDefers(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -252,11 +222,11 @@ func TestAdjudicateHandler_ProcessBatch_RenderFailureDefers(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if !reflect.DeepEqual(result.unresolved, []int{0}) {
-		t.Fatalf("unresolved=%v want [0]", result.unresolved)
+	result, batch := runCapturedQualityTest(t, h, doc, nil)
+	if !reflect.DeepEqual(result.Unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.Unresolved)
 	}
-	if result.callbackResult != nil {
+	if batch != nil {
 		t.Fatal("render failure must not produce callbackResult (would persist stale issues)")
 	}
 	if len(doc.Segments[0].Issues) != 1 {
@@ -264,7 +234,7 @@ func TestAdjudicateHandler_ProcessBatch_RenderFailureDefers(t *testing.T) {
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_NonTextAttachesSchema(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -281,7 +251,7 @@ func TestAdjudicateHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	runCapturedQualityTest(t, h, doc, nil)
 	if len(fb.requests) != 1 {
 		t.Fatalf("requests=%d want 1", len(fb.requests))
 	}
@@ -293,7 +263,7 @@ func TestAdjudicateHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_TextMode(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_TextMode(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -314,8 +284,8 @@ func TestAdjudicateHandler_ProcessBatch_TextMode(t *testing.T) {
 		ResponseMode: "text",
 		Logger:       quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.callbackResult == nil {
+	_, batch := runCapturedQualityTest(t, h, doc, nil)
+	if batch == nil {
 		t.Fatal("expected callbackResult")
 	}
 	if len(fb.requests) != 1 {
@@ -335,12 +305,13 @@ func TestAdjudicateHandler_ProcessBatch_TextMode(t *testing.T) {
 		t.Fatalf("text user missing [segment]:\n%s", req.User)
 	}
 	// source_residual 打 dismissed 标记保留，untranslated（硬规则不可裁决）保持 pending
-	if len(doc.Segments[0].Issues) != 2 {
-		t.Fatalf("issues len=%d want 2", len(doc.Segments[0].Issues))
+	issues := batch.Segments[0].Issues
+	if len(issues) != 2 {
+		t.Fatalf("issues len=%d want 2", len(issues))
 	}
 	var residual, untranslated *qa.QualityIssue
-	for i := range doc.Segments[0].Issues {
-		iss := &doc.Segments[0].Issues[i]
+	for i := range issues {
+		iss := &issues[i]
 		switch iss.Code {
 		case "source_residual":
 			residual = iss
@@ -349,17 +320,17 @@ func TestAdjudicateHandler_ProcessBatch_TextMode(t *testing.T) {
 		}
 	}
 	if residual == nil || !residual.Dismissed() || residual.Disposition != qa.DispositionDismissed {
-		t.Fatalf("source_residual not dismissed: %#v", doc.Segments[0].Issues)
+		t.Fatalf("source_residual not dismissed: %#v", issues)
 	}
 	if residual.Note != "proper noun" {
 		t.Fatalf("residual note=%q want %q", residual.Note, "proper noun")
 	}
 	if untranslated == nil || untranslated.Dismissed() || untranslated.Disposition != qa.DispositionPending {
-		t.Fatalf("untranslated should stay pending: %#v", doc.Segments[0].Issues)
+		t.Fatalf("untranslated should stay pending: %#v", issues)
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_TextModeJSONFallback(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -377,21 +348,23 @@ func TestAdjudicateHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
 		ResponseMode: "text",
 		Logger:       quietLogger(),
 	}
-	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if len(doc.Segments[0].Issues) != 1 || !doc.Segments[0].Issues[0].Dismissed() {
-		t.Fatalf("issues=%#v want 1 dismissed (false_positive via JSON fallback)", doc.Segments[0].Issues)
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	parsed := decodeCapturedQualityBatch(t, result)
+	issues := parsed.Segments[0].Issues
+	if len(issues) != 1 || !issues[0].Dismissed() {
+		t.Fatalf("issues=%#v want 1 dismissed (false_positive via JSON fallback)", issues)
 	}
-	if doc.Segments[0].Issues[0].Note != "ok" {
-		t.Fatalf("note=%q want %q", doc.Segments[0].Issues[0].Note, "ok")
+	if issues[0].Note != "ok" {
+		t.Fatalf("note=%q want %q", issues[0].Note, "ok")
 	}
 }
 
-// TestAdjudicateHandler_ProcessBatch_TextModeTruncatedRefused fail-closed stage
+// TestAdjudicateHandler_CapturedResponse_TextModeTruncatedRefused fail-closed stage
 // 对截断响应恒不采纳：adjudicate 的成功路径对所有批次段一律 SegmentDone
 // （无「缺失 verdict → 重跑」通道），text 协议逐行解析无完整性信号——截断的
 // 已完成行被当作完整裁决会令缺失 verdict 的段永久跳过。后端标记 Truncated 时
 // 即使 text 协议命中也必须报 parse_error 走 unresolved → 下一池整批重试。
-func TestAdjudicateHandler_ProcessBatch_TextModeTruncatedRefused(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_TextModeTruncatedRefused(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -413,14 +386,14 @@ func TestAdjudicateHandler_ProcessBatch_TextModeTruncatedRefused(t *testing.T) {
 		Reporter:     rec,
 		Logger:       quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if len(result.unresolved) != 1 {
+	result, batch := runCapturedQualityTest(t, h, doc, rec)
+	if len(result.Unresolved) != 1 {
 		t.Fatalf("unresolved=%v, want the batch (truncated text response must fail closed)",
-			result.unresolved)
+			result.Unresolved)
 	}
-	if result.callbackResult != nil {
+	if batch != nil {
 		t.Fatalf("truncated text response must not be accepted as complete verdicts, got %#v",
-			result.callbackResult)
+			batch)
 	}
 	// fail-closed：issue 保持 pending，段未被裁决
 	if doc.Segments[0].Issues[0].Dismissed() {
@@ -491,7 +464,7 @@ func TestAdjudicateHandler_BuildBatches_MaxBatchIndexSpan(t *testing.T) {
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_MatchedTextSelectiveDismiss(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_MatchedTextSelectiveDismiss(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -514,14 +487,16 @@ func TestAdjudicateHandler_ProcessBatch_MatchedTextSelectiveDismiss(t *testing.T
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	parsed := decodeCapturedQualityBatch(t, result)
+	issues := parsed.Segments[0].Issues
 	// foo 打 dismissed 标记保留，bar 保持 pending
-	if len(doc.Segments[0].Issues) != 2 {
-		t.Fatalf("issues=%#v want 2 kept (foo dismissed, bar pending)", doc.Segments[0].Issues)
+	if len(issues) != 2 {
+		t.Fatalf("issues=%#v want 2 kept (foo dismissed, bar pending)", issues)
 	}
 	var foo, bar *qa.QualityIssue
-	for i := range doc.Segments[0].Issues {
-		iss := &doc.Segments[0].Issues[i]
+	for i := range issues {
+		iss := &issues[i]
 		if qa.MatchedText(*iss) == "foo" {
 			foo = iss
 		} else if qa.MatchedText(*iss) == "bar" {
@@ -532,11 +507,11 @@ func TestAdjudicateHandler_ProcessBatch_MatchedTextSelectiveDismiss(t *testing.T
 		t.Fatalf("foo not dismissed with reason: %#v", foo)
 	}
 	if bar == nil || bar.Dismissed() || bar.Disposition != qa.DispositionPending {
-		t.Fatalf("bar should stay pending: %#v", doc.Segments[0].Issues)
+		t.Fatalf("bar should stay pending: %#v", issues)
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_MatchedTextMissingKeepsMultipleIssues(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_MatchedTextMissingKeepsMultipleIssues(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -556,9 +531,11 @@ func TestAdjudicateHandler_ProcessBatch_MatchedTextMissingKeepsMultipleIssues(t 
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if len(doc.Segments[0].Issues) != 2 {
-		t.Fatalf("issues=%#v want both retained", doc.Segments[0].Issues)
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	parsed := decodeCapturedQualityBatch(t, result)
+	issues := parsed.Segments[0].Issues
+	if len(issues) != 2 {
+		t.Fatalf("issues=%#v want both retained", issues)
 	}
 }
 
@@ -588,14 +565,16 @@ func TestAdjudicateHandler_AdjudicateCodes_OnlyLengthRatio(t *testing.T) {
 	if err != nil || len(batches) != 1 {
 		t.Fatalf("batches=%v err=%v", batches, err)
 	}
-	_ = h.ProcessBatch(context.Background(), doc, batches[0], 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, batches[0], &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	parsed := decodeCapturedQualityBatch(t, result)
+	issues := parsed.Segments[0].Issues
 	// source_residual not adjudicated → stays pending; length_ratio dismissed (marked, not removed)
-	if len(doc.Segments[0].Issues) != 2 {
-		t.Fatalf("issues len=%d want 2", len(doc.Segments[0].Issues))
+	if len(issues) != 2 {
+		t.Fatalf("issues len=%d want 2", len(issues))
 	}
 	var residual, ratio *qa.QualityIssue
-	for i := range doc.Segments[0].Issues {
-		iss := &doc.Segments[0].Issues[i]
+	for i := range issues {
+		iss := &issues[i]
 		switch iss.Code {
 		case "source_residual":
 			residual = iss
@@ -604,10 +583,10 @@ func TestAdjudicateHandler_AdjudicateCodes_OnlyLengthRatio(t *testing.T) {
 		}
 	}
 	if residual == nil || residual.Dismissed() || residual.Disposition != qa.DispositionPending {
-		t.Fatalf("source_residual should stay pending: %#v", doc.Segments[0].Issues)
+		t.Fatalf("source_residual should stay pending: %#v", issues)
 	}
 	if ratio == nil || !ratio.Dismissed() || ratio.Disposition != qa.DispositionDismissed || ratio.Note != "ok" {
-		t.Fatalf("length_ratio should be dismissed with reason: %#v", doc.Segments[0].Issues)
+		t.Fatalf("length_ratio should be dismissed with reason: %#v", issues)
 	}
 }
 
@@ -620,7 +599,14 @@ func TestApplyVerdicts_AlreadyDismissedPassedThrough(t *testing.T) {
 	verdictMap := map[string]prompt.AdjudicationVerdict{
 		adjudicationKey("0", "source_residual", ""): {ID: "0", IssueCode: "source_residual", Verdict: "false_positive", Reason: "LLM reason"},
 	}
-	out, newly := applyVerdicts(issues, "0", codes, verdictMap, quietLogger())
+	bounds, err := backend.NewBuildBounds(4096, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, newly, err := applyVerdictsBounded(bounds, issues, "0", codes, verdictMap)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if newly != 1 {
 		t.Fatalf("newlyDismissed=%d want 1", newly)
 	}
@@ -640,7 +626,7 @@ func TestApplyVerdicts_AlreadyDismissedPassedThrough(t *testing.T) {
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusDefaultAdjudicable(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_PunctuationSurplusDefaultAdjudicable(t *testing.T) {
 	// 未显式配置 AdjudicateCodes 时回退到 qa.DefaultAdjudicateCodes()，
 	// 其中已包含 punctuation_surplus —— 默认配置下即应可裁决。
 	doc := adjudicableDoc(
@@ -666,22 +652,21 @@ func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusDefaultAdjudicable(t *
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.callbackResult == nil {
-		t.Fatal("expected callbackResult")
-	}
-	if len(doc.Segments[0].Issues) != 1 {
-		t.Fatalf("issues len=%d want 1 (dismissed kept for audit)", len(doc.Segments[0].Issues))
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	parsed := decodeCapturedQualityBatch(t, result)
+	issues := parsed.Segments[0].Issues
+	if len(issues) != 1 {
+		t.Fatalf("issues len=%d want 1 (dismissed kept for audit)", len(issues))
 	}
 	var surplus *qa.QualityIssue
-	for i := range doc.Segments[0].Issues {
-		iss := &doc.Segments[0].Issues[i]
+	for i := range issues {
+		iss := &issues[i]
 		if iss.Code == qa.CheckPunctuationSurplus {
 			surplus = iss
 		}
 	}
 	if surplus == nil || !surplus.Dismissed() || surplus.Disposition != qa.DispositionDismissed {
-		t.Fatalf("punctuation_surplus not dismissed under default codes: %#v", doc.Segments[0].Issues)
+		t.Fatalf("punctuation_surplus not dismissed under default codes: %#v", issues)
 	}
 	if surplus.Note != "内心独白加引号" {
 		t.Fatalf("note=%q want %q (LLM reason audited)", surplus.Note, "内心独白加引号")
@@ -694,7 +679,7 @@ func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusDefaultAdjudicable(t *
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusMatchedTextKeyed(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_PunctuationSurplusMatchedTextKeyed(t *testing.T) {
 	// LLM 裁决未回传 matched_text（空串），但该段该 code 仅一条待决 issue，
 	// applyVerdicts 的单实例回退（空 matched_text 键）仍应命中并剔除。
 	doc := adjudicableDoc(
@@ -720,19 +705,18 @@ func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusMatchedTextKeyed(t *te
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.callbackResult == nil {
-		t.Fatal("expected callbackResult")
-	}
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	parsed := decodeCapturedQualityBatch(t, result)
+	issues := parsed.Segments[0].Issues
 	var surplus *qa.QualityIssue
-	for i := range doc.Segments[0].Issues {
-		iss := &doc.Segments[0].Issues[i]
+	for i := range issues {
+		iss := &issues[i]
 		if iss.Code == qa.CheckPunctuationSurplus {
 			surplus = iss
 		}
 	}
 	if surplus == nil || !surplus.Dismissed() || surplus.Disposition != qa.DispositionDismissed {
-		t.Fatalf("single-instance fallback should dismiss punctuation_surplus: %#v", doc.Segments[0].Issues)
+		t.Fatalf("single-instance fallback should dismiss punctuation_surplus: %#v", issues)
 	}
 	if surplus.Note != "拟声词加引号" {
 		t.Fatalf("note=%q want %q (LLM reason audited)", surplus.Note, "拟声词加引号")
@@ -742,7 +726,7 @@ func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusMatchedTextKeyed(t *te
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusRealStaysPending(t *testing.T) {
+func TestAdjudicateHandler_CapturedResponse_PunctuationSurplusRealStaysPending(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -766,23 +750,22 @@ func TestAdjudicateHandler_ProcessBatch_PunctuationSurplusRealStaysPending(t *te
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	parsed := decodeCapturedQualityBatch(t, result)
+	issues := parsed.Segments[0].Issues
 	// real 不是错误：批次成功返回 callbackResult，issue 保持 pending 原样保留。
-	if result.callbackResult == nil {
-		t.Fatal("expected callbackResult (real verdict is not an error)")
-	}
-	if len(doc.Segments[0].Issues) != 1 {
-		t.Fatalf("issues len=%d want 1 (real kept)", len(doc.Segments[0].Issues))
+	if len(issues) != 1 {
+		t.Fatalf("issues len=%d want 1 (real kept)", len(issues))
 	}
 	var surplus *qa.QualityIssue
-	for i := range doc.Segments[0].Issues {
-		iss := &doc.Segments[0].Issues[i]
+	for i := range issues {
+		iss := &issues[i]
 		if iss.Code == qa.CheckPunctuationSurplus {
 			surplus = iss
 		}
 	}
 	if surplus == nil {
-		t.Fatalf("punctuation_surplus missing: %#v", doc.Segments[0].Issues)
+		t.Fatalf("punctuation_surplus missing: %#v", issues)
 	}
 	if surplus.Dismissed() || surplus.Disposition != qa.DispositionPending {
 		t.Fatalf("real verdict must keep issue pending: %#v", surplus)

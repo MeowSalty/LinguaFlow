@@ -123,7 +123,7 @@ func TestProcessJobResourceLoadFailureIsTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = f.runner.processJobResource(ctx, &service.JobExecution{Job: job, Project: project}, f.snapshot, item, registry, nil, nil)
+	err = f.runner.processJobResource(ctx, &service.JobExecution{Job: job, Project: project}, f.snapshot, item, registry, nil)
 	if err != nil {
 		t.Fatalf("load failure must not escape with the resource left running: %v", err)
 	}

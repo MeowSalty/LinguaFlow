@@ -151,30 +151,34 @@ func TestRubyHandoffAcceptanceHTTPOriginalMemberMetadataExceedsFixedO(t *testing
 	t.Logf("complete main n%d HTTP1, pre-response actual member metadata=%d > O=%d; joined P/S=0 audit LS=%d", members, observed.Load(), backend.RequestMetadataBytes, storage)
 }
 
-func (handoffPermanentStorageError) Error() string   { return "acceptance durable record unavailable" }
+func (handoffPermanentStorageError) Error() string {
+	return "acceptance response settlement unavailable"
+}
 func (handoffPermanentStorageError) Permanent() bool { return true }
 
-type handoffStoredRecordStore struct {
-	pipeline.RoundStore
-	entered chan struct{}
-	release <-chan struct{}
-	failure bool
+type handoffStoredSettlementStore struct {
+	*roundStore
+	entered  chan struct{}
+	release  <-chan struct{}
+	failure  bool
+	attempts atomic.Int32
 }
 
-func (s *handoffStoredRecordStore) Record(ctx context.Context, id string, record pipeline.RequestRecord) error {
-	if record.State == "completed" {
-		s.entered <- struct{}{}
-		select {
-		case <-s.release:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-		if s.failure {
-			return handoffPermanentStorageError{}
-		}
+func (s *handoffStoredSettlementStore) SettleStoredResponse(ctx context.Context, doc *pipeline.Document, settlement pipeline.StoredResponseSettlement) error {
+	if s.attempts.Add(1) == 1 {
+		close(s.entered)
 	}
-	return s.RoundStore.Record(ctx, id, record)
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if s.failure {
+		return handoffPermanentStorageError{}
+	}
+	return s.roundStore.SettleStoredResponse(ctx, doc, settlement)
 }
+
 func TestRubyHandoffAcceptanceHTTPStoredRoundsOwnResponseUntilDurable(t *testing.T) {
 	for _, mode := range []string{"extract", "semantic_qa", "adjudicate"} {
 		for _, failure := range []bool{false, true} {
@@ -233,7 +237,13 @@ func TestRubyHandoffAcceptanceHTTPStoredRoundsOwnResponseUntilDurable(t *testing
 				if err := runtime.SetResponseLimits(1<<20, 64<<20); err != nil {
 					t.Fatal(err)
 				}
-				eng, err := f.factory.BuildEngine(pipeline.WithExecutionRuntime(ctx, runtime), f.snapshot, engine.RuntimeResources{Glossary: glossary.NewMemory()}, progress.Nop{})
+				ctx = service.WithExecutionJobActor(ctx, f.ownerID, f.jobID)
+				project := f.client.Job.GetX(ctx, f.jobID).QueryProject().OnlyX(ctx)
+				dictionary, err := service.NewDatabaseGlossary(ctx, f.client, project)
+				if err != nil {
+					t.Fatal(err)
+				}
+				eng, err := f.factory.BuildEngine(pipeline.WithExecutionRuntime(ctx, runtime), f.snapshot, engine.RuntimeResources{Glossary: dictionary}, progress.Nop{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -241,10 +251,10 @@ func TestRubyHandoffAcceptanceHTTPStoredRoundsOwnResponseUntilDurable(t *testing
 				doc, base := f.round(t, 0)
 				eng.PrepareDocument(doc, nil)
 				release := make(chan struct{})
-				entered := make(chan struct{}, 1)
+				entered := make(chan struct{})
 				var once sync.Once
 				open := func() { once.Do(func() { close(release) }) }
-				store := &handoffStoredRecordStore{RoundStore: base, entered: entered, release: release, failure: failure}
+				store := &handoffStoredSettlementStore{roundStore: base, entered: entered, release: release, failure: failure}
 				round := eng.Rounds()[0]
 				round.Store = store
 				round.Runtime = runtime
@@ -272,34 +282,52 @@ func TestRubyHandoffAcceptanceHTTPStoredRoundsOwnResponseUntilDurable(t *testing
 				case <-entered:
 				case got := <-done:
 					joined = true
-					fail("stored stopped before durable record: %+v %v", got.result, got.err)
+					fail("stored stopped before durable settlement: %+v %v", got.result, got.err)
 				case <-ctx.Done():
-					fail("stored never reached Record: %v", ctx.Err())
+					fail("stored never reached settlement: %v", ctx.Err())
 				}
-				atRecord := runtime.Admission.PipelineSnapshot()
+				atSettlement := runtime.Admission.PipelineSnapshot()
 				legacy := runtime.Admission.Snapshot()
-				if atRecord.MainOwners[0] != 1 || atRecord.MainOwnerPeak != 1 || atRecord.HandoffBytes <= atRecord.ProgressLane || legacy.PendingResults != 1 || legacy.MainInflight[0] != 0 {
-					fail("stored direct-save has no held J/R owner at durable record: %+v %+v", atRecord, legacy)
+				if atSettlement.MainOwners[0] != 1 || atSettlement.MainOwnerPeak != 1 || atSettlement.HandoffBytes <= atSettlement.ProgressLane || legacy.PendingResults != 1 || legacy.MainInflight[0] != 0 {
+					fail("stored response ownership missing during settlement: %+v %+v", atSettlement, legacy)
 				}
-				if atRecord.OwnedPayloads.Current["worker_index"] <= 0 {
+				if atSettlement.OwnedPayloads.Current["worker_index"] <= 0 {
 					fail("wrapped stored round lost its live canonical index")
 				}
 				open()
 				got := <-done
 				joined = true
+				if attempts := store.attempts.Load(); attempts != 1 {
+					fail("stored settlement attempts=%d, want 1: %v", attempts, got.err)
+				}
+				request := f.client.WorkRequest.Query().Where(workrequest.JobIDEQ(f.jobID)).OnlyX(ctx)
+				checkpoints := f.client.JobRoundSegment.Query().Where(jobroundsegment.JobRoundIDEQ(f.roundIDs[0])).CountX(ctx)
 				if failure {
-					if got.err == nil {
-						fail("stored durable failure swallowed")
+					if !errors.Is(got.err, handoffPermanentStorageError{}) || len(got.result.Resolved) != 0 {
+						fail("stored settlement failure: %+v %v", got.result, got.err)
 					}
-				} else if got.err != nil || len(got.result.Resolved) != 2 {
-					fail("stored completion: %+v %v", got.result, got.err)
+					if request.PromotionState != "capture_pending" || request.CaptureBytes == 0 || request.InputMemberBytes == 0 || len(request.GlossaryReceipt) != 0 || checkpoints != 0 {
+						fail("failed settlement did not retain an unapplied capture: phase=%s capture=%d inputs=%d receipt=%d checkpoints=%d", request.PromotionState, request.CaptureBytes, request.InputMemberBytes, len(request.GlossaryReceipt), checkpoints)
+					}
+					// The joined runtime retires its live owner; the SQL capture stays recoverable.
+					if err := runtime.CloseMainOwners(); err != nil {
+						fail("close failed settlement owner: %v", err)
+					}
+				} else {
+					if got.err != nil || len(got.result.Resolved) != 2 {
+						fail("stored completion: %+v %v", got.result, got.err)
+					}
+					if request.PromotionState != "promoted" || request.CaptureBytes != 0 || request.InputMemberBytes != 0 || checkpoints != 2 || (mode == "extract" && len(request.GlossaryReceipt) == 0) {
+						fail("successful settlement did not commit and retire the capture: phase=%s capture=%d inputs=%d receipt=%d checkpoints=%d", request.PromotionState, request.CaptureBytes, request.InputMemberBytes, len(request.GlossaryReceipt), checkpoints)
+					}
 				}
 				mu.Lock()
 				n := calls
 				mu.Unlock()
 				if n != 1 {
-					fail("stored durability retried model%d", n)
+					fail("stored upstream calls=%d, want 1", n)
 				}
+				f.assertUsage(t, 1)
 				end := runtime.Admission.PipelineSnapshot()
 				if end.MainOwners[0] != 0 || end.HandoffBytes != end.ProgressLane || runtime.Admission.Snapshot().PendingResults != 0 {
 					fail("stored terminal owner leaked: %+v", end)
@@ -307,7 +335,7 @@ func TestRubyHandoffAcceptanceHTTPStoredRoundsOwnResponseUntilDurable(t *testing
 				if err := verifyHandoffOwnedTerminal(end.OwnedPayloads, "wire", "worker_index"); err != nil {
 					fail("stored actual backing observation: %v", err)
 				}
-				t.Logf("actual_HTTP=%d durable_failure=%v barrier=%+v network=%+v terminal=%+v", n, failure, atRecord, legacy, end)
+				t.Logf("actual_HTTP=%d durable_failure=%v barrier=%+v network=%+v terminal=%+v", n, failure, atSettlement, legacy, end)
 			})
 		}
 	}

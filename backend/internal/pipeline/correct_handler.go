@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/correct"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -57,13 +58,7 @@ func (h *CorrectHandler) BuildBatches(_ context.Context, doc *Document, pending 
 			seg := &doc.Segments[i]
 			// 尊重段落选择（Translate 标记）：与 TranslateHandler 一致，
 			// 用户仅选中部分段落时，未选段不进入 correct 扫描，避免误改未选译文。
-			if !seg.Translate {
-				continue
-			}
-			if seg.Status != "translated" && seg.Status != "edited" {
-				continue
-			}
-			if seg.Target == "" {
+			if !correctEligible(seg) {
 				continue
 			}
 			if doc.ResolvedIndices != nil {
@@ -81,107 +76,92 @@ func (h *CorrectHandler) BuildBatches(_ context.Context, doc *Document, pending 
 	return [][]int{scan}, nil
 }
 
+func correctEligible(seg *Segment) bool {
+	return seg.Translate && (seg.Status == "translated" || seg.Status == "edited") && seg.Target != ""
+}
+
 // ProcessBatch applies rules per segment; on a change idempotency-reruns the
 // consumed checker(s). Revert + keep issues if the rewrite fails to clear the code.
 func (h *CorrectHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, _ int, logger *slog.Logger) batchResult {
 	if logger == nil {
 		logger = h.logger()
 	}
-	resolvedSet := codeSet(h.Rules.ConsumedIssueCodes())
-
 	callbackSegs := make([]TranslatedSegment, 0, len(idxs))
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
-		// 收集该段已 dismissed issue 的指纹，用于幂等检查豁免：
-		// 用户已判定非问题的模式，即使在新译文上仍存在，也不计为"未修干净"。
-		dismissedFPs := make(map[string]struct{}, len(seg.Issues))
-		for _, iss := range seg.Issues {
-			if iss.Dismissed() {
-				dismissedFPs[qa.Fingerprint(iss)] = struct{}{}
-			}
+		result, err := h.correctSegment(ctx, nil, doc.Format, idx, *seg, logger)
+		if err != nil {
+			return batchResult{err: err}
 		}
-		res := h.Rules.Apply(seg)
-		if !res.Changed {
-			callbackSegs = append(callbackSegs, TranslatedSegment{
-				Index:      idx,
-				ID:         seg.ID,
-				SourceText: seg.Source,
-				TargetText: seg.Target,
-				Issues:     append([]qa.QualityIssue(nil), seg.Issues...),
-				Protected:  seg.Protected,
-			})
-			continue
-		}
-		oldTarget := seg.Target
-		seg.Target = res.NewTarget
-		// 结构守卫：correct 轮做的是译文改写，判据是「不要把已经合法的译文改
-		// 坏」，基线取改写前的译文而非原文。改写结果一次性落库、没有重试机制，
-		// 因此不应用这次改写就是 fail-closed。
-		if markup.RequiresWellFormedTargets(doc.Format) {
-			if err := markup.TargetRegression(oldTarget, res.NewTarget); err != nil {
-				seg.Target = oldTarget
-				logger.Warn("correct rewrite broke markup structure, reverted",
-					"op", res.Op, "segment_id", seg.ID, "err", err)
-				callbackSegs = append(callbackSegs, TranslatedSegment{
-					Index:      idx,
-					ID:         seg.ID,
-					SourceText: seg.Source,
-					TargetText: seg.Target,
-					Issues:     append([]qa.QualityIssue(nil), seg.Issues...),
-					Protected:  seg.Protected,
-				})
-				continue
-			}
-		}
-		// Idempotency: rerun consumed checker(s) on the rewritten single segment.
-		var stillHas []qa.QualityIssue
-		if h.Idempotency != nil && len(resolvedSet) > 0 {
-			inputs := []qa.CheckInput{{
-				Index:      idx,
-				SourceText: seg.Source,
-				TargetText: res.NewTarget,
-				Meta:       seg.Meta,
-				Protected:  seg.Protected,
-			}}
-			issues := h.Idempotency.Run(ctx, inputs)
-			for _, iss := range issues {
-				if _, ok := resolvedSet[iss.Code]; !ok {
-					continue
-				}
-				if _, dismissed := dismissedFPs[qa.Fingerprint(iss)]; dismissed {
-					continue // 用户已裁决非问题，豁免
-				}
-				stillHas = append(stillHas, iss)
-			}
-		}
-		if len(stillHas) > 0 {
-			// Revert; keep original issues (the warning stays).
-			seg.Target = oldTarget
-			logger.Warn("correct idempotency failed, reverted",
-				"op", res.Op, "segment_id", seg.ID)
-			callbackSegs = append(callbackSegs, TranslatedSegment{
-				Index:      idx,
-				ID:         seg.ID,
-				SourceText: seg.Source,
-				TargetText: seg.Target,
-				Issues:     append([]qa.QualityIssue(nil), seg.Issues...),
-				Protected:  seg.Protected,
-			})
-			continue
-		}
-		// Apply: drop resolved codes from seg.Issues.
-		seg.Issues = qa.FilterOutPendingByCodes(seg.Issues, resolvedSet)
-		logger.Info("correct applied", "op", res.Op, "segment_id", seg.ID)
-		callbackSegs = append(callbackSegs, TranslatedSegment{
-			Index:      idx,
-			ID:         seg.ID,
-			SourceText: seg.Source,
-			TargetText: seg.Target,
-			Issues:     append([]qa.QualityIssue(nil), seg.Issues...),
-			Protected:  seg.Protected,
-		})
+		seg.Target, seg.Issues = result.TargetText, result.Issues
+		result.Issues = append([]qa.QualityIssue(nil), result.Issues...)
+		callbackSegs = append(callbackSegs, result)
 	}
 	return batchResult{callbackResult: &BatchResult{Segments: callbackSegs}}
+}
+
+func (h *CorrectHandler) correctSegment(ctx context.Context, bounds *backend.BuildBounds, format string, index int, seg Segment, logger *slog.Logger) (TranslatedSegment, error) {
+	result := TranslatedSegment{Index: index, ID: seg.ID, SourceText: seg.Source, TargetText: seg.Target, Issues: seg.Issues, Meta: seg.Meta, Protected: seg.Protected}
+	if h.Rules == nil || !h.Rules.Enabled() {
+		return result, nil
+	}
+	res := h.Rules.Apply(&seg)
+	if !res.Changed || res.NewTarget == seg.Target {
+		return result, nil
+	}
+	if markup.RequiresWellFormedTargets(format) {
+		if err := markup.TargetRegression(seg.Target, res.NewTarget); err != nil {
+			logger.Warn("correct rewrite broke markup structure", "op", res.Op, "segment_id", seg.ID, "err", err)
+			return result, nil
+		}
+	}
+	resolvedSet := codeSet(h.Rules.ConsumedIssueCodes())
+	if h.Idempotency != nil && len(resolvedSet) > 0 {
+		inputs := []qa.CheckInput{{Index: index, SourceText: seg.Source, TargetText: res.NewTarget, Meta: seg.Meta, Protected: seg.Protected}}
+		var issues []qa.QualityIssue
+		if bounds == nil {
+			issues = h.Idempotency.Run(ctx, inputs)
+		} else {
+			var err error
+			issues, err = h.Idempotency.RunBounded(ctx, bounds, inputs)
+			if err != nil {
+				return result, err
+			}
+		}
+		for _, issue := range issues {
+			if _, consumed := resolvedSet[issue.Code]; consumed && !correctDismissed(seg.Issues, issue) {
+				logger.Warn("correct idempotency failed", "op", res.Op, "segment_id", seg.ID)
+				return result, nil
+			}
+		}
+	}
+	if bounds != nil {
+		if err := bounds.ReserveText(int64(len(res.NewTarget)), int64(len(res.NewTarget))); err != nil {
+			return result, err
+		}
+		if err := backend.ReserveSlice[qa.QualityIssue](bounds, int64(len(seg.Issues))); err != nil {
+			return result, err
+		}
+	}
+	result.TargetText = res.NewTarget
+	result.Issues = qa.FilterOutPendingByCodes(seg.Issues, resolvedSet)
+	if bounds != nil {
+		var owned []qa.QualityIssue
+		if err := bounds.CloneInto(result.Issues, &owned); err != nil {
+			return result, err
+		}
+		result.Issues = owned
+	}
+	return result, nil
+}
+
+func correctDismissed(existing []qa.QualityIssue, fresh qa.QualityIssue) bool {
+	for _, issue := range existing {
+		if issue.Dismissed() && issue.Code == fresh.Code && qa.MatchedText(issue) == qa.MatchedText(fresh) {
+			return true
+		}
+	}
+	return false
 }
 
 func codeSet(codes []string) map[string]struct{} {

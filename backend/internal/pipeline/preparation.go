@@ -353,9 +353,7 @@ func prepareIntent(handler RoundHandler, store RoundStore, stage backend.Request
 		case *ReviseHandler:
 			id = requestBackendID(h.Backend)
 		case *ExtractHandler:
-			if len(h.Backends) > 0 {
-				id = requestBackendID(h.Backends[0])
-			}
+			id = requestBackendID(h.Backend)
 		case *SemanticQAHandler:
 			id = requestBackendID(h.Backend)
 		case *AdjudicateHandler:

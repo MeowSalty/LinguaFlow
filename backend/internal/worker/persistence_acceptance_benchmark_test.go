@@ -13,13 +13,17 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	pa "github.com/MeowSalty/LinguaFlow/backend/internal/persistenceacceptance"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
+
+const persistenceMainConcurrency = 10
 
 type persistenceFastModel struct {
 	calls, inflight, peak atomic.Int64
@@ -169,18 +173,25 @@ func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persis
 	if len(batchSizes) > 0 {
 		batchSize = batchSizes[0]
 	}
+	first := fixtures[0]
+	job := first.Client.Job.GetX(t.Context(), first.Scope.JobID)
+	project := first.Client.Project.GetX(t.Context(), job.ProjectID)
 	ctx, cancel := context.WithCancel(t.Context())
 	if deadline, ok := t.Deadline(); ok {
 		cancel()
 		ctx, cancel = context.WithDeadline(t.Context(), deadline.Add(-time.Second))
 	}
 	t.Cleanup(cancel)
-	admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 10}})
+	admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: persistenceMainConcurrency}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := pipeline.NewExecutionRuntime(admission, pipeline.DefaultCandidateLimits(), nil)
-	r.JobID = fixtures[0].Scope.JobID
+	limits := pipeline.DefaultCandidateLimits()
+	// Leave room for the active batches and one queued batch without
+	// consuming the member window's final slot reserved for forward progress.
+	limits.Segments = max(limits.Segments, (persistenceMainConcurrency+1)*batchSize+1)
+	r := pipeline.NewExecutionRuntime(admission, limits, nil)
+	r.JobID = job.ID
 	observer := &persistenceTimings{}
 	persistenceWireReporter(r, &progress.DBReporterOptions{}, observer)
 	observer.sampleRuntime(r)
@@ -188,6 +199,11 @@ func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persis
 	done := make(chan error, len(fixtures))
 	for _, f := range fixtures {
 		store := persistenceRoundStore(t, f, batchSize)
+		resourceCtx := service.WithExecutionInputBudget(ctx, nil, resourcebudget.Scope{JobID: job.ID}, service.DefaultExecutionInputBytes)
+		dictionary, dictionaryLease, err := service.LoadExecutionGlossary(resourceCtx, f.Client, project, true)
+		if err != nil {
+			t.Fatal(err)
+		}
 		opts := progress.DBReporterOptions{Client: f.Client, JobID: f.Scope.JobID, JobResourceID: f.Scope.JobResourceID, ResourceID: f.Scope.ResourceID, Logger: logger, Ticker: time.Hour}
 		persistenceWireReporter(r, &opts, observer)
 		reporter := progress.NewDBReporter(opts)
@@ -201,14 +217,14 @@ func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persis
 		if err != nil {
 			t.Fatal(err)
 		}
-		handler := &pipeline.ExtractHandler{Backends: []backend.Backend{pipeline.BindRequestBackend(model, 1, 0, r)}, Renderer: renderer, Glossary: glossary.NewMemory(), BatchSize: batchSize, MinSourceLen: 1, Logger: logger, Reporter: reporter}
-		doc := &pipeline.Document{SourceLang: "en", TargetLang: "zh"}
-		for i, id := range f.IDs {
-			doc.Segments = append(doc.Segments, pipeline.Segment{ID: fmt.Sprint(id), DBID: id, Source: fmt.Sprintf("synthetic source %d", i), Translate: true})
-		}
+		handler := &pipeline.ExtractHandler{Backend: pipeline.BindRequestBackend(model, 1, 0, r), Renderer: renderer, Glossary: dictionary, BatchSize: batchSize, MinSourceLen: 1, Logger: logger, Reporter: reporter}
+		resource := f.Client.Resource.GetX(resourceCtx, f.Scope.ResourceID)
+		rows := f.Client.Segment.Query().Where(segment.ResourceIDEQ(resource.ID)).Order(segment.BySegmentIndex()).AllX(resourceCtx)
+		doc := pipeline.BuildDocumentFromSegments(buildSegmentInputs(rows), store.snapshot.SourceLang, store.snapshot.TargetLang, resource.Format)
 		go func() {
-			_, err := pipeline.RunRound(ctx, pipeline.Round{Runtime: r, Store: store, Handler: handler, Concurrency: 10}, doc, nil, logger, reporter)
+			_, err := pipeline.RunRound(resourceCtx, pipeline.Round{Runtime: r, Store: store, Handler: handler, Concurrency: persistenceMainConcurrency}, doc, nil, logger, reporter)
 			closeErr := reporter.Close()
+			dictionaryLease.Close()
 			if err == nil {
 				err = closeErr
 			}
@@ -225,6 +241,28 @@ func persistenceJoin(done <-chan error, resources int) []string {
 		}
 	}
 	return failures
+}
+
+func checkPersistenceExtractionTimings(t *testing.T, timings map[string]any) {
+	t.Helper()
+	for _, group := range []struct {
+		operations []string
+		phases     []string
+	}{
+		{[]string{"reserve", "sent", string(persistence.ResponseCapture), string(persistence.BusinessPublication), "stage_initialize"}, []string{"save_queue", "query", "exec"}},
+		{[]string{string(persistence.ResponseCapture), string(persistence.BusinessPublication)}, []string{"transaction"}},
+		// Extraction commits progress in the business transaction. The reporter
+		// still queues a checkpoint flush without re-persisting those facts.
+		{[]string{"checkpoint"}, []string{"save_queue"}},
+	} {
+		for _, operation := range group.operations {
+			for _, phase := range group.phases {
+				if _, measured := timings[operation+"."+phase]; !measured {
+					t.Fatalf("required %s.%s observation missing", operation, phase)
+				}
+			}
+		}
+	}
 }
 
 func TestPersistenceLoadMatrix(t *testing.T) {
@@ -249,19 +287,13 @@ func TestPersistenceLoadMatrix(t *testing.T) {
 			}
 			extra := map[string]any{"delay_ms": ms, "resources": 7, "batches": 70, "segments": 21000, "provider_calls": model.calls.Load(), "provider_peak": model.peak.Load(), "completed": job.ProgressCompleted, "total": job.ProgressTotal, "usage_records": usage, "resource_completed": resourceCompletion, "failures": failures, "timings": observer.summary()}
 			persistenceReport(t, probe, "load7x10x300", extra)
-			if model.peak.Load() > 10 {
+			if model.peak.Load() > persistenceMainConcurrency {
 				t.Fatal("shared provider concurrency exceeded 10")
 			}
 			if _, measured := extra["timings"].(map[string]any)["save_queue"]; !measured {
 				t.Fatal("runtime observer did not produce required Save queue timings")
 			}
-			for _, operation := range []string{"reserve", "sent", "received", "completed", "checkpoint", "stage_initialize"} {
-				for _, phase := range []string{"save_queue", "query", "exec"} {
-					if _, measured := extra["timings"].(map[string]any)[operation+"."+phase]; !measured {
-						t.Fatalf("required %s %s observations missing", operation, phase)
-					}
-				}
-			}
+			checkPersistenceExtractionTimings(t, extra["timings"].(map[string]any))
 			if len(failures) > 0 {
 				t.Logf("joined load failure: model_calls=%d usage=%d admission=%+v pipeline=%+v", model.calls.Load(), usage, r.Admission.Snapshot(), r.Admission.PipelineSnapshot())
 				t.Fatalf("load failed: %v", failures)
@@ -351,7 +383,7 @@ func persistenceSharedConcurrency(t *testing.T, batchSize int, capacityObservati
 	timer := time.NewTimer(20 * time.Second)
 	defer timer.Stop()
 	reached := true
-	for range 10 {
+	for range persistenceMainConcurrency {
 		select {
 		case <-entered:
 		case <-timer.C:
@@ -386,7 +418,7 @@ func persistenceSharedConcurrency(t *testing.T, batchSize int, capacityObservati
 	close(release)
 	failures := persistenceJoin(done, len(fixtures))
 	observer.stopSampling()
-	if !reached || !queued || model.peak.Load() != 10 || len(failures) > 0 {
+	if !reached || !queued || model.peak.Load() != persistenceMainConcurrency || len(failures) > 0 {
 		t.Fatalf("full call path failed shared capacity contract: peak=%d queued=%t failures=%v", model.peak.Load(), queued, failures)
 	}
 	admission := r.Admission.Snapshot()
@@ -406,16 +438,10 @@ func persistenceSharedConcurrency(t *testing.T, batchSize int, capacityObservati
 			t.Fatalf("representative extraction resource completed=%d, want %d", got, 2*batchSize)
 		}
 	}
+	timings := observer.summary()
+	checkPersistenceExtractionTimings(t, timings)
 	if !capacityObservations {
 		return
-	}
-	timings := observer.summary()
-	for _, operation := range []string{"reserve", "sent", "received", "completed", "checkpoint", "stage_initialize"} {
-		for _, phase := range []string{"save_queue", "query", "exec"} {
-			if _, measured := timings[operation+"."+phase]; !measured {
-				t.Fatalf("required %s.%s observation missing", operation, phase)
-			}
-		}
 	}
 	for key, capacity := range map[string]int{"pending_owner_peak": 16, "coordinator_intent_peak": 16, "normal_queue_peak": 16, "reliable_queue_peak": 32, "completion_peak": 16} {
 		peak, measured := timings[key].(int)

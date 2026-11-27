@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"math/rand"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
 const (
@@ -38,13 +40,12 @@ type batchJob struct {
 
 // batchResult 描述一个批次的处理结果。
 type batchResult struct {
-	checkpointCtx   context.Context
 	waitCapacity    *WorkDeferred
 	waitJob         *batchJob
 	candidates      []*Candidate
+	extraction      *storedExtraction
+	storedParseErr  error
 	err             error
-	finish          func() error // confirms handoff and releases response capacity after the checkpoint
-	fail            func(error)  // prevents an unconfirmed response from becoming completed on cleanup
 	unresolved      []int        // 需要下一池处理
 	retry           *batchJob    // 池内 in-flight 退避重试
 	callbackResult  *BatchResult // 可选，供 BatchHandler 回调使用
@@ -92,176 +93,50 @@ func RunRound(
 	batchHandler func(ctx context.Context, result BatchResult) error,
 	logger *slog.Logger,
 	reporter progress.Reporter,
-) (RunRoundResult, error) {
-	if round.Runtime != nil {
-		if _, ok := round.Handler.(stagedHandler); ok {
-			return RunStagedRound(ctx, round, doc, round.Store, round.Runtime, logger, reporter)
-		}
-		return runStoredRound(ctx, round, doc, batchHandler, logger, reporter)
+) (result RunRoundResult, err error) {
+	if round.Runtime == nil {
+		return RunRoundResult{}, errors.New("round requires an execution runtime")
 	}
-	if logger == nil {
-		logger = slog.Default()
+	if _, ok := round.Handler.(stagedHandler); ok {
+		if round.Store != nil && batchHandler != nil {
+			return RunRoundResult{}, errors.New("staged round requires callbacks to be configured on the round store")
+		}
+		if round.Store == nil {
+			store := NewMemoryRoundStore(applyMemoryTranslation(round.Handler, doc, batchHandler))
+			defer func() { err = errors.Join(err, store.Close()) }()
+			round.Store = store
+		}
+		return RunStagedRound(ctx, round, doc, round.Store, round.Runtime, logger, reporter)
 	}
-	if reporter == nil {
-		reporter = progress.Nop{}
+	if _, captures := round.Handler.(capturedRoundHandler); !captures {
+		if _, local := round.Handler.(*CorrectHandler); !local {
+			return RunRoundResult{}, fmt.Errorf("unsupported round handler %T", round.Handler)
+		}
 	}
+	return runStoredRound(ctx, round, doc, batchHandler, logger, reporter)
+}
 
-	handler := round.Handler
-	// 非翻译轮（extract/adjudicate/semantic_qa）不接缩批，engine_factory 构造 pipeline.Round
-	// 时不填 Shrink（零值 0）。此处兜底为 1.0 使 SSE 文案显示"重切"而非"缩放 0.00"。
-	// translate 轮的 Shrink 已由 NormalizeShrink 处理（合法域 (0,1]，校验拒绝 0），此处对其无影响。
-	// 多池行为不受 Shrink 值影响（池数恒由 max_attempts+1 决定，非翻译 handler 的 BuildBatches 不读 Shrink）。
-	if round.Shrink == 0 {
-		round.Shrink = 1.0
+func applyMemoryTranslation(handler RoundHandler, doc *Document, apply func(context.Context, BatchResult) error) func(context.Context, BatchResult) error {
+	h, ok := handler.(*TranslateHandler)
+	if !ok || h.TM == nil {
+		return apply
 	}
-	// 池数恒由 max_attempts+1 决定（与 shrink 解耦）。
-	// shrink 仅控制每池批次约束的缩比：1.0 = 多池同尺寸重切，(0,1) = 每池缩小。
-	maxPools := round.Retry.MaxAttempts + 1
-	if maxPools < 1 {
-		maxPools = 1
+	if _, nop := h.TM.(tm.Nop); nop {
+		return apply
 	}
-	// 在途重试预算内部封顶 min(max_attempts+1, maxTransientRetries)，不暴露给用户。
-	transientBudget := transientBudgetFor(round.Retry)
-
-	var pending []int // nil = 池 0 由 handler 扫描 doc
-	var allFailedSegments []int
-	var failedBatches int
-	var finalUnresolved []int
-	var allFatalUnresolved []int
-	// 池 0 扫描集合（pending==nil 时由 batches 求和）；用于计算 Resolved。
-	var scannedIdxs []int
-	stageStarted := false
-
-	for poolIndex := 0; poolIndex < maxPools; poolIndex++ {
-		if ctx.Err() != nil {
-			break
-		}
-		// 池推进前暂停检查：暂停时不进入新池（本池已完成批次的结果保留，
-		// 未解决段落由断点集合覆盖，resume 时从 pending 重新切批）。
-		if round.Gate != nil && round.Gate.Paused() {
-			break
-		}
-
-		batches, err := handler.BuildBatches(ctx, doc, pending, poolIndex)
-		if err != nil {
-			return RunRoundResult{}, err
-		}
-		if len(batches) == 0 {
-			// 仅池 0 空 batches 视为"无任务"；后续池空 batches 保留上一池的 unresolved
-			if poolIndex == 0 {
-				finalUnresolved = nil
-			}
-			break
-		}
-
-		if !stageStarted {
-			totalSegments := 0
-			for _, batch := range batches {
-				totalSegments += len(batch)
-			}
-			reporter.StageStart(handler.ModeName(), totalSegments)
-			if checked, ok := reporter.(interface{ StageError() error }); ok {
-				if err := checked.StageError(); err != nil {
-					return RunRoundResult{}, err
-				}
-			}
-			stageStarted = true
-			defer reporter.StageDone()
-		}
-
-		// 记录池 0 的扫描集合（用于最终计算 Resolved）。
-		if poolIndex == 0 {
-			seen := make(map[int]struct{}, len(batches))
-			for _, batch := range batches {
-				for _, idx := range batch {
-					if _, ok := seen[idx]; !ok {
-						scannedIdxs = append(scannedIdxs, idx)
-						seen[idx] = struct{}{}
-					}
-				}
+	return func(ctx context.Context, batch BatchResult) error {
+		if apply != nil {
+			if err := apply(ctx, batch); err != nil {
+				return err
 			}
 		}
-
-		// 进入本池的实际段数：池 0 由 batches 求和（pending 为 nil），后续池用 pending 长度。
-		poolPending := len(pending)
-		if poolPending == 0 {
-			for _, batch := range batches {
-				poolPending += len(batch)
+		for _, segment := range batch.Segments {
+			if err := h.TM.Add(ctx, segment.SourceText, segment.TargetText, doc.SourceLang, doc.TargetLang); err != nil {
+				h.logger().Warn("save translation memory entry", "segment", segment.ID, "err", err)
 			}
 		}
-
-		logger.Info("running shrink pool",
-			"mode", handler.ModeName(),
-			"pool", poolIndex,
-			"batches", len(batches),
-			"shrink", round.Shrink)
-
-		// 池事件无条件发射（不再 gated on shrinkEnabled）。
-		emitPoolEvent(reporter, progress.PoolEvent{
-			Mode:       handler.ModeName(),
-			PoolIndex:  poolIndex,
-			MaxPools:   maxPools,
-			Batches:    len(batches),
-			Pending:    poolPending,
-			ShrinkRate: round.Shrink,
-			Phase:      "pool_start",
-		})
-
-		pr, err := runPool(ctx, round, handler, doc, batches, transientBudget, batchHandler, logger, reporter, poolIndex, nil)
-		if err != nil {
-			return RunRoundResult{}, err
-		}
-
-		allFailedSegments = append(allFailedSegments, pr.failedSegments...)
-		failedBatches += pr.failedBatches
-		finalUnresolved = pr.unresolved
-		// fatalUnresolved 段不进 pending（跳过剩余池），由 RunRound 直接并入 finalUnresolved 供跨轮传播。
-		allFatalUnresolved = append(allFatalUnresolved, pr.fatalUnresolved...)
-
-		if len(pr.unresolved) == 0 {
-			break
-		}
-		if poolIndex+1 >= maxPools {
-			break
-		}
-		pending = uniqueSortedInts(pr.unresolved)
-		logger.Info("advancing to next shrink pool",
-			"pool", poolIndex+1, "pending", len(pending), "shrink", round.Shrink)
-
-		emitPoolEvent(reporter, progress.PoolEvent{
-			Mode:       handler.ModeName(),
-			PoolIndex:  poolIndex,
-			MaxPools:   maxPools,
-			Batches:    len(batches),
-			Pending:    len(pending),
-			ShrinkRate: round.Shrink,
-			Phase:      "pool_advance",
-		})
+		return nil
 	}
-
-	if !stageStarted {
-		return RunRoundResult{}, nil
-	}
-
-	// fatalUnresolved 并入 finalUnresolved，参与跨轮传播（语义一致：均为"下一同模式轮 pending"）。
-	if len(allFatalUnresolved) > 0 {
-		finalUnresolved = append(finalUnresolved, allFatalUnresolved...)
-		finalUnresolved = uniqueSortedInts(finalUnresolved)
-	}
-
-	if err := handler.Finalize(ctx, doc, finalUnresolved); err != nil {
-		return RunRoundResult{}, err
-	}
-
-	// 计算 Resolved：池 0 扫描集合 − finalUnresolved − failedSegments。
-	resolved := computeResolved(scannedIdxs, finalUnresolved, allFailedSegments)
-
-	return RunRoundResult{
-		Unresolved:     finalUnresolved,
-		FailedSegments: allFailedSegments,
-		FailedBatches:  failedBatches,
-		Resolved:       resolved,
-	}, nil
 }
 
 // maxTransientRetries 是在途重试预算的内部封顶。
@@ -312,21 +187,17 @@ func computeResolved(scannedIdxs, unresolved, failedSegments []int) []int {
 	return out
 }
 
-// runPool 在单个池内并发执行所有批次；in-flight retry 复用席位，unresolved 释放席位。
-// transientBudget 是在途重试预算（内部封顶后的值）。reporter 承接收集点的
-// 段计数/断点登记（本函数是计数的唯一判定源，见收集点注释）。
+type batchProcessor func(context.Context, batchJob) batchResult
+
+// runPool schedules bounded work and collects its confirmed outcomes.
 func runPool(
 	ctx context.Context,
 	round Round,
-	handler RoundHandler,
 	doc *Document,
 	batches [][]int,
 	transientBudget int,
-	batchHandler func(ctx context.Context, result BatchResult) error,
-	logger *slog.Logger,
 	reporter progress.Reporter,
-	poolIndex int,
-	initialCursors map[int]WorkCursor,
+	process batchProcessor,
 ) (poolResult, error) {
 	if len(batches) == 0 {
 		return poolResult{}, nil
@@ -345,21 +216,18 @@ func runPool(
 	if bufferSize > len(batches) {
 		bufferSize = len(batches)
 	}
-	poolOwner := ""
-	if round.Runtime != nil {
-		poolOwner = "pool-channels:" + NewWorkID()
-		poolCtx := round.Runtime.BuildContext(ctx, poolOwner)
-		b, err := backend.NewBuildBoundsFromContext(poolCtx, 0, 0)
-		if err != nil {
-			return poolResult{}, err
-		}
-		defer round.Runtime.Admission.ReleaseBuild(poolOwner)
-		if err = backend.ReserveSlice[batchJob](b, int64(bufferSize)); err != nil {
-			return poolResult{}, err
-		}
-		if err = backend.ReserveSlice[batchResult](b, int64(bufferSize)); err != nil {
-			return poolResult{}, err
-		}
+	poolOwner := "pool-channels:" + NewWorkID()
+	poolCtx := round.Runtime.BuildContext(ctx, poolOwner)
+	b, err := backend.NewBuildBoundsFromContext(poolCtx, 0, 0)
+	if err != nil {
+		return poolResult{}, err
+	}
+	defer round.Runtime.Admission.ReleaseBuild(poolOwner)
+	if err = backend.ReserveSlice[batchJob](b, int64(bufferSize)); err != nil {
+		return poolResult{}, err
+	}
+	if err = backend.ReserveSlice[batchResult](b, int64(bufferSize)); err != nil {
+		return poolResult{}, err
 	}
 	jobs := make(chan batchJob, bufferSize)
 	results := make(chan batchResult, bufferSize)
@@ -395,148 +263,50 @@ func runPool(
 					pendingMu.Unlock()
 					continue
 				}
-				if round.Runtime != nil {
-					result := processStoredBatch(runCtx, round, handler, doc, job, poolIndex, transientBudget, batchHandler, logger, reporter)
-					if result.err != nil {
-						stop(result.err)
-					}
-					if result.deferred && result.waitCapacity == nil {
-						pendingMu.Lock()
-						nextPending = append(nextPending, job.idxs...)
-						pendingMu.Unlock()
-					}
-					result.idxs = job.idxs
-					if result.waitCapacity != nil {
-						copyJob := job
-						result.waitJob = &copyJob
-					}
-					results <- result
-					continue
+				result := batchResult{deferred: true}
+				if waitForBatch(runCtx, round.Gate, job.notBefore) {
+					result = process(runCtx, job)
 				}
-				// 暂停闸门：批次派发前检查，暂停中不派发新批次。
-				// 检查通过后先登记在途计数再获取槽位；任一步失败（ctx 取消）
-				// 则本批段落保持未解决，由断点集合/下一轮 pending 过滤覆盖。
-				// 暂停让行必须发空 result 保持 active 计数平衡：pause 不取消
-				// runCtx，主循环无法经 Done 分支提前退出，只能靠 result 归零。
-				if round.Gate != nil {
-					if round.Gate.Paused() {
-						pendingMu.Lock()
-						nextPending = append(nextPending, job.idxs...)
-						pendingMu.Unlock()
-						results <- batchResult{deferred: true, idxs: job.idxs}
-						continue
-					}
-					round.Gate.AcquireInflight()
+				if result.err != nil {
+					result.deferred = true
+					stop(result.err)
 				}
-				if round.Slots != nil {
-					if !round.Slots.Acquire(runCtx) {
-						if round.Gate != nil {
-							round.Gate.ReleaseInflight()
-						}
-						pendingMu.Lock()
-						nextPending = append(nextPending, job.idxs...)
-						pendingMu.Unlock()
-						results <- batchResult{deferred: true, idxs: job.idxs}
-						continue
-					}
-				}
-				// 获取槽位可能阻塞较久（Station 容量被所有在途资源共享），
-				// 阻塞期间到达的暂停需在此复查——否则排队 worker 会在槽位
-				// 释放后照常执行一整批 LLM 调用，排空时间被放大为排队深度。
-				if round.Gate != nil && round.Gate.Paused() {
-					if round.Slots != nil {
-						round.Slots.Release()
-					}
-					round.Gate.ReleaseInflight()
+				if result.deferred && result.waitCapacity == nil {
 					pendingMu.Lock()
 					nextPending = append(nextPending, job.idxs...)
 					pendingMu.Unlock()
-					results <- batchResult{deferred: true, idxs: job.idxs}
-					continue
 				}
-
-				result := handler.ProcessBatch(runCtx, doc, job.idxs, job.attempt, logger)
-
-				if round.Slots != nil {
-					round.Slots.Release()
-				}
-				if round.Gate != nil {
-					round.Gate.ReleaseInflight()
-				}
-
-				if batchHandler != nil && result.callbackResult != nil {
-					if herr := batchHandler(runCtx, *result.callbackResult); herr != nil {
-						logger.Error("batch handler error, terminating pool", "err", herr)
-						stop(herr)
-						pendingMu.Lock()
-						nextPending = append(nextPending, job.idxs...)
-						pendingMu.Unlock()
-						results <- batchResult{deferred: true, idxs: job.idxs}
-						continue
-					}
-				}
-				// 提交确认门：副作用是否真的落库无法从 result 的成功形态判断，必须
-				// 看两个 ctx：副作用使用回调形参 runCtx，资源级 ctx 同时提供父取消
-				// 屏障。runCtx 的检查覆盖 handlerErr fail-fast 取消 runCtx（ctx 仍
-				// 存活）的窗口，以及父 ctx 取消向子 ctx 传播的瞬间窗口。ctx 已死时
-				// 各 handler 对 context.Canceled 的处理是「静默跳过该段并返回 nil」，
-				// 而 semantic_qa/revise 的 preserveResult 与成功形态无法区分——
-				// 回调返回 nil 也不可信。任一 ctx 已死即按让行处理：段落回
-				// nextPending，绝不计数、绝不登记断点。
-				//
-				// 方向性取舍：伪造断点会让非翻译轮在恢复时永久跳过该段（裁决/
-				// 质检/修订/术语抽取结果静默丢失），而漏登记只是恢复后重扫一次
-				// （翻译轮由 Segment.status 过滤掉，零成本）。宁可重扫，绝不伪造。
-				// 暂停不取消 ctx（PauseGate 与 ctx 解耦），pause/resume 主流程不走
-				// 这道门。代价：runCtx 因 fail-fast 被取消时会多让行几个在途批次，
-				// 该轮本就会 abort 并重跑，重扫成本可接受。
-				if ctx.Err() != nil || runCtx.Err() != nil {
-					pendingMu.Lock()
-					nextPending = append(nextPending, job.idxs...)
-					pendingMu.Unlock()
-					results <- batchResult{deferred: true, idxs: job.idxs}
-					continue
-				}
-
 				result.idxs = job.idxs
+				if result.waitCapacity != nil {
+					copyJob := job
+					result.waitJob = &copyJob
+				}
 				results <- result
 			}
 		}()
 	}
 
 	done := make(chan struct{})
-	var sourceCredits chan struct{}
-	if round.Runtime != nil {
-		sourceCredits = make(chan struct{}, min(concurrency, max(1, round.Runtime.Policy.PreparePending)))
-	}
-	returnSourceCredit := func() {
-		if sourceCredits != nil {
-			<-sourceCredits
-		}
-	}
+	sourceCredits := make(chan struct{}, min(concurrency, max(1, round.Runtime.Policy.PreparePending)))
+	returnSourceCredit := func() { <-sourceCredits }
 	var submitWg sync.WaitGroup
 	submitWg.Add(1)
 	go func() {
 		defer submitWg.Done()
 		for batchIndex, batch := range batches {
-			if sourceCredits != nil {
-				select {
-				case sourceCredits <- struct{}{}:
-				case <-done:
-					pendingMu.Lock()
-					for _, remaining := range batches[batchIndex:] {
-						nextPending = append(nextPending, remaining...)
-					}
-					pendingMu.Unlock()
-					return
+			select {
+			case sourceCredits <- struct{}{}:
+			case <-done:
+				pendingMu.Lock()
+				for _, remaining := range batches[batchIndex:] {
+					nextPending = append(nextPending, remaining...)
 				}
+				pendingMu.Unlock()
+				return
 			}
 			job := batchJob{idxs: batch}
 			for _, idx := range batch {
-				cursor := initialCursors[idx]
-				if initialCursors == nil && round.Runtime != nil {
-					cursor = doc.Segments[idx].RoundWork.Cursor
-				}
+				cursor := doc.Segments[idx].RoundWork.Cursor
 				job.attempt = max(job.attempt, cursor.Attempt)
 				if cursor.NextAttemptAt.After(job.notBefore) {
 					job.notBefore = cursor.NextAttemptAt
@@ -559,65 +329,7 @@ func runPool(
 	}()
 
 	active := len(batches)
-	// resolvedNotifier 是支持轮次断点持久化的 Reporter（当前仅 DBReporter）；
-	// 未实现则跳过断点登记（与 emitPoolEvent 的探测惯例一致）。
-	resolvedNotifier, _ := reporter.(progress.SegmentResolvedNotifier)
-
-	// applyBatchResult 是收集点记账的唯一实现：主循环与 cleanup 排空共用同一份
-	// 终态判定，避免两条路径语义漂移（排空路径若自带一份判定，取消场景的计数
-	// 与断点口径会与正常路径悄悄分叉）。重试的席位调度不在此处——它需要 active
-	// 记账与 jobs 通道，排空期两者都已不可用。
-	//
-	// 计数与断点登记的唯一判定源：本批终态时从 job.idxs 推导 resolved 子集，
-	// 逐段 SegmentDone（计数）+ SegmentResolved（断点），随后 BatchComplete
-	// 触发缓冲区 flush。handler 不再触碰进度计数。
-	//
-	// 批次终态判定（按收集到的 result 形态）：
-	//   - deferred=true：让行点（暂停/槽位失败/batchHandler 失败/副作用未确认
-	//     （含 extract）），idxs 已进 nextPending——空 result 不代表全批成功，
-	//     跳过一切计数；
-	//   - retry != nil：同批退避重试（含超预算转 nextPending），非终态——
-	//     重试后的终态批次再计，保证池推进/在途重试不重复计数；
-	//   - 其余为终态：resolved = idxs − unresolved − fatalUnresolved − failedSegments。
-	//
-	// 各 handler 返回组合的核实结论（resolved 公式对全部组合成立）：
-	//   - translate：unresolved 为漏译/占位符违规段（FilterPendingIdxs 过滤
-	//     上下文段后），成功段仅写 doc 不单独报告；fatal=401/403 整批
-	//     fatalUnresolved。unresolved 恒 ⊆ idxs，idxs−unresolved 即成功段；
-	//   - extract：成功=空 batchResult（idxs 全 resolved）；失败=unresolved/
-	//     fatalUnresolved 整批（idxs）；无部分成功形态。成功的空 result 也要过
-	//     提交确认门——术语在 ProcessBatch 内以 runCtx 落库，ctx 已死时成功
-	//     形态同样不代表副作用落库，由门转 deferred；
-	//   - adjudicate：成功=callbackResult（idxs 全 resolved）；失败=unresolved/
-	//     fatalUnresolved 整批；无部分成功形态；
-	//   - semantic_qa：成功=callbackResult（idxs 全 resolved）；失败=unresolved
-	//     整批、fatalUnresolved 整批、terminalFailure=failedSegments 整批（软警告，
-	//     未解决——callbackResult 里的 preserve 段不计 resolved）；外部中断
-	//     preserve：ctx 或 runCtx 任一已死时都被 worker 侧的提交确认门转成
-	//     deferred，不会以终态形态到达本函数——runCtx 被 fail-fast 取消时
-	//     （ctx 仍存活）preserve 形态与成功同形，同样不可信；
-	//   - revise：部分成功=callbackResult（returned 段）+ unresolved=missing 段，
-	//     idxs−missing 恰为 callback 段；terminalFailure=failedSegments（未解决，
-	//     callback 内的 preserve 段不计）；fatal=整批 fatalUnresolved；外部中断
-	//     preserve 同 semantic_qa（ctx 或 runCtx 任一已死时被门转成 deferred）；
-	//   - correct：纯本地恒成功=callbackResult（idxs 全 resolved）。
-	//   综上：failedSegments 恒 = 整批 idxs 且恒伴随 callbackResult、从不伴随
-	//   unresolved/retry；unresolved/fatalUnresolved 恒 ⊆ idxs；无任何形态
-	//   会把同一 idx 同时计入 resolved 与失败/未解决集合。
 	applyBatchResult := func(result batchResult) {
-		if result.finish != nil {
-			defer func() {
-				if err := result.finish(); err != nil {
-					stop(err)
-				}
-			}()
-		}
-		failCheckpoint := func(err error) {
-			if result.fail != nil {
-				result.fail(err)
-			}
-			stop(err)
-		}
 		pendingMu.Lock()
 		nextPending = append(nextPending, result.unresolved...)
 		fatalUnresolved = append(fatalUnresolved, result.fatalUnresolved...)
@@ -629,34 +341,19 @@ func runPool(
 
 		if !result.deferred && result.retry == nil {
 			excluded := append(append([]int(nil), result.unresolved...), result.fatalUnresolved...)
-			notifyResolvedSegments(result.idxs, result, reporter, resolvedNotifier)
-			if round.Runtime != nil {
-				if barrier, ok := reporter.(interface{ FlushCheckpoint(context.Context) error }); ok {
-					checkpointCtx := result.checkpointCtx
-					if checkpointCtx == nil {
-						checkpointCtx = runCtx
-					}
-					if err := barrier.FlushCheckpoint(checkpointCtx); err != nil {
-						failCheckpoint(&StorageError{Operation: "checkpoint", Err: err})
-						return
-					}
-				} else {
-					reporter.BatchComplete()
-					if checked, ok := reporter.(interface{ StageError() error }); ok {
-						if err := checked.StageError(); err != nil {
-							failCheckpoint(&StorageError{Operation: "checkpoint", Err: err})
-							return
-						}
-					}
-				}
-			} else {
+			notifyResolvedSegments(result.idxs, result, reporter)
+			if _, durable := reporter.(interface{ FlushCheckpoint(context.Context) error }); !durable {
 				reporter.BatchComplete()
+			}
+			if checked, ok := reporter.(interface{ StageError() error }); ok {
+				if err := checked.StageError(); err != nil {
+					stop(err)
+					return
+				}
 			}
 			resolved = append(resolved, computeResolved(result.idxs, excluded, result.failedSegments)...)
 		}
-		if round.Runtime != nil {
-			progress.NotifyWorkState(reporter)
-		}
+		progress.NotifyWorkState(reporter)
 	}
 
 	// deferRetry 把无法重投的在途重试转为未解决（排空期 jobs 已关闭）。
@@ -686,15 +383,10 @@ func runPool(
 	}
 	capacityWake := false
 	for active > 0 {
-		var preparationChanged, admissionChanged <-chan struct{}
-		var globalPolicyChanged <-chan struct{}
-		var pauseRequested <-chan struct{}
-		if round.Runtime != nil {
-			preparationChanged = round.Runtime.Preparation.Changed()
-			admissionChanged = round.Runtime.Admission.Changed()
-			globalPolicyChanged = round.Runtime.Admission.PolicyChanged()
-			pauseRequested = round.Gate.Done()
-		}
+		preparationChanged := round.Runtime.Preparation.Changed()
+		admissionChanged := round.Runtime.Admission.Changed()
+		globalPolicyChanged := round.Runtime.Admission.PolicyChanged()
+		pauseRequested := round.Gate.Done()
 		if capacityWake {
 			for i := 0; i < len(capacityWaiting); {
 				// A global notification may come from this invocation's own
@@ -854,22 +546,24 @@ cleanup:
 	}, nil
 }
 
-// notifyResolvedSegments 对终态批次的 resolved 子集逐段通知：
-// SegmentDone 推进进度计数，SegmentResolved（Reporter 实现
-// SegmentResolvedNotifier 时）登记轮次断点，两者由同一判定驱动，
-// 保证 segment_completed ≡ 断点集合基数的 checkpoint 不变式。
-//
-// resolved = idxs − unresolved − fatalUnresolved − failedSegments（各自去重；
-// 计数口径从「已尝试」收敛为「已解决」：失败尝试、池推进重试与暂停让行
-// 段均不计数，completed 恒 ≤ total）。
-// unresolvable 恒 ⊆ idxs（核实结论见收集点注释），故每个 idx 至多通知一次；
-// 若 handler 返回异常组合（集合溢出 idxs），以 idxs 为界防御性截断。
-func notifyResolvedSegments(
-	idxs []int,
-	result batchResult,
-	rep progress.Reporter,
-	notifier progress.SegmentResolvedNotifier,
-) {
+func waitForBatch(ctx context.Context, gate *PauseGate, notBefore time.Time) bool {
+	if wait := time.Until(notBefore); wait > 0 {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return false
+		case <-gate.Done():
+			return false
+		case <-timer.C:
+		}
+	}
+	return ctx.Err() == nil && !gate.Paused()
+}
+
+// Durable completion is owned by the batch processor. The collector reports
+// only the confirmed subset and never registers a second completion record.
+func notifyResolvedSegments(idxs []int, result batchResult, rep progress.Reporter) {
 	if len(idxs) == 0 {
 		return
 	}
@@ -889,9 +583,6 @@ func notifyResolvedSegments(
 		}
 		excluded[idx] = struct{}{} // idxs 内重复索引只通知一次
 		rep.SegmentDone()
-		if notifier != nil {
-			notifier.SegmentResolved(idx)
-		}
 	}
 }
 

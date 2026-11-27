@@ -66,11 +66,12 @@ type RequestMember struct {
 }
 
 type RequestRecord struct {
-	State      string
-	UsageKnown bool
-	Usage      backend.Usage
-	Duration   time.Duration
-	Error      string
+	State       string
+	UsageKnown  bool
+	Usage       backend.Usage
+	Duration    time.Duration
+	Error       string
+	MainFailure *WorkCursor
 }
 
 type CommitOutcome string
@@ -183,6 +184,7 @@ func (s *MemoryRoundStore) Close() error {
 		}
 		record.retireBacking(record.capture)
 		record.retireBacking(record.publicBacking)
+		record.retireBacking(record.parseDiagnosticBacking)
 		// Keep only authority scalars and retryable retirement rights.
 		*record = memoryResponse{response: memoryResponseRecord{MainResponseHeader: record.response.MainResponseHeader}, historyAdmission: record.historyAdmission, historyOwner: record.historyOwner, retiredBackings: record.retiredBackings}
 	}
@@ -500,8 +502,10 @@ func (s *MemoryRoundStore) Commit(ctx context.Context, c *Candidate, result Tran
 	record.stored = true
 	s.confirmations[c.Index] = record
 	s.confirmed[c.ID] = true
+	if c.Mode != RoundModeCorrect || c.Segment.Target != result.TargetText {
+		c.Segment.TargetIsNull = false
+	}
 	c.Segment.Target, c.Segment.Issues = result.TargetText, result.Issues
-	c.Segment.TargetIsNull = false
 	if c.Mode == RoundModeTranslate {
 		c.Segment.Status = "translated"
 	}

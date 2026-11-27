@@ -1,9 +1,11 @@
 package event
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -67,14 +69,26 @@ func (s *HybridStore) NormalizeTime(t time.Time) time.Time {
 }
 
 func (s *HybridStore) Replay(ctx context.Context, jobID int, afterSeq int64, limit int) ([]Event, error) {
-	events, err := s.ringStore.Replay(ctx, jobID, afterSeq, limit)
+	cached, cursorInWindow, err := s.ringStore.replay(ctx, jobID, afterSeq, limit, true)
 	if err != nil {
 		return nil, err
 	}
-	if events != nil && len(events) > 0 {
-		return events, nil
+	if cursorInWindow && len(cached) > 0 {
+		return cached, nil
 	}
-	return s.entStore.Replay(ctx, jobID, afterSeq, limit)
+	// A newly populated ring may start after the cursor, for example after a
+	// restart. Older events can still be in the DB and newer ones only in memory.
+	persisted, err := s.entStore.Replay(ctx, jobID, afterSeq, limit)
+	if err != nil || len(cached) == 0 {
+		return persisted, err
+	}
+	events := append(persisted, cached...)
+	slices.SortStableFunc(events, func(a, b Event) int { return cmp.Compare(a.Seq, b.Seq) })
+	events = slices.CompactFunc(events, func(a, b Event) bool { return a.Seq == b.Seq })
+	if limit > 0 && len(events) > limit {
+		events = events[:limit]
+	}
+	return events, nil
 }
 
 // LatestSeq returns the highest seq for the job, preferring the DB (source of

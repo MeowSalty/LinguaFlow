@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -25,6 +26,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segmentrevision"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
@@ -152,23 +154,31 @@ func TestConfigurationConsumersSSERingCapacity(t *testing.T) {
 			s, _, user := configurationConsumerServer(t, config.ModeLocal, func(cfg *config.ServerConfig) { cfg.SSE.RingBufferCapacity = capacity })
 			job := configurationConsumerJob(t, s, user.ID)
 			count := capacity + 2
-			for i := 0; i < count; i++ {
+			seqs := make([]int64, count)
+			for i := range seqs {
 				configurationPublish(s, job.ID, "ring-event")
+				seqs[i] = int64(i + 1)
 			}
-			history, _, more, err := s.eventBroker.ListHistory(context.Background(), job.ID, 0, count+1)
-			if err != nil || len(history) != count || more {
-				t.Fatalf("ring eviction lost durable history: %+v", history)
+			sameSeq := func(got event.Event, want int64) bool { return got.Seq == want }
+			ctx := t.Context()
+			history, _, more, err := s.eventBroker.ListHistory(ctx, job.ID, 0, count+1)
+			if err != nil || !slices.EqualFunc(history, seqs, sameSeq) || more {
+				t.Fatalf("ring eviction lost durable history: got %+v, more=%t, err=%v", history, more, err)
 			}
-			// Remove only durable rows so the following probes can only be served
-			// by the production ring. The exact overflow boundary proves capacity.
-			s.entClient.SSEEvent.Delete().ExecX(context.Background())
-			oldest := int64(count - capacity + 1)
-			if got, err := s.eventBroker.Replay(context.Background(), job.ID, oldest, count); err != nil || len(got) != capacity-1 || got[0].Seq != oldest+1 || got[len(got)-1].Seq != int64(count) {
-				t.Fatalf("configured ring capacity %d: %+v", capacity, got)
+			assertReplay := func(after int64, want []int64) {
+				t.Helper()
+				got, err := s.eventBroker.Replay(ctx, job.ID, after, count)
+				if err != nil || !slices.EqualFunc(got, want, sameSeq) {
+					t.Fatalf("replay after %d with capacity %d: got %+v, err=%v, want seqs %v", after, capacity, got, err, want)
+				}
 			}
-			if got, err := s.eventBroker.Replay(context.Background(), job.ID, oldest-1, count); err != nil || len(got) != 0 {
-				t.Fatalf("overflow must require durable fallback: %+v", got)
-			}
+			// The second event has been evicted, so this cursor needs the DB.
+			assertReplay(seqs[0], seqs[1:])
+			s.entClient.SSEEvent.Delete().Where(sseevent.JobIDEQ(job.ID)).ExecX(ctx)
+			// With the DB rows gone, hybrid replay still serves the retained suffix.
+			retained := seqs[count-capacity:]
+			assertReplay(seqs[0], retained)
+			assertReplay(retained[0], retained[1:])
 		})
 	}
 }

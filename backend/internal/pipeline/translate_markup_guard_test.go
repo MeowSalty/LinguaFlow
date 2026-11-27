@@ -10,11 +10,8 @@ import (
 
 // recordingTM 记录 Add 调用的 TM 桩：用于验证结构守卫拦截的坏译文不会污染记忆库。
 type recordingTM struct {
+	tm.Nop
 	adds []tm.Match
-}
-
-func (*recordingTM) Search(context.Context, string, string, string) ([]tm.Match, error) {
-	return nil, nil
 }
 
 func (r *recordingTM) Add(_ context.Context, src, tgt, srcLang, tgtLang string) error {
@@ -39,14 +36,17 @@ func newMarkupGuardDoc(format, source string) *Document {
 	}
 }
 
-// runMarkupGuard 直接驱动 processTranslatedSegments，返回 (unresolved, 处理后的段)。
-func runMarkupGuard(t *testing.T, doc *Document, target string, memory tm.TranslationMemory) ([]int, *Segment) {
+func runMarkupGuard(t *testing.T, doc *Document, memory tm.TranslationMemory, targets map[string]string) ([]int, *Segment) {
 	t.Helper()
-	h := &TranslateHandler{Logger: quietLogger(), TM: memory}
-	unresolved := h.processTranslatedSegments(
-		context.Background(), doc, []int{0}, []string{"1"},
-		map[string]string{"1": target}, nil, map[int]struct{}{}, quietLogger())
-	return unresolved, &doc.Segments[0]
+	h := &TranslateHandler{
+		Backend:   &fakeBackend{name: "markup", responses: []string{mustJSON(t, map[string]any{"translations": targets})}},
+		BatchSize: len(targets), Renderer: newTestRenderer(t), TM: memory,
+	}
+	result, err := runMemoryTestRound(t, t.Context(), Round{Handler: h, Concurrency: 1}, doc, nil, quietLogger(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result.Unresolved, &doc.Segments[0]
 }
 
 const (
@@ -58,11 +58,11 @@ const (
 	markupGuardGoodTarget = "「等级６：<ruby>劣化雷神皇<rt>雷萨埃夫塔尔</rt></ruby>！」"
 )
 
-// 坏译文（缺 </ruby>）必须被拦截：段索引进 unresolved、Target 清空、Issues 清空，
+// 坏译文（缺 </ruby>）必须被拦截：段索引进 unresolved，已接受的内容保留，
 // 使该段复用既有的池间/跨轮重试机制。
 func TestTranslateMarkupGuard_BadRubyTargetGoesUnresolved(t *testing.T) {
 	doc := newMarkupGuardDoc("epub", markupGuardGoodSource)
-	unresolved, seg := runMarkupGuard(t, doc, markupGuardBadTarget, nil)
+	unresolved, seg := runMarkupGuard(t, doc, nil, map[string]string{"1": markupGuardBadTarget})
 
 	if len(unresolved) != 1 || unresolved[0] != 0 {
 		t.Fatalf("unresolved=%v, want [0]", unresolved)
@@ -70,15 +70,15 @@ func TestTranslateMarkupGuard_BadRubyTargetGoesUnresolved(t *testing.T) {
 	if seg.Target != "" {
 		t.Errorf("Target=%q, want empty (坏译文不得落库)", seg.Target)
 	}
-	if seg.Issues != nil {
-		t.Errorf("Issues=%+v, want nil (针对已丢弃译文的裁决不应落库)", seg.Issues)
+	if len(seg.Issues) != 1 || seg.Issues[0].Code != qa.CheckPunctuationMissing {
+		t.Errorf("prior issues changed: %+v", seg.Issues)
 	}
 }
 
 // 合法译文照常通过：不进 unresolved，Target 保持 LLM 译文原样。
 func TestTranslateMarkupGuard_WellFormedTargetPasses(t *testing.T) {
 	doc := newMarkupGuardDoc("epub", markupGuardGoodSource)
-	unresolved, seg := runMarkupGuard(t, doc, markupGuardGoodTarget, nil)
+	unresolved, seg := runMarkupGuard(t, doc, nil, map[string]string{"1": markupGuardGoodTarget})
 
 	if len(unresolved) != 0 {
 		t.Fatalf("unresolved=%v, want empty", unresolved)
@@ -92,7 +92,7 @@ func TestTranslateMarkupGuard_WellFormedTargetPasses(t *testing.T) {
 // （防止误伤纯文本等按字节直通格式的项目）。
 func TestTranslateMarkupGuard_FormatGateSkipsNonEpub(t *testing.T) {
 	doc := newMarkupGuardDoc("txt", markupGuardGoodSource)
-	unresolved, seg := runMarkupGuard(t, doc, markupGuardBadTarget, nil)
+	unresolved, seg := runMarkupGuard(t, doc, nil, map[string]string{"1": markupGuardBadTarget})
 
 	if len(unresolved) != 0 {
 		t.Fatalf("unresolved=%v, want empty (txt 格式不应判违规)", unresolved)
@@ -106,7 +106,7 @@ func TestTranslateMarkupGuard_FormatGateSkipsNonEpub(t *testing.T) {
 // 译文含同样的裸 & 也不得判违规——否则每次重译都判违规，整轮任务被无解拖死。
 func TestTranslateMarkupGuard_InvalidSourceNeverFlagsRegression(t *testing.T) {
 	doc := newMarkupGuardDoc("epub", "A & B <ruby>基<rt>注</rt></ruby>")
-	unresolved, seg := runMarkupGuard(t, doc, "A & B <ruby>基<rt>注</rt></ruby>", nil)
+	unresolved, seg := runMarkupGuard(t, doc, nil, map[string]string{"1": "A & B <ruby>基<rt>注</rt></ruby>"})
 
 	if len(unresolved) != 0 {
 		t.Fatalf("unresolved=%v, want empty (源文非法时不应判违规)", unresolved)
@@ -138,10 +138,7 @@ func TestTranslateMarkupGuard_BadTargetNeverWritesTM(t *testing.T) {
 		},
 	}
 	memory := &recordingTM{}
-	h := &TranslateHandler{Logger: quietLogger(), TM: memory}
-	unresolved := h.processTranslatedSegments(
-		context.Background(), doc, []int{0, 1}, []string{"1", "2"},
-		map[string]string{"1": markupGuardBadTarget, "2": "普通的一句"}, nil, map[int]struct{}{}, quietLogger())
+	unresolved, _ := runMarkupGuard(t, doc, memory, map[string]string{"1": markupGuardBadTarget, "2": "普通的一句"})
 
 	if len(unresolved) != 1 || unresolved[0] != 0 {
 		t.Fatalf("unresolved=%v, want [0]", unresolved)

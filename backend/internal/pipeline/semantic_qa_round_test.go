@@ -34,7 +34,7 @@ func TestRunRound_SemanticQA401FatalUnresolvedCrossRound(t *testing.T) {
 		Concurrency: 1,
 		Retry:       backend.RetryPolicy{MaxAttempts: 3},
 	}
-	result, err := RunRound(context.Background(), round, doc, nil, quietLogger(), nil)
+	result, err := runMemoryTestRound(t, context.Background(), round, doc, nil, quietLogger(), nil)
 	if err != nil {
 		t.Fatalf("RunRound: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestRunRound_SemanticQARenderFailureLeavesUnresolvedEmpty(t *testing.T) {
 		Concurrency: 1,
 		Retry:       backend.RetryPolicy{MaxAttempts: 0},
 	}
-	result, err := RunRound(context.Background(), round, doc, nil, quietLogger(), nil)
+	result, err := runMemoryTestRound(t, context.Background(), round, doc, nil, quietLogger(), nil)
 	if err != nil {
 		t.Fatalf("RunRound: %v", err)
 	}

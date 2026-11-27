@@ -165,6 +165,9 @@ func (s *roundStore) LoadCanonical(ctx context.Context, doc *pipeline.Document) 
 			}
 			c := w.Cursor
 			cursor := pipeline.WorkCursor{Pool: c.PoolIndex, Attempt: c.MainAttempts, LogicalAttempt: c.AlignmentAttempts, NetworkAttempt: c.AlignmentNetworkAttempts, Phase: c.PromptPhase, State: c.State}
+			if pipeline.IsPendingPromptUpgrade(cursor.Phase) {
+				cursor.NetworkAttempt = c.MainNetworkAttempts
+			}
 			if c.NextAttemptAt != nil {
 				cursor.NextAttemptAt = *c.NextAttemptAt
 			}
@@ -184,6 +187,10 @@ func (s *roundStore) LoadCanonical(ctx context.Context, doc *pipeline.Document) 
 	return true, count, nil
 }
 func (s *roundStore) SealCanonical(ctx context.Context, doc *pipeline.Document) error {
+	return s.classify(s.sealCanonical(ctx, doc, false))
+}
+
+func (s *roundStore) sealCanonical(ctx context.Context, doc *pipeline.Document, local bool) error {
 	total := 0
 	for i := range doc.Segments {
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "canonical_seal", Operation: "doc_member_visit", Rows: 1})
@@ -206,7 +213,10 @@ func (s *roundStore) SealCanonical(ctx context.Context, doc *pipeline.Document) 
 		}
 		return nil
 	}
-	return s.classify(s.store.SealRoundStream(ctx, s.scope, total, walk))
+	if local {
+		return s.store.SealLocalRoundStream(ctx, s.scope, total, walk)
+	}
+	return s.store.SealRoundStream(ctx, s.scope, total, walk)
 }
 func (s *roundStore) segmentIndex(id int) (int, bool) {
 	return s.segmentIndexObserved(nil, id)

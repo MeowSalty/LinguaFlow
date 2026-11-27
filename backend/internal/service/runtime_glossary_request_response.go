@@ -1,13 +1,14 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
+	"io"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -17,6 +18,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/execution"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/workstate"
 )
@@ -35,11 +38,12 @@ type responseBusinessProof struct {
 	projectID                 int
 	inputDigest, publicDigest string
 	publicBytes               int64
+	extract                   bool
 }
 
 func (p responseBusinessProof) matches(req *ent.WorkRequest) bool {
 	var receipt glossary.ResponseReceipt
-	return p.identity.Matches(req) && int64(len(req.GlossaryReceipt)) == p.publicBytes && req.PublicDigest == p.publicDigest && responseReceiptMatches(req, glossary.ResponseProcess{RequestID: p.identity.RequestID, InputDigest: p.inputDigest, CaptureEpoch: p.identity.CaptureEpoch}, &receipt)
+	return p.identity.Matches(req) && (p.extract || int64(len(req.GlossaryReceipt)) == p.publicBytes) && req.PublicDigest == p.publicDigest && responseReceiptMatches(req, glossary.ResponseProcess{RequestID: p.identity.RequestID, InputDigest: p.inputDigest, CaptureEpoch: p.identity.CaptureEpoch, Extract: p.extract}, &receipt)
 }
 
 func (p responseBusinessProof) exists(ctx context.Context, tx *ent.Client) (bool, error) {
@@ -47,10 +51,10 @@ func (p responseBusinessProof) exists(ctx context.Context, tx *ent.Client) (bool
 	if err != nil {
 		return false, err
 	}
-	if !p.identity.Matches(req) || req.ResponseDigest != p.inputDigest {
+	if !p.identity.Matches(req) || req.ResponseDigest != p.inputDigest || (req.MemberMode == "extract") != p.extract {
 		return false, workstate.ErrManifest
 	}
-	if len(req.GlossaryReceipt) == 0 && req.PromotionState == "outputs_ready" {
+	if len(req.GlossaryReceipt) == 0 && req.PromotionState == responseBusinessInputPhase(p.extract) {
 		return false, nil
 	}
 	if !p.matches(req) {
@@ -99,7 +103,7 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 	if err != nil {
 		return out, err
 	}
-	proof := responseBusinessProof{identity: workstate.ResponseIdentityFromRow(current), projectID: g.projectID, inputDigest: in.InputDigest, publicBytes: current.PublicBytes, publicDigest: current.PublicDigest}
+	proof := responseBusinessProof{identity: workstate.ResponseIdentityFromRow(current), projectID: g.projectID, inputDigest: in.InputDigest, publicBytes: int64(len(current.GlossaryReceipt)), publicDigest: current.PublicDigest, extract: in.Extract}
 	if proof.identity.CaptureEpoch != in.CaptureEpoch || g.executionJobID > 0 && proof.identity.JobID != g.executionJobID {
 		return out, workstate.ErrManifest
 	}
@@ -147,7 +151,7 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 		if !proof.identity.Matches(req) {
 			return workstate.ErrManifest
 		}
-		if req.ResponseFormatVersion != 2 || req.ResponseDigest != in.InputDigest {
+		if req.ResponseFormatVersion != execution.ResponseFormatVersion || req.ResponseDigest != in.InputDigest || (req.MemberMode == "extract") != in.Extract {
 			return workstate.ErrManifest
 		}
 		if len(req.GlossaryReceipt) > 0 {
@@ -172,18 +176,20 @@ func (g *DatabaseGlossary) ProcessResponse(ctx context.Context, in glossary.Resp
 		if err != nil || digest != req.SnapshotDigest {
 			return workstate.ErrManifest
 		}
-		round, err := tx.JobRound.Get(ctx, req.JobRoundID)
-		if err != nil {
-			return err
+		if !in.Extract {
+			round, err := tx.JobRound.Get(ctx, req.JobRoundID)
+			if err != nil {
+				return err
+			}
+			jr, err := tx.JobResource.Get(ctx, round.JobResourceID)
+			if err != nil {
+				return err
+			}
+			if err := guardJobResourceSource(ctx, tx, jr); err != nil {
+				return err
+			}
 		}
-		jr, err := tx.JobResource.Get(ctx, round.JobResourceID)
-		if err != nil {
-			return err
-		}
-		if err := guardJobResourceSource(ctx, tx, jr); err != nil {
-			return err
-		}
-		if req.ResponseFormatVersion != 2 || req.State != "completed" || req.PromotionState != "outputs_ready" || req.PromotionCursor != 0 {
+		if req.State != "completed" || req.PromotionState != responseBusinessInputPhase(in.Extract) || req.PromotionCursor != 0 {
 			return workstate.ErrManifest
 		}
 		businessCtx := workstate.WithBusinessTransaction(ctx, tx)
@@ -268,20 +274,39 @@ func absorbResponseEntries(ctx context.Context, tx *ent.Client, projectID int, i
 			result.Skipped, e = backend.AppendNode(b, result.Skipped, glossary.SkippedEntry{Reason: glossary.SkipReasonEmpty})
 			return e
 		}
-		existing, e := requestGlossaryEntryProjected(ctx, tx, projectID, input, in.ItemLimit)
-		if e == nil {
-			if existing.Target == input.Target {
-				return nil
+		if in.Extract {
+			// Extraction only needs counts. Compare the stored target in SQL so
+			// a large editor-provided target cannot overrun the response budget.
+			q := responseGlossaryEntryQuery(tx, projectID, input)
+			_, err := q.Clone().OnlyID(ctx)
+			exists := err == nil
+			if !exists && !ent.IsNotFound(err) {
+				return err
 			}
-			var decision glossary.SkippedEntry
-			if e = b.CloneInto(glossary.SkippedEntry{Proposed: glossary.Entry{Target: input.Target}, Existing: glossary.Entry{Target: existing.Target}, Reason: glossary.SkipReasonExists}, &decision); e != nil {
+			if exists {
+				_, err := q.Where(glossaryentry.TargetEQ(input.Target)).OnlyID(ctx)
+				if !ent.IsNotFound(err) {
+					return err
+				}
+				result.Skipped, err = backend.AppendNode(b, result.Skipped, glossary.SkippedEntry{Reason: glossary.SkipReasonExists})
+				return err
+			}
+		} else {
+			existing, err := requestGlossaryEntryProjected(ctx, tx, projectID, input, in.ItemLimit)
+			if err == nil {
+				if existing.Target == input.Target {
+					return nil
+				}
+				var decision glossary.SkippedEntry
+				if e = b.CloneInto(glossary.SkippedEntry{Proposed: glossary.Entry{Target: input.Target}, Existing: glossary.Entry{Target: existing.Target}, Reason: glossary.SkipReasonExists}, &decision); e != nil {
+					return e
+				}
+				result.Skipped, e = backend.AppendNode(b, result.Skipped, decision)
 				return e
 			}
-			result.Skipped, e = backend.AppendNode(b, result.Skipped, decision)
-			return e
-		}
-		if !ent.IsNotFound(e) {
-			return e
+			if !ent.IsNotFound(err) {
+				return err
+			}
 		}
 		if _, e = createGlossaryEntry(ctx, tx, projectID, input); e != nil {
 			return e
@@ -300,8 +325,15 @@ func executionFormatForResponse(j *ent.Job) error {
 	return err
 }
 
+func responseBusinessInputPhase(extract bool) string {
+	if extract {
+		return string(responsecontract.CapturePending)
+	}
+	return string(responsecontract.OutputsReady)
+}
+
 func requestGlossaryEntryProjected(ctx context.Context, tx *ent.Client, project int, input GlossaryEntryInput, limit int64) (*ent.GlossaryEntry, error) {
-	q := tx.GlossaryEntry.Query().Where(glossaryentry.ProjectIDEQ(project), glossaryentry.SourceKeyEQ(glossarySourceKey(input.Source)), glossaryentry.ForbiddenEQ(input.Forbidden))
+	q := responseGlossaryEntryQuery(tx, project, input)
 	var size []struct {
 		ID    int   `json:"id"`
 		Bytes int64 `json:"bytes"`
@@ -323,6 +355,10 @@ func requestGlossaryEntryProjected(ctx context.Context, tx *ent.Client, project 
 	return tx.GlossaryEntry.Query().Where(glossaryentry.IDEQ(size[0].ID)).Select(glossaryentry.FieldID, glossaryentry.FieldTarget).Only(ctx)
 }
 
+func responseGlossaryEntryQuery(tx *ent.Client, project int, input GlossaryEntryInput) *ent.GlossaryEntryQuery {
+	return tx.GlossaryEntry.Query().Where(glossaryentry.ProjectIDEQ(project), glossaryentry.SourceKeyEQ(glossarySourceKey(input.Source)), glossaryentry.ForbiddenEQ(input.Forbidden))
+}
+
 // The public transaction reads one small header and its bounded receipt; member
 // bodies remain in the member table and are borrowed individually by the sink.
 func responseBusinessRequest(ctx context.Context, client *ent.Client, id string, project int) (*ent.WorkRequest, error) {
@@ -340,7 +376,7 @@ func responseBusinessRequest(ctx context.Context, client *ent.Client, id string,
 			expression = "COALESCE(OCTET_LENGTH(CAST(" + s.C(workrequest.FieldGlossaryReceipt) + " AS TEXT)),0)"
 		}
 		s.Where(sql.Or(sql.NEQ(s.C(workrequest.FieldPromotionState), "business_ready"), sql.ExprP(expression+" = "+s.C(workrequest.FieldPublicBytes))))
-	}).Select(workrequest.FieldID, workrequest.FieldIdentity, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldPromotionCount, workrequest.FieldFreezeDigest, workrequest.FieldSnapshotDigest, workrequest.FieldResponseDigest, workrequest.FieldResponseFormatVersion, workrequest.FieldState, workrequest.FieldPromotionState, workrequest.FieldPromotionCursor, workrequest.FieldPublicKind, workrequest.FieldPublicBytes, workrequest.FieldPublicDigest, workrequest.FieldGlossaryReceipt).Only(ctx)
+	}).Select(workrequest.FieldID, workrequest.FieldIdentity, workrequest.FieldJobID, workrequest.FieldResourceID, workrequest.FieldJobRoundID, workrequest.FieldRetryEpoch, workrequest.FieldPromotionCount, workrequest.FieldFreezeDigest, workrequest.FieldSnapshotDigest, workrequest.FieldResponseDigest, workrequest.FieldResponseFormatVersion, workrequest.FieldState, workrequest.FieldPromotionState, workrequest.FieldPromotionCursor, workrequest.FieldPublicKind, workrequest.FieldPublicBytes, workrequest.FieldPublicDigest, workrequest.FieldGlossaryReceipt, workrequest.FieldMemberMode, workrequest.FieldArchiveDigest).Only(ctx)
 	if ent.IsNotFound(err) {
 		if exists, lookup := q.Exist(ctx); lookup != nil {
 			return nil, lookup
@@ -352,11 +388,31 @@ func responseBusinessRequest(ctx context.Context, client *ent.Client, id string,
 }
 
 func responseReceiptMatches(req *ent.WorkRequest, in glossary.ResponseProcess, r *glossary.ResponseReceipt) bool {
-	sum := sha256.Sum256(req.GlossaryReceipt)
 	businessReady := req.PromotionState == "business_ready" && req.PublicKind == workrequest.PublicKindReceipt && int64(len(req.GlossaryReceipt)) == req.PublicBytes
 	promoted := req.PromotionState == "promoted" && req.PublicKind == workrequest.PublicKindNone && req.PublicBytes == 0
-	if !businessReady && !promoted || hex.EncodeToString(sum[:]) != req.PublicDigest {
+	if (req.MemberMode == "extract") != in.Extract || in.Extract && (!promoted || req.PromotionCursor != req.PromotionCount || req.ArchiveDigest != in.InputDigest) {
 		return false
 	}
-	return req.ResponseFormatVersion == 2 && req.RetryEpoch == in.CaptureEpoch && req.ResponseDigest == in.InputDigest && req.State == "completed" && len(req.GlossaryReceipt) > 0 && len(req.GlossaryReceipt) <= glossary.ResponseReceiptLimit && json.Unmarshal(req.GlossaryReceipt, r) == nil && r.Version == glossary.ResponseReceiptVersion && r.RequestID == in.RequestID && r.InputDigest == in.InputDigest && len(r.OutcomeDigest) == 64 && r.Added >= 0 && r.Skipped >= 0
+	payload := req.GlossaryReceipt
+	if !businessReady && !promoted || req.ResponseFormatVersion != execution.ResponseFormatVersion || req.RetryEpoch != in.CaptureEpoch || req.ResponseDigest != in.InputDigest || req.State != "completed" || len(payload) == 0 || len(payload) > glossary.ResponseReceiptLimit {
+		return false
+	}
+	if in.Extract {
+		// PostgreSQL's JSONB representation can reorder keys and add space on
+		// read-back. Confirm the same compact, typed receipt that was published.
+		decoder := json.NewDecoder(bytes.NewReader(payload))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(r) != nil || decoder.Decode(new(json.RawMessage)) != io.EOF {
+			return false
+		}
+		var err error
+		payload, err = json.Marshal(r)
+		if err != nil {
+			return false
+		}
+	} else if json.Unmarshal(payload, r) != nil {
+		return false
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]) == req.PublicDigest && r.Version == glossary.ResponseReceiptVersion && r.RequestID == in.RequestID && r.InputDigest == in.InputDigest && len(r.OutcomeDigest) == 64 && r.Added >= 0 && r.Skipped >= 0
 }

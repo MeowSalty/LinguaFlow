@@ -50,7 +50,19 @@ function one(measurements, name, driver, delay) {
   return matches[0].extra || {};
 }
 
-function load(extra, resources, segmentsPerResource, operations, phases) {
+function requireTimings(extra, operations, phases) {
+  for (const operation of operations) for (const phase of phases) {
+    requireCondition(Number.isSafeInteger(extra.timings?.[operation + '.' + phase]?.count) && extra.timings[operation + '.' + phase].count > 0, operation + '.' + phase);
+  }
+}
+
+function requireExtractionTimings(extra) {
+  requireTimings(extra, ['reserve', 'sent', 'response_capture', 'business_publication', 'stage_initialize'], ['save_queue', 'query', 'exec']);
+  requireTimings(extra, ['response_capture', 'business_publication'], ['transaction']);
+  requireTimings(extra, ['checkpoint'], ['save_queue']);
+}
+
+function load(extra, resources, segmentsPerResource) {
   const segments = resources * segmentsPerResource;
   exact(extra, { resources, segments, completed: segments, total: segments });
   requireCondition(Object.hasOwn(extra, 'failures') && (extra.failures === null || (Array.isArray(extra.failures) && extra.failures.length === 0)), 'load failures');
@@ -59,14 +71,12 @@ function load(extra, resources, segmentsPerResource, operations, phases) {
   for (const [key, capacity] of Object.entries({ pending_owner_peak: 16, coordinator_intent_peak: 16, normal_queue_peak: 16, reliable_queue_peak: 32, completion_peak: 16 })) {
     requireCondition(Number.isSafeInteger(extra.timings?.[key]) && extra.timings[key] >= 0 && extra.timings[key] <= capacity, key);
   }
-  for (const operation of operations) for (const phase of phases) {
-    requireCondition(Number.isSafeInteger(extra.timings?.[operation + '.' + phase]?.count) && extra.timings[operation + '.' + phase].count > 0, operation + '.' + phase);
-  }
 }
 
 function translation(extra, resources, batches) {
   const segments = resources * batches * 300;
-  load(extra, resources, batches * 300, ['reserve', 'sent', 'response_handoff', 'member_promotion', 'commit', 'stage_initialize'], ['save_queue', 'transaction', 'query', 'exec']);
+  load(extra, resources, batches * 300);
+  requireTimings(extra, ['reserve', 'sent', 'response_handoff', 'member_promotion', 'commit', 'stage_initialize'], ['save_queue', 'transaction', 'query', 'exec']);
   exact(extra, { source_batches: resources * batches, source_batch_size: 300, body_updated: segments, facts: segments, candidate_records: segments, invalid_requests: 0, duplicate_or_missing_members: 0 });
   const requests = extra.actual_llm_batches;
   requireCondition(Number.isSafeInteger(requests) && requests >= resources * batches, 'actual LLM batches');
@@ -104,7 +114,8 @@ export function validateMeasurements(measurements, { driver, protocol, bench }) 
   } else {
     for (const delay of [0, 1, 2, 5]) {
       const extra = one(measurements, 'load7x10x300', driver, delay);
-      load(extra, 7, 3000, ['reserve', 'sent', 'received', 'completed', 'checkpoint', 'stage_initialize'], ['save_queue', 'query', 'exec']);
+      load(extra, 7, 3000);
+      requireExtractionTimings(extra);
       exact(extra, { batches: 70, provider_calls: 70, usage_records: 70 });
     }
     for (const delay of [0, 5]) translation(one(measurements, 'translation7x2x300', driver, delay), 7, 2);
@@ -112,6 +123,7 @@ export function validateMeasurements(measurements, { driver, protocol, bench }) 
   if (!bench) {
     const extraction = one(measurements, 'extraction7x2x300', driver);
     exact(extraction, { resources: 7, batches: 14, segments: 4200, completed: 4200, total: 4200, provider_calls: 14, usage_records: 14, provider_peak: 10 });
+    requireExtractionTimings(extraction);
     translation(one(measurements, 'translation2x1x300', driver), 2, 1);
   }
 }

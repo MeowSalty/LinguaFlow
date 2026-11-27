@@ -32,18 +32,13 @@ func TestRubyCandidateMalformedMappingsRetainMainTranslation(t *testing.T) {
 		seg.Translate = true
 		doc := &Document{Format: "text", SourceLang: "en", TargetLang: "zh", Segments: []Segment{*seg}}
 		main := &fakeBackend{name: "main", responses: []string{body}}
-		alignment := &fakeBackend{name: "alignment"}
-		h := &TranslateHandler{Backend: main, Renderer: newTestRenderer(t), RubyEnabled: true, RubyProtocolVersion: 2, RubyRetryBackends: []backend.Backend{alignment}, RubyRetryAttempts: 2, Repair: defaultRepairOpts()}
-		result := h.PrepareBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-		if result.err != nil || len(result.candidates) != 1 || len(result.unresolved) != 0 {
-			t.Fatalf("main response requeued because of ruby mapping: %+v", result)
+		h := &TranslateHandler{Backend: main, Renderer: newTestRenderer(t), RubyEnabled: true, RubyProtocolVersion: 2, Repair: defaultRepairOpts()}
+		result, err := runMemoryTestRound(t, t.Context(), Round{Handler: h, Concurrency: 1}, doc, nil, quietLogger(), nil)
+		if err != nil || len(result.Unresolved) != 0 || doc.Segments[0].Target != "alpha beta" || len(main.requests) != 1 {
+			t.Fatalf("malformed ruby mapping %s lost valid main text: result=%+v target=%q calls=%d err=%v", output, result, doc.Segments[0].Target, len(main.requests), err)
 		}
-		candidate := result.candidates[0]
-		if candidate.Segment.Target != "alpha beta" || candidate.Ready || len(candidate.Alignment.Missing()) != 1 || len(main.requests) != 1 || len(alignment.requests) != 0 {
-			t.Fatalf("incorrect handoff: %+v", candidate)
-		}
-		if doc.Segments[0].Target != "old" {
-			t.Fatal("private main candidate mutated accepted document")
+		if len(doc.Segments[0].Issues) != 1 || doc.Segments[0].Issues[0].Code != qa.CodeRubyRestoreIncomplete {
+			t.Fatalf("unverified ruby mapping did not produce a warning: %v", doc.Segments[0].Issues)
 		}
 	}
 }

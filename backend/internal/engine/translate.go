@@ -32,6 +32,10 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 		opt(cfg)
 	}
 
+	if cfg.store != nil && cfg.batchHandler != nil {
+		return pipeline.TranslateResult{}, fmt.Errorf("engine: configure the batch callback on the supplied round store")
+	}
+
 	if doc == nil {
 		return pipeline.TranslateResult{}, fmt.Errorf("engine: document is nil")
 	}
@@ -46,26 +50,7 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 	round := e.rounds[roundIdx]
 	handler := round.Handler
 
-	// 流水线注入：站位信号量与暂停闸门（每次执行按选项覆盖；nil 保持单资源
-	// 语义）。Round 为值类型副本，不污染引擎持有的基准配置。
-	round.Slots = cfg.station
-	round.Gate = cfg.gate
 	round.Store = cfg.store
-	if round.Runtime != nil {
-		round.Gate = round.Runtime.Gate
-		round.Slots = nil
-		if round.Store == nil {
-			memory := pipeline.NewMemoryRoundStore(cfg.batchHandler)
-			defer memory.Close()
-			round.Store = memory
-		}
-	}
-	// 退避重试等待中止信号同步到 handler（各 LLM handler 的 backoff select）。
-	if round.Gate != nil {
-		if setter, ok := handler.(interface{ SetGate(*pipeline.PauseGate) }); ok {
-			setter.SetGate(round.Gate)
-		}
-	}
 
 	// Prepare document
 	e.PrepareDocument(doc, nil)

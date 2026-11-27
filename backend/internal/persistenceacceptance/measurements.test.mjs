@@ -11,6 +11,14 @@ function timings(operations, phases) {
   return result;
 }
 
+function extractionTimings() {
+  return {
+    ...timings(['reserve', 'sent', 'response_capture', 'business_publication', 'stage_initialize'], ['save_queue', 'query', 'exec']),
+    ...timings(['response_capture', 'business_publication'], ['transaction']),
+    ...timings(['checkpoint'], ['save_queue']),
+  };
+}
+
 function measured(sample) {
   return { sql: 0, begins: 0, commits: 0, rollbacks: 0, elapsed_ms: 0, sql_p50_ms: 0, sql_p95_ms: 0, txn_p50_ms: 0, txn_p95_ms: 0, ...sample };
 }
@@ -23,7 +31,7 @@ function fullSamples() {
       segments: 21000, completed: 21000, total: 21000,
       provider_calls: 70, provider_peak: 10, usage_records: 70,
       resource_completed: Array(7).fill(3000), failures: null,
-      timings: timings(['reserve', 'sent', 'received', 'completed', 'checkpoint', 'stage_initialize'], ['save_queue', 'query', 'exec']),
+      timings: extractionTimings(),
     },
   });
   const translate = delay => ({
@@ -84,7 +92,8 @@ test('protocol acceptance requires both representative production paths', () => 
   for (const name of ['pool-advance-reserve300', 'seal5000', 'checkpoint300', 'calibrate', 'commit-observations']) samples.push({ name, driver: 'sqlite3', extra: {} });
   samples.find(sample => sample.name === 'commit-observations').extra.timings = timings(['commit'], ['query']);
   samples.push({ name: 'extraction7x2x300', driver: 'sqlite3', extra: { resources: 7, batches: 14, segments: 4200, completed: 4200, total: 4200, provider_calls: 14, usage_records: 14, provider_peak: 10 } });
-  samples.at(-1).extra.timings = timings(['reserve'], ['query']);
+  const extraction = samples.at(-1);
+  extraction.extra.timings = extractionTimings();
   const translation = fullSamples()[4];
   translation.name = 'translation2x1x300';
   Object.assign(translation.extra, { resources: 2, source_batches: 2, segments: 600, completed: 600, total: 600, body_updated: 600, facts: 600, candidate_records: 600, provider_calls: 6, request_records: 9, completed_request_records: 6, actual_llm_batches: 6, usage_records: 6, resource_completed: [300, 300], request_size_distribution: { 100: 6 }, model_size_distribution: { 100: 6 }, commit_correlations: { events: 600, missing: 0, request_count: 6 } });
@@ -92,6 +101,8 @@ test('protocol acceptance requires both representative production paths', () => 
   const protocol = { ...options, protocol: true, bench: false };
   assert.doesNotThrow(() => validateMeasurements(samples.map(measured), protocol));
   assert.throws(() => validateMeasurements(samples.slice(0, -1).map(measured), protocol), /translation2x1x300/);
+  delete extraction.extra.timings['business_publication.exec'];
+  assert.throws(() => validateMeasurements(samples.map(measured), protocol), /business_publication\.exec/);
 });
 
 test('missing, null, non-finite or unsafe measured numbers and extra delay samples fail', () => {

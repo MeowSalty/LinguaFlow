@@ -16,17 +16,21 @@ import (
 // ArchiveMember is one normalized output, bound to the frozen request ordinal.
 // Failure is a content failure; capacity and cancellation remain returned errors.
 type ArchiveMember struct {
-	Outcome    responsecontract.MemberOutcome
-	Target     string
-	Revision   *prompt.ReviseRevision
-	RubyOutput []ruby.OutputEntry
-	Missing    bool
-	Failure    string
+	Outcome           responsecontract.MemberOutcome
+	Target            string
+	Revision          *prompt.ReviseRevision
+	RubyOutput        []ruby.OutputEntry
+	Missing           bool
+	Failure           string
+	BatchParseFailure bool `json:",omitempty"`
 }
 
 // ArchiveContentError is a model syntax/schema failure. It never wraps a
 // capacity, cancellation, identity, or storage failure.
-type ArchiveContentError struct{ Err error }
+type ArchiveContentError struct {
+	Err      error
+	Repaired []string
+}
 
 func (e *ArchiveContentError) Error() string { return e.Err.Error() }
 func (e *ArchiveContentError) Unwrap() error { return e.Err }
@@ -106,6 +110,10 @@ func PrepareArchive(b *backend.BuildBounds, text string, textMode, revise bool, 
 	if textMode {
 		recognized, err := a.prepareText(b, text, index, opt)
 		if err != nil {
+			var content *ArchiveContentError
+			if errors.As(err, &content) {
+				content.Repaired = a.repaired
+			}
 			a.Release()
 			return nil, err
 		}
@@ -121,10 +129,16 @@ func PrepareArchive(b *backend.BuildBounds, text string, textMode, revise bool, 
 		err = a.selectJSON(b, v, index, opt)
 	}
 	if err != nil {
+		repaired := a.repaired
 		a.Release()
+		var content *ArchiveContentError
+		if errors.As(err, &content) {
+			content.Repaired = repaired
+			return nil, err
+		}
 		var syntax *backend.JSONSyntaxError
 		if errors.As(err, &syntax) {
-			return nil, &ArchiveContentError{Err: err}
+			return nil, &ArchiveContentError{Err: err, Repaired: repaired}
 		}
 		return nil, err
 	}
@@ -169,7 +183,11 @@ func (a *Archive) prepareView(b *backend.BuildBounds, text string, opt Options) 
 		bare := strings.TrimSpace(stripCodeFence(text))
 		if strings.HasPrefix(bare, "[") {
 			v, err := a.firstArray(b, bare)
-			if err == nil || errors.Is(err, backend.ErrBuildCapacity) {
+			if err == nil {
+				a.repaired, err = backend.AppendNode(b, a.repaired, "json.bare-array")
+				return v, err
+			}
+			if errors.Is(err, backend.ErrBuildCapacity) {
 				return v, err
 			}
 		}
@@ -227,7 +245,8 @@ func (a *Archive) prepareView(b *backend.BuildBounds, text string, opt Options) 
 				attempts++
 				candidate, e := a.firstArray(b, text[i:])
 				if e == nil {
-					return candidate, nil
+					a.repaired, e = backend.AppendNode(b, a.repaired[:0], "json.bare-array")
+					return candidate, e
 				}
 				if errors.Is(e, backend.ErrBuildCapacity) {
 					return v, e
@@ -342,13 +361,25 @@ func (a *Archive) selectJSON(b *backend.BuildBounds, v backend.JSONValue, index 
 			return err
 		}
 	} else {
+		bareRevise := a.revise && v.Kind() == '['
+		var bareEntries bool
 		if err := rows.EachArray(func(row backend.JSONValue) error {
 			if row.Kind() != '{' {
+				if bareRevise {
+					return &ArchiveContentError{Err: errors.New("bare revisions array must contain only objects")}
+				}
 				return nil
 			}
 			id, err := archiveField(row, "id")
 			if err != nil {
 				return err
+			}
+			if bareRevise && !bareEntries && id.Kind() == '"' && !archiveBlank(id.Raw()) {
+				target, err := archiveField(row, "target")
+				if err != nil {
+					return err
+				}
+				bareEntries = target.Kind() == '"' && !archiveBlank(target.Raw())
 			}
 			ordinal, found, err := a.ordinal(b, id, index, a.revise)
 			if err != nil || !found {
@@ -360,6 +391,9 @@ func (a *Archive) selectJSON(b *backend.BuildBounds, v backend.JSONValue, index 
 			return a.selectRow(b, ordinal, row)
 		}); err != nil {
 			return err
+		}
+		if bareRevise && !bareEntries {
+			return &ArchiveContentError{Err: errors.New("bare revisions array has no normalized entries")}
 		}
 	}
 	if output.Kind() == '{' {

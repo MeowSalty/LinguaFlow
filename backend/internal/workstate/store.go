@@ -80,12 +80,18 @@ func guardScope(ctx context.Context, tx *ent.Client, scope Scope, dispatch bool)
 // are still read and checked on every call; only the duplicate lock is omitted.
 // Commit may retain this transaction's short round facts for its later
 // manifest check. Other callers project only the relationship fields they use.
-func guardLockedScope(ctx context.Context, tx *ent.Client, scope Scope, dispatch, manifest bool) (*ent.JobRound, error) {
+func guardLockedScope(ctx context.Context, tx *ent.Client, scope Scope, dispatch, manifest bool, deferIfPaused ...bool) (*ent.JobRound, error) {
 	j, err := tx.Job.Query().Where(job.IDEQ(scope.JobID)).Select(job.FieldID, job.FieldRetryEpoch, job.FieldStatus, job.FieldPauseRequested).Only(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if j.RetryEpoch != scope.RetryEpoch || (j.Status != "running" && j.Status != "pausing" && j.Status != "pending") {
+	if j.RetryEpoch != scope.RetryEpoch {
+		return nil, ErrStopped
+	}
+	if len(deferIfPaused) > 0 && deferIfPaused[0] && (j.Status == "pausing" || j.Status == "paused" || j.Status == "running" && j.PauseRequested) {
+		return nil, ErrPaused
+	}
+	if j.Status != "running" && j.Status != "pausing" && j.Status != "pending" {
 		return nil, ErrStopped
 	}
 	if dispatch && (j.PauseRequested || j.Status == "pausing") {
@@ -599,7 +605,7 @@ func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old
 		workrequest.JobRoundIDEQ(c.Scope.RoundID),
 		workrequest.RetryEpochEQ(c.Scope.RetryEpoch),
 		workrequest.StateIn("sent", "received", "completed", "failed"),
-		workrequest.IdentityEQ(parentID), workrequest.StageEQ("main"),
+		workrequest.IdentityEQ(parentID), workrequest.StageIn("main", MainPromptUpgradeStage),
 	).Select(workrequest.FieldSegmentIds).All(ctx)
 	if err != nil {
 		return err

@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
@@ -26,104 +28,62 @@ func (*boundedStoredProbe) Close() error { return nil }
 func (p *boundedStoredProbe) Translate(context.Context, backend.Request) (*backend.Response, error) {
 	p.calls++
 	p.held = p.held || len(p.runtime.parse) != 0
-	return &backend.Response{Text: p.text}, nil
+	return &backend.Response{Text: p.text, Usage: backend.Usage{PromptTokens: 7, CompletionTokens: 11}}, nil
 }
 
-type boundedStoredGlossary struct {
-	runtime   *ExecutionRuntime
-	added     []glossary.Entry
-	held      bool
-	lookupErr error
-	addErr    error
-}
-
-func (*boundedStoredGlossary) Lookup(context.Context, string, string, string) ([]glossary.Entry, error) {
-	return nil, nil
-}
-func (g *boundedStoredGlossary) LookupSourcesBounded(context.Context, string, string, string, int64, func(context.Context, func() error) error) ([]string, error) {
-	return nil, g.lookupErr
-}
-func (g *boundedStoredGlossary) Add(_ context.Context, entries ...glossary.Entry) (glossary.AddResult, error) {
-	g.held = g.held || len(g.runtime.parse) != 0
-	if g.addErr != nil {
-		return glossary.AddResult{}, g.addErr
+func boundedQualityFixture(t *testing.T, mode string, p backend.Backend, reporter progress.Reporter) (RoundHandler, *Document) {
+	t.Helper()
+	if mode == RoundModeSemanticQA {
+		return &SemanticQAHandler{Renderer: newSemanticQARenderer(t), Backend: p, SegmentScope: "all", Reporter: reporter}, semanticQADoc([]string{"translated"}, nil)
 	}
-	g.added = append(g.added, entries...)
-	return glossary.AddResult{Added: entries}, nil
+	return &AdjudicateHandler{Renderer: newAdjudicationRenderer(t), Backend: p, AdjudicateCodes: []string{"calque"}, Reporter: reporter},
+		adjudicableDoc([]string{"translated"}, [][]qa.QualityIssue{{{Code: "calque", Message: "issue"}}})
 }
 
-func TestBoundedStoredHandlersKeepNetworkAndAddOutsideCPU(t *testing.T) {
-	for _, mode := range []string{"extract", "semantic_qa", "adjudicate"} {
-		t.Run(mode, func(t *testing.T) {
-			r := &ExecutionRuntime{parse: make(chan struct{}, 2), ResponseBytes: 4096, HandoffBytes: 64 << 10}
-			ctx := WithExecutionRuntime(context.Background(), r)
-			p := &boundedStoredProbe{runtime: r}
-			doc := &Document{SourceLang: "en", TargetLang: "zh", Segments: []Segment{{ID: "0", Source: "source", Target: "target", Status: "translated", Issues: []qa.QualityIssue{{Code: "calque", Message: "issue"}}}}}
-			var handler RoundHandler
-			var g *boundedStoredGlossary
-			switch mode {
-			case "extract":
-				p.text = `{"glossary":[{"source":"term","target":"value","notes":"verbatim notes"}]}`
-				renderer, e := prompt.NewBootstrapRenderer("extract")
-				if e != nil {
-					t.Fatal(e)
-				}
-				g = &boundedStoredGlossary{runtime: r}
-				handler = &ExtractHandler{Renderer: renderer, Backends: []backend.Backend{p}, Glossary: g}
-			case "semantic_qa":
-				p.text = `{"issues":[{"id":"0","code":"calque","message":"warning","snippet":"target"}]}`
-				renderer, e := prompt.NewSemanticQARenderer("quality")
-				if e != nil {
-					t.Fatal(e)
-				}
-				handler = &SemanticQAHandler{Renderer: renderer, Backend: p}
-			case "adjudicate":
-				p.text = `{"verdicts":[{"id":"0","issue_code":"calque","verdict":"false_positive","reason":"reason"}]}`
-				renderer, e := prompt.NewAdjudicationRenderer("adjudicate")
-				if e != nil {
-					t.Fatal(e)
-				}
-				handler = &AdjudicateHandler{Renderer: renderer, Backend: p, AdjudicateCodes: []string{"calque"}}
+func TestBoundedStoredQualityNetworkRunsOutsideCPU(t *testing.T) {
+	for _, tc := range []struct {
+		mode, raw string
+	}{
+		{RoundModeSemanticQA, `{"issues":[{"id":"0","code":"calque","message":"warning"}]}`},
+		{RoundModeAdjudicate, `{"verdicts":[{"id":"0","issue_code":"calque","verdict":"false_positive","reason":"reason"}]}`},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			r := memoryTestRuntime(t, 1, nil)
+			p := &boundedStoredProbe{runtime: r, text: tc.raw}
+			h, doc := boundedQualityFixture(t, tc.mode, p, nil)
+			var batch BatchResult
+			result, err := runMemoryTestRound(t, t.Context(), Round{Handler: h, Runtime: r, Concurrency: 1}, doc, func(_ context.Context, sealed BatchResult) error {
+				return json.Unmarshal(sealed.PreparedPayload, &batch)
+			}, quietLogger(), nil)
+			if err != nil || !reflect.DeepEqual(result.Resolved, []int{0}) || p.calls != 1 || p.held || len(r.parse) != 0 {
+				t.Fatalf("result=%+v calls=%d held=%v err=%v", result, p.calls, p.held, err)
 			}
-			result := handler.ProcessBatch(ctx, doc, []int{0}, 0, quietLogger())
-			if result.err != nil || len(result.unresolved) != 0 || len(result.failedSegments) != 0 || p.calls != 1 || p.held || len(r.parse) != 0 {
-				t.Fatalf("result=%+v calls=%d held=%v", result, p.calls, p.held)
+			if len(batch.Segments) != 1 || len(batch.Segments[0].Issues) != 1 ||
+				batch.Segments[0].Issues[0].Dismissed() != (tc.mode == RoundModeAdjudicate) {
+				t.Fatalf("quality result lost: %+v", batch.Segments)
 			}
-			if g != nil && (g.held || len(g.added) != 1 || g.added[0].Notes != "verbatim notes") {
-				t.Fatalf("add=%+v held=%v", g.added, g.held)
-			}
-			if mode == "semantic_qa" && (result.callbackResult == nil || len(result.callbackResult.Segments[0].Issues) != 1) {
-				t.Fatal("semantic result lost")
-			}
-			if mode == "adjudicate" && (result.callbackResult == nil || !result.callbackResult.Segments[0].Issues[0].Dismissed()) {
-				t.Fatal("verdict lost")
+			if doc.InputTokens != 7 || doc.OutputTokens != 11 {
+				t.Fatalf("captured tokens were not counted once: %d/%d", doc.InputTokens, doc.OutputTokens)
 			}
 		})
 	}
 }
 
-func TestBoundedStoredHandlersRejectInputBeforeNetwork(t *testing.T) {
-	for _, mode := range []string{"extract", "semantic_qa", "adjudicate"} {
+func TestBoundedStoredQualityRejectsInputBeforeNetwork(t *testing.T) {
+	for _, mode := range []string{RoundModeSemanticQA, RoundModeAdjudicate} {
 		t.Run(mode, func(t *testing.T) {
-			r := &ExecutionRuntime{parse: make(chan struct{}, 2), ResponseBytes: 4096, HandoffBytes: 64 << 10}
-			ctx := WithExecutionRuntime(context.Background(), r)
-			p := &boundedStoredProbe{runtime: r, text: `{"issues":[]}`}
-			doc := &Document{SourceLang: "en", TargetLang: "zh", Segments: []Segment{{ID: "0", Source: strings.Repeat("x", 80<<10), Target: "target", Status: "translated"}}}
-			var h RoundHandler
-			switch mode {
-			case "extract":
-				renderer, _ := prompt.NewBootstrapRenderer("extract")
-				h = &ExtractHandler{Renderer: renderer, Backends: []backend.Backend{p}, Glossary: glossary.Nop{}}
-			case "semantic_qa":
-				renderer, _ := prompt.NewSemanticQARenderer("quality")
-				h = &SemanticQAHandler{Renderer: renderer, Backend: p}
-			case "adjudicate":
-				renderer, _ := prompt.NewAdjudicationRenderer("adjudicate")
-				h = &AdjudicateHandler{Renderer: renderer, Backend: p}
+			r := memoryTestRuntime(t, 1, nil)
+			const handoff = 2 << 20
+			if err := r.SetResponseLimits(4096, handoff); err != nil {
+				t.Fatal(err)
 			}
-			h.ProcessBatch(ctx, doc, []int{0}, 0, quietLogger())
-			if p.calls != 0 || len(r.parse) != 0 {
-				t.Fatalf("oversize input dispatched %d calls, CPU=%d", p.calls, len(r.parse))
+			p := &boundedStoredProbe{runtime: r}
+			rep := &recordingBatchObserver{}
+			h, doc := boundedQualityFixture(t, mode, p, rep)
+			doc.Segments[0].Source = strings.Repeat("x", handoff+1)
+			result, err := runMemoryTestRound(t, t.Context(), Round{Handler: h, Runtime: r, Concurrency: 1}, doc, nil, quietLogger(), rep)
+			if err != nil || p.calls != 0 || len(r.parse) != 0 || len(result.Resolved) != 0 || len(rep.events) != 1 || rep.events[0].ErrorType != "render_error" {
+				t.Fatalf("oversize input result=%+v calls=%d CPU=%d events=%+v err=%v", result, p.calls, len(r.parse), rep.events, err)
 			}
 		})
 	}
@@ -131,26 +91,12 @@ func TestBoundedStoredHandlersRejectInputBeforeNetwork(t *testing.T) {
 
 func TestBoundedStoredSemanticCapacityDoesNotRetryModel(t *testing.T) {
 	r := &ExecutionRuntime{parse: make(chan struct{}, 2), ResponseBytes: 256, HandoffBytes: 64 << 10}
-	p := &boundedStoredProbe{runtime: r, text: `{"issues":[{"id":"0","code":"calque","message":"` + strings.Repeat("x", 300) + `"}]}`}
-	renderer, _ := prompt.NewSemanticQARenderer("quality")
-	h := &SemanticQAHandler{Renderer: renderer, Backend: p, Retry: backend.RetryPolicy{MaxAttempts: 3}}
-	doc := &Document{Segments: []Segment{{ID: "0", Source: "source", Target: "target", Status: "translated"}}}
-	result := h.ProcessBatch(WithExecutionRuntime(context.Background(), r), doc, []int{0}, 0, quietLogger())
-	if p.calls != 1 || result.retry != nil || len(result.failedSegments) != 1 || len(r.parse) != 0 {
-		t.Fatalf("capacity result=%+v calls=%d", result, p.calls)
-	}
-}
-
-func TestBoundedStoredExtractContextCapacityRefusesDispatch(t *testing.T) {
-	r := &ExecutionRuntime{parse: make(chan struct{}, 2), ResponseBytes: 4096, HandoffBytes: 64 << 10}
-	p := &boundedStoredProbe{runtime: r}
-	g := &boundedStoredGlossary{runtime: r, lookupErr: backend.ErrBuildCapacity}
-	renderer, _ := prompt.NewBootstrapRenderer("extract")
-	h := &ExtractHandler{Renderer: renderer, Backends: []backend.Backend{p}, Glossary: g}
-	doc := &Document{Segments: []Segment{{ID: "0", Source: "source"}}}
-	result := h.ProcessBatch(WithExecutionRuntime(context.Background(), r), doc, []int{0}, 0, quietLogger())
-	if p.calls != 0 || len(result.failedSegments) != 1 || len(result.unresolved) != 0 || len(r.parse) != 0 {
-		t.Fatalf("context was silently omitted or retried: %+v calls=%d", result, p.calls)
+	h := &SemanticQAHandler{Backend: &fakeBackend{name: "test"}, Retry: backend.RetryPolicy{MaxAttempts: 3}}
+	doc := semanticQADoc([]string{"translated"}, nil)
+	resp := &backend.Response{Text: `{"issues":[{"id":"0","code":"calque","message":"` + strings.Repeat("x", 300) + `"}]}`}
+	result := h.processStoredResponse(WithExecutionRuntime(t.Context(), r), doc, []int{0}, resp, 0, quietLogger())
+	if result.retry != nil || len(result.failedSegments) != 1 || len(r.parse) != 0 {
+		t.Fatalf("capacity result=%+v", result)
 	}
 }
 
@@ -225,17 +171,5 @@ func TestBoundedStoredPlannerCapacityBeforeBacking(t *testing.T) {
 	got, _, err := buildStoredScopeBounded(ctx, &Document{}, make([]int, 2000), nil, func(*Segment, map[string]struct{}) bool { return true }, BatchConstraint{}, 0, false)
 	if !errors.Is(err, backend.ErrBuildCapacity) || got != nil || len(r.parse) != 0 {
 		t.Fatalf("planner=%v err=%v CPU=%d", got, err, len(r.parse))
-	}
-}
-
-func TestBoundedStoredExtractStorageFailureDoesNotResend(t *testing.T) {
-	r := &ExecutionRuntime{parse: make(chan struct{}, 2), ResponseBytes: 4096, HandoffBytes: 64 << 10}
-	p := &boundedStoredProbe{runtime: r, text: `{"glossary":[{"source":"term","target":"value"}]}`}
-	g := &boundedStoredGlossary{runtime: r, addErr: &StorageError{Err: errors.New("storage failed")}}
-	renderer, _ := prompt.NewBootstrapRenderer("extract")
-	h := &ExtractHandler{Renderer: renderer, Backends: []backend.Backend{p}, Glossary: g}
-	result := h.ProcessBatch(WithExecutionRuntime(context.Background(), r), &Document{Segments: []Segment{{ID: "0", Source: "source"}}}, []int{0}, 0, quietLogger())
-	if !storageFailure(result.err) || p.calls != 1 || g.held || len(r.parse) != 0 {
-		t.Fatalf("result=%+v calls=%d CPU=%d", result, p.calls, len(r.parse))
 	}
 }

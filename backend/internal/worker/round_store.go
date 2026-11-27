@@ -128,6 +128,9 @@ func (s *roundStore) recovery(state workstate.RoundState) (pipeline.RoundRecover
 		}
 		c := w.Cursor
 		out := pipeline.WorkCursor{Pool: c.PoolIndex, Attempt: c.MainAttempts, LogicalAttempt: c.AlignmentAttempts, NetworkAttempt: c.AlignmentNetworkAttempts, Phase: c.PromptPhase, State: c.State}
+		if pipeline.IsPendingPromptUpgrade(out.Phase) {
+			out.NetworkAttempt = c.MainNetworkAttempts
+		}
 		if c.NextAttemptAt != nil {
 			out.NextAttemptAt = *c.NextAttemptAt
 		}
@@ -426,6 +429,10 @@ func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) err
 	if in.Stage == backend.RequestStageAlignment {
 		req.MaxNetworkAttempts = max(1, retry)
 	}
+	if in.PromptUpgrade {
+		req.Stage = workstate.MainPromptUpgradeStage
+		req.MaxNetworkAttempts = 2
+	}
 	err = s.store.ReserveRequest(ctx, req)
 	if errors.Is(err, workstate.ErrStopped) {
 		row, readErr := s.client.Job.Get(ctx, s.scope.JobID)
@@ -436,8 +443,10 @@ func (s *roundStore) Reserve(ctx context.Context, in pipeline.RequestIntent) err
 	return s.classify(err)
 }
 func (s *roundStore) Record(ctx context.Context, id string, r pipeline.RequestRecord) error {
-	return s.classify(s.store.RecordRequestForScope(ctx, s.scope, id, workstate.RequestResult{State: r.State, UsageKnown: r.UsageKnown, InputTokens: r.Usage.PromptTokens, OutputTokens: r.Usage.CompletionTokens, DurationMS: r.Duration.Milliseconds(), LastError: r.Error}))
+	return s.classify(s.store.RecordRequestForScope(ctx, s.scope, id, workstate.RequestResult{State: r.State, UsageKnown: r.UsageKnown, InputTokens: r.Usage.PromptTokens, OutputTokens: r.Usage.CompletionTokens, DurationMS: r.Duration.Milliseconds(), LastError: r.Error, MainFailure: r.MainFailure}))
 }
+
+func (s *roundStore) PersistsMainFailure() bool { return true }
 func (s *roundStore) AbortRequest(ctx context.Context, id string) error {
 	return s.classify(s.store.AbortRequestForScope(ctx, s.scope, id))
 }

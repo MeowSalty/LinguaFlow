@@ -25,10 +25,16 @@ type Event struct {
 // Broker is an in-process pub/sub hub for translation job events.
 // Each job ID has its own set of subscriber channels.
 type Broker struct {
-	store       EventStore
-	historian   Historian
-	mu          sync.RWMutex
-	subscribers map[int]map[chan Event]struct{}
+	store        EventStore
+	historian    Historian
+	mu           sync.RWMutex
+	subscribers  map[int]map[chan Event]struct{}
+	publications map[int]*jobPublication
+}
+
+type jobPublication struct {
+	gate chan struct{}
+	refs int
 }
 
 // Historian provides paginated reads of the full persisted event history,
@@ -50,8 +56,9 @@ var ErrHistoryUnavailable = errors.New("durable event history unavailable")
 // If store is nil, events are broadcast without persistence (no replay support).
 func NewBroker(store EventStore) *Broker {
 	return &Broker{
-		store:       store,
-		subscribers: make(map[int]map[chan Event]struct{}),
+		store:        store,
+		subscribers:  make(map[int]map[chan Event]struct{}),
+		publications: make(map[int]*jobPublication),
 	}
 }
 
@@ -105,11 +112,37 @@ func (b *Broker) CloseJob(jobID int) {
 	b.Purge(jobID)
 }
 
+// lockPublication keeps sequence allocation, storage, and broadcast in order
+// for one job. The map only retains entries with an active or waiting publisher.
+func (b *Broker) lockPublication(jobID int) func() {
+	b.mu.Lock()
+	publication := b.publications[jobID]
+	if publication == nil {
+		publication = &jobPublication{gate: make(chan struct{}, 1)}
+		b.publications[jobID] = publication
+	}
+	publication.refs++
+	b.mu.Unlock()
+
+	publication.gate <- struct{}{}
+	return func() {
+		<-publication.gate
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		publication.refs--
+		if publication.refs == 0 {
+			delete(b.publications, jobID)
+		}
+	}
+}
+
 // Publish sends an event to all subscribers of the given job ID.
 // If a store is configured, the event is persisted first and assigned a global Seq.
 // If persistence fails, the event is still broadcast in degraded mode (memory-only).
-// Non-blocking: if a subscriber's buffer is full, the event is dropped for that subscriber.
+// Subscribers never block publication. A full subscriber buffer drops the event.
 func (b *Broker) Publish(jobID int, evt Event) {
+	unlock := b.lockPublication(jobID)
+	defer unlock()
 	evt.CreatedAt = timeutil.Normalize(evt.CreatedAt)
 	if normalizer, ok := b.store.(interface{ NormalizeTime(time.Time) time.Time }); ok {
 		evt.CreatedAt = normalizer.NormalizeTime(evt.CreatedAt)

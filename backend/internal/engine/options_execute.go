@@ -14,8 +14,6 @@ type executeConfig struct {
 	batchHandler    func(ctx context.Context, result pipeline.BatchResult) error
 	segmentFilter   map[int]struct{} // 非空时仅翻译这些索引
 	resolvedIndices map[int]struct{} // 本轮池 0 应跳过的已解决段（跨轮增量载体）
-	station         *pipeline.Station
-	gate            *pipeline.PauseGate
 }
 
 func WithRoundStore(store pipeline.RoundStore) ExecuteOption {
@@ -24,7 +22,7 @@ func WithRoundStore(store pipeline.RoundStore) ExecuteOption {
 
 // WithBatchHandler 注入每批完成后的回调。
 // 回调可能被并发调用（多个批同时完成时），实现必须并发安全。
-// 回调返回 error 时翻译中止。nil 表示不需要中间持久化。
+// 回调返回 error 时轮次中止。调用方传入 WithRoundStore 时由存储负责提交。
 func WithBatchHandler(fn func(ctx context.Context, result pipeline.BatchResult) error) ExecuteOption {
 	return func(c *executeConfig) {
 		c.batchHandler = fn
@@ -58,22 +56,6 @@ func WithResolvedIndices(set map[int]struct{}) ExecuteOption {
 		if len(set) > 0 {
 			c.resolvedIndices = set
 		}
-	}
-}
-
-// WithStation 注入站位信号量（流水线：同轮所有在途资源共享该轮并发预算）。
-// nil 时退化为单资源模式（runPool 不做跨资源槽位仲裁）。
-func WithStation(s *pipeline.Station) ExecuteOption {
-	return func(c *executeConfig) {
-		c.station = s
-	}
-}
-
-// WithPauseGate 注入任务级暂停闸门（与 ctx 取消分离的优雅排空信号）。
-// nil 时无暂停语义。
-func WithPauseGate(g *pipeline.PauseGate) ExecuteOption {
-	return func(c *executeConfig) {
-		c.gate = g
 	}
 }
 

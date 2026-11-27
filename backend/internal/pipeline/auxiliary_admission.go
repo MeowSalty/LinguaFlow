@@ -55,10 +55,11 @@ func preclaimMeasured(ctx context.Context, remote backend.Backend, session *requ
 		return e
 	}
 	frozen := struct {
-		Members []RequestMember
-		Measure backend.PromptMeasure
-		Backend int
-	}{intent.Members, measured, bound.id}
+		Members      []RequestMember
+		Measure      backend.PromptMeasure
+		Backend      int
+		FreezeDigest string `json:",omitempty"`
+	}{intent.Members, measured, bound.id, intent.InputDigest}
 	if err = b.WriteJSON(h, frozen); err != nil {
 		return err
 	}
@@ -74,7 +75,7 @@ func preclaimMeasured(ctx context.Context, remote backend.Backend, session *requ
 				return err
 			}
 		}
-		granted, e := bound.runtime.Admission.PrepareMain(intent.ID, intent.RoundIndex, intent.ResourceID, 0, input, 0, progress, len(intent.Indices))
+		granted, e := bound.runtime.Admission.PrepareMain(intent.ID, intent.RoundIndex, intent.ResourceID, inputMemberTotal(intent.InputMembers), input, intent.BusinessBound, progress, len(intent.Indices))
 		if e != nil {
 			return e
 		}
@@ -123,6 +124,12 @@ func preclaimMeasured(ctx context.Context, remote backend.Backend, session *requ
 		err = session.runtime.SaveNamed(ctx, persistence.Metadata{Operation: "reserve", Class: persistence.Normal, ResourceID: intent.ResourceID, RequestID: intent.ID}, func(saveCtx context.Context) error { return session.store.Reserve(saveCtx, intent) })
 		if err != nil {
 			ticket.Release()
+			if errors.Is(err, backend.ErrDispatchPaused) {
+				if bound.runtime.Gate != nil {
+					bound.runtime.Gate.Pause()
+				}
+				return backend.ErrDispatchPaused
+			}
 			return err
 		}
 	}

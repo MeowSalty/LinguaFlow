@@ -173,7 +173,7 @@ func TestDisabledGlossaryJobSkipsExtractWithoutAddingProgress(t *testing.T) {
 	}
 	runner.SetCredentials(fixtureCredentials{}, fixtureCredentials{})
 	if err := runner.processJobResource(ctx, &service.JobExecution{Job: job, Project: project},
-		snapshot, item, registry, nil, nil); err != nil {
+		snapshot, item, registry, nil); err != nil {
 		t.Fatal(err)
 	}
 	item, err = client.JobResource.Get(ctx, resourceJobID)

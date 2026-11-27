@@ -8,21 +8,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 )
 
-func TestRubyHandoffAcceptanceStationAndOwnerAreSparse(t *testing.T) {
-	station := NewStation(math.MaxInt)
-	if station.capacity != math.MaxInt || cap(station.changed) != 0 || !station.TryAcquire() || !station.TryAcquire() {
-		t.Fatal("MaxInt station allocated capacity-sized storage or lost scalar capacity")
-	}
-	station.Release()
-	station.Release()
-	if station.inflight != 0 {
-		t.Fatal("sparse station leaked inflight")
-	}
-	cancelled, cancel := context.WithCancel(context.Background())
-	cancel()
-	if station.Acquire(cancelled) {
-		t.Fatal("station accepted cancelled acquisition")
-	}
+func TestRubyHandoffAcceptanceRequestOwnerIsSparse(t *testing.T) {
 	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: math.MaxInt}})
 	if err != nil {
 		t.Fatal(err)

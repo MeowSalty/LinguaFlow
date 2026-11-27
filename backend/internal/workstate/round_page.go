@@ -49,7 +49,7 @@ func (s *Store) LoadRoundMembersPage(ctx context.Context, scope Scope, after, li
 		sel.Where(sql.P(func(builder *sql.Builder) {
 			builder.WriteString(roundMemberCursorBytes(sel)).WriteOp(sql.OpLTE).Arg(128)
 		}))
-	}).Select(workitem.FieldID, workitem.FieldSegmentID, workitem.FieldRetryEpoch, workitem.FieldState, workitem.FieldPoolIndex, workitem.FieldMainAttempts, workitem.FieldAlignmentAttempts, workitem.FieldAlignmentNetworkAttempts, workitem.FieldPromptPhase, workitem.FieldNextAttemptAt).Order(ent.Asc(workitem.FieldSegmentID)).Limit(limit).All(ctx)
+	}).Select(workitem.FieldID, workitem.FieldSegmentID, workitem.FieldRetryEpoch, workitem.FieldState, workitem.FieldPoolIndex, workitem.FieldMainAttempts, workitem.FieldMainNetworkAttempts, workitem.FieldAlignmentAttempts, workitem.FieldAlignmentNetworkAttempts, workitem.FieldPromptPhase, workitem.FieldNextAttemptAt).Order(ent.Asc(workitem.FieldSegmentID)).Limit(limit).All(ctx)
 	if err != nil {
 		return nil, after, err
 	}
@@ -61,7 +61,7 @@ func (s *Store) LoadRoundMembersPage(ctx context.Context, scope Scope, after, li
 		if r.RetryEpoch != scope.RetryEpoch {
 			return nil, after, ErrStopped
 		}
-		out = append(out, Work{SegmentID: r.SegmentID, RetryEpoch: r.RetryEpoch, Cursor: Cursor{State: r.State, PoolIndex: r.PoolIndex, MainAttempts: r.MainAttempts, AlignmentAttempts: r.AlignmentAttempts, AlignmentNetworkAttempts: r.AlignmentNetworkAttempts, PromptPhase: r.PromptPhase, NextAttemptAt: r.NextAttemptAt}})
+		out = append(out, Work{SegmentID: r.SegmentID, RetryEpoch: r.RetryEpoch, Cursor: Cursor{State: r.State, PoolIndex: r.PoolIndex, MainAttempts: r.MainAttempts, MainNetworkAttempts: r.MainNetworkAttempts, AlignmentAttempts: r.AlignmentAttempts, AlignmentNetworkAttempts: r.AlignmentNetworkAttempts, PromptPhase: r.PromptPhase, NextAttemptAt: r.NextAttemptAt}})
 		after = r.SegmentID
 	}
 	return out, after, nil

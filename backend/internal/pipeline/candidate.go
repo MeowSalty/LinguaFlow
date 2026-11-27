@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -151,18 +150,6 @@ func DecodeCandidateBounded(data []byte, limit, input int64) (*Candidate, error)
 		}
 	}
 	return &c, nil
-}
-
-// PrepareBatch calls the existing main-response/repair path with all output kept private.
-func (h *TranslateHandler) PrepareBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
-	copy := *h
-	copy.prepareOnly = true
-	return copy.ProcessBatch(ctx, doc, idxs, attempt, logger)
-}
-func (h *ReviseHandler) PrepareBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
-	copy := *h
-	copy.prepareOnly = true
-	return copy.ProcessBatch(ctx, doc, idxs, attempt, logger)
 }
 
 func (h *TranslateHandler) prepareTranslatedCandidates(doc *Document, idxs []int, wantIDs []string, trans map[string]string, outputs map[string][]ruby.OutputEntry, contextSet map[int]struct{}, logger *slog.Logger, candidateIDs ...string) batchResult {

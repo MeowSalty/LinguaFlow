@@ -55,6 +55,9 @@ func TestHybridReadFailureDoesNotFallBackToMisleadingMemory(t *testing.T) {
 	if _, _, err := hybrid.LatestSeq(t.Context(), 1); !errors.Is(err, ErrHistoryUnavailable) {
 		t.Fatalf("sequence lookup used memory after database failure: %v", err)
 	}
+	if _, err := hybrid.Replay(t.Context(), 1, 1, 10); !errors.Is(err, ErrHistoryUnavailable) {
+		t.Fatalf("older cursor used partial memory after database failure: %v", err)
+	}
 	hybrid.Purge(1)
 	if _, err := hybrid.Replay(t.Context(), 1, 0, 10); !errors.Is(err, ErrHistoryUnavailable) {
 		t.Fatalf("missing memory fell back to empty history: %v", err)

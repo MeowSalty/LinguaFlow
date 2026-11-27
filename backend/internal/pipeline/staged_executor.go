@@ -20,7 +20,7 @@ import (
 
 type stagedHandler interface {
 	RoundHandler
-	PrepareBatch(context.Context, *Document, []int, int, *slog.Logger) batchResult
+	stagedRound()
 }
 
 type stagedEvent struct {
@@ -78,14 +78,17 @@ var ErrResourceYield = errors.New("resource yields to recovered candidates")
 // durable destination. Main workers finish at reliable handoff, not alignment.
 // Only this goroutine applies confirmed results to the resource Document.
 func RunStagedRound(ctx context.Context, round Round, doc *Document, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporter progress.Reporter) (RunRoundResult, error) {
+	h, ok := round.Handler.(stagedHandler)
+	if !ok {
+		return RunRoundResult{}, fmt.Errorf("unsupported staged round handler %T", round.Handler)
+	}
+	if runtime == nil {
+		return RunRoundResult{}, errors.New("staged round requires an execution runtime")
+	}
 	ctx = WithExecutionRuntime(ctx, runtime)
 	ctx = context.WithValue(ctx, confirmationDocumentKey{}, doc)
 	if err := runtime.RetryConfirmedDocument(ctx, doc); err != nil {
 		return RunRoundResult{}, err
-	}
-	h, ok := round.Handler.(stagedHandler)
-	if !ok {
-		return RunRound(ctx, round, doc, nil, logger, reporter)
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -157,12 +160,12 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		return RunRoundResult{}, nil
 	}
 	reporter.StageStart(h.ModeName(), total)
-	defer reporter.StageDone()
 	if checked, ok := reporter.(interface{ StageError() error }); ok {
 		if err := checked.StageError(); err != nil {
 			return RunRoundResult{}, err
 		}
 	}
+	defer reporter.StageDone()
 	remaining := func(yield func(int) bool) { canonicalRemaining(doc, yield) }
 	completed := func(yield func(int) bool) { canonicalCompleted(doc, yield) }
 	candidates := map[int]*Candidate{}
@@ -188,6 +191,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		return RunRoundResult{}, err
 	}
 	defer scheduler.close()
+	poolProgress := stagedPoolProgress{pool: -1, maxPools: maxPools, shrink: round.Shrink}
+	if poolProgress.shrink == 0 {
+		poolProgress.shrink = 1
+	}
+	var batchProgress stagedBatchProgress
 	// Final result collection is one cold document pass per result set. Include
 	// its real visits so diagnostics never hide the retained scalar inventory.
 	remaining = func(yield func(int) bool) {
@@ -222,9 +230,16 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 	applyMember := func(e stagedEvent) {
 		for _, header := range e.responseHeaders {
 			responses[header.ID] = header
+			if e.main && e.err == nil {
+				batchProgress.start(header)
+			}
+		}
+		for idx, cursor := range e.cursors {
+			doc.Segments[idx].RoundWork.Cursor = cursor
 		}
 		if e.responseAdvance != nil {
 			header := *e.responseAdvance
+			previous, tracked := responses[header.ID]
 			responseActive[header.ID] = false
 			delete(responseBlocked, header.ID)
 			if header.Cursor >= header.MemberCount {
@@ -232,9 +247,18 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			} else {
 				responses[header.ID] = header
 			}
-		}
-		for idx, cursor := range e.cursors {
-			doc.Segments[idx].RoundWork.Cursor = cursor
+			if e.err == nil && tracked && header.Cursor > previous.Cursor {
+				if rejected := header.Cursor - previous.Cursor - len(e.candidates); rejected > 0 {
+					retry := false
+					for _, cursor := range e.cursors {
+						retry = retry || (cursor.State == "pending" && cursor.Pool == header.Pool)
+					}
+					batchProgress.finish(reporter, header.ID, rejected, retry)
+				}
+				if header.Cursor == header.MemberCount {
+					progress.NotifyWorkState(reporter)
+				}
+			}
 		}
 		for _, c := range e.candidates {
 			if !doc.Segments[c.Index].RoundWork.Member || doc.Segments[c.Index].RoundWork.Completed {
@@ -315,6 +339,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					cancel()
 				}
 				reporter.SegmentDone()
+				batchProgress.finish(reporter, c.ParentRequestID, 1, false)
 			} else if e.outcome == CommitRejected || e.outcome == CommitStale {
 				delete(candidates, c.Index)
 				delete(alignmentReadyAt, c.Index)
@@ -333,6 +358,17 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				if _, persisted := e.cursors[c.Index]; !persisted {
 					doc.Segments[c.Index].RoundWork.Cursor = WorkCursor{Pool: maxPools, State: "unresolved"}
 				}
+				batchProgress.finish(reporter, c.ParentRequestID, 1, false)
+			}
+		}
+		if e.main && e.err == nil && len(e.responseHeaders) == 0 && e.mainPlan != nil {
+			finished := false
+			for _, cursor := range e.cursors {
+				finished = finished || cursor.Pool > e.mainPlan.pool || cursor.State == "unresolved"
+			}
+			if finished {
+				reporter.BatchComplete()
+				progress.NotifyWorkState(reporter)
 			}
 		}
 		// Terminal storage failures stop shared dispatch.
@@ -383,7 +419,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					waitingBatch.close()
 					waitingBatch = e.mainPlan
 					waitingBatch.deferFor(e.waitCapacity.Wait, runtime.Admission.PolicyChanged())
-					if g := scheduler.selectedGroup(); resumePlan && g >= 0 && scheduler.groups[g].pool == waitingBatch.pool && scheduler.groups[g].attempt == waitingBatch.attempt {
+					if g := scheduler.selectedGroup(); resumePlan && g >= 0 && waitingBatch.matches(scheduler.groups[g]) {
 						waitingBatch.version = scheduler.groups[g].version
 					}
 				} else {
@@ -715,6 +751,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					break
 				}
 				pool, attempt := scheduler.groups[g].pool, scheduler.groups[g].attempt
+				// A whole-batch parse retry may become pending one member at a
+				// time. Re-admit it after the parent releases all its members.
+				if _, promoting := responses[scheduler.groups[g].retry.parent()]; promoting {
+					break
+				}
 				var e error
 				if waitingBatch == nil {
 					e = runtime.Run(runCtx, func() error { var err error; waitingBatch, err = scheduler.buildPlan(runCtx, g, store); return err })
@@ -730,6 +771,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					cancel()
 					break
 				}
+				poolProgress.start(scheduler, g, reporter, logger)
 				idxs := waitingBatch.indices
 				// Proven fixed recovery inventory can leave no member slot at all.
 				// Decide this before a preparation ticket: aggregate recovery stock
@@ -842,7 +884,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				wg.Add(1)
 				go func(idxs []int, pool, attempt int, input *preparedMainDocument, key string, ticket *PreparationTicket, plan *deferredMainPlan) {
 					defer wg.Done()
-					e := prepareCapturedMain(withPreparationTicket(withCoordinatorPreparation(runCtx), ticket), round, h, doc, input, idxs, pool, attempt, key, store, runtime, logger, reporter)
+					e := prepareCapturedMain(withPreparationTicket(withCoordinatorPreparation(runCtx), ticket), round, h, doc, input, idxs, pool, attempt, plan.retry, key, store, runtime, logger, reporter)
 					e.mainPlan = plan
 					if ticket.Active() && e.err == nil {
 						ticket.Release()
@@ -940,7 +982,15 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		result.Resolved = append(result.Resolved, idx)
 	}
 	for idx := range remaining {
-		result.Unresolved = append(result.Unresolved, idx)
+		phase := doc.Segments[idx].RoundWork.Cursor.Phase
+		if phase == "terminal_failure_batch" {
+			result.FailedBatches++
+		}
+		if phase == "terminal_failure_batch" || phase == "terminal_failure" {
+			result.FailedSegments = append(result.FailedSegments, idx)
+		} else {
+			result.Unresolved = append(result.Unresolved, idx)
+		}
 	}
 	sort.Ints(result.Resolved)
 	sort.Ints(result.Unresolved)
@@ -965,126 +1015,6 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		}
 	}
 	return result, nil
-}
-
-func prepareMain(ctx context.Context, round Round, h stagedHandler, doc *Document, idxs []int, pool, attempt int, reservation string, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporters ...progress.Reporter) (e stagedEvent) {
-	e = stagedEvent{main: true, indices: idxs, cursors: map[int]WorkCursor{}}
-	defer func() {
-		e.inputTokens = atomic.LoadInt64(&doc.InputTokens)
-		e.outputTokens = atomic.LoadInt64(&doc.OutputTokens)
-	}()
-	defer runtime.Window.Release(reservation)
-	if attempt >= transientBudgetFor(round.Retry) {
-		var transitions []CursorTransition
-		for _, idx := range idxs {
-			cursor := WorkCursor{Pool: pool + 1, State: "pending"}
-			transitions = append(transitions, CursorTransition{Index: idx, Cursor: cursor})
-			e.cursors[idx] = cursor
-		}
-		if err := runtime.SaveNamed(ctx, persistence.Metadata{Operation: "pool_advance", Class: persistence.Reliable, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error { return store.Cursors(saveCtx, transitions) }); err != nil {
-			e.err = err
-			return e
-		}
-		return e
-	}
-	_, _, _, _, roundIndex := alignmentSettings(round.Handler)
-	session := &requestSession{runtime: runtime, store: store, intent: RequestIntent{Stage: backend.RequestStageMain, Indices: idxs, Pool: pool, Attempt: attempt, Phase: "main", RoundIndex: roundIndex, ResourceID: storeResourceID(store)}}
-	if len(reporters) > 0 {
-		session.reporter = reporters[0]
-	}
-	defer func() {
-		if e.err != nil {
-			session.fail(e.err)
-		}
-		if err := session.finish(); err != nil && (e.err == nil || storageFailure(err)) {
-			e.err = err
-		}
-	}()
-	ctx = session.Context(ctx)
-	result := h.PrepareBatch(ctx, doc, idxs, attempt, logger)
-	if result.waitCapacity != nil {
-		e.waitCapacity = result.waitCapacity
-		return e
-	}
-	if session.err != nil {
-		e.err = session.err
-		return e
-	}
-	if ctx.Err() != nil {
-		e.err = ctx.Err()
-		return e
-	}
-	if result.err != nil {
-		e.err = result.err
-		return e
-	}
-	for _, c := range result.candidates {
-		if identity, ok := store.(interface{ WorkIdentity(int) string }); ok {
-			c.WorkID = identity.WorkIdentity(c.Index)
-		}
-		c.PoolIndex = pool
-		c.MainAttempt = attempt + 1
-		c.ParentRequestID = session.lastID
-		data, err := c.Encode()
-		if err != nil {
-			e.err = err
-			return e
-		}
-		if int64(len(data)) > runtime.Window.limits.ItemBytes {
-			e.err = ErrCandidateCapacity
-			return e
-		}
-		if err = runtime.SaveNamed(ctx, candidateSaveMetadata("candidate", store, c), func(saveCtx context.Context) error { return store.Save(saveCtx, c) }); err != nil {
-			e.err = err
-			return e
-		}
-		if err = runtime.Window.Transfer(reservation, c.ID, int64(len(data))); err != nil {
-			e.err = err
-			return e
-		}
-		e.candidates = append(e.candidates, c)
-	}
-	accepted := map[int]bool{}
-	for _, c := range e.candidates {
-		accepted[c.Index] = true
-		e.cursors[c.Index] = WorkCursor{Pool: pool, Attempt: attempt + 1, State: "candidate"}
-	}
-	var transitions []CursorTransition
-	for _, idx := range idxs {
-		if accepted[idx] {
-			continue
-		}
-		cursor := WorkCursor{Pool: pool + 1, State: "pending"}
-		if result.retry != nil && attempt+1 < transientBudgetFor(round.Retry) {
-			cursor.Pool = pool
-			cursor.Attempt = attempt + 1
-			cursor.NextAttemptAt = result.retry.notBefore
-		}
-		if len(result.fatalUnresolved) > 0 {
-			cursor.Pool = max(1, round.Retry.MaxAttempts+1)
-			cursor.State = "unresolved"
-		}
-		if runtime.Gate != nil && runtime.Gate.Paused() {
-			cursor.Pool = pool
-			cursor.Attempt = attempt
-			if session.calls > 0 {
-				cursor.Attempt++
-			}
-		}
-		if cursor.Attempt >= transientBudgetFor(round.Retry) {
-			cursor.Pool++
-			cursor.Attempt = 0
-		}
-		transitions = append(transitions, CursorTransition{Index: idx, Cursor: cursor})
-		e.cursors[idx] = cursor
-	}
-	if len(transitions) > 0 {
-		if err := runtime.Save(ctx, func(saveCtx context.Context) error { return store.Cursors(saveCtx, transitions) }); err != nil {
-			e.err = err
-			return e
-		}
-	}
-	return e
 }
 
 func processCandidate(ctx context.Context, round Round, c *Candidate, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporter progress.Reporter) (e stagedEvent) {

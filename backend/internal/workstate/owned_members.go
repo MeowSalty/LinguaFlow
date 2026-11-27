@@ -2,6 +2,7 @@ package workstate
 
 import (
 	"context"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 )
@@ -19,7 +20,15 @@ func (s *Store) LoadOwnedMemberHeaders(ctx context.Context, jobID, after, limit 
 		return nil, after, err
 	}
 	limit = min(max(1, limit), 16)
-	rows, err := s.client.WorkItem.Query().Where(workitem.JobIDEQ(jobID), workitem.IDGT(after), workitem.MemberOwnedEQ(true), workitem.StateNotIn("candidate", "response_pending", "resolved", "unresolved", "stale", "rejected", "cancelled")).Select(workitem.FieldID, workitem.FieldJobID, workitem.FieldResourceID, workitem.FieldJobRoundID, workitem.FieldSegmentID, workitem.FieldRetryEpoch).Order(ent.Asc(workitem.FieldID)).Limit(limit).All(ctx)
+	return loadOwnedMemberHeaders(ctx, s.client.WorkItem.Query().Where(workitem.JobIDEQ(jobID)), after, limit)
+}
+
+func (s *Store) LoadRoundOwnedMemberHeaders(ctx context.Context, scope Scope, after, limit int) ([]OwnedMemberHeader, int, error) {
+	return loadOwnedMemberHeaders(ctx, s.client.WorkItem.Query().Where(memberScope(scope)...).Where(workitem.RetryEpochEQ(scope.RetryEpoch)), after, min(max(1, limit), 16))
+}
+
+func loadOwnedMemberHeaders(ctx context.Context, q *ent.WorkItemQuery, after, limit int) ([]OwnedMemberHeader, int, error) {
+	rows, err := q.Where(workitem.IDGT(after), workitem.MemberOwnedEQ(true), workitem.StateNotIn("candidate", "response_pending", "resolved", "unresolved", "stale", "rejected", "cancelled")).Select(workitem.FieldID, workitem.FieldJobID, workitem.FieldResourceID, workitem.FieldJobRoundID, workitem.FieldSegmentID, workitem.FieldRetryEpoch).Order(ent.Asc(workitem.FieldID)).Limit(limit).All(ctx)
 	if err != nil {
 		return nil, after, err
 	}

@@ -4,28 +4,11 @@ import (
 	"context"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"log/slog"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-type descriptorBusyHandler struct {
-	calls   atomic.Int64
-	entered chan int
-	wake    chan struct{}
-}
-
-func (h *descriptorBusyHandler) ModeName() string { return "descriptor_busy" }
-func (h *descriptorBusyHandler) BuildBatches(context.Context, *Document, []int, int) ([][]int, error) {
-	return nil, nil
-}
-func (h *descriptorBusyHandler) Finalize(context.Context, *Document, []int) error { return nil }
-func (h *descriptorBusyHandler) ProcessBatch(_ context.Context, _ *Document, indices []int, _ int, _ *slog.Logger) batchResult {
-	h.calls.Add(1)
-	h.entered <- indices[0]
-	return batchResult{deferred: true, waitCapacity: &WorkDeferred{Wait: backend.AdmissionWait{Reason: "test_busy", CapacityChanged: h.wake}}}
-}
 func TestStoredBusyDescriptorsDoNotConsumeWholeSourcePage(t *testing.T) {
 	a, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{MainConcurrency: map[int]int{0: 4}})
 	if err != nil {
@@ -33,7 +16,13 @@ func TestStoredBusyDescriptorsDoNotConsumeWholeSourcePage(t *testing.T) {
 	}
 	runtime := NewExecutionRuntime(a, DefaultCandidateLimits(), nil)
 	defer runtime.Close()
-	h := &descriptorBusyHandler{entered: make(chan int, 128), wake: make(chan struct{})}
+	var calls atomic.Int64
+	entered, wake := make(chan int, 128), make(chan struct{})
+	process := func(_ context.Context, job batchJob) batchResult {
+		calls.Add(1)
+		entered <- job.idxs[0]
+		return batchResult{deferred: true, waitCapacity: &WorkDeferred{Wait: backend.AdmissionWait{Reason: "test_busy", CapacityChanged: wake}}}
+	}
 	doc := newTestDoc(128)
 	batches := make([][]int, 128)
 	for i := range batches {
@@ -43,13 +32,13 @@ func TestStoredBusyDescriptorsDoNotConsumeWholeSourcePage(t *testing.T) {
 	defer cancel()
 	done := make(chan poolResult, 1)
 	go func() {
-		r, _ := runPool(ctx, Round{Handler: h, Runtime: runtime, Store: NewMemoryRoundStore(nil), Gate: runtime.Gate, Concurrency: 4}, h, doc, batches, 1, nil, quietLogger(), progress.Nop{}, 0, nil)
+		r, _ := runPool(ctx, Round{Runtime: runtime, Gate: runtime.Gate, Concurrency: 4}, doc, batches, 1, progress.Nop{}, process)
 		done <- r
 	}()
 	seen := make(map[int]bool)
 	for i := 0; i < 4; i++ {
 		select {
-		case index := <-h.entered:
+		case index := <-entered:
 			if seen[index] {
 				cancel()
 				<-done
@@ -63,7 +52,7 @@ func TestStoredBusyDescriptorsDoNotConsumeWholeSourcePage(t *testing.T) {
 		}
 	}
 	select {
-	case index := <-h.entered:
+	case index := <-entered:
 		cancel()
 		<-done
 		t.Fatalf("Busy fifth call index=%d repeated=%v", index, seen[index])
@@ -72,8 +61,8 @@ func TestStoredBusyDescriptorsDoNotConsumeWholeSourcePage(t *testing.T) {
 	cancel()
 	select {
 	case r := <-done:
-		if h.calls.Load() != 4 || len(r.unresolved) != 128 {
-			t.Fatalf("source lost on join: calls%d unresolved%d", h.calls.Load(), len(r.unresolved))
+		if calls.Load() != 4 || len(r.unresolved) != 128 {
+			t.Fatalf("source lost on join: calls%d unresolved%d", calls.Load(), len(r.unresolved))
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Busy source did not join on cancel")

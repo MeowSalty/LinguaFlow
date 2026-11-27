@@ -35,6 +35,7 @@ type ResponseProcess struct {
 	RequestID, InputDigest, TargetLang string
 	Entries                            []Entry
 	EntriesPayload                     []byte
+	Extract                            bool
 	Rewrite                            bool
 	ItemLimit, BusinessLimit           int64
 	Validate                           func(context.Context, ResponseTarget) error

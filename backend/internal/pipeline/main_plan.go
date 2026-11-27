@@ -19,6 +19,7 @@ type deferredMainPlan struct {
 	keys          []string
 	keyBacking    []byte
 	pool, attempt int
+	retry         mainRetryKey
 	version       uint64
 	dispatchGroup int
 	dispatchEmpty bool
@@ -43,7 +44,7 @@ func (s *MemoryRoundStore) AppendWorkIdentity(dst []byte, index int) []byte {
 }
 
 func (s *mainScheduler) buildPlan(ctx context.Context, g int, store RoundStore) (plan *deferredMainPlan, err error) {
-	p := &deferredMainPlan{pool: s.groups[g].pool, attempt: s.groups[g].attempt, version: s.groups[g].version, owner: "main-plan:" + NewWorkID(), runtime: s.runtime}
+	p := &deferredMainPlan{pool: s.groups[g].pool, attempt: s.groups[g].attempt, retry: s.groups[g].retry, version: s.groups[g].version, owner: "main-plan:" + NewWorkID(), runtime: s.runtime}
 	buildCtx := s.runtime.BuildContext(ctx, p.owner)
 	b, err := backend.NewBuildBoundsFromContext(buildCtx, 0, 0)
 	if err != nil {
@@ -153,7 +154,11 @@ func mainWaitSignalReady(signal <-chan struct{}) bool {
 }
 func (p *deferredMainPlan) valid(s *mainScheduler) bool {
 	g := s.selectedGroup()
-	return g >= 0 && s.groups[g].pool == p.pool && s.groups[g].attempt == p.attempt && s.groups[g].version == p.version
+	return g >= 0 && p.matches(s.groups[g]) && s.groups[g].version == p.version
+}
+
+func (p *deferredMainPlan) matches(g mainScheduleGroup) bool {
+	return g.pool == p.pool && g.attempt == p.attempt && g.retry == p.retry
 }
 
 // The slot is a generation handle even when its group has become empty. Its
@@ -169,11 +174,11 @@ func (p *deferredMainPlan) canRestoreWait(s *mainScheduler) bool {
 		return false
 	}
 	g := s.groups[p.dispatchGroup]
-	if g.pool != p.pool || g.attempt != p.attempt || g.version != p.version {
+	if !p.matches(g) || g.version != p.version {
 		return false
 	}
 	if p.dispatchEmpty {
-		return g.root < 0 && s.findGroup(p.pool, p.attempt) < 0
+		return g.root < 0 && s.findGroup(p.pool, p.attempt, p.retry) < 0
 	}
-	return g.root >= 0 && s.findGroup(p.pool, p.attempt) == p.dispatchGroup
+	return g.root >= 0 && s.findGroup(p.pool, p.attempt, p.retry) == p.dispatchGroup
 }

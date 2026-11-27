@@ -44,6 +44,7 @@ type mainScheduleNode struct {
 }
 type mainScheduleGroup struct {
 	pool, attempt, root, left, right, free int
+	retry                                  mainRetryKey
 	priority, version                      uint64
 }
 type mainScheduleChoice struct{ pool, ordinal, barrier, pending, mainPending int }
@@ -206,9 +207,10 @@ func (s *mainScheduler) refreshOrdinal(i int, active bool, candidate *Candidate,
 	seg := &s.doc.Segments[n.index]
 	w := seg.RoundWork
 	cur := w.Cursor
+	retry := mainRetryFor(cur)
 	ready := !w.Completed && !active && candidate == nil && cur.Pool < s.maxPools && cur.State != "unresolved" && cur.State != "candidate" && cur.State != "response_pending" && !now.Before(cur.NextAttemptAt)
 	g := n.group
-	if g >= 0 && (!ready || s.groups[g].pool != cur.Pool || s.groups[g].attempt != cur.Attempt) {
+	if g >= 0 && (!ready || s.groups[g].pool != cur.Pool || s.groups[g].attempt != cur.Attempt || s.groups[g].retry != retry) {
 		s.groups[g].root = s.eraseReady(s.groups[g].root, i, g)
 		s.version++
 		s.groups[g].version = s.version
@@ -220,7 +222,7 @@ func (s *mainScheduler) refreshOrdinal(i int, active bool, candidate *Candidate,
 		}
 	}
 	if ready && n.group < 0 {
-		g = s.findGroup(cur.Pool, cur.Attempt)
+		g = s.findGroup(cur.Pool, cur.Attempt, retry)
 		if g < 0 {
 			if s.freeGroup >= 0 {
 				g = s.freeGroup
@@ -229,7 +231,13 @@ func (s *mainScheduler) refreshOrdinal(i int, active bool, candidate *Candidate,
 				g = s.nextGroup
 				s.nextGroup++
 			}
-			s.groups[g] = mainScheduleGroup{pool: cur.Pool, attempt: cur.Attempt, root: -1, left: -1, right: -1, priority: schedulePriority(uint64(cur.Pool) ^ uint64(cur.Attempt)<<32)}
+			// A failed response can create a second group at the same pool and
+			// attempt. Use an insertion-specific priority for those groups.
+			priority := schedulePriority(uint64(cur.Pool) ^ uint64(cur.Attempt)<<32)
+			if retry.phase != "" {
+				priority = schedulePriority(s.version)
+			}
+			s.groups[g] = mainScheduleGroup{pool: cur.Pool, attempt: cur.Attempt, retry: retry, root: -1, left: -1, right: -1, priority: priority}
 			s.groupRoot = s.insertGroup(s.groupRoot, g)
 		}
 		n.group, n.left, n.right = g, -1, -1
@@ -276,14 +284,14 @@ func (s *mainScheduler) selectedGroup() int {
 	s.observe("index_visit", 0, 1)
 	return s.nodes[c.ordinal].group
 }
-func (s *mainScheduler) findGroup(pool, attempt int) int {
+func (s *mainScheduler) findGroup(pool, attempt int, retry mainRetryKey) int {
 	for g := s.groupRoot; g >= 0; {
 		s.observe("index_visit", 0, 1)
 		n := s.groups[g]
-		if n.pool == pool && n.attempt == attempt {
+		if n.pool == pool && n.attempt == attempt && n.retry == retry {
 			return g
 		}
-		if pool < n.pool || pool == n.pool && attempt < n.attempt {
+		if (mainScheduleGroup{pool: pool, attempt: attempt, retry: retry}).less(n) {
 			g = n.left
 		} else {
 			g = n.right
@@ -292,8 +300,16 @@ func (s *mainScheduler) findGroup(pool, attempt int) int {
 	return -1
 }
 func (s *mainScheduler) groupLess(a, b int) bool {
-	x, y := s.groups[a], s.groups[b]
-	return x.pool < y.pool || x.pool == y.pool && x.attempt < y.attempt
+	return s.groups[a].less(s.groups[b])
+}
+func (x mainScheduleGroup) less(y mainScheduleGroup) bool {
+	if x.pool != y.pool {
+		return x.pool < y.pool
+	}
+	if x.attempt != y.attempt {
+		return x.attempt < y.attempt
+	}
+	return x.retry.less(y.retry)
 }
 func (s *mainScheduler) mergeGroup(a, b int) int {
 	if a < 0 {

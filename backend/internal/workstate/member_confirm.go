@@ -11,7 +11,7 @@ import (
 
 // Confirmation reads only the bounded canonical header, including a resolved unknown ACK.
 func (s *Store) ResponseHeader(ctx context.Context, id string) (ResponseHeader, error) {
-	r, e := memberHeaderQuery(memberClient(ctx, s.client).WorkRequest.Query().Where(workrequest.IdentityEQ(id))).Only(ctx)
+	r, e := responseContinuationQuery(memberClient(ctx, s.client).WorkRequest.Query().Where(workrequest.IdentityEQ(id))).Only(ctx)
 	if e != nil {
 		return ResponseHeader{}, e
 	}

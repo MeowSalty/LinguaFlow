@@ -315,122 +315,47 @@ func quietLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// TestAbsorbInlineGlossary_RewritesConflictInBatch 验证并发冲突场景下的核心修复。
-func TestAbsorbInlineGlossary_RewritesConflictInBatch(t *testing.T) {
-	g := glossary.NewMemory()
-	if _, err := g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"}); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	h := &TranslateHandler{
-		Glossary:               g,
-		InlineBootstrap:        true,
-		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Words:   3.0,
-		InlineConflictStrategy: InlineConflictRewriteLocal,
-	}
-	entries := []prompt.BootstrapEntry{
-		{Source: "thread pool", Target: "并发池"},
-	}
-	translations := map[string]string{
-		"1": "并发池是一种常见模式。",
-		"2": "另一个段提到并发池时也应同步。",
-	}
-	h.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
-
-	for id, want := range map[string]string{
-		"1": "线程池是一种常见模式。",
-		"2": "另一个段提到线程池时也应同步。",
+func TestTranslateInlineGlossaryConflict(t *testing.T) {
+	for _, tc := range []struct {
+		name, strategy, existing, proposed, first, second, wantFirst, wantSecond string
+	}{
+		{"rewrite", InlineConflictRewriteLocal, "线程池", "并发池", "并发池是一种常见模式。", "另一个段提到并发池。", "线程池是一种常见模式。", "另一个段提到线程池。"},
+		{"off", InlineConflictOff, "线程池", "并发池", "并发池保留原样。", "并发池", "并发池保留原样。", "并发池"},
+		{"new", InlineConflictRewriteLocal, "", "线程池", "线程池入门。", "入门", "线程池入门。", "入门"},
+		{"same", InlineConflictRewriteLocal, "线程池", "线程池", "线程池上线。", "线程池", "线程池上线。", "线程池"},
+		{"absent target", InlineConflictRewriteLocal, "线程池", "并发池", "本段未提到该术语。", "另一段。", "本段未提到该术语。", "另一段。"},
 	} {
-		if got := translations[id]; got != want {
-			t.Errorf("translations[%s] = %q, want %q", id, got, want)
-		}
-	}
-	hits, _ := g.Lookup(context.Background(), "thread pool here", "", "")
-	if len(hits) != 1 || hits[0].Target != "线程池" {
-		t.Errorf("authoritative target should remain 线程池，got %#v", hits)
-	}
-}
-
-// TestAbsorbInlineGlossary_StrategyOffKeepsConflict 验证 off 策略保留旧行为。
-func TestAbsorbInlineGlossary_StrategyOffKeepsConflict(t *testing.T) {
-	g := glossary.NewMemory()
-	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
-	h := &TranslateHandler{
-		Glossary:               g,
-		InlineBootstrap:        true,
-		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Words:   3.0,
-		InlineConflictStrategy: InlineConflictOff,
-	}
-	entries := []prompt.BootstrapEntry{
-		{Source: "thread pool", Target: "并发池"},
-	}
-	translations := map[string]string{"1": "并发池保留原样。"}
-	h.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
-	if translations["1"] != "并发池保留原样。" {
-		t.Errorf("strategy=off should not rewrite, got %q", translations["1"])
-	}
-}
-
-// TestAbsorbInlineGlossary_NoConflictNoChange 没有冲突时 translations 不应被动。
-func TestAbsorbInlineGlossary_NoConflictNoChange(t *testing.T) {
-	g := glossary.NewMemory()
-	h := &TranslateHandler{
-		Glossary:               g,
-		InlineBootstrap:        true,
-		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Words:   3.0,
-		InlineConflictStrategy: InlineConflictRewriteLocal,
-	}
-	entries := []prompt.BootstrapEntry{
-		{Source: "thread pool", Target: "线程池"},
-	}
-	translations := map[string]string{"1": "线程池入门。"}
-	h.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
-	if translations["1"] != "线程池入门。" {
-		t.Errorf("no conflict should not rewrite, got %q", translations["1"])
-	}
-}
-
-// TestAbsorbInlineGlossary_SameTargetIsNoop 验证同 target 不进 Skipped，不会误改译文。
-func TestAbsorbInlineGlossary_SameTargetIsNoop(t *testing.T) {
-	g := glossary.NewMemory()
-	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
-	h := &TranslateHandler{
-		Glossary:               g,
-		InlineBootstrap:        true,
-		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Words:   3.0,
-		InlineConflictStrategy: InlineConflictRewriteLocal,
-	}
-	entries := []prompt.BootstrapEntry{
-		{Source: "thread pool", Target: "线程池"},
-	}
-	translations := map[string]string{"1": "线程池上线。"}
-	h.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
-	if translations["1"] != "线程池上线。" {
-		t.Errorf("identical target should noop, got %q", translations["1"])
-	}
-}
-
-// TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations 译文里找不到冲突 target 时不 panic 也不报错。
-func TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations(t *testing.T) {
-	g := glossary.NewMemory()
-	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
-	h := &TranslateHandler{
-		Glossary:               g,
-		InlineBootstrap:        true,
-		MinBootstrapSourceLen:  2,
-		MaxTermsPer1000Words:   3.0,
-		InlineConflictStrategy: InlineConflictRewriteLocal,
-	}
-	entries := []prompt.BootstrapEntry{
-		{Source: "thread pool", Target: "并发池"},
-	}
-	translations := map[string]string{"1": "本段未提到该术语。"}
-	h.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
-	if translations["1"] != "本段未提到该术语。" {
-		t.Errorf("text without target should be unchanged, got %q", translations["1"])
+		t.Run(tc.name, func(t *testing.T) {
+			g := glossary.NewMemory()
+			if tc.existing != "" {
+				if _, err := g.Add(t.Context(), glossary.Entry{Source: "thread pool", Target: tc.existing}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			response := mustJSON(t, map[string]any{
+				"translations": map[string]string{"1": tc.first, "2": tc.second},
+				"glossary":     []prompt.BootstrapEntry{{Source: "thread pool", Target: tc.proposed}},
+			})
+			h := newTestTranslateHandler(&fakeBackend{name: "inline", responses: []string{response}}, 2, 1)
+			h.Glossary, h.InlineBootstrap, h.InlineConflictStrategy = g, true, tc.strategy
+			h.MinBootstrapSourceLen, h.MaxTermsPer1000Words = 2, 10
+			doc := newTestDoc(2)
+			doc.Segments[0].Source = "a thread pool is one commonly used design pattern for parallel work"
+			if err := runTestTranslateRound(t, h, doc); err != nil {
+				t.Fatal(err)
+			}
+			if got := []string{doc.Segments[0].Target, doc.Segments[1].Target}; !reflect.DeepEqual(got, []string{tc.wantFirst, tc.wantSecond}) {
+				t.Fatalf("targets=%v want %q and %q", got, tc.wantFirst, tc.wantSecond)
+			}
+			hits, err := g.Lookup(t.Context(), "thread pool here", "", "")
+			target := tc.existing
+			if target == "" {
+				target = tc.proposed
+			}
+			if err != nil || len(hits) != 1 || hits[0].Target != target {
+				t.Fatalf("glossary=%+v err=%v want target %q", hits, err, target)
+			}
+		})
 	}
 }
 
@@ -546,7 +471,7 @@ func runTestTranslateRound(t *testing.T, h *TranslateHandler, doc *Document, con
 		Shrink:      h.FallbackShrink,
 		Handler:     h,
 	}
-	_, err := RunRound(context.Background(), round, doc, nil, h.Logger, h.Reporter)
+	_, err := runMemoryTestRound(t, t.Context(), round, doc, nil, h.Logger, h.Reporter)
 	return err
 }
 
@@ -1168,82 +1093,6 @@ func TestPoolModel_ParseFailureAdvancesAndReleasesSeat(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&rep.stageStartCalls); got != 1 {
 		t.Errorf("StageStart=%d want 1", got)
-	}
-}
-
-// TestPoolModel_5xxInFlightRetry 5xx 走池内 in-flight backoff，不进下一池缩批。
-func TestPoolModel_5xxInFlightRetry(t *testing.T) {
-	doc := newTestDoc(2)
-	rep := &countingReporter{}
-
-	fb := &fakeBackend{
-		name: "fake",
-		errs: []error{
-			&backend.StatusError{StatusCode: 500, Err: errors.New("internal")},
-			nil,
-		},
-		responses: []string{
-			"", // first call fails via errs
-			`{"translations":{"1":"a","2":"b"}}`,
-		},
-	}
-	h := newTestTranslateHandler(fb, 2, 1, func(h *TranslateHandler) {
-		h.Reporter = rep
-		h.FallbackShrink = 0.5
-		h.Retry = backend.RetryPolicy{MaxAttempts: 2, Backoff: 0} // backoff floored to minRateLimitBackoff
-	})
-
-	// Override min backoff path: use short context... actually backoffDuration enforces 5s min.
-	// Speed up by setting MaxAttempts and accepting wait — too slow for unit test.
-	// Instead call ProcessBatch directly and assert retry path without full RunRound wait.
-	h.Renderer = newTestRenderer(t)
-	result := h.ProcessBatch(context.Background(), doc, []int{0, 1}, 0, quietLogger())
-	if result.retry == nil {
-		t.Fatal("expected in-flight retry for 500, got no retry")
-	}
-	if len(result.unresolved) != 0 {
-		t.Fatalf("5xx must not unresolved/shrink, got unresolved=%v", result.unresolved)
-	}
-	if result.retry.attempt != 1 {
-		t.Fatalf("retry.attempt=%d want 1", result.retry.attempt)
-	}
-	if len(result.retry.idxs) != 2 {
-		t.Fatalf("retry must keep same batch size, got %d", len(result.retry.idxs))
-	}
-}
-
-// TestPoolModel_429InFlightRetry 429 行为不变：in-flight backoff。
-func TestPoolModel_429InFlightRetry(t *testing.T) {
-	doc := newTestDoc(2)
-	h := newTestTranslateHandler(&fakeBackend{
-		name: "fake",
-		errs: []error{&backend.StatusError{StatusCode: 429, Err: errors.New("rate limited")}},
-	}, 2, 1, func(h *TranslateHandler) {
-		h.Retry = backend.RetryPolicy{MaxAttempts: 2, Backoff: 0}
-	})
-	h.Renderer = newTestRenderer(t)
-	result := h.ProcessBatch(context.Background(), doc, []int{0, 1}, 0, quietLogger())
-	if result.retry == nil {
-		t.Fatal("expected in-flight retry for 429")
-	}
-	if len(result.unresolved) != 0 {
-		t.Fatalf("429 must not unresolved, got %v", result.unresolved)
-	}
-}
-
-// TestPoolModel_NetworkErrorInFlightRetry 无 HTTPStatus 的网络错误走 IsRetryable in-flight。
-func TestPoolModel_NetworkErrorInFlightRetry(t *testing.T) {
-	doc := newTestDoc(1)
-	h := newTestTranslateHandler(&fakeBackend{
-		name: "fake",
-		errs: []error{errors.New("dial tcp: i/o timeout")},
-	}, 1, 1, func(h *TranslateHandler) {
-		h.Retry = backend.RetryPolicy{MaxAttempts: 2, Backoff: 0}
-	})
-	h.Renderer = newTestRenderer(t)
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.retry == nil {
-		t.Fatal("expected in-flight retry for network error")
 	}
 }
 

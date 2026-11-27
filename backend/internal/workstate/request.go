@@ -3,9 +3,11 @@ package workstate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
@@ -13,6 +15,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workrequest"
+	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 func requestBudgetError(r Request, segmentID int, dimension string, current, max int) error {
@@ -105,6 +109,9 @@ func (s *Store) ReserveRequest(ctx context.Context, r Request) error {
 			}
 			if r.MainAttempt && r.MaxMainAttempts > 0 && w.MainAttempts >= r.MaxMainAttempts {
 				return requestBudgetError(r, id, "main_attempts", w.MainAttempts, r.MaxMainAttempts)
+			}
+			if r.Stage == MainPromptUpgradeStage && (r.MainAttempt || w.MainAttempts == 0 || w.MainNetworkAttempts == 0 || !strings.HasPrefix(w.PromptPhase, responsecontract.PromptUpgradeCursorPrefix)) {
+				return ErrManifest
 			}
 			if alignmentAttempt && r.MaxAlignmentAttempts > 0 && w.AlignmentAttempts >= r.MaxAlignmentAttempts {
 				return requestBudgetError(r, id, "alignment_attempts", w.AlignmentAttempts, r.MaxAlignmentAttempts)
@@ -228,6 +235,8 @@ func (s *Store) recordRequest(ctx context.Context, scope *Scope, id string, resu
 	}
 	jobID := 0
 	var expected *ent.WorkRequest
+	var failureCursors []CursorTransition
+	var dispositionErr error
 	ctx = operationContext(ctx)
 	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
 		if scope != nil {
@@ -253,9 +262,32 @@ func (s *Store) recordRequest(ctx context.Context, scope *Scope, id string, resu
 			return ErrStopped
 		}
 		expected, err = recordRequestAccountingTx(ctx, tx, row, result)
+		if err != nil {
+			return err
+		}
+		if expected.State == "failed" {
+			if err := retireUncapturedStoredInputs(ctx, tx, jobID, workrequest.IDEQ(row.ID)); err != nil {
+				return err
+			}
+		}
+		if result.MainFailure == nil {
+			return nil
+		}
+		if scope == nil || expected.State != "failed" || row.Stage != "main" && row.Stage != MainPromptUpgradeStage {
+			return ErrManifest
+		}
+		if _, err := guardLockedScope(ctx, tx, *scope, false, false); err != nil {
+			// A stopped execution can still owe the provider's request accounting.
+			if errors.Is(err, ErrStopped) || errors.Is(err, ErrStale) {
+				dispositionErr = err
+				return nil
+			}
+			return err
+		}
+		failureCursors, err = settleMainFailure(ctx, tx, *scope, expected, *result.MainFailure)
 		return err
 	})
-	return s.finishUnknown(ctx, jobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
+	err = s.finishUnknown(ctx, jobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
 		row, err := projectedRequest(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(id))).Only(ctx)
 		if err != nil {
 			return false, err
@@ -263,11 +295,68 @@ func (s *Store) recordRequest(ctx context.Context, scope *Scope, id string, resu
 		if expected == nil || row.JobID != jobID {
 			return false, ErrManifest
 		}
-		if row.State == expected.State && row.LastError == expected.LastError && row.UsageKnown == expected.UsageKnown && row.InputTokens == expected.InputTokens && row.OutputTokens == expected.OutputTokens && row.DurationMs == expected.DurationMs && sameInt(row.UsageRecordID, expected.UsageRecordID) {
-			return true, nil
+		if row.State != expected.State || row.LastError != expected.LastError || row.UsageKnown != expected.UsageKnown || row.InputTokens != expected.InputTokens || row.OutputTokens != expected.OutputTokens || row.DurationMs != expected.DurationMs || !sameInt(row.UsageRecordID, expected.UsageRecordID) {
+			return false, errUnverifiable
 		}
-		return false, errUnverifiable
+		if len(failureCursors) > 0 {
+			members, err := loadMembers(ctx, tx, *scope, row.SegmentIds)
+			if err != nil {
+				return false, err
+			}
+			for _, t := range failureCursors {
+				// The projected fields are the canonical scheduler cursor. The
+				// optional JSON mirror may be normalized by the database driver.
+				t.Cursor.Data = nil
+				if !cursorSaved(members[t.SegmentID], t.Cursor) {
+					return false, errUnverifiable
+				}
+			}
+		}
+		return true, nil
 	})
+	if err != nil {
+		return err
+	}
+	return dispositionErr
+}
+
+func settleMainFailure(ctx context.Context, tx *ent.Client, scope Scope, request *ent.WorkRequest, next model.RoundWorkCursor) ([]CursorTransition, error) {
+	if next.Pool < request.MemberPool || next.State != "unresolved" && next.State != "pending" {
+		return nil, ErrManifest
+	}
+	rows, err := loadMembers(ctx, tx, scope, request.SegmentIds)
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(next)
+	if err != nil {
+		return nil, err
+	}
+	transitions := make([]CursorTransition, 0, len(request.SegmentIds))
+	for _, segmentID := range request.SegmentIds {
+		row := rows[segmentID]
+		if row.PoolIndex != request.MemberPool && (row.PoolIndex != next.Pool || row.State != next.State || row.LastError != request.LastError) {
+			return nil, ErrStale
+		}
+		cursor := cursorFromRow(row)
+		if next.Pool > row.PoolIndex {
+			cursor = Cursor{PoolIndex: next.Pool}
+		}
+		cursor.State = next.State
+		cursor.MainAttempts = max(cursor.MainAttempts, next.Attempt)
+		cursor.PromptPhase = next.Phase
+		cursor.LastError = request.LastError
+		cursor.Data = data
+		cursor.NextAttemptAt = nil
+		if !next.NextAttemptAt.IsZero() {
+			cursor.NextAttemptAt = &next.NextAttemptAt
+		}
+		transitions = append(transitions, CursorTransition{SegmentID: segmentID, Cursor: cursor})
+	}
+	if err := saveCursorRows(ctx, tx, scope, transitions, rows); err != nil {
+		return nil, err
+	}
+	return transitions, releaseFailedRequestProgress(ctx, tx, scope, request.Identity, transitions)
 }
 
 func usageInt(n int64) int {
@@ -283,6 +372,9 @@ func usageInt(n int64) int {
 // MarkUnknown is called only while the lifecycle claim is inactive, before
 // resumed dispatch. An uncertain request keeps its already debited attempts.
 func MarkUnknown(ctx context.Context, tx *ent.Client, jobID int) error {
+	if err := retireUncapturedStoredInputs(ctx, tx, jobID, workrequest.StateIn("reserved", "sent", "received")); err != nil {
+		return err
+	}
 	_, err := tx.WorkRequest.Update().Where(workrequest.JobIDEQ(jobID), workrequest.StateIn("reserved", "sent", "received")).SetState("unknown").Save(ctx)
 	return err
 }

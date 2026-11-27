@@ -36,15 +36,17 @@ func (a *RequestAdmission) prepareRootMetadataLocked(id string, members int) (bo
 func (a *RequestAdmission) RestoreRootMetadata(bytes int64) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if bytes < 0 || a.root != nil || len(a.requestMetadata) > 0 {
+	if bytes < 0 || a.root != nil || a.rootMetadataRestored || len(a.requestMetadata) > 0 {
 		return ErrPipelineCapacity
 	}
 	a.rootMetadataBase = bytes
+	a.rootMetadataRestored = true
 	return nil
 }
 
-// RestoreRequestMetadata transfers one original member table out of restored
-// scalar stock. No root is increased when a reliable response is reattached.
+// RestoreRequestMetadata attaches the original member table once. A Job with
+// an aggregate snapshot transfers its existing stock. A standalone runtime
+// starting from a round store reserves the authoritative bytes directly.
 func (a *RequestAdmission) RestoreRequestMetadata(id string, members int, actual int64) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -60,14 +62,22 @@ func (a *RequestAdmission) RestoreRequestMetadata(id string, members int, actual
 		}
 		return nil
 	}
-	if actual > a.rootMetadataBase {
-		return ErrPipelineCapacity
+	if a.rootMetadataRestored {
+		if actual > a.rootMetadataBase {
+			return a.rejectLocked(ErrPipelineCapacity, "restore_request_metadata_insufficient", "restore_request_metadata", RejectionEvidence{RequestID: id, InventoryKnown: true, InventoryBytes: a.rootMetadataBase, RequestedBytes: actual})
+		}
+		a.rootMetadataBase -= actual
 	}
 	if a.requestMetadata == nil {
 		a.requestMetadata = map[string]*requestMetadataCredit{}
 	}
-	a.rootMetadataBase -= actual
 	a.requestMetadata[id] = &requestMetadataCredit{members: members, actual: actual, dispatched: true, settled: true}
+	if !a.rootMetadataRestored {
+		if err := a.syncRootLocked(0); err != nil {
+			delete(a.requestMetadata, id)
+			return err
+		}
+	}
 	return nil
 }
 

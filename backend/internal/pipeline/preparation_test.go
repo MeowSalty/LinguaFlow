@@ -36,7 +36,7 @@ func TestStagedRecoveryCommitUsesActualResourceAndRequestMetadata(t *testing.T) 
 		o := &runtimeMetadataObserver{}
 		ctx = persistence.WithObserver(ctx, o)
 		r := stagedTestRuntime(t, DefaultCandidateLimits())
-		store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil)}
+		store := &nativeStoredRoundTestStore{MemoryRoundStore: NewMemoryRoundStore(nil)}
 		_, _ = store.Seal(ctx, []int{0})
 		doc := newTestDoc(1)
 		c := newCandidate(doc.Segments[0], 0, RoundModeTranslate, "text")
