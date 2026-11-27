@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
+	"unsafe"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -26,6 +29,14 @@ type storedRoundTestStore struct {
 
 func (*storedRoundTestStore) ResourceIdentity() int { return 73 }
 
+func (s *storedRoundTestStore) LoadCanonical(ctx context.Context, doc *Document) (bool, int, error) {
+	return s.RoundStore.(CanonicalRoundStore).LoadCanonical(ctx, doc)
+}
+
+func (s *storedRoundTestStore) SealCanonical(ctx context.Context, doc *Document) error {
+	return s.RoundStore.(CanonicalRoundStore).SealCanonical(ctx, doc)
+}
+
 func (s *storedRoundTestStore) Seal(ctx context.Context, indices []int) (RoundRecovery, error) {
 	if s.fail == "seal" {
 		return RoundRecovery{}, terminalRuntimeStoreError{errors.New("manifest unavailable")}
@@ -38,6 +49,9 @@ func (s *storedRoundTestStore) Reserve(_ context.Context, intent RequestIntent) 
 	defer s.mu.Unlock()
 	if s.fail == "reserve" {
 		return terminalRuntimeStoreError{errors.New("intent unavailable")}
+	}
+	if s.fail == "paused" {
+		return terminalRuntimeStoreError{backend.ErrDispatchPaused}
 	}
 	s.intents = append(s.intents, intent)
 	return nil
@@ -409,5 +423,151 @@ func TestStoredRoundRecoversTerminalScanFailure(t *testing.T) {
 	result, err := RunRound(context.Background(), Round{Runtime: runtime, Store: memory, Handler: h, Concurrency: 1}, newTestDoc(1), nil, quietLogger(), nil)
 	if err != nil || !reflect.DeepEqual(result.FailedSegments, []int{0}) || len(result.Unresolved) != 0 || inner.calls.Load() != 0 {
 		t.Fatalf("terminal scan failure lost on recovery: %+v %v", result, err)
+	}
+}
+
+func TestStoredSemanticQAPoolEventsFollowActualPools(t *testing.T) {
+	for _, stored := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stored=%t", stored), func(t *testing.T) {
+			var calls atomic.Int64
+			inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+				switch calls.Add(1) {
+				case 1:
+					return nil, &backend.StatusError{StatusCode: 401, Err: errors.New("unauthorized")}
+				case 2:
+					return nil, &backend.StatusError{StatusCode: 400, Err: errors.New("invalid input")}
+				default:
+					return &backend.Response{Text: `{"issues":[]}`}, nil
+				}
+			}}
+			rep := &recordingPoolObserver{}
+			retry := backend.RetryPolicy{MaxAttempts: 1}
+			h := &SemanticQAHandler{Backend: inner, Renderer: newSemanticQARenderer(t), SegmentScope: "all", BatchSize: 1, Retry: retry, Reporter: rep}
+			round := Round{Handler: h, Concurrency: 1, Retry: retry}
+			if stored {
+				round.Runtime = storedTestExecutionRuntime(t)
+				h.Backend = BindRequestBackend(inner, 9, 0, round.Runtime)
+			}
+			doc := semanticQADoc([]string{"translated", "translated", "translated"}, nil)
+			result, err := RunRound(t.Context(), round, doc, nil, quietLogger(), rep)
+			if err != nil || !reflect.DeepEqual(result.Resolved, []int{1, 2}) || !reflect.DeepEqual(result.Unresolved, []int{0}) || calls.Load() != 4 {
+				t.Fatalf("result=%+v calls=%d err=%v", result, calls.Load(), err)
+			}
+			want := []progress.PoolEvent{
+				{Mode: RoundModeSemanticQA, PoolIndex: 0, MaxPools: 2, Batches: 3, Pending: 3, ShrinkRate: 1, Phase: "pool_start"},
+				{Mode: RoundModeSemanticQA, PoolIndex: 0, MaxPools: 2, Batches: 3, Pending: 1, ShrinkRate: 1, Phase: "pool_advance"},
+				{Mode: RoundModeSemanticQA, PoolIndex: 1, MaxPools: 2, Batches: 1, Pending: 1, ShrinkRate: 1, Phase: "pool_start"},
+			}
+			if !reflect.DeepEqual(rep.events, want) {
+				t.Fatalf("pool events=%+v want=%+v", rep.events, want)
+			}
+			if len(rep.batches) != 4 || rep.batches[0].HTTPStatus != 401 || rep.batches[1].HTTPStatus != 400 {
+				t.Fatalf("batch events=%+v", rep.batches)
+			}
+		})
+	}
+}
+
+func TestStoredSemanticQAPauseBeforeDispatchLeavesAttemptPending(t *testing.T) {
+	runtime := storedTestExecutionRuntime(t)
+	store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil), fail: "paused"}
+	inner := &runtimeTestBackend{}
+	rep := &recordingPoolObserver{}
+	h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Reporter: rep}
+	result, err := RunRound(t.Context(), Round{Handler: h, Runtime: runtime, Store: store}, semanticQADoc([]string{"translated"}, nil), nil, quietLogger(), rep)
+	if err != nil || !reflect.DeepEqual(result.Unresolved, []int{0}) || inner.calls.Load() != 0 || !runtime.Gate.Paused() || len(rep.batches) != 0 {
+		t.Fatalf("paused result=%+v calls=%d events=%+v err=%v", result, inner.calls.Load(), rep.batches, err)
+	}
+	state, err := store.Load(t.Context())
+	if err != nil || state.Cursors[0] != (WorkCursor{}) {
+		t.Fatalf("undispatched work consumed retry budget: state=%+v err=%v", state, err)
+	}
+}
+
+func TestStoredSemanticQACancellationDoesNotAcknowledgeBatch(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	runtime := storedTestExecutionRuntime(t)
+	inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+		cancel()
+		return nil, context.Canceled
+	}}
+	rep := &recordingPoolObserver{}
+	h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Reporter: rep}
+	callbacks := 0
+	result, err := RunRound(ctx, Round{Handler: h, Runtime: runtime}, semanticQADoc([]string{"translated"}, nil), func(context.Context, BatchResult) error {
+		callbacks++
+		return nil
+	}, quietLogger(), rep)
+	if err != context.Canceled || !reflect.DeepEqual(result.Unresolved, []int{0}) || inner.calls.Load() != 1 || callbacks != 0 || len(rep.batches) != 0 {
+		t.Fatalf("cancelled result=%+v calls=%d callbacks=%d events=%+v err=%v", result, inner.calls.Load(), callbacks, rep.batches, err)
+	}
+}
+
+func TestStoredSemanticQARecordsOnlyProviderFailureWhenAccountingFails(t *testing.T) {
+	providerErr := &backend.StatusError{StatusCode: 503, Err: errors.New("upstream unavailable")}
+	for _, tc := range []struct {
+		name    string
+		callErr error
+	}{
+		{name: "provider and accounting", callErr: providerErr},
+		{name: "accounting only"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runtime := storedTestExecutionRuntime(t)
+			store := &storedRoundTestStore{RoundStore: NewMemoryRoundStore(nil), fail: "record"}
+			inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+				if tc.callErr != nil {
+					return nil, tc.callErr
+				}
+				return &backend.Response{Text: `{"issues":[]}`}, nil
+			}}
+			rep := &recordingPoolObserver{}
+			h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Reporter: rep}
+			_, err := RunRound(t.Context(), Round{Handler: h, Runtime: runtime, Store: store}, semanticQADoc([]string{"translated"}, nil), nil, quietLogger(), rep)
+			var storage *StorageError
+			if !errors.As(err, &storage) || inner.calls.Load() != 1 {
+				t.Fatalf("calls=%d err=%v", inner.calls.Load(), err)
+			}
+			if tc.callErr == nil {
+				if len(rep.batches) != 0 {
+					t.Fatalf("accounting failure emitted provider failure: %+v", rep.batches)
+				}
+				return
+			}
+			if !errors.Is(err, providerErr) || len(rep.batches) != 1 {
+				t.Fatalf("provider failure lost: events=%+v err=%v", rep.batches, err)
+			}
+			event := rep.batches[0]
+			if event.ErrorType != "backend_error" || event.HTTPStatus != 503 || event.ErrorMessage != providerErr.Error() {
+				t.Fatalf("provider failure event=%+v", event)
+			}
+		})
+	}
+}
+
+func TestStoredSemanticQAPublishesBoundedRequestAndResponseDiagnostics(t *testing.T) {
+	runtime := storedTestExecutionRuntime(t)
+	reply := `{"issues":[]}` + strings.Repeat(" ", progress.MaxSSEBatchContentBytes+100)
+	inner := &runtimeTestBackend{call: func(context.Context) (*backend.Response, error) {
+		return &backend.Response{Text: reply}, nil
+	}}
+	rep := &recordingPoolObserver{}
+	h := &SemanticQAHandler{Backend: BindRequestBackend(inner, 9, 0, runtime), Renderer: newSemanticQARenderer(t), SegmentScope: "all", Reporter: rep}
+	doc := semanticQADoc([]string{"translated"}, nil)
+	doc.Segments[0].Source = strings.Repeat("界", progress.MaxSSEBatchContentBytes/3+100)
+	result, err := RunRound(t.Context(), Round{Handler: h, Runtime: runtime}, doc, nil, quietLogger(), rep)
+	if err != nil || !reflect.DeepEqual(result.Resolved, []int{0}) || len(rep.batches) != 1 {
+		t.Fatalf("result=%+v diagnostics=%d err=%v", result, len(rep.batches), err)
+	}
+	evt := rep.batches[0]
+	if evt.Status != "success" || evt.SystemPrompt == "" || len(evt.JSONSchema) == 0 || evt.ParentRequestID == "" || evt.PoolIndex == nil || *evt.PoolIndex != 0 {
+		t.Fatal("batch diagnostics lost the request context")
+	}
+	if evt.UserMessage != evt.SentContent || len(evt.UserMessage) > progress.MaxSSEBatchContentBytes || evt.SentLength <= len(evt.UserMessage) || !utf8.ValidString(evt.UserMessage) {
+		t.Fatalf("prompt preview bytes=%d original=%d", len(evt.UserMessage), evt.SentLength)
+	}
+	if evt.ResponseContent != evt.ReceivedContent || evt.ResponseContent != reply[:progress.MaxSSEBatchContentBytes] || evt.ReceivedLength != len(reply) || unsafe.StringData(evt.ResponseContent) == unsafe.StringData(reply) {
+		t.Fatalf("response preview bytes=%d original=%d", len(evt.ResponseContent), evt.ReceivedLength)
 	}
 }

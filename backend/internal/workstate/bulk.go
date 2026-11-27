@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workcandidate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/workitem"
@@ -234,35 +235,7 @@ func (s *Store) saveCursors(ctx context.Context, scope Scope, requestID string, 
 		if err := saveCursorRows(ctx, tx, scope, transitions, rows, expected); err != nil {
 			return err
 		}
-		if requestID != "" {
-			j, err := tx.Job.Get(ctx, scope.JobID)
-			if err != nil {
-				return err
-			}
-			state, err := decodeRuntimeState(j.PipelineRuntimeState)
-			if err != nil {
-				return err
-			}
-			if state.ProgressID == requestID {
-				state.ProgressID = ""
-				state.ResponseID = ""
-				if state.BusinessOwner == requestID {
-					state.BusinessOwner = ""
-				}
-				for _, t := range transitions {
-					if t.Cursor.State == "pending" {
-						if state.ProgressID != "" {
-							return ErrManifest
-						}
-						state.ProgressID = "member:" + WorkIdentity(scope, t.SegmentID)
-					}
-				}
-				if err := saveRuntimeState(ctx, tx, scope.JobID, state); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+		return releaseFailedRequestProgress(ctx, tx, scope, requestID, transitions)
 	})
 	return s.finishUnknown(ctx, scope.JobID, err, func(ctx context.Context, tx *ent.Client) (bool, error) {
 		rows, err := queryMemberRows(ctx, tx, scope, ids, true, true)
@@ -280,6 +253,34 @@ func (s *Store) saveCursors(ctx context.Context, scope Scope, requestID string, 
 		}
 		return true, nil
 	})
+}
+
+func releaseFailedRequestProgress(ctx context.Context, tx *ent.Client, scope Scope, requestID string, transitions []CursorTransition) error {
+	if requestID == "" {
+		return nil
+	}
+	j, err := tx.Job.Query().Where(job.IDEQ(scope.JobID)).Select(job.FieldPipelineRuntimeState).Only(ctx)
+	if err != nil {
+		return err
+	}
+	state, err := decodeRuntimeState(j.PipelineRuntimeState)
+	if err != nil || state.ProgressID != requestID {
+		return err
+	}
+	state.ProgressID = ""
+	state.ResponseID = ""
+	if state.BusinessOwner == requestID {
+		state.BusinessOwner = ""
+	}
+	for _, t := range transitions {
+		if t.Cursor.State == "pending" {
+			if state.ProgressID != "" {
+				return ErrManifest
+			}
+			state.ProgressID = "member:" + WorkIdentity(scope, t.SegmentID)
+		}
+	}
+	return saveRuntimeState(ctx, tx, scope.JobID, state)
 }
 
 func cursorSaved(row *ent.WorkItem, c Cursor) bool {

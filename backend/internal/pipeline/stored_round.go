@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -23,6 +24,9 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 	}
 	if reporter == nil {
 		reporter = progress.Nop{}
+	}
+	if round.Shrink == 0 {
+		round.Shrink = 1
 	}
 	if round.Store == nil {
 		memory := NewMemoryRoundStore(nil)
@@ -72,12 +76,12 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 		h.scannedSegments.Store(int64(len(state.Members)))
 	}
 	reporter.StageStart(round.Handler.ModeName(), len(state.Members))
-	defer reporter.StageDone()
 	if checked, ok := reporter.(interface{ StageError() error }); ok {
 		if err := checked.StageError(); err != nil {
 			return RunRoundResult{}, err
 		}
 	}
+	defer reporter.StageDone()
 	completed := make(map[int]bool, len(state.Completed))
 	for _, idx := range state.Completed {
 		completed[idx] = true
@@ -85,6 +89,11 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 	maxPools := max(1, round.Retry.MaxAttempts+1)
 	budget := transientBudgetFor(round.Retry)
 	failed := map[int]bool{}
+	for _, idx := range state.Members {
+		if !completed[idx] && state.Cursors[idx].Phase == "terminal_failure" {
+			failed[idx] = true
+		}
+	}
 	failedBatches := 0
 	for pool := 0; pool < maxPools; pool++ {
 		if ctx.Err() != nil || round.Gate.Paused() {
@@ -93,14 +102,10 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 		groups := map[int][]int{}
 		var advances []CursorTransition
 		for _, idx := range state.Members {
-			if completed[idx] {
+			if completed[idx] || failed[idx] {
 				continue
 			}
 			cursor := state.Cursors[idx]
-			if cursor.Phase == "terminal_failure" {
-				failed[idx] = true
-				continue
-			}
 			if cursor.State == "unresolved" || cursor.State == "stale" || cursor.State == "rejected" || cursor.Pool != pool {
 				continue
 			}
@@ -124,6 +129,7 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 			}
 		}
 		var batches [][]int
+		poolPending := 0
 		for attempt := 0; attempt < budget; attempt++ {
 			pending := groups[attempt]
 			if len(pending) == 0 {
@@ -137,6 +143,7 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 				return RunRoundResult{}, err
 			}
 			batches = append(batches, built...)
+			poolPending += len(pending)
 		}
 		if len(batches) == 0 {
 			continue
@@ -151,7 +158,8 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 			return at
 		}
 		sort.SliceStable(batches, func(i, j int) bool { return batchAt(batches[i]).Before(batchAt(batches[j])) })
-		emitPoolEvent(reporter, progress.PoolEvent{Mode: round.Handler.ModeName(), PoolIndex: pool, MaxPools: maxPools, Batches: len(batches), Pending: len(computeResolved(state.Members, mapIndices(completed), mapIndices(failed))), ShrinkRate: 1, Phase: "pool_start"})
+		poolEvent := progress.PoolEvent{Mode: round.Handler.ModeName(), PoolIndex: pool, MaxPools: maxPools, Batches: len(batches), Pending: poolPending, ShrinkRate: round.Shrink, Phase: "pool_start"}
+		emitPoolEvent(reporter, poolEvent)
 		result, err := runPool(ctx, round, round.Handler, doc, batches, budget, batchHandler, logger, reporter, pool, state.Cursors)
 		if err != nil {
 			return RunRoundResult{}, err
@@ -163,6 +171,9 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 			failed[idx] = true
 		}
 		failedBatches += result.failedBatches
+		if ctx.Err() != nil {
+			break
+		}
 		state, err = round.Store.Load(ctx)
 		if err != nil {
 			return RunRoundResult{}, &StorageError{Err: err}
@@ -170,6 +181,15 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 		state = storedRoundSnapshot(state)
 		for _, idx := range state.Completed {
 			completed[idx] = true
+		}
+		if pool+1 < maxPools {
+			nextPending := len(advances)
+			for _, idx := range result.unresolved {
+				if state.Cursors[idx].Pool == pool+1 {
+					nextPending++
+				}
+			}
+			emitStoredPoolAdvance(reporter, poolEvent, nextPending)
 		}
 	}
 	unresolved := computeResolved(state.Members, mapIndices(completed), mapIndices(failed))
@@ -184,6 +204,15 @@ func runStoredRound(ctx context.Context, round Round, doc *Document, batchHandle
 		return result, err
 	}
 	return result, nil
+}
+
+func emitStoredPoolAdvance(reporter progress.Reporter, poolEvent progress.PoolEvent, pending int) {
+	if poolEvent.Batches == 0 || pending == 0 {
+		return
+	}
+	poolEvent.Phase = "pool_advance"
+	poolEvent.Pending = pending
+	emitPoolEvent(reporter, poolEvent)
 }
 
 func storedRoundSnapshot(state RoundRecovery) RoundRecovery {
@@ -241,17 +270,16 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 	if intent := prepareIntent(handler, round.Store, backend.RequestStageMain); intent.BackendID != 0 {
 		ticket, err := round.Runtime.Preparation.Try(ctx, intent, round.Gate)
 		if err != nil {
+			if storedDispatchDeferred(ctx, err) {
+				return deferred
+			}
 			if d := workDeferred(err); d != nil {
 				return batchResult{waitCapacity: d, deferred: true}
 			}
 			return batchResult{err: err, deferred: true}
 		}
 		ctx = withPreparationTicket(withCoordinatorPreparation(ctx), ticket)
-		defer func() {
-			if ticket.Active() && out.err == nil {
-				ticket.Release()
-			}
-		}()
+		defer ticket.Release()
 	}
 	session := &requestSession{runtime: round.Runtime, store: round.Store, reporter: reporter, intent: RequestIntent{ID: NewWorkID(), Stage: backend.RequestStageMain, RoundIndex: handlerRoundIndex(handler), ResourceID: storeResourceID(round.Store), Indices: job.idxs, Pool: pool, Attempt: job.attempt, Phase: "main"}}
 	buildID := session.intent.ID
@@ -271,11 +299,14 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 			}
 			if out.err != nil {
 				session.fail(out.err)
-			} else if err := ctx.Err(); err != nil {
-				session.fail(err)
 			}
-			if err := session.finish(); err != nil {
-				out.err = err
+			var canceled error
+			if session.err == nil && ctx.Err() != nil {
+				canceled = session.fail(ctx.Err())
+			}
+			// A lone cancellation leaves the batch pending so the pool can drain.
+			if finishErr := session.finish(); finishErr != nil && finishErr != canceled {
+				out.err = finishErr
 				out.deferred = true
 			}
 			// No result escaped this invocation. History is separately owned;
@@ -313,11 +344,17 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 		deferred.err = result.err
 		return deferred
 	}
+	if result.deferred || ctx.Err() != nil {
+		return deferred
+	}
 	if batchHandler != nil && result.callbackResult != nil {
 		if err := batchHandler(callCtx, *result.callbackResult); err != nil {
 			deferred.err = err
 			return deferred
 		}
+	}
+	if ctx.Err() != nil {
+		return deferred
 	}
 	for i, idx := range job.idxs {
 		current := doc.Segments[idx]
@@ -401,6 +438,34 @@ func processStoredBatch(ctx context.Context, round Round, handler RoundHandler, 
 	result.fail = func(err error) { session.fail(err) }
 	retained = true
 	return result
+}
+
+func storedDispatchDeferred(ctx context.Context, err error) bool {
+	runtime := ExecutionRuntimeFromContext(ctx)
+	if err == nil || runtime == nil {
+		return false
+	}
+	if errors.Is(err, backend.ErrDispatchPaused) {
+		if runtime.Gate != nil {
+			runtime.Gate.Pause()
+		}
+		return true
+	}
+	ctxErr := ctx.Err()
+	return ctxErr != nil && errors.Is(err, ctxErr) && !storageFailure(err)
+}
+
+func storedProviderFailure(ctx context.Context) error {
+	if session, ok := ctx.Value(requestSessionKey{}).(*requestSession); ok {
+		return session.providerFailure
+	}
+	return nil
+}
+
+func observedStoredProviderFailure(ctx context.Context, remote backend.Backend) bool {
+	_, bound := remote.(*requestBackend)
+	session, _ := ctx.Value(requestSessionKey{}).(*requestSession)
+	return !bound || session == nil || session.providerFailure != nil
 }
 
 // storedBackoffRetry moves runtime-managed waiting after durable cursor saving.

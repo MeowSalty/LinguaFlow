@@ -54,7 +54,10 @@ type ResponseHeader struct {
 	Cursor                                           int
 	Phase                                            responsecontract.ResponsePhase
 	Truncated                                        bool
+	PromptUpgrade                                    bool
 }
+
+const MainPromptUpgradeStage = "main_prompt_upgrade"
 
 type MemberPromotion struct {
 	Scope     Scope
@@ -82,7 +85,7 @@ func memberPromotionStateQuery(q *ent.WorkRequestQuery) *ent.WorkRequestQuery {
 }
 
 func responseHeader(row *ent.WorkRequest) ResponseHeader {
-	return ResponseHeader{MemberContext: MemberContext{MemberPool: row.MemberPool, MemberAttempt: row.MemberAttempt, MemberMode: row.MemberMode, MemberFormat: row.MemberFormat, SourceLang: row.SourceLang, TargetLang: row.TargetLang, TextMode: row.TextMode}, FormatVersion: row.ResponseFormatVersion, ArchiveCursor: row.ArchiveCursor, ArchiveDigest: row.ArchiveDigest, InputMemberBytes: row.InputMemberBytes, OutputMemberBytes: row.OutputMemberBytes, PublicBytes: row.PublicBytes, MetadataBytes: row.RequestMetadataBytes + row.MemberStorageBytes - row.InputMemberBytes - row.OutputMemberBytes - row.CaptureBytes - row.PublicBytes, DatabaseID: row.ID, RequestID: row.Identity, Scope: Scope{JobID: row.JobID, ResourceID: row.ResourceID, RoundID: row.JobRoundID, RetryEpoch: row.RetryEpoch}, SnapshotDigest: row.SnapshotDigest, FreezeDigest: row.FreezeDigest, ResponseDigest: row.ResponseDigest, CaptureBytes: row.CaptureBytes, ModelOutputBytes: row.ModelOutputBytes, CorrectionBytes: row.CorrectionBytes, PublicKind: responsecontract.PublicKind(row.PublicKind), BusinessBound: row.BusinessBound, MemberCount: row.PromotionCount, Cursor: row.PromotionCursor, Phase: responsecontract.ResponsePhase(row.PromotionState), Truncated: row.ResponseTruncated}
+	return ResponseHeader{MemberContext: MemberContext{MemberPool: row.MemberPool, MemberAttempt: row.MemberAttempt, MemberMode: row.MemberMode, MemberFormat: row.MemberFormat, SourceLang: row.SourceLang, TargetLang: row.TargetLang, TextMode: row.TextMode}, FormatVersion: row.ResponseFormatVersion, ArchiveCursor: row.ArchiveCursor, ArchiveDigest: row.ArchiveDigest, InputMemberBytes: row.InputMemberBytes, OutputMemberBytes: row.OutputMemberBytes, PublicBytes: row.PublicBytes, MetadataBytes: row.RequestMetadataBytes + row.MemberStorageBytes - row.InputMemberBytes - row.OutputMemberBytes - row.CaptureBytes - row.PublicBytes, DatabaseID: row.ID, RequestID: row.Identity, Scope: Scope{JobID: row.JobID, ResourceID: row.ResourceID, RoundID: row.JobRoundID, RetryEpoch: row.RetryEpoch}, SnapshotDigest: row.SnapshotDigest, FreezeDigest: row.FreezeDigest, ResponseDigest: row.ResponseDigest, CaptureBytes: row.CaptureBytes, ModelOutputBytes: row.ModelOutputBytes, CorrectionBytes: row.CorrectionBytes, PublicKind: responsecontract.PublicKind(row.PublicKind), BusinessBound: row.BusinessBound, MemberCount: row.PromotionCount, Cursor: row.PromotionCursor, Phase: responsecontract.ResponsePhase(row.PromotionState), Truncated: row.ResponseTruncated, PromptUpgrade: row.Stage == MainPromptUpgradeStage}
 }
 
 // Headers deliberately include earlier retry epochs. Only reliable responses
@@ -91,7 +94,7 @@ func (s *Store) LoadResponseHeaders(ctx context.Context, jobID, after, limit int
 	if limit < 1 || limit > 256 {
 		return nil, after, ErrManifest
 	}
-	rows, err := memberHeaderQuery(s.client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.IDGT(after), workrequest.StateEQ("completed"), workrequest.PromotionStateIn("capture_pending", "outputs_ready", "business_ready")).Order(ent.Asc(workrequest.FieldID)).Limit(limit)).All(ctx)
+	rows, err := responseContinuationQuery(s.client.WorkRequest.Query().Where(workrequest.JobIDEQ(jobID), workrequest.IDGT(after), workrequest.StateEQ("completed"), workrequest.PromotionStateIn("capture_pending", "outputs_ready", "business_ready")).Order(ent.Asc(workrequest.FieldID)).Limit(limit)).All(ctx)
 	if err != nil {
 		return nil, after, err
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
@@ -130,6 +131,9 @@ type RequestResult struct {
 	OutputTokens int64
 	DurationMS   int64
 	LastError    string
+	// MainFailure records the disposition of a known provider failure after
+	// dispatch. It shares the request accounting transaction.
+	MainFailure *model.RoundWorkCursor
 }
 
 type Outcome string

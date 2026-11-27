@@ -9,6 +9,10 @@ import (
 )
 
 func renderPairBounded(b *backend.BuildBounds, t *template.Template, d any, maxBytes int64, claim func(backend.PromptMeasure) error, user func(*textOutput)) (string, string, error) {
+	return renderPairWithSuffixBounded(b, t, d, "", maxBytes, claim, user)
+}
+
+func renderPairWithSuffixBounded(b *backend.BuildBounds, t *template.Template, d any, suffix string, maxBytes int64, claim func(backend.PromptMeasure) error, user func(*textOutput)) (string, string, error) {
 	if e := validateTemplateData(b, reflect.ValueOf(d), 0); e != nil {
 		return "", "", e
 	}
@@ -25,6 +29,9 @@ func renderPairBounded(b *backend.BuildBounds, t *template.Template, d any, maxB
 		o.err = bt.Execute(o.w, frozen)
 		bt = nil
 		retire()
+		if suffix != "" {
+			o.put(suffix)
+		}
 	}
 	sc := &textCount{limit: maxBytes}
 	so := &textOutput{w: sc}

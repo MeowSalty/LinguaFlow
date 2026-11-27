@@ -67,6 +67,7 @@ type TranslateHandler struct {
 	buildBounds         *backend.BuildBounds
 	buildClaim          func(backend.Request, backend.PromptMeasure) error
 	buildMaxBytes       int64
+	buildSystemSuffix   string
 	RubyProtocolVersion int
 }
 
@@ -559,7 +560,7 @@ func (h *TranslateHandler) buildRequestWithHints(doc *Document, idxs []int, cont
 		}
 		return nil
 	}
-	sys, usr, err := renderer.RenderWithCreditsBounded(b, data, max(b.OutputLimit(), h.buildMaxBytes), claim)
+	sys, usr, err := renderer.RenderWithSystemSuffixBounded(b, data, h.buildSystemSuffix, max(b.OutputLimit(), h.buildMaxBytes), claim)
 	if err != nil {
 		return "", "", backend.Request{}, nil, nil, nil, fmt.Errorf("render batch prompt (%d segs): %w", len(idxs), err)
 	}

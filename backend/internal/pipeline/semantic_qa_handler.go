@@ -119,7 +119,9 @@ func (h *SemanticQAHandler) BuildBatches(ctx context.Context, doc *Document, pen
 // render 失败（确定性配置/模板问题）→ terminalFailure（软警告，不重试）。
 // 致命 401/403 → fatalUnresolved（跳池+跨轮传播）。
 func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
-	emit := func(evt progress.BatchEvent) { h.emitBatchOutcome(storedProgressEvent(ctx, evt)) }
+	var diagnostic storedBatchDiagnostic
+	defer diagnostic.close()
+	emit := func(evt progress.BatchEvent) { h.emitBatchOutcome(diagnostic.apply(ctx, evt)) }
 	batchStart := time.Now()
 	tried := []string{h.Backend.Name()}
 
@@ -150,6 +152,9 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	}
 	sys, usr := req.System, req.User
 	if renderErr != nil {
+		if storedDispatchDeferred(ctx, renderErr) {
+			return batchResult{deferred: true}
+		}
 		if ctx.Err() != nil {
 			return h.preserveResultBounded(ctx, doc, idxs)
 		}
@@ -175,10 +180,22 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		return h.terminalFailureBounded(ctx, doc, idxs)
 	}
 
+	diagnostic.captureRequest(ctx, h.Reporter, req)
 	callStart := time.Now()
 	resp, callErr := h.Backend.Translate(ctx, req)
-	releaseStoredRequestText(ctx, &req, &sys, &usr)
+	diagnostic.captureResponse(ctx, &req, resp, &sys, &usr)
+	emitBackendFailure := func(err error) {
+		if observedStoredProviderFailure(ctx, h.Backend) {
+			emit(backendErrorBatchEvent(RoundModeSemanticQA, doc, idxs, h.Backend.Name(), tried, err, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+		}
+	}
+	if storedDispatchDeferred(ctx, callErr) {
+		return batchResult{deferred: true}
+	}
 	if storageFailure(callErr) {
+		if providerErr := storedProviderFailure(ctx); providerErr != nil {
+			emitBackendFailure(providerErr)
+		}
 		return batchResult{err: callErr}
 	}
 	if d := workDeferred(callErr); d != nil {
@@ -192,7 +209,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		if isExternalInterrupt {
 			logger.Info("semantic_qa backend interrupted by context",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-			emit(backendErrorBatchEvent(RoundModeSemanticQA, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+			emitBackendFailure(callErr)
 			return h.preserveResultBounded(ctx, doc, idxs)
 		}
 
@@ -206,11 +223,11 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			logger.Warn("semantic_qa backend fatal error, deferring to cross-round",
 				"backend", h.Backend.Name(), "batch_size", len(idxs),
 				"attempt", attempt, "err", callErr)
-			emit(backendErrorBatchEvent(RoundModeSemanticQA, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+			emitBackendFailure(callErr)
 			return batchResult{fatalUnresolved: idxs}
 		}
 
-		emit(backendErrorBatchEvent(RoundModeSemanticQA, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+		emitBackendFailure(callErr)
 
 		// 本地超时 / 5xx / 429 / 裸网络错误可退避重试；外部中断不计入。
 		// 401/403 已在上文 fatalUnresolved 分支提前返回。
@@ -312,6 +329,9 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		parseErr = fmt.Errorf("response truncated by output token limit: refusing partial issues as complete")
 	}
 	if parseErr != nil {
+		if storedDispatchDeferred(ctx, parseErr) {
+			return batchResult{deferred: true}
+		}
 		if ctx.Err() != nil {
 			return h.preserveResultBounded(ctx, doc, idxs)
 		}

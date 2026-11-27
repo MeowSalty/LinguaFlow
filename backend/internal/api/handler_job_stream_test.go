@@ -29,14 +29,6 @@ func jobStreamTestServer(t *testing.T, ringCapacity, replayBatch, maxReplay int)
 	users := service.NewUserService(client, nil)
 	projects := service.NewProjectService(client, users)
 	jobSvc := service.NewJobService(client, projects, nil, nil, nil, nil, nil, nil, nil)
-	entStore := event.NewEntEventStore(client, config.DatabaseDriverSQLite)
-	hybridStore, err := event.NewHybridStore(
-		event.NewRingBufferStore(event.RingBufferConfig{Capacity: ringCapacity}),
-		entStore,
-	)
-	if err != nil {
-		t.Fatalf("new hybrid store: %v", err)
-	}
 	s := &Server{
 		mode:           config.ModeLocal,
 		serverCfg:      &config.ServerConfig{ServiceName: "test"},
@@ -44,7 +36,7 @@ func jobStreamTestServer(t *testing.T, ringCapacity, replayBatch, maxReplay int)
 		entClient:      client,
 		projectSvc:     projects,
 		jobSvc:         jobSvc,
-		eventBroker:    event.NewBroker(hybridStore).WithHistorian(entStore),
+		eventBroker:    newJobStreamTestBroker(t, client, ringCapacity),
 		sseReplayBatch: replayBatch,
 		sseMaxReplay:   maxReplay,
 	}
@@ -58,6 +50,19 @@ func jobStreamTestServer(t *testing.T, ringCapacity, replayBatch, maxReplay int)
 	}
 	s.localUser = u
 	return s, client, u
+}
+
+func newJobStreamTestBroker(t *testing.T, client *ent.Client, ringCapacity int) *event.Broker {
+	t.Helper()
+	entStore := event.NewEntEventStore(client, config.DatabaseDriverSQLite)
+	hybridStore, err := event.NewHybridStore(
+		event.NewRingBufferStore(event.RingBufferConfig{Capacity: ringCapacity}),
+		entStore,
+	)
+	if err != nil {
+		t.Fatalf("new hybrid store: %v", err)
+	}
+	return event.NewBroker(hybridStore).WithHistorian(entStore)
 }
 
 // seedJobEventsN 直接向 DB 写入 job 的 n 条事件（seq 1..n），模拟
@@ -127,6 +132,16 @@ func (s *safeRecorder) String() string {
 // expected 为期待的回放事件数，用于轮询等待回放完成。
 func streamSSE(t *testing.T, s *Server, jobID int, u *ent.User, lastEventID string, expected int) []int64 {
 	t.Helper()
+	body := replayJobStream(t, s, jobID, u, lastEventID)
+	seqs := parseIDLines(body)
+	if expected >= 0 && len(seqs) != expected {
+		t.Fatalf("expected %d replayed events, got %d (%v); body=%q", expected, len(seqs), seqs, body)
+	}
+	return seqs
+}
+
+func replayJobStream(t *testing.T, s *Server, jobID int, u *ent.User, lastEventID string) string {
+	t.Helper()
 	path := "/jobs/" + strconv.Itoa(jobID) + "/stream"
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	if lastEventID != "" {
@@ -165,11 +180,7 @@ func streamSSE(t *testing.T, s *Server, jobID int, u *ent.User, lastEventID stri
 	cancel()
 	<-done
 
-	seqs := parseIDLines(w.String())
-	if expected >= 0 && len(seqs) != expected {
-		t.Fatalf("expected %d replayed events, got %d (%v); body=%q", expected, len(seqs), seqs, w.String())
-	}
-	return seqs
+	return w.String()
 }
 
 var sseIDLineRE = regexp.MustCompile(`(?m)^id: (\d+)$`)

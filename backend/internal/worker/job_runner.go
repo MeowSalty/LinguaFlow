@@ -959,6 +959,7 @@ func (r *JobRunner) processJobResource(
 	// 判定 translate 失败与其余模式的软警告，取代「读最后执行轮 lastResult」
 	// 的跨模式误取。
 	residualByMode := make(map[string]roundResidual)
+	stagedResiduals := make(map[string][]stagedRoundResidual)
 
 	// 跨轮增量载体（in-memory）：per-mode 已解决段索引集合。
 	// 下一同模式轮的 BuildBatches（池 0）据此排除已解决段，避免跨轮全量重扫。
@@ -1005,10 +1006,17 @@ func (r *JobRunner) processJobResource(
 				_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 				return nil
 			}
-			rowStatus, statErr := r.jobs.GetJobRoundStatus(ctx, roundRowID)
+			roundRow, statErr := r.client.JobRound.Query().Where(jobround.IDEQ(roundRowID)).
+				Select(jobround.FieldStatus, jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted).Only(ctx)
 			if statErr != nil {
 				_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, statErr)
 				return nil
+			}
+			rowStatus := roundRow.Status
+			if usesStagedRound(round.Mode) {
+				stagedResiduals[round.Mode] = append(stagedResiduals[round.Mode], stagedRoundResidual{
+					rowID: roundRowID, hasResidual: rowStatus == service.JobRoundStatusCompleted && roundRow.SegmentCompleted < roundRow.SegmentTotal,
+				})
 			}
 			if rowStatus == service.JobRoundStatusCompleted || rowStatus == service.JobRoundStatusSkipped {
 				continue // 断点续传：已完成/跳过轮不再执行
@@ -1575,10 +1583,19 @@ func (r *JobRunner) processJobResource(
 		// 与轮次行流转的 skipped 状态语义不同。
 		if roundRowID > 0 && (gate == nil || !gate.Paused()) && ctx.Err() == nil {
 			residual := roundResidual{unresolved: len(result.Unresolved), failed: result.FailedSegmentCount}
+			if rounds := stagedResiduals[round.Mode]; len(rounds) > 0 {
+				rounds[len(rounds)-1].hasResidual = residual.total() > 0
+			}
 			if roundAbandoned(residual, roundIdx != lastRoundIdxByMode[round.Mode]) {
-				if err := r.jobs.MarkJobRoundFailed(ctx, roundRowID, fmt.Errorf(
-					"轮次有 %d 个未解决段、%d 个终态失败段，无后续同模式轮次承接",
-					residual.unresolved, residual.failed)); err != nil {
+				if usesStagedRound(round.Mode) {
+					scope := workstate.Scope{JobID: job.ID, ResourceID: res.ID, RoundID: roundRowID}
+					stored, err := r.loadStagedResidual(ctx, scope, nil)
+					if err != nil {
+						return fmt.Errorf("load failed round cause: %w", err)
+					}
+					residual.cause = stored.cause
+				}
+				if err := r.jobs.MarkJobRoundFailed(ctx, roundRowID, residual.roundFailure()); err != nil {
 					return fmt.Errorf("persist unresolved round: %w", err)
 				}
 			} else if err := r.jobs.MarkJobRoundCompleted(ctx, roundRowID); err != nil {
@@ -1611,6 +1628,9 @@ func (r *JobRunner) processJobResource(
 		r.logger.Info("job paused, freezing resource state",
 			"job_id", job.ID, "job_resource_id", item.ID)
 		return nil
+	}
+	if err := r.reconcileStagedResiduals(ctx, job.ID, res.ID, stagedResiduals, residualByMode); err != nil {
+		return err
 	}
 
 	// 最后一轮 translate 后，检查仍有瞬时写入失败的段（历经所有翻译轮仍写不进去）。
@@ -1656,10 +1676,12 @@ func (r *JobRunner) processJobResource(
 			"completed_count", completedCount,
 		)
 		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).SetSkippedSegments(skippedCount).Exec(ctx)
-		err := fmt.Errorf("%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
-			translateResidual.total(), completedCount)
-		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
-		return nil
+		cause := translateResidual.cause
+		if cause == "" {
+			cause = "no translation result confirmed within the round's execution budget"
+		}
+		return r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID,
+			fmt.Errorf("%d segments failed to translate (completed: %d): %s", translateResidual.total(), completedCount, cause))
 	}
 
 	// 非翻译模式的残留统一在收尾处转化为资源级软警告（不阻塞 completed）。
@@ -1684,7 +1706,11 @@ func (r *JobRunner) processJobResource(
 			"unresolved", residual.unresolved,
 			"failed_segments", residual.failed,
 		)
-		roundWarnings = append(roundWarnings, residualWarning(mode, residual))
+		warning := residualWarning(mode, residual)
+		if residual.cause != "" {
+			warning += "：" + residual.cause
+		}
+		roundWarnings = append(roundWarnings, warning)
 	}
 	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount, mergeWarnings(roundWarnings...))
 }
@@ -1714,6 +1740,7 @@ func mergeWarnings(warnings ...string) string {
 type roundResidual struct {
 	unresolved int
 	failed     int
+	cause      string
 }
 
 func (r roundResidual) total() int { return r.unresolved + r.failed }

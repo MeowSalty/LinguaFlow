@@ -1,6 +1,7 @@
 package repair
 
 import (
+	"errors"
 	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"strings"
 
@@ -11,8 +12,23 @@ import (
 
 func (a *Archive) prepareText(b *backend.BuildBounds, text string, index map[string]int, opt Options) (bool, error) {
 	if !a.revise && opt.JSONStructural {
+		var changed bool
 		var err error
-		text, _, err = cleanZeroWidthBounded(b, text)
+		text, changed, err = cleanZeroWidthBounded(b, text)
+		if err != nil {
+			return false, err
+		}
+		if changed {
+			a.repaired, err = backend.AppendNode(b, a.repaired, "text.strip-bom-zw")
+			if err != nil {
+				return false, err
+			}
+		}
+	}
+	body := stripCodeFence(text)
+	if !a.revise && body != text {
+		var err error
+		a.repaired, err = backend.AppendNode(b, a.repaired, "text.strip-code-fence")
 		if err != nil {
 			return false, err
 		}
@@ -20,7 +36,7 @@ func (a *Archive) prepareText(b *backend.BuildBounds, text string, index map[str
 	last := -1
 	inGlossary, inRuby, inRevision := false, false, false
 	header, content, valid := false, false, false
-	for rest := stripCodeFence(text); rest != ""; {
+	for rest := body; rest != ""; {
 		line, tail, _ := strings.Cut(rest, "\n")
 		rest = tail
 		line = strings.TrimSpace(line)
@@ -80,6 +96,7 @@ func (a *Archive) prepareText(b *backend.BuildBounds, text string, index map[str
 			return false, err
 		}
 		if loc != nil {
+			valid = true
 			var found bool
 			last, found = index[line[loc[2]:loc[3]]]
 			if !found {
@@ -108,6 +125,9 @@ func (a *Archive) prepareText(b *backend.BuildBounds, text string, index map[str
 		if err != nil {
 			return false, err
 		}
+	}
+	if !a.revise && !valid {
+		return false, &ArchiveContentError{Err: errors.New("no translations found in text response")}
 	}
 	return !a.revise || header && (valid || !content), nil
 }

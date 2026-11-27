@@ -473,6 +473,9 @@ func (r *Renderer) RenderBounded(b *backend.BuildBounds, d Data, maxBytes int64)
 	return r.RenderWithCreditsBounded(b, d, maxBytes, nil)
 }
 func (r *Renderer) RenderWithCreditsBounded(b *backend.BuildBounds, d Data, maxBytes int64, claim func(backend.PromptMeasure) error) (string, string, error) {
+	return r.RenderWithSystemSuffixBounded(b, d, "", maxBytes, claim)
+}
+func (r *Renderer) RenderWithSystemSuffixBounded(b *backend.BuildBounds, d Data, suffix string, maxBytes int64, claim func(backend.PromptMeasure) error) (string, string, error) {
 	if e := b.CloneInto(d, &d); e != nil {
 		return "", "", e
 	}
@@ -491,14 +494,14 @@ func (r *Renderer) RenderWithCreditsBounded(b *backend.BuildBounds, d Data, maxB
 		if mode == "" {
 			mode = RubyModeSection
 		}
-		return renderPairBounded(b, r.system, d, maxBytes, claim, func(o *textOutput) { writeTranslateText(o, segs, d.RubyAnnotations, mode) })
+		return renderPairWithSuffixBounded(b, r.system, d, suffix, maxBytes, claim, func(o *textOutput) { writeTranslateText(o, segs, d.RubyAnnotations, mode) })
 	} else {
 		m := make(map[string]SegmentDetail, len(segs))
 		for _, s := range segs {
 			m[s.ID] = SegmentDetail{Source: s.Source, Translate: s.Translate}
 		}
 		env := userEnvelope{d.SourceLang, d.TargetLang, m, d.RubyAnnotations}
-		return renderPairBounded(b, r.system, d, maxBytes, claim, func(o *textOutput) { o.err = b.WriteJSON(o.w, env) })
+		return renderPairWithSuffixBounded(b, r.system, d, suffix, maxBytes, claim, func(o *textOutput) { o.err = b.WriteJSON(o.w, env) })
 	}
 }
 

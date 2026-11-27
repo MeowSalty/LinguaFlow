@@ -157,12 +157,12 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		return RunRoundResult{}, nil
 	}
 	reporter.StageStart(h.ModeName(), total)
-	defer reporter.StageDone()
 	if checked, ok := reporter.(interface{ StageError() error }); ok {
 		if err := checked.StageError(); err != nil {
 			return RunRoundResult{}, err
 		}
 	}
+	defer reporter.StageDone()
 	remaining := func(yield func(int) bool) { canonicalRemaining(doc, yield) }
 	completed := func(yield func(int) bool) { canonicalCompleted(doc, yield) }
 	candidates := map[int]*Candidate{}
@@ -188,6 +188,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		return RunRoundResult{}, err
 	}
 	defer scheduler.close()
+	poolProgress := stagedPoolProgress{pool: -1, maxPools: maxPools, shrink: round.Shrink}
+	if poolProgress.shrink == 0 {
+		poolProgress.shrink = 1
+	}
+	var batchProgress stagedBatchProgress
 	// Final result collection is one cold document pass per result set. Include
 	// its real visits so diagnostics never hide the retained scalar inventory.
 	remaining = func(yield func(int) bool) {
@@ -222,9 +227,16 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 	applyMember := func(e stagedEvent) {
 		for _, header := range e.responseHeaders {
 			responses[header.ID] = header
+			if e.main && e.err == nil {
+				batchProgress.start(header)
+			}
+		}
+		for idx, cursor := range e.cursors {
+			doc.Segments[idx].RoundWork.Cursor = cursor
 		}
 		if e.responseAdvance != nil {
 			header := *e.responseAdvance
+			previous, tracked := responses[header.ID]
 			responseActive[header.ID] = false
 			delete(responseBlocked, header.ID)
 			if header.Cursor >= header.MemberCount {
@@ -232,9 +244,18 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 			} else {
 				responses[header.ID] = header
 			}
-		}
-		for idx, cursor := range e.cursors {
-			doc.Segments[idx].RoundWork.Cursor = cursor
+			if e.err == nil && tracked && header.Cursor > previous.Cursor {
+				if rejected := header.Cursor - previous.Cursor - len(e.candidates); rejected > 0 {
+					retry := false
+					for _, cursor := range e.cursors {
+						retry = retry || (cursor.State == "pending" && cursor.Pool == header.Pool)
+					}
+					batchProgress.finish(reporter, header.ID, rejected, retry)
+				}
+				if header.Cursor == header.MemberCount {
+					progress.NotifyWorkState(reporter)
+				}
+			}
 		}
 		for _, c := range e.candidates {
 			if !doc.Segments[c.Index].RoundWork.Member || doc.Segments[c.Index].RoundWork.Completed {
@@ -315,6 +336,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					cancel()
 				}
 				reporter.SegmentDone()
+				batchProgress.finish(reporter, c.ParentRequestID, 1, false)
 			} else if e.outcome == CommitRejected || e.outcome == CommitStale {
 				delete(candidates, c.Index)
 				delete(alignmentReadyAt, c.Index)
@@ -333,6 +355,17 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				if _, persisted := e.cursors[c.Index]; !persisted {
 					doc.Segments[c.Index].RoundWork.Cursor = WorkCursor{Pool: maxPools, State: "unresolved"}
 				}
+				batchProgress.finish(reporter, c.ParentRequestID, 1, false)
+			}
+		}
+		if e.main && e.err == nil && len(e.responseHeaders) == 0 && e.mainPlan != nil {
+			finished := false
+			for _, cursor := range e.cursors {
+				finished = finished || cursor.Pool > e.mainPlan.pool || cursor.State == "unresolved"
+			}
+			if finished {
+				reporter.BatchComplete()
+				progress.NotifyWorkState(reporter)
 			}
 		}
 		// Terminal storage failures stop shared dispatch.
@@ -383,7 +416,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					waitingBatch.close()
 					waitingBatch = e.mainPlan
 					waitingBatch.deferFor(e.waitCapacity.Wait, runtime.Admission.PolicyChanged())
-					if g := scheduler.selectedGroup(); resumePlan && g >= 0 && scheduler.groups[g].pool == waitingBatch.pool && scheduler.groups[g].attempt == waitingBatch.attempt {
+					if g := scheduler.selectedGroup(); resumePlan && g >= 0 && waitingBatch.matches(scheduler.groups[g]) {
 						waitingBatch.version = scheduler.groups[g].version
 					}
 				} else {
@@ -715,6 +748,11 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					break
 				}
 				pool, attempt := scheduler.groups[g].pool, scheduler.groups[g].attempt
+				// A whole-batch parse retry may become pending one member at a
+				// time. Re-admit it after the parent releases all its members.
+				if _, promoting := responses[scheduler.groups[g].retry.parent()]; promoting {
+					break
+				}
 				var e error
 				if waitingBatch == nil {
 					e = runtime.Run(runCtx, func() error { var err error; waitingBatch, err = scheduler.buildPlan(runCtx, g, store); return err })
@@ -730,6 +768,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 					cancel()
 					break
 				}
+				poolProgress.start(scheduler, g, reporter, logger)
 				idxs := waitingBatch.indices
 				// Proven fixed recovery inventory can leave no member slot at all.
 				// Decide this before a preparation ticket: aggregate recovery stock
@@ -842,7 +881,7 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 				wg.Add(1)
 				go func(idxs []int, pool, attempt int, input *preparedMainDocument, key string, ticket *PreparationTicket, plan *deferredMainPlan) {
 					defer wg.Done()
-					e := prepareCapturedMain(withPreparationTicket(withCoordinatorPreparation(runCtx), ticket), round, h, doc, input, idxs, pool, attempt, key, store, runtime, logger, reporter)
+					e := prepareCapturedMain(withPreparationTicket(withCoordinatorPreparation(runCtx), ticket), round, h, doc, input, idxs, pool, attempt, plan.retry, key, store, runtime, logger, reporter)
 					e.mainPlan = plan
 					if ticket.Active() && e.err == nil {
 						ticket.Release()
@@ -940,7 +979,15 @@ func RunStagedRound(ctx context.Context, round Round, doc *Document, store Round
 		result.Resolved = append(result.Resolved, idx)
 	}
 	for idx := range remaining {
-		result.Unresolved = append(result.Unresolved, idx)
+		phase := doc.Segments[idx].RoundWork.Cursor.Phase
+		if phase == "terminal_failure_batch" {
+			result.FailedBatches++
+		}
+		if phase == "terminal_failure_batch" || phase == "terminal_failure" {
+			result.FailedSegments = append(result.FailedSegments, idx)
+		} else {
+			result.Unresolved = append(result.Unresolved, idx)
+		}
 	}
 	sort.Ints(result.Resolved)
 	sort.Ints(result.Unresolved)

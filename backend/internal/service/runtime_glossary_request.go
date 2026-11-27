@@ -72,7 +72,7 @@ func (g *DatabaseGlossary) AddForRequest(ctx context.Context, id string, entries
 		if req.RetryEpoch != j.RetryEpoch || (j.Status != JobStatusRunning && j.Status != JobStatusPausing && j.Status != JobStatusPending) {
 			return workstate.ErrStopped
 		}
-		if (req.State != "received" && req.State != "completed") || req.Stage != "main" {
+		if (req.State != "received" && req.State != "completed") || (req.Stage != "main" && req.Stage != workstate.MainPromptUpgradeStage) {
 			return fmt.Errorf("%w: inline glossary requires a received main response", workstate.ErrManifest)
 		}
 		round, err := tx.JobRound.Get(ctx, req.JobRoundID)

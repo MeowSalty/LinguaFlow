@@ -22,6 +22,7 @@ type FrozenContext struct {
 	Pool, MainAttempt                    int
 	Mode, Format, SourceLang, TargetLang string
 	TextMode                             bool
+	PromptUpgrade                        bool
 }
 type InputMemberFrame struct {
 	Key MemberKey
@@ -57,6 +58,7 @@ type OutputPublication struct {
 	Glossary         []byte
 	PublicAllocation *backend.OwnedAllocation
 	Complete         bool
+	ParseDiagnostic  string
 }
 
 // MemberResponseStore never exposes the complete frozen request or output set.
@@ -65,6 +67,7 @@ type MemberResponseStore interface {
 	LoadOutputMember(context.Context, MemberKey, bool, int64) (OutputMemberFrame, error)
 	CaptureResponse(context.Context, CapturedResponse) (MainResponseHeader, error)
 	LoadCapture(context.Context, string, int64) (CapturedResponse, error)
+	LoadMainParseDiagnostic(context.Context, string) (string, error)
 	PublishOutputs(context.Context, OutputPublication) (MainResponseHeader, error)
 	LoadResponsePublic(context.Context, string, int64) (OutputMemberFrame, error)
 	StageCorrectedMember(context.Context, OutputMemberFrame) error

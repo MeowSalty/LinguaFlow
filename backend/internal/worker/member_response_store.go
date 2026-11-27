@@ -82,10 +82,15 @@ func (s *roundStore) LoadCapture(ctx context.Context, id string, limit int64) (p
 	return pipeline.CapturedResponse{MainResponseHeader: pipelineResponseHeader(m.ResponseHeader), Payload: m.Payload, Release: m.Release}, nil
 }
 func (s *roundStore) PublishOutputs(ctx context.Context, in pipeline.OutputPublication) (pipeline.MainResponseHeader, error) {
-	out := workstate.OutputPublication{Key: storageMemberKey(in.Key), Next: in.Next, Digest: in.Digest, Glossary: in.Glossary, Complete: in.Complete}
+	out := workstate.OutputPublication{Key: storageMemberKey(in.Key), Next: in.Next, Digest: in.Digest, Glossary: in.Glossary, Complete: in.Complete, ParseDiagnostic: in.ParseDiagnostic}
 	for _, m := range in.Members {
 		out.Members = append(out.Members, workstate.OutputMember{Key: storageMemberKey(m.Key), Payload: m.Payload, Bytes: m.Bytes, Digest: m.Digest})
 	}
 	h, err := s.store.PublishOutputs(ctx, out)
 	return pipelineResponseHeader(h), s.classify(err)
+}
+
+func (s *roundStore) LoadMainParseDiagnostic(ctx context.Context, id string) (string, error) {
+	diagnostic, err := s.store.LoadMainParseDiagnostic(ctx, s.scope, id)
+	return diagnostic, s.classify(err)
 }

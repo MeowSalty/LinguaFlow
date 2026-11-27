@@ -165,6 +165,9 @@ func (s *roundStore) LoadCanonical(ctx context.Context, doc *pipeline.Document) 
 			}
 			c := w.Cursor
 			cursor := pipeline.WorkCursor{Pool: c.PoolIndex, Attempt: c.MainAttempts, LogicalAttempt: c.AlignmentAttempts, NetworkAttempt: c.AlignmentNetworkAttempts, Phase: c.PromptPhase, State: c.State}
+			if pipeline.IsPendingPromptUpgrade(cursor.Phase) {
+				cursor.NetworkAttempt = c.MainNetworkAttempts
+			}
 			if c.NextAttemptAt != nil {
 				cursor.NextAttemptAt = *c.NextAttemptAt
 			}

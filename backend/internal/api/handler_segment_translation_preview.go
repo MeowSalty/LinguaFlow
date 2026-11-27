@@ -244,9 +244,9 @@ func toTranslationBatchDiagnostic(event progress.BatchEvent) TranslationBatchDia
 		}
 		diagnostic.AddedGlossary = &entries
 	}
-	system, systemTruncated, systemLength := progress.TruncateSSEContent(event.SystemPrompt)
-	user, userTruncated, userLength := progress.TruncateSSEContent(firstNonEmptyString(event.UserMessage, event.SentContent))
-	content, contentTruncated, contentLength := progress.TruncateSSEContent(firstNonEmptyString(event.ResponseContent, event.ReceivedContent))
+	system, systemTruncated, systemLength := progress.BatchEventContent(event.SystemPrompt, event.SystemPromptLength)
+	user, userTruncated, userLength := progress.BatchEventContent(firstNonEmptyString(event.UserMessage, event.SentContent), event.SentLength)
+	content, contentTruncated, contentLength := progress.BatchEventContent(firstNonEmptyString(event.ResponseContent, event.ReceivedContent), event.ReceivedLength)
 	var jsonSchema *map[string]interface{}
 	if event.JSONSchema != nil {
 		converted := map[string]interface{}(event.JSONSchema)

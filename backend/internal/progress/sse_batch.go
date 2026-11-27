@@ -11,18 +11,32 @@ const MaxSSEBatchContentBytes = 128 * 1024
 // TruncateSSEContent truncates s to at most MaxSSEBatchContentBytes for SSE payloads.
 // Truncation never splits a UTF-8 code point.
 func TruncateSSEContent(s string) (content string, truncated bool, originalLen int) {
-	originalLen = len(s)
-	if originalLen <= MaxSSEBatchContentBytes {
-		return strings.Clone(s), false, originalLen
+	return BatchEventContent(s, 0)
+}
+
+// BatchEventContent keeps the original length of a previously capped field.
+func BatchEventContent(s string, originalLen int) (content string, truncated bool, length int) {
+	prefix := SSEContentPrefix(s)
+	length = max(originalLen, len(s))
+	return strings.Clone(prefix), len(prefix) < length, length
+}
+
+// SSEContentPrefix returns the displayable prefix without allocating a copy.
+func SSEContentPrefix(s string) string {
+	if len(s) <= MaxSSEBatchContentBytes {
+		return s
 	}
 	end := MaxSSEBatchContentBytes
-	for end > 0 && !utf8.ValidString(s[:end]) {
-		end--
+	if !utf8.ValidString(s[:end]) {
+		for i := 0; i < end; {
+			r, size := utf8.DecodeRuneInString(s[i:end])
+			if r == utf8.RuneError && size == 1 {
+				return s[:i]
+			}
+			i += size
+		}
 	}
-	if end == 0 {
-		return "", true, originalLen
-	}
-	return strings.Clone(s[:end]), true, originalLen
+	return s[:end]
 }
 
 // BatchLevelFromStatus maps batch metadata status to SSE level.

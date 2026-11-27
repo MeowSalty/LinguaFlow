@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -261,6 +262,14 @@ func (s *MemoryRoundStore) reserveMembers(ctx context.Context, in RequestIntent)
 	if len(in.InputMembers) != len(in.Indices) {
 		return fmt.Errorf("invalid input member count")
 	}
+	if in.PromptUpgrade {
+		for _, idx := range in.Indices {
+			cursor := s.state.Cursors[idx]
+			if !IsPendingPromptUpgrade(cursor.Phase) || cursor.NetworkAttempt != 1 {
+				return fmt.Errorf("prompt upgrade budget exhausted")
+			}
+		}
+	}
 	promptIDs, candidateIDs := map[string]bool{}, map[string]bool{}
 	epoch := int64(0)
 	if len(in.InputMembers) > 0 {
@@ -292,8 +301,12 @@ func (s *MemoryRoundStore) reserveMembers(ctx context.Context, in RequestIntent)
 	installed = true
 	for _, idx := range in.Indices {
 		cur := s.state.Cursors[idx]
-		if in.Phase != "prompt_upgrade" && in.Stage == backend.RequestStageMain {
-			cur.Attempt++
+		if in.Stage == backend.RequestStageMain {
+			if in.Phase == promptUpgradePhase {
+				cur.NetworkAttempt++
+			} else {
+				cur.Attempt++
+			}
 		}
 		s.state.Cursors[idx] = cur
 	}
@@ -368,7 +381,7 @@ func (s *MemoryRoundStore) captureResponse(ctx context.Context, in CapturedRespo
 		return backend.ErrAdmissionClosed
 	}
 	r := s.requests[in.ID]
-	if r == nil || len(in.Payload) == 0 {
+	if r == nil {
 		return fmt.Errorf("invalid capture")
 	}
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "capture", Operation: "capture_write", Bytes: int64(len(in.Payload)), Rows: 1})
@@ -431,11 +444,17 @@ func (s *MemoryRoundStore) publishOutputs(ctx context.Context, in OutputPublicat
 	if len(in.Members) > 16 {
 		return fmt.Errorf("archive page exceeds bound")
 	}
+	if len(in.ParseDiagnostic) > responsecontract.MainParseDiagnosticLimit || in.ParseDiagnostic != "" && !in.Complete {
+		return fmt.Errorf("invalid main parse diagnostic")
+	}
 	for ordinal, backing := range r.archiveStaging {
 		r.retireBacking(backing)
 		delete(r.archiveStaging, ordinal)
 	}
 	if r.response.ArchiveCursor == in.Next && r.response.ArchiveDigest == in.Digest {
+		if in.ParseDiagnostic != "" && r.record.Error != in.ParseDiagnostic {
+			return fmt.Errorf("main parse diagnostic changed")
+		}
 		return nil
 	}
 	if r.response.Phase != "capture_pending" || len(in.Members) != in.Next-r.response.ArchiveCursor {
@@ -445,12 +464,15 @@ func (s *MemoryRoundStore) publishOutputs(ctx context.Context, in OutputPublicat
 		return fmt.Errorf("incomplete archive")
 	}
 	staged := map[int]*memberBacking{}
+	var public, parseDiagnostic *memberBacking
 	installed := false
 	defer func() {
 		if !installed {
 			for _, b := range staged {
 				r.retireBacking(b)
 			}
+			r.retireBacking(public)
+			r.retireBacking(parseDiagnostic)
 		}
 	}()
 	for i, m := range in.Members {
@@ -463,12 +485,24 @@ func (s *MemoryRoundStore) publishOutputs(ctx context.Context, in OutputPublicat
 		}
 		staged[m.Key.Ordinal] = b
 	}
-	var public *memberBacking
 	if in.Complete && len(in.Glossary) > 0 {
 		public, err = prepareMemberBacking(ctx, in.Glossary, in.PublicAllocation, "public:"+in.Key.RequestID)
 		if err != nil {
 			return err
 		}
+	}
+	if in.ParseDiagnostic != "" {
+		// Recovery can publish new facts after the runtime that originally
+		// reserved this request has closed. Charge the archive's current owner.
+		if admission, _ := backend.BuildOwnership(ctx); admission != nil {
+			owner := "parse-diagnostic:" + s.identity + ":" + in.Key.RequestID
+			bytes := int64(len(in.ParseDiagnostic)+len(owner)) + int64(unsafe.Sizeof(memberBacking{}))
+			if err := admission.ClaimBuildBounded(owner, bytes, backend.BuildAllocationLimit(ctx)); err != nil {
+				return err
+			}
+			parseDiagnostic = &memberBacking{refs: 1, release: func() error { return admission.ReleaseBuild(owner) }}
+		}
+		r.record.Error = strings.Clone(in.ParseDiagnostic)
 	}
 	for _, m := range in.Members {
 		staged[m.Key.Ordinal].commit()
@@ -491,6 +525,7 @@ func (s *MemoryRoundStore) publishOutputs(ctx context.Context, in OutputPublicat
 		r.response.CaptureBytes = 0
 		r.response.Receipt = in.Glossary
 		r.publicBacking = public
+		r.parseDiagnosticBacking = parseDiagnostic
 		r.response.PublicBytes = int64(len(in.Glossary))
 		r.response.PublicKind = responsecontract.PublicEntries
 		r.publicDigest = sha256.Sum256(in.Glossary)
@@ -499,6 +534,16 @@ func (s *MemoryRoundStore) publishOutputs(ctx context.Context, in OutputPublicat
 	}
 	installed = true
 	return nil
+}
+
+func (s *MemoryRoundStore) LoadMainParseDiagnostic(_ context.Context, id string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r := s.requests[id]
+	if s.closed || r == nil || r.response.Phase != responsecontract.Promoted {
+		return "", fmt.Errorf("main parse diagnostic unavailable")
+	}
+	return r.record.Error, nil
 }
 func (s *MemoryRoundStore) publishBusiness(ctx context.Context, id string, out glossary.ResponseBusiness, install func()) (result error) {
 	s.mu.Lock()

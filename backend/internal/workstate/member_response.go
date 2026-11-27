@@ -2,6 +2,7 @@ package workstate
 
 import (
 	"context"
+	"crypto/sha256"
 	"entgo.io/ent/dialect/sql"
 	"errors"
 	"fmt"
@@ -68,12 +69,13 @@ type CapturedResponse struct {
 	Release func()
 }
 type OutputPublication struct {
-	Key      MemberKey
-	Members  []OutputMember
-	Next     int
-	Digest   string
-	Glossary []byte
-	Complete bool
+	Key             MemberKey
+	Members         []OutputMember
+	Next            int
+	Digest          string
+	Glossary        []byte
+	Complete        bool
+	ParseDiagnostic string
 }
 
 func memberHeaderQuery(q *ent.WorkRequestQuery) *ent.WorkRequestQuery {
@@ -81,6 +83,9 @@ func memberHeaderQuery(q *ent.WorkRequestQuery) *ent.WorkRequestQuery {
 		workrequest.FieldRequestMetadataBytes, workrequest.FieldState, workrequest.FieldResponseFormatVersion, workrequest.FieldSnapshotDigest, workrequest.FieldFreezeDigest, workrequest.FieldResponseDigest, workrequest.FieldPromotionCount, workrequest.FieldPromotionCursor, workrequest.FieldPromotionState,
 		workrequest.FieldBusinessBound, workrequest.FieldResponseTruncated, workrequest.FieldArchiveCursor, workrequest.FieldArchiveDigest, workrequest.FieldCaptureBytes, workrequest.FieldModelOutputBytes, workrequest.FieldCorrectionBytes, workrequest.FieldPublicKind, workrequest.FieldInputMemberBytes, workrequest.FieldOutputMemberBytes, workrequest.FieldPublicBytes, workrequest.FieldPublicDigest, workrequest.FieldMemberStorageBytes, workrequest.FieldRemainingMembers,
 		workrequest.FieldMemberMode, workrequest.FieldMemberFormat, workrequest.FieldSourceLang, workrequest.FieldTargetLang, workrequest.FieldTextMode, workrequest.FieldMemberPool, workrequest.FieldMemberAttempt).WorkRequestQuery
+}
+func responseContinuationQuery(q *ent.WorkRequestQuery) *ent.WorkRequestQuery {
+	return memberHeaderQuery(q).Select(workrequest.FieldStage).WorkRequestQuery
 }
 func memberRequest(ctx context.Context, tx *ent.Client, key MemberKey) (*ent.WorkRequest, error) {
 	return readMemberRequest(ctx, key, memberHeaderQuery(tx.WorkRequest.Query().Where(workrequest.IdentityEQ(key.RequestID))))
@@ -246,9 +251,6 @@ func (s *Store) LoadOutputMember(ctx context.Context, key MemberKey, final bool,
 	return OutputMember{StoredBytes: row.PayloadBytes + row.CorrectedBytes, Key: key, Payload: p, Bytes: n, Digest: d, Release: release}, nil
 }
 func (s *Store) captureResponse(ctx context.Context, in CapturedResponse) error {
-	if len(in.Payload) == 0 {
-		return ErrManifest
-	}
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "capture", Operation: "capture_write", Bytes: int64(len(in.Payload)), Rows: 1})
 	digest := memberPayloadDigest(ctx, in.Payload)
 	key := MemberKey{RequestID: in.RequestID, CaptureEpoch: in.Scope.RetryEpoch}
@@ -343,7 +345,7 @@ func (s *Store) captureResponse(ctx context.Context, in CapturedResponse) error 
 				groups[w.State] = append(groups[w.State], w.ID)
 			}
 			for state, ids := range groups {
-				n, err := tx.WorkItem.Update().Where(workitem.IDIn(ids...), workitem.JobIDEQ(in.Scope.JobID), workitem.ResourceIDEQ(in.Scope.ResourceID), workitem.JobRoundIDEQ(in.Scope.RoundID), workitem.RetryEpochEQ(in.Scope.RetryEpoch), workitem.StateEQ(state), workitem.CandidateIDEQ(""), workitem.Or(workitem.ResponseRequestIDEQ(""), workitem.ResponseRequestIDEQ(in.RequestID))).SetMemberOwned(true).SetState("response_pending").SetResponseRequestID(in.RequestID).Save(ctx)
+				n, err := tx.WorkItem.Update().Where(workitem.IDIn(ids...), workitem.JobIDEQ(in.Scope.JobID), workitem.ResourceIDEQ(in.Scope.ResourceID), workitem.JobRoundIDEQ(in.Scope.RoundID), workitem.RetryEpochEQ(in.Scope.RetryEpoch), workitem.StateEQ(state), workitem.CandidateIDEQ(""), workitem.Or(workitem.ResponseRequestIDEQ(""), workitem.ResponseRequestIDEQ(in.RequestID))).SetMemberOwned(true).SetState("response_pending").SetResponseRequestID(in.RequestID).SetLastError("").Save(ctx)
 				if err != nil {
 					return err
 				}
@@ -366,11 +368,11 @@ func (s *Store) captureResponse(ctx context.Context, in CapturedResponse) error 
 	return s.finishUnknown(ctx, identity.JobID, err, check)
 }
 func (s *Store) LoadCapture(ctx context.Context, id string, limit int64) (CapturedResponse, error) {
-	h, err := memberHeaderQuery(s.client.WorkRequest.Query().Where(workrequest.IdentityEQ(id), func(sel *sql.Selector) { sel.Where(requestMetadataBounds(sel)) })).Only(ctx)
+	h, err := responseContinuationQuery(s.client.WorkRequest.Query().Where(workrequest.IdentityEQ(id), func(sel *sql.Selector) { sel.Where(requestMetadataBounds(sel)) })).Only(ctx)
 	if err != nil {
 		return CapturedResponse{}, err
 	}
-	if h.ResponseFormatVersion != execution.ResponseFormatVersion || h.PromotionState != "capture_pending" || h.CaptureBytes <= 0 || h.CaptureBytes > limit {
+	if h.ResponseFormatVersion != execution.ResponseFormatVersion || h.PromotionState != "capture_pending" || h.CaptureBytes < 0 || h.CaptureBytes > limit {
 		return CapturedResponse{}, ErrManifest
 	}
 	reservation, err := reserveMemberBytes(ctx, h.CaptureBytes)
@@ -398,7 +400,7 @@ func (s *Store) LoadCapture(ctx context.Context, id string, limit int64) (Captur
 	return CapturedResponse{ResponseHeader: responseHeader(h), Payload: row.CapturePayload, Release: reservation.release}, nil
 }
 func (s *Store) publishOutputs(ctx context.Context, in OutputPublication) error {
-	if len(in.Members) > 16 {
+	if len(in.Members) > 16 || len(in.ParseDiagnostic) > responsecontract.MainParseDiagnosticLimit || in.ParseDiagnostic != "" && !in.Complete {
 		return ErrManifest
 	}
 	current, err := memberRequest(ctx, s.client, in.Key)
@@ -407,6 +409,8 @@ func (s *Store) publishOutputs(ctx context.Context, in OutputPublication) error 
 	}
 	identity := ResponseIdentityFromRow(current)
 	next, archiveDigest, complete := in.Next, in.Digest, in.Complete
+	parseDiagnosticBytes := int64(len(in.ParseDiagnostic))
+	parseDiagnosticDigest := sha256.Sum256([]byte(in.ParseDiagnostic))
 	responseDigest := current.ResponseDigest
 	publicBytes, publicDigest := int64(len(in.Glossary)), memberPayloadDigest(ctx, in.Glossary)
 	check := func(factCtx context.Context, tx *ent.Client) (bool, error) {
@@ -435,6 +439,20 @@ func (s *Store) publishOutputs(ctx context.Context, in OutputPublication) error 
 		if complete && r.PromotionState == "promoted" && (r.PublicKind != workrequest.PublicKindNone || r.PublicBytes != 0) {
 			return false, ErrManifest
 		}
+		if parseDiagnosticBytes > 0 {
+			read, err := reserveMemberBytes(factCtx, parseDiagnosticBytes)
+			if err != nil {
+				return false, err
+			}
+			defer read.release()
+			stored, err := tx.WorkRequest.Query().Where(workrequest.IDEQ(r.ID), memberPayloadBound(workrequest.FieldLastError, parseDiagnosticBytes)).Select(workrequest.FieldID, workrequest.FieldLastError).Only(factCtx)
+			if err != nil {
+				return false, err
+			}
+			if int64(len(stored.LastError)) != parseDiagnosticBytes || sha256.Sum256([]byte(stored.LastError)) != parseDiagnosticDigest {
+				return false, ErrManifest
+			}
+		}
 		return true, nil
 	}
 	ctx = WithCommitConfirmation(ctx, s.client, identity.JobID, check)
@@ -455,6 +473,12 @@ func (s *Store) publishOutputs(ctx context.Context, in OutputPublication) error 
 		if r.PromotionState == "outputs_ready" || r.PromotionState == "business_ready" || r.PromotionState == "promoted" {
 			if !in.Complete || r.ArchiveDigest != in.Digest {
 				return ErrManifest
+			}
+			if in.ParseDiagnostic != "" {
+				stored, err := tx.WorkRequest.Query().Where(workrequest.IDEQ(r.ID), workrequest.LastErrorEQ(in.ParseDiagnostic)).Exist(ctx)
+				if err != nil || !stored {
+					return errors.Join(ErrManifest, err)
+				}
 			}
 			return nil
 		}
@@ -506,11 +530,24 @@ func (s *Store) publishOutputs(ctx context.Context, in OutputPublication) error 
 				return ErrManifest
 			}
 			u.SetPromotionState("outputs_ready").SetPublicKind(workrequest.PublicKindEntries).ClearCapturePayload().SetCaptureBytes(0).SetResponseGlossary(in.Glossary).SetPublicDigest(memberPayloadDigest(ctx, in.Glossary)).AddPublicBytes(int64(len(in.Glossary))).AddMemberStorageBytes(int64(len(in.Glossary)) - r.CaptureBytes)
+			if in.ParseDiagnostic != "" {
+				u.SetLastError(in.ParseDiagnostic).AddMemberStorageBytes(int64(len(in.ParseDiagnostic)))
+			}
 		}
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "member", Operation: "checkpoint_write", Rows: 1})
 		return u.Select(workrequest.FieldID).Exec(ctx)
 	})
 	return s.finishUnknown(ctx, identity.JobID, err, check)
+}
+
+// LoadMainParseDiagnostic reads the bounded reason already recorded by archive.
+// The caller reserves the retained text before entering the store.
+func (s *Store) LoadMainParseDiagnostic(ctx context.Context, scope Scope, requestID string) (string, error) {
+	r, err := s.client.WorkRequest.Query().Where(workrequest.IdentityEQ(requestID), workrequest.JobIDEQ(scope.JobID), workrequest.ResourceIDEQ(scope.ResourceID), workrequest.JobRoundIDEQ(scope.RoundID), workrequest.StageEQ("main"), workrequest.PromotionStateEQ("promoted"), memberPayloadBound(workrequest.FieldLastError, responsecontract.MainParseDiagnosticLimit)).Select(workrequest.FieldID, workrequest.FieldLastError).Only(ctx)
+	if err != nil {
+		return "", err
+	}
+	return r.LastError, nil
 }
 func (s *Store) PublishMemberBusiness(ctx context.Context, id string, receipt []byte) error {
 	current, err := memberHeaderQuery(memberClient(ctx, s.client).WorkRequest.Query().Where(workrequest.IdentityEQ(id))).Only(ctx)

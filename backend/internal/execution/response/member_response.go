@@ -13,6 +13,12 @@ import (
 type ResponsePhase string
 
 const (
+	// MainParseDiagnosticLimit bounds the ledger fact used to prepare a prompt upgrade.
+	MainParseDiagnosticLimit  = 2048
+	PromptUpgradeCursorPrefix = "prompt_upgrade:"
+)
+
+const (
 	InputsReady       ResponsePhase = "inputs_ready"
 	CapturePending    ResponsePhase = "capture_pending"
 	OutputsReady      ResponsePhase = "outputs_ready"

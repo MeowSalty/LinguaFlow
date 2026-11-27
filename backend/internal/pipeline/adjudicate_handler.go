@@ -121,7 +121,9 @@ func (h *AdjudicateHandler) BuildBatches(ctx context.Context, doc *Document, pen
 // 末池耗尽后原 issue 保持 pending 原样保留。
 // 段计数/断点由 executor 在批次终态时统一登记（handler 不触碰进度计数）。
 func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
-	emit := func(evt progress.BatchEvent) { h.emitBatchOutcome(storedProgressEvent(ctx, evt)) }
+	var diagnostic storedBatchDiagnostic
+	defer diagnostic.close()
+	emit := func(evt progress.BatchEvent) { h.emitBatchOutcome(diagnostic.apply(ctx, evt)) }
 	batchStart := time.Now()
 	var codes map[string]struct{}
 	tried := []string{h.Backend.Name()}
@@ -166,6 +168,9 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	}
 	sys, usr := req.System, req.User
 	if renderErr != nil {
+		if storedDispatchDeferred(ctx, renderErr) {
+			return batchResult{deferred: true}
+		}
 		if d := workDeferred(renderErr); d != nil {
 			return batchResult{waitCapacity: d, deferred: true}
 		}
@@ -190,10 +195,22 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 
 	// 非 text：只挂 JSONSchema，不强制 ResponseFormat，由 backend 默认决定是否用 schema。
 	// text：强制 ResponseFormat=none，不挂 schema。
+	diagnostic.captureRequest(ctx, h.Reporter, req)
 	callStart := time.Now()
 	resp, callErr := h.Backend.Translate(ctx, req)
-	releaseStoredRequestText(ctx, &req, &sys, &usr)
+	diagnostic.captureResponse(ctx, &req, resp, &sys, &usr)
+	emitBackendFailure := func(err error) {
+		if observedStoredProviderFailure(ctx, h.Backend) {
+			emit(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, err, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+		}
+	}
+	if storedDispatchDeferred(ctx, callErr) {
+		return batchResult{deferred: true}
+	}
 	if storageFailure(callErr) {
+		if providerErr := storedProviderFailure(ctx); providerErr != nil {
+			emitBackendFailure(providerErr)
+		}
 		return batchResult{err: callErr}
 	}
 	if d := workDeferred(callErr); d != nil {
@@ -203,7 +220,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		if isFatalBackendError(callErr) {
 			logger.Error("adjudicate backend fatal error, deferring to cross-round",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-			emit(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+			emitBackendFailure(callErr)
 			// 401/403：跳池（同 backend 重试无意义）+ 跨轮传播换 backend。
 			return batchResult{fatalUnresolved: idxs}
 		}
@@ -211,7 +228,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		if backend.IsRetryable(callErr) {
 			logger.Warn("adjudicate rate limit, will backoff and retry",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-			emit(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+			emitBackendFailure(callErr)
 			wait := backoffDuration(attempt, h.Retry, callErr)
 			if retry := storedBackoffRetry(ctx, idxs, attempt, wait); retry != nil {
 				return batchResult{retry: retry}
@@ -231,7 +248,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		}
 		logger.Warn("adjudicate backend failed, deferring to next pool",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-		emit(backendErrorBatchEvent(RoundModeAdjudicate, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+		emitBackendFailure(callErr)
 		return batchResult{unresolved: idxs}
 	}
 
@@ -279,6 +296,9 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		parseErr = fmt.Errorf("response truncated by output token limit: refusing partial verdicts as complete")
 	}
 	if parseErr != nil {
+		if storedDispatchDeferred(ctx, parseErr) {
+			return batchResult{deferred: true}
+		}
 		logger.Warn("adjudicate parse failed, deferring to next pool",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", parseErr,
 			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))

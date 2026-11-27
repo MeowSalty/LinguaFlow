@@ -599,7 +599,7 @@ func guardCandidateHandoff(ctx context.Context, tx *ent.Client, c Candidate, old
 		workrequest.JobRoundIDEQ(c.Scope.RoundID),
 		workrequest.RetryEpochEQ(c.Scope.RetryEpoch),
 		workrequest.StateIn("sent", "received", "completed", "failed"),
-		workrequest.IdentityEQ(parentID), workrequest.StageEQ("main"),
+		workrequest.IdentityEQ(parentID), workrequest.StageIn("main", MainPromptUpgradeStage),
 	).Select(workrequest.FieldSegmentIds).All(ctx)
 	if err != nil {
 		return err

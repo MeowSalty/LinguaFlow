@@ -851,8 +851,8 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 	if r.broker == nil {
 		return
 	}
-	sent, sentTrunc, sentLen := TruncateSSEContent(batchEvent.SentContent)
-	recv, recvTrunc, recvLen := TruncateSSEContent(batchEvent.ReceivedContent)
+	sent, sentTrunc, sentLen := BatchEventContent(batchEvent.SentContent, batchEvent.SentLength)
+	recv, recvTrunc, recvLen := BatchEventContent(batchEvent.ReceivedContent, batchEvent.ReceivedLength)
 	metadata := map[string]any{
 		"segment_ids":      batchEvent.SegmentIDs,
 		"segment_count":    batchEvent.SegmentCount,
@@ -893,10 +893,11 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 	if batchEvent.HTTPStatus > 0 {
 		metadata["http_status"] = batchEvent.HTTPStatus
 	}
-	if batchEvent.RoundIndex > 0 {
+	stagedMain := batchEvent.ParentRequestID != "" && (batchEvent.Stage == "translate" || batchEvent.Stage == "revise")
+	if batchEvent.RoundIndex > 0 || stagedMain {
 		metadata["round_index"] = batchEvent.RoundIndex
 	}
-	if batchEvent.Attempt > 0 {
+	if batchEvent.Attempt > 0 || stagedMain {
 		metadata["attempt"] = batchEvent.Attempt
 	}
 	if batchEvent.ResponseFormat != "" {
@@ -907,6 +908,9 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 	}
 	if batchEvent.ParentRequestID != "" {
 		metadata["parent_request_id"] = batchEvent.ParentRequestID
+	}
+	if batchEvent.PoolIndex != nil {
+		metadata["pool_index"] = *batchEvent.PoolIndex
 	}
 	if len(batchEvent.AlignmentMembers) > 0 {
 		metadata["alignment_members"] = append([]AlignmentMemberEvent(nil), batchEvent.AlignmentMembers...)

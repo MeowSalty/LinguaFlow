@@ -37,13 +37,15 @@ type frozenMainMember struct {
 // preparedMainDocument stores only selected targets and their actual context.
 // Global indices are kept separately; it never clones the Document segment tree.
 type preparedMainDocument struct {
-	bounds    *backend.BuildBounds
-	doc       *Document
-	global    []int
-	targets   []int
-	context   map[int]struct{}
-	truncated map[int]string
-	locals    []int
+	bounds               *backend.BuildBounds
+	doc                  *Document
+	global               []int
+	targets              []int
+	context              map[int]struct{}
+	truncated            map[int]string
+	locals               []int
+	diagnosticIDs        []string
+	diagnosticAllocation *backend.OwnedAllocation
 }
 
 func snapshotMainInput(ctx context.Context, doc *Document, indices []int, handler stagedHandler, runtime *ExecutionRuntime) (*preparedMainDocument, error) {
@@ -123,6 +125,10 @@ func snapshotMainInput(ctx context.Context, doc *Document, indices []int, handle
 	for _, idx := range indices {
 		input.targets = append(input.targets, localTargets[idx])
 	}
+	if err := input.prepareDiagnosticIDs(); err != nil {
+		input.close()
+		return nil, err
+	}
 	return input, nil
 }
 
@@ -130,6 +136,7 @@ func (input *preparedMainDocument) close() {
 	if input == nil {
 		return
 	}
+	input.diagnosticAllocation.Release()
 	b := input.bounds
 	*input = preparedMainDocument{}
 	b.CloseRetired()
@@ -266,6 +273,8 @@ func (r *ExecutionRuntime) releaseMainOwner(id string) error {
 	r.ownerMu.Unlock()
 	owner.rawCredit.Release()
 	if owner.ctx != nil {
+		session, _ := owner.ctx.Value(requestSessionKey{}).(*requestSession)
+		releaseMainBatchDiagnostic(session)
 		if err := backend.CloseProviderResponseAllocation(owner.ctx); err != nil {
 			return err
 		}
@@ -291,7 +300,8 @@ func (r *ExecutionRuntime) releaseMainOwner(id string) error {
 	return nil
 }
 
-func prepareMainInvocation(ctx context.Context, h stagedHandler, input *preparedMainDocument, session *requestSession, attempt int, logger *slog.Logger) (result batchResult) {
+func prepareMainInvocation(ctx context.Context, h stagedHandler, input *preparedMainDocument, session *requestSession, attempt int, retry mainRetryKey, logger *slog.Logger) (result batchResult) {
+	defer input.close()
 	doc := input.doc
 	var hintPayload MainHintPayload
 	hintCredit := int64(0)
@@ -328,13 +338,34 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 		}
 		session.runtime.Admission.ObserveOwned("attachment", session.intent.ID, int64(cap(hintPayload.JSON)))
 	}
+	var retryDiagnostic string
+	var diagnosticBounds *backend.BuildBounds
+	if retry.upgrade() {
+		var err error
+		diagnosticBounds, err = backend.NewBuildBoundsFromContext(ctx, session.runtime.handoffLimit(), 0)
+		if err != nil {
+			return batchResult{err: err}
+		}
+		defer diagnosticBounds.CloseRetired()
+		const limit = responsecontract.MainParseDiagnosticLimit + 200
+		if err = diagnosticBounds.ReserveText(limit, limit); err != nil {
+			return batchResult{err: err}
+		}
+		// An SQL reader can wait for a glossary transaction that needs a
+		// build worker. Load this scalar before acquiring a worker below.
+		retryDiagnostic, err = session.store.LoadMainParseDiagnostic(ctx, retry.parent())
+		if err != nil {
+			return batchResult{err: fmt.Errorf("load prompt upgrade diagnostic: %w", err)}
+		}
+	}
 	var req backend.Request
 	var remote backend.Backend
 	var requestBounds *backend.BuildBounds
+	var reviseBuildPhase, reviseBackend string
+	buildStart := time.Now()
 	defer func() {
 		req = backend.Request{}
 		doc = nil
-		input.close()
 		if requestBounds == nil {
 			return
 		}
@@ -370,6 +401,10 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 		}
 		requestBounds = b
 		frozen := FrozenContext{Mode: h.ModeName(), Format: doc.Format, SourceLang: doc.SourceLang, TargetLang: doc.TargetLang, Pool: session.intent.Pool, MainAttempt: attempt + 1}
+		if retry.upgrade() {
+			frozen.MainAttempt = attempt
+			frozen.PromptUpgrade = true
+		}
 		switch handler := h.(type) {
 		case *TranslateHandler:
 			if err = backend.ReserveSlice[string](b, int64(len(input.targets))); err != nil {
@@ -383,6 +418,12 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 			copy := *handler
 			copy.buildBounds = b
 			copy.buildMaxBytes = session.runtime.handoffLimit()
+			if retry.upgrade() {
+				copy.buildSystemSuffix, err = renderMainRetryReminder(b, handler.RetryReminderTemplate, retryDiagnostic, session.runtime.handoffLimit())
+				if err != nil {
+					return err
+				}
+			}
 			remote = handler.Backend
 			frozen.TextMode = prompt.ProtocolFromResponseMode(handler.ResponseMode).IsText()
 			ids := make([]string, len(input.targets))
@@ -399,16 +440,21 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 			copy.buildClaim = func(skeleton backend.Request, m backend.PromptMeasure) error {
 				return freezeMeasuredMain(ctx, b, h, input, session, frozen, ids, nil, remote, skeleton, m)
 			}
-			_, _, request, _, _, _, err := copy.buildRequestWithHints(doc, input.globalLocal(), input.context, input.truncated, glos, hints)
+			_, _, request, _, _, usedGlossary, err := copy.buildRequestWithHints(doc, input.globalLocal(), input.context, input.truncated, glos, hints)
 			req = request
+			if err == nil {
+				prepareMainBatchDiagnostic(ctx, session, input, req, remote.Name(), usedGlossary)
+			}
 			return err
 		case *ReviseHandler:
 			copy := *handler
 			copy.buildBounds = b
 			remote = handler.Backend
+			reviseBackend = remote.Name()
 			frozen.TextMode = prompt.ProtocolFromResponseMode(handler.ResponseMode).IsText()
 			segments, states, anns, err := copy.buildProtectedInputs(doc, input.targets, handler.issueCodeSet())
 			if err != nil {
+				reviseBuildPhase = "protect"
 				return err
 			}
 			ids := make([]string, len(segments))
@@ -426,12 +472,24 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 			sys, user, err := handler.Renderer.RenderWithCreditsBounded(b, prompt.ReviseData{SourceLang: doc.SourceLang, TargetLang: doc.TargetLang, Segments: segments, Protocol: prompt.ProtocolFromResponseMode(handler.ResponseMode), RubyAnnotations: anns, RubyMode: handler.RubyMode}, session.runtime.handoffLimit(), func(m backend.PromptMeasure) error {
 				return freezeMeasuredMain(ctx, b, h, input, session, frozen, ids, states, remote, req, m)
 			})
+			if reviseTemplateFailure(err) {
+				reviseBuildPhase = "render"
+			}
 			req.System, req.User = sys, user
+			if err == nil {
+				prepareMainBatchDiagnostic(ctx, session, input, req, remote.Name(), nil)
+			}
 			return err
 		default:
 			return fmt.Errorf("handler has no main response contract")
 		}
 	})
+	retryDiagnostic = ""
+	diagnosticBounds.CloseRetired()
+	if reviseBuildPhase != "" && reviseMainBuildFailure(ctx, buildErr) {
+		emitReviseMainBuildFailure(ctx, session, input, logger, reviseBackend, reviseBuildPhase, buildErr, buildStart)
+		return batchResult{failedSegments: session.intent.Indices}
+	}
 	if !errors.Is(buildErr, backend.ErrMainBatchTooLarge) {
 		input.doc = nil
 	}
@@ -440,6 +498,9 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 	if buildErr != nil {
 		if d := workDeferred(buildErr); d != nil {
 			return batchResult{waitCapacity: d, deferred: true}
+		}
+		if capturedMainInterrupted(ctx, buildErr) {
+			return batchResult{deferred: true}
 		}
 		return batchResult{err: buildErr}
 	}
@@ -456,13 +517,16 @@ func prepareMainInvocation(ctx context.Context, h stagedHandler, input *prepared
 		if d := workDeferred(err); d != nil {
 			return batchResult{waitCapacity: d, deferred: true}
 		}
-		if errors.Is(err, backend.ErrNoCapacityDrain) || storageFailure(err) || errors.Is(err, backend.ErrBuildCapacity) || errors.Is(err, backend.ErrResponseTooLarge) {
+		if storageFailure(err) {
 			return batchResult{err: err}
 		}
-		if backend.IsRetryable(err) {
-			return batchResult{retry: &batchJob{attempt: attempt + 1, notBefore: time.Now().Add(backoffDuration(attempt, handlerRetry(h), err))}}
+		if session.mainFailure != nil {
+			return batchResult{}
 		}
-		return batchResult{unresolved: session.intent.Indices}
+		if capturedMainInterrupted(ctx, err) {
+			return batchResult{deferred: true}
+		}
+		return batchResult{err: err}
 	}
 	if session.rawResponse == nil {
 		return batchResult{err: fmt.Errorf("main backend did not hand off its response")}
@@ -474,7 +538,7 @@ func (input *preparedMainDocument) globalLocal() []int {
 }
 
 func freezeMeasuredMain(ctx context.Context, b *backend.BuildBounds, h stagedHandler, input *preparedMainDocument, session *requestSession, frozen FrozenContext, ids []string, states []reviseProtectState, remote backend.Backend, req backend.Request, m backend.PromptMeasure) error {
-	session.intent.FrozenContext = FrozenContext{Pool: frozen.Pool, MainAttempt: frozen.MainAttempt, Mode: frozen.Mode, Format: frozen.Format, SourceLang: frozen.SourceLang, TargetLang: frozen.TargetLang, TextMode: frozen.TextMode}
+	session.intent.FrozenContext = frozen
 	if err := backend.ReserveSlice[InputMemberFrame](b, int64(len(input.targets))); err != nil {
 		return err
 	}
@@ -547,17 +611,7 @@ func freezeMeasuredMain(ctx context.Context, b *backend.BuildBounds, h stagedHan
 	return nil
 }
 
-func handlerRetry(h stagedHandler) backend.RetryPolicy {
-	switch v := h.(type) {
-	case *TranslateHandler:
-		return v.Retry
-	case *ReviseHandler:
-		return v.Retry
-	}
-	return backend.RetryPolicy{}
-}
-
-func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, source *Document, input *preparedMainDocument, indices []int, pool, attempt int, reservation string, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporter progress.Reporter) (e stagedEvent) {
+func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, source *Document, input *preparedMainDocument, indices []int, pool, attempt int, retry mainRetryKey, reservation string, store RoundStore, runtime *ExecutionRuntime, logger *slog.Logger, reporter progress.Reporter) (e stagedEvent) {
 	parentCtx := ctx
 	e = stagedEvent{main: true, indices: indices, cursors: map[int]WorkCursor{}}
 	// A failed provider call can leave the durable cursor at the end of the
@@ -565,10 +619,10 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 	// pool before creating a request session; otherwise ReserveRequest debits
 	// the same members once more and returns ErrBudget as a misleading storage
 	// failure.
-	if attempt >= transientBudgetFor(round.Retry) {
+	if retry.consumed || !retry.upgrade() && attempt >= transientBudgetFor(round.Retry) {
 		var transitions []CursorTransition
 		for _, idx := range indices {
-			cursor := WorkCursor{Pool: pool + 1, State: "pending"}
+			cursor := WorkCursor{Pool: pool + 1, Phase: "initial", State: "pending"}
 			transitions = append(transitions, CursorTransition{Index: idx, Cursor: cursor})
 			e.cursors[idx] = cursor
 		}
@@ -581,11 +635,16 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 		runtime.Window.Release(reservation)
 		return e
 	}
-	session := &requestSession{runtime: runtime, store: store, reporter: reporter, intent: RequestIntent{ID: reservation, Stage: backend.RequestStageMain, Indices: indices, Pool: pool, Attempt: attempt, Phase: "main", RoundIndex: prepareIntent(h, store, backend.RequestStageMain).RoundIndex, ResourceID: storeResourceID(store)}}
+	phase, invocationAttempt := "main", attempt
+	if retry.upgrade() {
+		phase, invocationAttempt = promptUpgradePhase, attempt-1
+	}
+	session := &requestSession{runtime: runtime, store: store, reporter: reporter, intent: RequestIntent{ID: reservation, Stage: backend.RequestStageMain, Indices: indices, Pool: pool, Attempt: invocationAttempt, Phase: phase, RoundIndex: prepareIntent(h, store, backend.RequestStageMain).RoundIndex, ResourceID: storeResourceID(store)}}
+	session.mainLogger, session.mainRetry = logger, round.Retry
 	ctx = session.Context(ctx)
 	defer runtime.Admission.ObserveOwned("freeze", reservation, 0)
 	defer runtime.Admission.ObserveOwned("raw", reservation, 0)
-	result := prepareMainInvocation(ctx, h, input, session, attempt, logger)
+	result := prepareMainInvocation(ctx, h, input, session, attempt, retry, logger)
 	input = nil
 	defer func() {
 		transferred := session.rawResponse != nil
@@ -599,6 +658,7 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 		session.intent.Indices = nil
 		session.intent.Members = nil
 		if !transferred {
+			releaseMainBatchDiagnostic(session)
 			_ = runtime.Admission.ReleaseBuild("build:" + reservation)
 		}
 	}()
@@ -628,7 +688,7 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 		}
 		e.responseHeaders = []MainResponseHeader{response.MainResponseHeader}
 		for _, idx := range indices {
-			e.cursors[idx] = WorkCursor{Pool: pool, Attempt: attempt + 1, State: "response_pending"}
+			e.cursors[idx] = WorkCursor{Pool: pool, Attempt: response.MainAttempt, State: "response_pending"}
 		}
 		return e
 	}
@@ -643,6 +703,10 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 		e.waitAttempt = attempt
 		return e
 	}
+	if result.deferred {
+		runtime.Window.Release(reservation)
+		return e
+	}
 	if result.err != nil {
 		if session.calls > 0 {
 			_ = runtime.Window.SplitOwnedMembers(reservation, memberReservationKeys(store, h.ModeName(), indices))
@@ -652,23 +716,41 @@ func prepareCapturedMain(ctx context.Context, round Round, h stagedHandler, sour
 		e.err = result.err
 		return e
 	}
+	maxPools := max(1, round.Retry.MaxAttempts+1)
 	var transitions []CursorTransition
-	for _, idx := range indices {
+	for i, idx := range indices {
 		cursor := WorkCursor{Pool: pool + 1, State: "pending"}
-		if result.retry != nil {
-			cursor = WorkCursor{Pool: pool, Attempt: attempt + 1, State: "pending", NextAttemptAt: result.retry.notBefore}
+		switch {
+		case session.mainFailure != nil:
+			cursor = *session.mainFailure
+		case len(result.failedSegments) > 0:
+			cursor = WorkCursor{Pool: maxPools, State: "unresolved", Phase: "terminal_failure"}
+			if i == 0 {
+				cursor.Phase = "terminal_failure_batch"
+			}
+		case cursor.Pool >= maxPools:
+			cursor = WorkCursor{Pool: maxPools, State: "unresolved"}
+		}
+		if session.intent.Phase == promptUpgradePhase && cursor.Phase == "" {
+			cursor.Phase = "initial"
 		}
 		e.cursors[idx] = cursor
 		transitions = append(transitions, CursorTransition{Index: idx, Cursor: cursor})
 	}
-	e.err = runtime.SaveNamed(ctx, persistence.Metadata{Operation: "main_failure", Class: persistence.Reliable, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
-		if failed, ok := store.(interface {
-			FailureCursors(context.Context, string, []CursorTransition) error
-		}); ok {
-			return failed.FailureCursors(saveCtx, session.intent.ID, transitions)
-		}
-		return store.Cursors(saveCtx, transitions)
-	})
+	atomicStore, atomic := store.(interface{ PersistsMainFailure() bool })
+	if session.mainFailure == nil || !atomic || !atomicStore.PersistsMainFailure() {
+		e.err = runtime.SaveNamed(ctx, persistence.Metadata{Operation: "main_failure", Class: persistence.Reliable, ResourceID: storeResourceID(store)}, func(saveCtx context.Context) error {
+			if failed, ok := store.(interface {
+				FailureCursors(context.Context, string, []CursorTransition) error
+			}); ok && session.lastID != "" {
+				return failed.FailureCursors(saveCtx, session.lastID, transitions)
+			}
+			return store.Cursors(saveCtx, transitions)
+		})
+	}
+	if e.err != nil && session.providerFailure != nil {
+		e.err = joinRequestPersistenceFailure(e.err, session.providerFailure)
+	}
 	if e.err == nil && session.calls > 0 {
 		var owned []int
 		for _, t := range transitions {
@@ -761,7 +843,7 @@ func advanceArchivedResponse(ctx context.Context, round Round, h stagedHandler, 
 		}
 	}()
 	var parseErr error
-	next := WorkCursor{Pool: header.Pool + 1, State: "pending"}
+	next := WorkCursor{Pool: header.Pool + 1, Phase: "initial", State: "pending"}
 	operation := "build_candidate"
 	err = runtime.Run(ctx, func() error {
 		b, e := backend.NewBuildBoundsFromContext(ctx, runtime.Window.limits.ItemBytes, input.Bytes+output.Bytes)
@@ -778,6 +860,9 @@ func advanceArchivedResponse(ctx context.Context, round Round, h stagedHandler, 
 		operation = "decode_output_member"
 		if e = b.DecodeJSON(output.Payload, &selected); e != nil {
 			return e
+		}
+		if selected.BatchParseFailure || selected.Failure == invalidModelResponse {
+			next = modelParseFailureCursor(round, h, header)
 		}
 		if frozen.Index != input.Index || frozen.PromptID != input.PromptID || frozen.CandidateID != input.CandidateID {
 			return ErrCandidateStale
@@ -812,7 +897,7 @@ func advanceArchivedResponse(ctx context.Context, round Round, h stagedHandler, 
 				if e = c.sealAndCompactMeasured(b, measured, runtime.Window.limits.ItemBytes); e != nil {
 					return e
 				}
-				next = WorkCursor{Pool: c.PoolIndex, Attempt: c.MainAttempt, State: "candidate"}
+				next = WorkCursor{Pool: c.PoolIndex, Attempt: c.MainAttempt, Phase: "initial", State: "candidate"}
 			}
 		}
 		return nil

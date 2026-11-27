@@ -40,17 +40,75 @@ func runStoredHandlerCPU(ctx context.Context, fn func() error) error {
 	return backend.RunBuild(ctx, fn)
 }
 
-func releaseStoredRequestText(ctx context.Context, req *backend.Request, system, user *string) {
-	if ExecutionRuntimeFromContext(ctx) != nil {
-		req.System, req.User = "", ""
-		*system, *user = "", ""
-	}
+type storedBatchDiagnostic struct {
+	event  progress.BatchEvent
+	bounds *backend.BuildBounds
 }
 
-func storedProgressEvent(ctx context.Context, evt progress.BatchEvent) progress.BatchEvent {
-	if ExecutionRuntimeFromContext(ctx) != nil {
-		evt.SystemPrompt, evt.UserMessage, evt.SentContent, evt.ReceivedContent, evt.ResponseContent = "", "", "", "", ""
-		evt.JSONSchema, evt.AddedGlossary = nil, nil
+func (d *storedBatchDiagnostic) close() {
+	d.event = progress.BatchEvent{}
+	d.bounds.CloseRetired()
+	d.bounds = nil
+}
+
+func (d *storedBatchDiagnostic) captureRequest(ctx context.Context, reporter progress.Reporter, req backend.Request) {
+	if ExecutionRuntimeFromContext(ctx) == nil {
+		return
+	}
+	if _, ok := reporter.(progress.BatchObserver); !ok {
+		return
+	}
+	d.event.SystemPromptLength, d.event.SentLength = len(req.System), len(req.User)
+	// Diagnostics are best effort and carry their own finite copies. A preview
+	// allocation failure must leave the request outcome and its accounting intact.
+	_ = runStoredHandlerCPU(ctx, func() error {
+		b, err := backend.NewBuildBoundsFromContext(ctx, 0, 0)
+		if err != nil {
+			return err
+		}
+		d.bounds = b
+		d.event.SystemPrompt, err = cloneBatchContent(b, req.System)
+		if err != nil {
+			return err
+		}
+		d.event.UserMessage, err = cloneBatchContent(b, req.User)
+		if err != nil {
+			return err
+		}
+		return b.CloneInto(req.JSONSchema, &d.event.JSONSchema)
+	})
+}
+
+func (d *storedBatchDiagnostic) captureResponse(ctx context.Context, req *backend.Request, resp *backend.Response, system, user *string) {
+	if ExecutionRuntimeFromContext(ctx) == nil {
+		return
+	}
+	req.System, req.User = "", ""
+	*system, *user = "", ""
+	if resp == nil || d.bounds == nil {
+		return
+	}
+	d.event.ReceivedLength = len(resp.Text)
+	_ = runStoredHandlerCPU(ctx, func() error {
+		var err error
+		d.event.ResponseContent, err = cloneBatchContent(d.bounds, resp.Text)
+		return err
+	})
+}
+
+func (d *storedBatchDiagnostic) apply(ctx context.Context, evt progress.BatchEvent) progress.BatchEvent {
+	if ExecutionRuntimeFromContext(ctx) == nil {
+		return evt
+	}
+	evt.SystemPrompt = d.event.SystemPrompt
+	evt.SentContent, evt.UserMessage = d.event.UserMessage, d.event.UserMessage
+	evt.ReceivedContent, evt.ResponseContent = d.event.ResponseContent, d.event.ResponseContent
+	evt.SystemPromptLength, evt.SentLength, evt.ReceivedLength = d.event.SystemPromptLength, d.event.SentLength, d.event.ReceivedLength
+	evt.JSONSchema = d.event.JSONSchema
+	if session, ok := ctx.Value(requestSessionKey{}).(*requestSession); ok {
+		pool := session.intent.Pool
+		evt.PoolIndex = &pool
+		evt.ParentRequestID = session.lastID
 	}
 	return evt
 }
@@ -287,7 +345,9 @@ func (h *ExtractHandler) BuildBatches(ctx context.Context, doc *Document, pendin
 //   - 全 backend 失败（非致命）→ unresolved（进下一池重试）
 //   - 成功 → 空 batchResult（resolved 由 executor 统计）
 func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
-	emit := func(evt progress.BatchEvent) { h.emitBatchOutcome(storedProgressEvent(ctx, evt)) }
+	var diagnostic storedBatchDiagnostic
+	defer diagnostic.close()
+	emit := func(evt progress.BatchEvent) { h.emitBatchOutcome(diagnostic.apply(ctx, evt)) }
 	start := time.Now()
 
 	// 从索引取文本（优先用 OriginalSource）
@@ -336,6 +396,9 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		return err
 	})
 	if err != nil {
+		if storedDispatchDeferred(ctx, err) {
+			return batchResult{deferred: true}
+		}
 		logger.Warn("extract render failed", "err", err)
 		emit(progress.BatchEvent{
 			Stage:        "extract",
@@ -361,14 +424,20 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 	// 单后端：直接调用 b.Translate（不再用 backend.WithRetry 包裹）。
 	// 在途重试由 executor 的 retry 通道统一处理。
 	var lastErr error
-	var lastBackend, lastResponse string
+	var lastBackend, lastResponse, lastErrorType string
+	var lastHTTPStatus int
 	for _, b := range h.Backends {
+		diagnostic.close()
+		lastResponse, lastHTTPStatus = "", 0
 		lastBackend = b.Name()
 		callStart := time.Now()
 		req, err = RenderStoredRequestBounded(ctx, b, requestBase, func(bounds *backend.BuildBounds, claim func(backend.PromptMeasure) error) (string, string, error) {
 			return h.Renderer.RenderWithCreditsBounded(bounds, prompt.BootstrapData{SourceLang: doc.SourceLang, TargetLang: doc.TargetLang, Texts: texts, Existing: existing, MaxTerms: h.calcMaxTerms(texts), Protocol: proto}, storedHandlerInputLimit(ctx), claim)
 		})
 		if err != nil {
+			if storedDispatchDeferred(ctx, err) {
+				return batchResult{deferred: true}
+			}
 			if d := workDeferred(err); d != nil {
 				return batchResult{waitCapacity: d, deferred: true}
 			}
@@ -378,16 +447,28 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			if errors.Is(err, backend.ErrBuildCapacity) {
 				return batchResult{failedSegments: idxs}
 			}
-			lastErr = err
+			lastErr, lastErrorType = err, "render_error"
 			continue
 		}
 		sys, usr = req.System, req.User
+		diagnostic.captureRequest(ctx, h.Reporter, req)
 		resp, callErr := b.Translate(ctx, req)
-		releaseStoredRequestText(ctx, &req, &sys, &usr)
+		diagnostic.captureResponse(ctx, &req, resp, &sys, &usr)
+		emitBackendFailure := func(err error) {
+			if observedStoredProviderFailure(ctx, b) {
+				emit(backendErrorBatchEvent(RoundModeExtract, doc, idxs, b.Name(), nil, err, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+			}
+		}
+		if storedDispatchDeferred(ctx, callErr) {
+			return batchResult{deferred: true}
+		}
 		if storageFailure(callErr) {
+			if providerErr := storedProviderFailure(ctx); providerErr != nil {
+				emitBackendFailure(providerErr)
+			}
 			return batchResult{err: callErr}
 		}
-		if resp != nil {
+		if resp != nil && ExecutionRuntimeFromContext(ctx) == nil {
 			lastResponse = resp.Text
 		}
 		if d := workDeferred(callErr); d != nil {
@@ -398,7 +479,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			if isFatalBackendError(callErr) {
 				logger.Warn("extract backend fatal error, deferring to cross-round",
 					"backend", b.Name(), "err", callErr)
-				emit(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+				emitBackendFailure(callErr)
 				return batchResult{fatalUnresolved: idxs}
 			}
 
@@ -406,7 +487,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			if backend.IsRetryable(callErr) {
 				logger.Warn("extract backend retryable error, will backoff and retry",
 					"backend", b.Name(), "err", callErr)
-				emit(backendErrorBatchEvent("extract", doc, idxs, b.Name(), nil, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
+				emitBackendFailure(callErr)
 				wait := backoffDuration(attempt, h.Retry, callErr)
 				if retry := storedBackoffRetry(ctx, idxs, attempt, wait); retry != nil {
 					return batchResult{retry: retry}
@@ -429,7 +510,10 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 
 			// 其余非致命 backend 错误：换下一个 backend（若有）或进下一池重试。
 			logger.Warn("extract LLM call failed", "backend", b.Name(), "err", callErr)
-			lastErr = callErr
+			lastErr, lastErrorType = callErr, ""
+			if observedStoredProviderFailure(ctx, b) {
+				lastErrorType, lastHTTPStatus = "backend_error", httpStatusFromErr(callErr)
+			}
 			continue
 		}
 
@@ -466,11 +550,14 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			return e
 		})
 		if perr != nil {
+			if storedDispatchDeferred(ctx, perr) {
+				return batchResult{deferred: true}
+			}
 			logger.Warn("extract parse failed",
 				"backend", b.Name(), "err", perr,
 				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
 				"repaired", parseRepaired)
-			lastErr = perr
+			lastErr, lastErrorType = perr, "parse_error"
 			if errors.Is(perr, backend.ErrBuildCapacity) {
 				return batchResult{failedSegments: idxs}
 			}
@@ -524,6 +611,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			Truncated:       resp.Truncated,
 			Repaired:        parseRepaired,
 			RoundIndex:      h.RoundIndex,
+			Attempt:         attempt,
 			SystemPrompt:    sys,
 			UserMessage:     usr,
 			ResponseFormat:  req.ResponseFormat,
@@ -537,18 +625,23 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 	if lastErr != nil {
 		logger.Warn("extract batch failed (all backends exhausted)", "err", lastErr)
 	}
+	if lastErrorType == "" {
+		return batchResult{unresolved: idxs}
+	}
 	emit(progress.BatchEvent{
 		Stage:           "extract",
 		SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
 		SegmentCount:    len(idxs),
 		Status:          "failed",
 		DurationMs:      time.Since(start).Milliseconds(),
-		ErrorType:       "backend_error",
+		ErrorType:       lastErrorType,
 		ErrorMessage:    fmt.Sprint(lastErr),
+		HTTPStatus:      lastHTTPStatus,
 		BackendName:     lastBackend,
 		SentContent:     usr,
 		ReceivedContent: lastResponse,
 		RoundIndex:      h.RoundIndex,
+		Attempt:         attempt,
 		SystemPrompt:    sys,
 		UserMessage:     usr,
 		ResponseFormat:  req.ResponseFormat,

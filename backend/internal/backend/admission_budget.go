@@ -716,6 +716,9 @@ func (a *RequestAdmission) ApplyPromotion(from, to string, expected ...int64) er
 	raw.Count--
 	if raw.Count == 0 {
 		delete(b.entries, from)
+		if b.progressID == from {
+			b.progressID = ""
+		}
 	} else {
 		b.entries[from] = raw
 	}

@@ -2,12 +2,14 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/persistence"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"log/slog"
-	"strings"
 )
 
 func canonicalStoredHandler(h RoundHandler) bool {
@@ -105,15 +107,18 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 		h.scannedSegments.Store(int64(total))
 	}
 	reporter.StageStart(round.Handler.ModeName(), total)
-	defer reporter.StageDone()
 	if checked, ok := reporter.(interface{ StageError() error }); ok {
 		if err := checked.StageError(); err != nil {
 			return RunRoundResult{}, err
 		}
 	}
+	defer reporter.StageDone()
 	maxPools, budget := max(1, round.Retry.MaxAttempts+1), transientBudgetFor(round.Retry)
+	_, observePools := reporter.(progress.PoolObserver)
 	failedBatches := 0
 	for pool := 0; pool < maxPools; pool++ {
+		poolEvent := progress.PoolEvent{Mode: round.Handler.ModeName(), PoolIndex: pool, MaxPools: maxPools, ShrinkRate: round.Shrink, Phase: "pool_start"}
+		nextPending := 0
 		for {
 			if err := ctx.Err(); err != nil {
 				return canonicalStoredResult(doc, failedBatches), err
@@ -200,6 +205,7 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 				for _, t := range advances {
 					doc.Segments[t.Index].RoundWork.Cursor = t.Cursor
 				}
+				nextPending += len(advances)
 			}
 			if len(pending) == 0 {
 				plans = nil
@@ -259,6 +265,25 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 				}
 			}
 			pending = nil
+			if observePools && poolEvent.Batches == 0 {
+				// Count the complete pool without retaining every batch alongside
+				// the bounded page of descriptors used for execution.
+				err = round.Runtime.Run(planCtx, func() error {
+					var countErr error
+					poolEvent.Batches, countErr = storedCanonicalDescriptorCount(doc, round.Handler, pool, budget, len(doc.Segments))
+					for _, seg := range doc.Segments {
+						attempt := seg.RoundWork.Cursor.Attempt
+						if attempt < budget && storedPlannerEligible(seg, pool, attempt) {
+							poolEvent.Pending++
+						}
+					}
+					return countErr
+				})
+				if err != nil {
+					return canonicalStoredResult(doc, failedBatches), err
+				}
+				emitPoolEvent(reporter, poolEvent)
+			}
 			result, e := runPool(ctx, round, round.Handler, doc, batches, budget, batchHandler, logger, reporter, pool, nil)
 			batches, advances, plans = nil, nil, nil
 			_ = round.Runtime.Admission.ReleaseBuild(activePlanOwner)
@@ -273,8 +298,17 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 			for _, i := range result.failedSegments {
 				doc.Segments[i].RoundWork.Cursor.Phase = "terminal_failure"
 			}
+			if err := ctx.Err(); err != nil {
+				return canonicalStoredResult(doc, failedBatches), err
+			}
+			if round.Gate.Paused() {
+				return canonicalStoredResult(doc, failedBatches), nil
+			}
 			_, _, err = canonical.LoadCanonical(ctx, doc)
 			if err != nil {
+				if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+					return canonicalStoredResult(doc, failedBatches), ctxErr
+				}
 				return RunRoundResult{}, &StorageError{Err: err}
 			}
 			// The synchronous store/reporter has no Job checkpoints. Confirmed local
@@ -285,12 +319,26 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 			for _, i := range result.failedSegments {
 				doc.Segments[i].RoundWork.Cursor.Phase = "terminal_failure"
 			}
+			for _, i := range result.unresolved {
+				if doc.Segments[i].RoundWork.Cursor.Pool == pool+1 {
+					nextPending++
+				}
+			}
 			if len(result.resolved) == 0 && len(result.unresolved) == 0 && len(result.fatalUnresolved) == 0 && len(result.failedSegments) == 0 {
 				return canonicalStoredResult(doc, failedBatches), fmt.Errorf("stored round made no durable progress")
 			}
 		}
+		if pool+1 < maxPools {
+			emitStoredPoolAdvance(reporter, poolEvent, nextPending)
+		}
 	}
 	result := canonicalStoredResult(doc, failedBatches)
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	if round.Gate.Paused() {
+		return result, nil
+	}
 	if err = round.Handler.Finalize(ctx, doc, result.Unresolved); err != nil {
 		return result, err
 	}
