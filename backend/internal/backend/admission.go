@@ -72,6 +72,7 @@ type RequestAdmission struct {
 	storageCredits                           map[string]int64
 	candidateReads                           map[string]*candidateReadCredit
 	rootMetadataBase                         int64
+	rootMetadataRestored                     bool
 	requestMetadata                          map[string]*requestMetadataCredit
 	buildAllocations                         map[string]int64
 	prepareOwners, buildWorkers, descriptors int64

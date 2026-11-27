@@ -61,6 +61,7 @@ func (a *RequestAdmission) ResetInventoryAfterJoin(segments, candidate, growth, 
 	old := *b
 	oldReads := a.candidateReads
 	oldMetadata, oldMetadataBase := a.requestMetadata, a.rootMetadataBase
+	oldMetadataRestored := a.rootMetadataRestored
 	metadataBase := a.rootMetadataBase
 	if len(metadata) > 0 {
 		metadataBase = metadata[0]
@@ -80,6 +81,9 @@ func (a *RequestAdmission) ResetInventoryAfterJoin(segments, candidate, growth, 
 	a.candidateReads = nil
 	a.requestMetadata = nil
 	a.rootMetadataBase = metadataBase
+	if len(metadata) > 0 {
+		a.rootMetadataRestored = true
+	}
 	p, w, q := a.prepareOwners, a.buildWorkers, a.descriptors
 	b.baseSegments, b.baseCandidates, b.baseGrowth, b.baseHandoff = segments, candidate, growth, handoff
 	b.entries = map[string]PipelineBudgetEntry{}
@@ -95,6 +99,7 @@ func (a *RequestAdmission) ResetInventoryAfterJoin(segments, candidate, growth, 
 		*b = old
 		a.candidateReads = oldReads
 		a.requestMetadata, a.rootMetadataBase = oldMetadata, oldMetadataBase
+		a.rootMetadataRestored = oldMetadataRestored
 		a.prepareOwners, a.buildWorkers, a.descriptors = p, w, q
 		return err
 	}

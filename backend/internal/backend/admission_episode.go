@@ -115,7 +115,9 @@ func (a *RequestAdmission) MemoryMoveProgress(previous, business, id, response s
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	b := a.budget
-	if b == nil || b.progressID != "" && b.progressID != previous {
+	// Replacing the sole member reservation can point the live ledger at
+	// the new owner before this step confirms the old persisted binding.
+	if b == nil || b.progressID != "" && b.progressID != previous && (b.progressID != id || b.state.ProgressID != previous) {
 		return PipelineRuntimeState{}, ErrProgressRequired
 	}
 	s := b.state

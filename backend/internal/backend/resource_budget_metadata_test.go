@@ -99,6 +99,33 @@ func TestRequestMetadataRestoreTransfersScalarAndUnsentRefunds(t *testing.T) {
 
 }
 
+func TestRequestMetadataStandaloneChargeOnce(t *testing.T) {
+	const actual = 1200
+	a := contractAdmission(t, 256, 4, 64<<20)
+	root, err := resourcebudget.New(resourcebudget.Policy{Instance: resourcebudget.Limits{MaxPayloadBytes: 1 << 20}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := resourcebudget.Scope{ActorID: 1, JobID: 1}
+	if err := a.AttachRootBudget(root, scope); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := a.RestoreRequestMetadata("saved", 2, actual); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := a.RestoreRequestMetadata("saved", 2, actual+1); !errors.Is(err, backend.ErrPipelineCapacity) {
+		t.Fatalf("accepted conflicting metadata: %v", err)
+	}
+	if err := a.RestoreRequestMetadata("too-large", 2, 2<<20); !errors.Is(err, resourcebudget.ErrCapacity) {
+		t.Fatalf("metadata ignored the root quota: %v", err)
+	}
+	if used, _ := root.Usage(scope, "job:1:runtime"); used.PayloadBytes != actual {
+		t.Fatalf("metadata reattachment or rejected allocation charged bytes twice: %+v", used)
+	}
+}
+
 func seedMetadataStock(t *testing.T, root *resourcebudget.RootBudget, scope resourcebudget.Scope, bytes int64) {
 	t.Helper()
 	source := resourcebudget.SourceFunc(func(_ context.Context, emit func(resourcebudget.Record) error) error {
