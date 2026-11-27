@@ -126,9 +126,11 @@ func (w *CandidateWindow) prepareResultLocked(n, resourceID int, consumer *Windo
 		return WindowTooLarge, false
 	}
 	stock := w.ledger.PipelineSnapshot().Segments
+	left := len(w.entries)
 	for _, id := range replacements {
 		if e, ok := w.entries[id]; ok {
 			stock -= e.count
+			left--
 		}
 	}
 	// Only recovered, durable inventory without a live consumer can establish
@@ -141,9 +143,11 @@ func (w *CandidateWindow) prepareResultLocked(n, resourceID int, consumer *Windo
 		if n > w.limits.Segments-stock {
 			return WindowBusy, len(w.entries) == 0 && stock > 0
 		}
-		for _, e := range w.entries {
-			if !w.fixedPin(e, consumer) {
-				return WindowBusy, false
+		if left > 0 {
+			for _, e := range w.entries {
+				if !w.fixedPin(e, consumer) {
+					return WindowBusy, false
+				}
 			}
 		}
 	}
@@ -423,7 +427,21 @@ func (w *CandidateWindow) RenameReservation(from, to string) error {
 func (w *CandidateWindow) RestoreRaw(id string, count, resource, round int, consumer *WindowConsumer) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if _, ok := w.entries[id]; ok {
+	if consumer != nil && (consumer.window != w || consumer.resourceID != resource || consumer.roundID != round || resource > 0 && !consumer.active) {
+		return ErrCandidateCapacity
+	}
+	if current, ok := w.entries[id]; ok {
+		if !current.reservation || current.count != count || current.resourceID != resource || current.roundID != round {
+			return ErrCandidateCapacity
+		}
+		if consumer != nil && current.consumer != consumer {
+			if current.consumer != nil && current.consumer.active {
+				return ErrCandidateCapacity
+			}
+			current.consumer = consumer
+			w.entries[id] = current
+			w.signal()
+		}
 		return nil
 	}
 	transferred, err := w.ledger.RestoreBudgetEntryWithTransfer(id, backend.PipelineBudgetEntry{ResourceID: resource, RoundID: round, Count: count, Reservation: true, Durable: true})
@@ -632,6 +650,18 @@ func (r *ExecutionRuntime) Configure(policy RuntimePolicy) {
 	}
 	r.Policy = policy
 	r.Preparation = NewPreparation(r.Admission, policy.PreparePending)
+}
+
+// NewMemoryExecutionRuntime uses the same admission and execution limits as a
+// persisted round. The caller owns the runtime and binds its provider backends.
+func NewMemoryExecutionRuntime(main map[int]int, alignment int, gate *PauseGate) (*ExecutionRuntime, error) {
+	admission, err := backend.NewRequestAdmission(nil, backend.RequestAdmissionConfig{
+		MainConcurrency: main, AlignmentConcurrency: alignment,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return NewExecutionRuntime(admission, DefaultCandidateLimits(), gate), nil
 }
 
 func NewExecutionRuntime(admission *backend.RequestAdmission, limits CandidateLimits, gate *PauseGate) *ExecutionRuntime {
@@ -864,6 +894,7 @@ type responseBackingOwner struct {
 }
 
 type requestSession struct {
+	stored            bool
 	mode              string
 	mainLogger        *slog.Logger
 	mainRetry         backend.RetryPolicy
@@ -1351,13 +1382,18 @@ func (b *requestBackend) translate(ctx context.Context, req backend.Request) (*b
 		}()
 	}
 	resp, callErr := b.inner.Translate(backend.WithAdmittedRequest(providerCtx), req)
+	if session != nil && session.stored && callErr == nil && resp == nil {
+		callErr = errors.New("provider returned no response")
+	}
 	duration := time.Since(start)
 	permit.RequestDone()
 	if session != nil && capturedProviderFailure(ctx, callErr) {
 		session.providerFailure = callErr
-		if session.mainLogger != nil {
+		if session.mainLogger != nil || session.stored {
 			cursor := capturedMainFailureCursor(session.mode, intent, session.mainRetry, callErr)
 			session.mainFailure = &cursor
+		}
+		if session.mainLogger != nil {
 			defer session.reportCapturedMainFailure(ctx, intent, b.inner.Name(), callErr, resp, duration)
 		}
 	}

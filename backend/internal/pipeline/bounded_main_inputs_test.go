@@ -10,6 +10,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -78,10 +79,11 @@ func TestBoundedMainContextRejectsBeforeTextBacking(t *testing.T) {
 	}
 }
 
-func TestBoundedMainHintOrderDedupeAndScoreParity(t *testing.T) {
+func TestBoundedMainHintOrderDedupeAndScore(t *testing.T) {
 	h := &TranslateHandler{Glossary: boundedHintGlossary{entries: []glossary.Entry{{Source: "a", Target: "x", Notes: "first"}, {Source: "b", Target: "y"}, {Source: "a", Target: "x", Notes: "last"}, {Source: "blocked", Target: "z", Forbidden: true}}}, TM: boundedHintTM{matches: []tm.Match{{Source: "source", Target: "one", Score: 0.3}, {Source: "source", Target: "two", Score: 0.7}, {Source: "source", Target: "one", Score: 0.9}}}}
 	doc := &Document{Segments: []Segment{{Source: "source"}, {Source: "source"}}}
-	wantG, wantT := h.lookupHints(context.Background(), doc, []int{0, 1}, quietLogger())
+	wantG := []prompt.GlossaryEntry{{Source: "a", Target: "x", Notes: "last"}, {Source: "b", Target: "y"}}
+	wantT := []prompt.TMHint{{Source: "source", Target: "one", Score: 0.9}, {Source: "source", Target: "two", Score: 0.7}}
 	p, e := LookupMainHintsBounded(context.Background(), h, doc, []int{0, 1}, 1<<20, nil, quietLogger())
 	if e != nil {
 		t.Fatal(e)

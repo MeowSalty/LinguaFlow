@@ -32,7 +32,7 @@ func capturedProviderFailure(ctx context.Context, err error) bool {
 
 func retryCapturedMain(mode string, intent RequestIntent, retry backend.RetryPolicy, err error) bool {
 	return intent.Phase != promptUpgradePhase && intent.Attempt+1 < transientBudgetFor(retry) &&
-		(backend.IsRetryable(err) || mode == RoundModeRevise && errors.Is(err, context.DeadlineExceeded))
+		(backend.IsRetryable(err) || (mode == RoundModeRevise || mode == RoundModeSemanticQA || mode == RoundModeAdjudicate) && errors.Is(err, context.DeadlineExceeded))
 }
 
 func fatalCapturedMain(intent RequestIntent, err error) bool {

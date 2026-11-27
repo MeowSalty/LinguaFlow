@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 func inputMemberTotal(members []InputMemberFrame) int64 {
@@ -260,6 +261,13 @@ func archiveCapturedResponse(ctx context.Context, h stagedHandler, header MainRe
 // selected is private to this member. A replacement changes its representation
 // and needs its own measurement before the fixed-size encoder can admit it.
 func encodeArchivedOutput(b *backend.BuildBounds, selected *archivedOutput, key MemberKey, limit int64) ([]byte, error) {
+	// Invalid is a parser-only flag. Keep the identity for duplicate checks
+	// and discard the rest so archive recovery cannot verify the malformed row.
+	for i, entry := range selected.RubyOutput {
+		if entry.Invalid {
+			selected.RubyOutput[i] = ruby.OutputEntry{ID: entry.ID, Invalid: true}
+		}
+	}
 	measured, err := b.MeasureJSON(selected)
 	if err != nil {
 		return nil, err

@@ -47,9 +47,13 @@ func TestTranslateHandler_ProcessBatch_EmitsTruncationSignals(t *testing.T) {
 		Logger:    quietLogger(),
 	}
 
-	res := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if len(res.unresolved) != 0 {
-		t.Fatalf("unresolved = %v, want empty (close-braces repair should recover)", res.unresolved)
+	h.Repair.PromptUpgrade = false
+	res, err := runMemoryTestRound(t, t.Context(), Round{Handler: h, Concurrency: 1}, doc, nil, quietLogger(), rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Unresolved) != 0 {
+		t.Fatalf("unresolved = %v, want empty (close-braces repair should recover)", res.Unresolved)
 	}
 
 	if len(rec.events) != 1 {
@@ -98,8 +102,12 @@ func TestTranslateHandler_ProcessBatch_ParseErrorEmitsTruncatedSignal(t *testing
 		Logger:    quietLogger(),
 	}
 
-	res := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if len(res.unresolved) == 0 {
+	h.Repair.PromptUpgrade = false
+	res, err := runMemoryTestRound(t, t.Context(), Round{Handler: h, Concurrency: 1}, doc, nil, quietLogger(), rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Unresolved) == 0 {
 		t.Fatal("unresolved is empty, want non-empty (unparseable truncated response)")
 	}
 

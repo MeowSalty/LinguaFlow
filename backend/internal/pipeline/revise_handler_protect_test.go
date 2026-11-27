@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"context"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // protectReviseDoc 构造带 pending 语义问题的单段文档。
@@ -61,7 +61,7 @@ func mustJSON(t *testing.T, v any) string {
 }
 
 // TestReviseHandler_ProtectRoundTrip 验证 target 进 prompt 前被占位符化，
-// LLM 保持占位符时 callback 收到还原后的最终译文，doc 全程不被污染。
+// LLM 保持占位符时 callback 收到还原后的最终译文，doc 安装确认后的译文。
 func TestReviseHandler_ProtectRoundTrip(t *testing.T) {
 	const target = "现在运行 `make build` 吧"
 	doc := protectReviseDoc("Run `make build` now", target, "")
@@ -82,15 +82,15 @@ func TestReviseHandler_ProtectRoundTrip(t *testing.T) {
 	}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Protector: prot, Logger: discardLogger()}
 
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
-		t.Fatalf("callback=%#v want one revision", result.callbackResult)
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 {
+		t.Fatalf("callback=%#v want one revision", confirmed)
 	}
-	if got := result.callbackResult.Segments[0].TargetText; got != want {
+	if got := confirmed[0].TargetText; got != want {
 		t.Fatalf("target=%q want restored %q", got, want)
 	}
-	if len(result.unresolved) != 0 {
-		t.Fatalf("unresolved=%v want none", result.unresolved)
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("unresolved=%v want none", result.Unresolved)
 	}
 
 	key := soleMappingKey(t, mapping)
@@ -101,8 +101,7 @@ func TestReviseHandler_ProtectRoundTrip(t *testing.T) {
 	if !strings.Contains(fb.requests[0].User, "Run `make build` now") {
 		t.Fatal("prompt must carry raw source for reference")
 	}
-	if doc.Segments[0].Target != target || doc.Segments[0].Source != "Run `make build` now" ||
-		doc.Segments[0].Protected != nil {
+	if doc.Segments[0].Target != want || doc.Segments[0].Source != "Run `make build` now" {
 		t.Fatalf("doc mutated: %+v", doc.Segments[0])
 	}
 }
@@ -134,12 +133,12 @@ func TestReviseHandler_PlaceholderViolationRejected(t *testing.T) {
 			}}
 			h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Protector: prot, Logger: discardLogger()}
 
-			result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-			if !reflect.DeepEqual(result.unresolved, []int{0}) {
-				t.Fatalf("unresolved=%v want [0]", result.unresolved)
+			result, confirmed := runMemoryReviseTestRound(t, h, doc)
+			if !reflect.DeepEqual(result.Unresolved, []int{0}) {
+				t.Fatalf("unresolved=%v want [0]", result.Unresolved)
 			}
-			if result.callbackResult != nil && len(result.callbackResult.Segments) != 0 {
-				t.Fatalf("callback=%#v want empty", result.callbackResult)
+			if len(confirmed) != 0 {
+				t.Fatalf("callback=%#v want empty", confirmed)
 			}
 			if doc.Segments[0].Target != target {
 				t.Fatalf("doc mutated: %q", doc.Segments[0].Target)
@@ -157,26 +156,26 @@ func TestReviseHandler_RubyJSONRoundTrip(t *testing.T) {
 	fb := &fakeBackend{name: "fake", responses: []string{
 		mustJSON(t, map[string]any{
 			"revisions": []map[string]string{{"id": "0", "target": "漢語之書"}},
-			"ruby_output": map[string][]map[string]string{
-				"0": {{"id": "1", "base": "漢語", "text": "かんご", "kind": "phonetic"}},
+			"ruby_output": map[string][]map[string]any{
+				"0": {{"id": "1", "base": "漢語", "text": "かんご", "kind": "phonetic", "occurrence": 1}},
 			},
 		}),
 	}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json",
+		RubyEnabled: true, RubyProtocolVersion: ruby.ProtocolV2, RubyMode: "json",
 	}
 
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
-		t.Fatalf("callback=%#v want one revision", result.callbackResult)
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 {
+		t.Fatalf("callback=%#v want one revision", confirmed)
 	}
 	want := "<ruby>漢語<rt>かんご</rt></ruby>之書"
-	if got := result.callbackResult.Segments[0].TargetText; got != want {
+	if got := confirmed[0].TargetText; got != want {
 		t.Fatalf("target=%q want %q", got, want)
 	}
-	if len(result.unresolved) != 0 {
-		t.Fatalf("unresolved=%v want none", result.unresolved)
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("unresolved=%v want none", result.Unresolved)
 	}
 	segs, anns := reviseUserPayload(t, fb.requests[0].User)
 	if len(segs) != 1 || segs[0]["target"] != "漢語の本" {
@@ -185,7 +184,7 @@ func TestReviseHandler_RubyJSONRoundTrip(t *testing.T) {
 	if len(anns) != 1 {
 		t.Fatalf("prompt must carry ruby_annotations for segment 0, got %v", anns)
 	}
-	if doc.Segments[0].Target != "<ruby>漢<rt>かん</rt></ruby>語の本" || doc.Segments[0].Source != "漢語の本" {
+	if doc.Segments[0].Target != want || doc.Segments[0].Source != "漢語の本" {
 		t.Fatalf("doc mutated: %+v", doc.Segments[0])
 	}
 }
@@ -197,17 +196,17 @@ func TestReviseHandler_RubyTextModeSection(t *testing.T) {
 	doc := protectReviseDoc("漢語の本", "<ruby>漢<rt>かん</rt></ruby>語の本", "<ruby>漢<rt>かん</rt></ruby>語の本")
 
 	fb := &fakeBackend{name: "fake", responses: []string{
-		"[revisions]\n0 | 漢語之書\n[ruby]\n0: 漢語 | かんご | phonetic | 1\n",
+		"[revisions]\n0 | 漢語之書\n[ruby]\n0: \"漢語\" | \"かんご\" | \"phonetic\" | \"1\"\n",
 	}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		ResponseMode: "text", RubyEnabled: true, RubyMode: "section",
+		ResponseMode: "text", RubyEnabled: true, RubyProtocolVersion: ruby.ProtocolV2, RubyMode: "section",
 	}
 
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
+	_, confirmed := runMemoryReviseTestRound(t, h, doc)
 	want := "<ruby>漢語<rt>かんご</rt></ruby>之書"
-	if result.callbackResult == nil || result.callbackResult.Segments[0].TargetText != want {
-		t.Fatalf("callback=%#v want %q", result.callbackResult, want)
+	if len(confirmed) != 1 || confirmed[0].TargetText != want {
+		t.Fatalf("callback=%#v want %q", confirmed, want)
 	}
 	user := fb.requests[0].User
 	if !strings.Contains(user, "ruby: 漢/かん#1") {
@@ -236,15 +235,15 @@ func TestReviseHandler_RubyInlineMarkersRejected(t *testing.T) {
 	}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json",
+		RubyEnabled: true, RubyProtocolVersion: ruby.ProtocolV2, RubyMode: "json",
 	}
 
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if !reflect.DeepEqual(result.unresolved, []int{0}) {
-		t.Fatalf("unresolved=%v want [0]", result.unresolved)
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if !reflect.DeepEqual(result.Unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.Unresolved)
 	}
-	if result.callbackResult != nil && len(result.callbackResult.Segments) != 0 {
-		t.Fatalf("callback=%#v want empty", result.callbackResult)
+	if len(confirmed) != 0 {
+		t.Fatalf("callback=%#v want empty", confirmed)
 	}
 	if doc.Segments[0].Target != target {
 		t.Fatalf("doc must keep annotated target, got %q", doc.Segments[0].Target)
@@ -259,7 +258,7 @@ func TestReviseHandler_RubyRealignmentIncompleteRejected(t *testing.T) {
 		name string
 		// revised 为 LLM 返回的修订译文；rubyOutput 缺省/未命中的两种失败形态。
 		revised   string
-		rubyEntry map[string]string
+		rubyEntry map[string]any
 	}{
 		{
 			// 漏返 ruby_output（text 模式 [ruby] 段可选、JSON 空数组合法）。
@@ -270,7 +269,7 @@ func TestReviseHandler_RubyRealignmentIncompleteRejected(t *testing.T) {
 			// 回填 base 未命中修订译文，SourceBase（漢）亦不在简体译文中。
 			name:      "ruby base misses revised text",
 			revised:   "汉语之书",
-			rubyEntry: map[string]string{"id": "1", "base": "和書", "text": "わしょ", "kind": "phonetic"},
+			rubyEntry: map[string]any{"id": "1", "base": "和書", "text": "わしょ", "kind": "phonetic", "occurrence": 1},
 		},
 		{
 			// 字面量 <ruby> 文本凑数：判据为还原器实际插入数而非子串计数，无法伪造。
@@ -287,20 +286,20 @@ func TestReviseHandler_RubyRealignmentIncompleteRejected(t *testing.T) {
 				"revisions": []map[string]string{{"id": "0", "target": tc.revised}},
 			}
 			if tc.rubyEntry != nil {
-				resp["ruby_output"] = map[string][]map[string]string{"0": {tc.rubyEntry}}
+				resp["ruby_output"] = map[string][]map[string]any{"0": {tc.rubyEntry}}
 			}
 			fb := &fakeBackend{name: "fake", responses: []string{mustJSON(t, resp)}}
 			h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 				Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-				RubyEnabled: true, RubyMode: "json",
+				RubyEnabled: true, RubyProtocolVersion: ruby.ProtocolV2, RubyMode: "json",
 			}
 
-			result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-			if !reflect.DeepEqual(result.unresolved, []int{0}) {
-				t.Fatalf("unresolved=%v want [0]", result.unresolved)
+			result, confirmed := runMemoryReviseTestRound(t, h, doc)
+			if !reflect.DeepEqual(result.Unresolved, []int{0}) {
+				t.Fatalf("unresolved=%v want [0]", result.Unresolved)
 			}
-			if result.callbackResult != nil && len(result.callbackResult.Segments) != 0 {
-				t.Fatalf("callback=%#v want empty", result.callbackResult)
+			if len(confirmed) != 0 {
+				t.Fatalf("callback=%#v want empty", confirmed)
 			}
 			if doc.Segments[0].Target != target {
 				t.Fatalf("doc must keep annotated target, got %q", doc.Segments[0].Target)
@@ -321,26 +320,26 @@ func TestReviseHandler_RubyKindRelabelAccepted(t *testing.T) {
 	fb := &fakeBackend{name: "fake", responses: []string{
 		mustJSON(t, map[string]any{
 			"revisions": []map[string]string{{"id": "0", "target": "漢語之書"}},
-			"ruby_output": map[string][]map[string]string{
-				"0": {{"id": "1", "base": "漢語", "text": "かんご", "kind": "semantic"}},
+			"ruby_output": map[string][]map[string]any{
+				"0": {{"id": "1", "base": "漢語", "text": "かんご", "kind": "semantic", "occurrence": 1}},
 			},
 		}),
 	}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json",
+		RubyEnabled: true, RubyProtocolVersion: ruby.ProtocolV2, RubyMode: "json",
 		RubyPreserveKinds: []string{"phonetic"},
 	}
 
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
-		t.Fatalf("callback=%#v want one revision（重分类不得导致拒绝）", result.callbackResult)
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 {
+		t.Fatalf("callback=%#v want one revision（重分类不得导致拒绝）", confirmed)
 	}
-	if want := "<ruby>漢語<rt>かんご</rt></ruby>之書"; result.callbackResult.Segments[0].TargetText != want {
-		t.Fatalf("target=%q want %q", result.callbackResult.Segments[0].TargetText, want)
+	if want := "<ruby>漢語<rt>かんご</rt></ruby>之書"; confirmed[0].TargetText != want {
+		t.Fatalf("target=%q want %q", confirmed[0].TargetText, want)
 	}
-	if len(result.unresolved) != 0 {
-		t.Fatalf("unresolved=%v want none", result.unresolved)
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("unresolved=%v want none", result.Unresolved)
 	}
 }
 
@@ -355,18 +354,18 @@ func TestReviseHandler_RubyEmptyBaseItemAccepted(t *testing.T) {
 	}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json",
+		RubyEnabled: true, RubyProtocolVersion: ruby.ProtocolV2, RubyMode: "json",
 	}
 
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
-		t.Fatalf("callback=%#v want one revision", result.callbackResult)
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 {
+		t.Fatalf("callback=%#v want one revision", confirmed)
 	}
-	if got := result.callbackResult.Segments[0].TargetText; got != "書" {
+	if got := confirmed[0].TargetText; got != "書" {
 		t.Fatalf("target=%q want %q", got, "書")
 	}
-	if len(result.unresolved) != 0 {
-		t.Fatalf("unresolved=%v want none", result.unresolved)
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("unresolved=%v want none", result.Unresolved)
 	}
 }
 
@@ -379,26 +378,26 @@ func TestReviseHandler_RubyPreserveKindsEmptyIgnored(t *testing.T) {
 	fb := &fakeBackend{name: "fake", responses: []string{
 		mustJSON(t, map[string]any{
 			"revisions": []map[string]string{{"id": "0", "target": "漢語之書"}},
-			"ruby_output": map[string][]map[string]string{
-				"0": {{"id": "1", "base": "漢語", "text": "かんご", "kind": "phonetic"}},
+			"ruby_output": map[string][]map[string]any{
+				"0": {{"id": "1", "base": "漢語", "text": "かんご", "kind": "phonetic", "occurrence": 1}},
 			},
 		}),
 	}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(),
 		Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger(),
-		RubyEnabled: true, RubyMode: "json",
+		RubyEnabled: true, RubyProtocolVersion: ruby.ProtocolV2, RubyMode: "json",
 		RubyPreserveKinds: []string{},
 	}
 
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
-		t.Fatalf("callback=%#v want one revision", result.callbackResult)
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 {
+		t.Fatalf("callback=%#v want one revision", confirmed)
 	}
-	if got := result.callbackResult.Segments[0].TargetText; got != "<ruby>漢語<rt>かんご</rt></ruby>之書" {
+	if got := confirmed[0].TargetText; got != "<ruby>漢語<rt>かんご</rt></ruby>之書" {
 		t.Fatalf("target=%q want restored %q", got, "<ruby>漢語<rt>かんご</rt></ruby>之書")
 	}
-	if len(result.unresolved) != 0 {
-		t.Fatalf("unresolved=%v want none", result.unresolved)
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("unresolved=%v want none", result.Unresolved)
 	}
 }
 
@@ -421,9 +420,9 @@ func TestReviseHandler_SnippetMappedToProtectedForm(t *testing.T) {
 	}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Protector: prot, Logger: discardLogger()}
 
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
-		t.Fatalf("callback=%#v want one revision (unchanged target keeps placeholders)", result.callbackResult)
+	_, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 {
+		t.Fatalf("callback=%#v want one revision (unchanged target keeps placeholders)", confirmed)
 	}
 	segs, _ := reviseUserPayload(t, fb.requests[0].User)
 	issues, _ := segs[0]["issues"].([]any)
@@ -447,9 +446,9 @@ func TestReviseHandler_RubyDisabledSendsRaw(t *testing.T) {
 	}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
 
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.callbackResult == nil || result.callbackResult.Segments[0].TargetText != target {
-		t.Fatalf("callback=%#v want raw passthrough", result.callbackResult)
+	_, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 || confirmed[0].TargetText != target {
+		t.Fatalf("callback=%#v want raw passthrough", confirmed)
 	}
 	// 降级路径直发原文：target 字段保留 <ruby> 标签（经反序列化断言，避开
 	// json.Marshal 的 HTML 转义）。

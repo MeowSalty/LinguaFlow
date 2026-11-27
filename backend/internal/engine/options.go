@@ -376,7 +376,7 @@ func buildExtractPipelineRound(
 	}
 
 	handler := &pipeline.ExtractHandler{
-		Backends:             []backend.Backend{rc.Backend},
+		Backend:              rc.Backend,
 		RoundIndex:           rc.RoundIndex,
 		Renderer:             e.Renderer,
 		Glossary:             glossaryRes,

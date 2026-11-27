@@ -14,6 +14,44 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
+func TestCapturedSemanticQAProviderRetryPersistsBeforePause(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"local timeout", context.DeadlineExceeded},
+		{"network failure", errors.New("network down")},
+		{"provider failure", &backend.StatusError{StatusCode: 503, Err: errors.New("upstream unavailable")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runtime := memoryTestRuntime(t, 1, nil)
+			memory := NewMemoryRoundStore(nil)
+			defer memory.Close()
+			store := &nativeStoredRoundTestStore{MemoryRoundStore: memory, onFailure: func(cursor WorkCursor) {
+				if cursor.Attempt == 1 {
+					runtime.Gate.Pause()
+				}
+			}}
+			remote := &fakeBackend{name: "test", errs: []error{tc.err}}
+			rep := &recordingBatchObserver{}
+			retry := backend.RetryPolicy{MaxAttempts: 1}
+			h := &SemanticQAHandler{Backend: remote, Renderer: newSemanticQARenderer(t), SegmentScope: "all", Retry: retry, Reporter: rep}
+			doc := semanticQADoc([]string{"translated"}, nil)
+			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+			defer cancel()
+			result, err := runMemoryTestRound(t, ctx, Round{Handler: h, Runtime: runtime, Store: store, Concurrency: 1, Retry: retry}, doc, nil, quietLogger(), rep)
+			if err != nil || !reflect.DeepEqual(result.Unresolved, []int{0}) || len(result.FailedSegments) != 0 || remote.idx.Load() != 1 {
+				t.Fatalf("unexpected retry result %+v calls=%d err=%v", result, remote.idx.Load(), err)
+			}
+			state, err := memory.Load(t.Context())
+			cursor := state.Cursors[0]
+			if err != nil || cursor.Pool != 0 || cursor.Attempt != 1 || cursor.NextAttemptAt.IsZero() || len(rep.events) != 1 || rep.events[0].ErrorType != "backend_error" {
+				t.Fatalf("retry cursor or provider event missing: cursor=%+v events=%+v err=%v", cursor, rep.events, err)
+			}
+		})
+	}
+}
+
 const testSemanticQATmpl = `Semantic QA for {{.SourceLang}} → {{.TargetLang}}. Reply as JSON: {"issues":[...]}`
 
 func newSemanticQARenderer(t *testing.T) *prompt.SemanticQARenderer {
@@ -185,7 +223,7 @@ func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
 	})
 }
 
-func TestSemanticQAHandler_ProcessBatch_ProducesIssues(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_ProducesIssues(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	// 预置一条规则 issue，确认 handler 回调只带新产出
 	doc.Segments[0].Issues = []qa.QualityIssue{
@@ -201,24 +239,24 @@ func TestSemanticQAHandler_ProcessBatch_ProducesIssues(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
 	if result.callbackResult == nil {
 		t.Fatal("expected callbackResult")
 	}
-	cb := result.callbackResult.Segments
+	cb := decodeCapturedQualityBatch(t, result).Segments
 	if len(cb) != 1 || len(cb[0].Issues) != 1 || cb[0].Issues[0].Code != "calque" {
 		t.Fatalf("callback issues=%v want only new calque", cb)
 	}
 	if cb[0].Issues[0].Severity != qa.SeverityWarning {
 		t.Fatalf("severity=%v want warning", cb[0].Issues[0].Severity)
 	}
-	// 内存 doc 应追加
-	if len(doc.Segments[0].Issues) != 2 {
-		t.Fatalf("doc issues len=%d want 2 (existing + new)", len(doc.Segments[0].Issues))
+	// 解析不修改输入段的原有规则问题。
+	if len(doc.Segments[0].Issues) != 1 {
+		t.Fatalf("doc issues len=%d want 1 existing", len(doc.Segments[0].Issues))
 	}
 }
 
-func TestSemanticQAHandler_ProcessBatch_EmptyIssuesMarksSegmentProcessed(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_EmptyIssuesMarksSegmentProcessed(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{name: "fake", responses: []string{`{"issues":[]}`}}
 	h := &SemanticQAHandler{SegmentScope: "all",
@@ -227,16 +265,16 @@ func TestSemanticQAHandler_ProcessBatch_EmptyIssuesMarksSegmentProcessed(t *test
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
 	if result.callbackResult == nil {
 		t.Fatal("expected callbackResult")
 	}
-	if result.callbackResult.Segments[0].Issues == nil {
+	if decodeCapturedQualityBatch(t, result).Segments[0].Issues == nil {
 		t.Fatal("successful empty scan must return a non-nil issue slice")
 	}
 }
 
-func TestSemanticQAHandler_ProcessBatch_ParseFailureProducesNone(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_ParseFailureProducesNone(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	doc.Segments[0].Issues = []qa.QualityIssue{
 		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"},
@@ -249,7 +287,7 @@ func TestSemanticQAHandler_ProcessBatch_ParseFailureProducesNone(t *testing.T) {
 		Logger:    quietLogger(),
 	}
 	// MaxAttempts=0 → transientBudget=1 → parse 失败在 attempt 0 即耗尽预算，落 unresolved（交下一池）
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
 	if len(doc.Segments[0].Issues) != 1 {
 		t.Fatalf("doc issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
 	}
@@ -267,7 +305,7 @@ func TestSemanticQAHandler_ProcessBatch_ParseFailureProducesNone(t *testing.T) {
 	}
 }
 
-func TestSemanticQAHandler_ProcessBatch_ParseFailureRetries(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_ParseFailureRetries(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{name: "fake", responses: []string{`not json at all`}}
 	h := &SemanticQAHandler{SegmentScope: "all",
@@ -276,7 +314,7 @@ func TestSemanticQAHandler_ProcessBatch_ParseFailureRetries(t *testing.T) {
 		Retry:    backend.RetryPolicy{MaxAttempts: 2},
 		Logger:   quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
 	if result.retry == nil || result.retry.attempt != 1 {
 		t.Fatalf("retry=%v want attempt=1", result.retry)
 	}
@@ -288,245 +326,7 @@ func TestSemanticQAHandler_ProcessBatch_ParseFailureRetries(t *testing.T) {
 	}
 }
 
-func TestSemanticQAHandler_ProcessBatch_BackendErrorProducesNone(t *testing.T) {
-	doc := semanticQADoc([]string{"translated"}, nil)
-	doc.Segments[0].Issues = []qa.QualityIssue{
-		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"},
-	}
-	// MaxAttempts=0 → transientBudget=1 → 预算耗尽，落 unresolved（交下一池）
-	fb := &fakeBackend{name: "fake", errs: []error{errors.New("network down")}}
-	h := &SemanticQAHandler{SegmentScope: "all",
-		Backend:   fb,
-		Renderer:  newSemanticQARenderer(t),
-		BatchSize: 10,
-		Logger:    quietLogger(),
-	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if len(doc.Segments[0].Issues) != 1 {
-		t.Fatalf("doc issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
-	}
-	if result.callbackResult != nil {
-		t.Fatal("backend error must not produce callbackResult (would write back empty issues)")
-	}
-	if result.retry != nil {
-		t.Fatal("MaxAttempts=0 must not retry")
-	}
-	if !reflect.DeepEqual(result.unresolved, []int{0}) {
-		t.Fatalf("unresolved=%v want [0]", result.unresolved)
-	}
-	if result.failedSegments != nil {
-		t.Fatalf("unresolved path must not set failedSegments, got %v", result.failedSegments)
-	}
-}
-
-func TestSemanticQAHandler_ProcessBatch_NetworkErrorRetries(t *testing.T) {
-	doc := semanticQADoc([]string{"translated"}, nil)
-	fb := &fakeBackend{name: "fake", errs: []error{errors.New("network down")}}
-	h := &SemanticQAHandler{SegmentScope: "all",
-		Backend:  fb,
-		Renderer: newSemanticQARenderer(t),
-		Retry: backend.RetryPolicy{
-			MaxAttempts: 2,
-			Backoff:     time.Millisecond, // 缩短测试时间；minRateLimitBackoff 仍会生效
-		},
-		Logger: quietLogger(),
-	}
-	// 覆盖 minRateLimitBackoff 的等待：用短 backoff 仍会至少等 5s；测试里接受。
-	// 为避免 5s 等待，改用 StatusError 500 测重试路径（同 IsRetryable）。
-	// 本用例验证裸网络错误 + canRetry → retry。
-	start := time.Now()
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.retry == nil || result.retry.attempt != 1 {
-		t.Fatalf("retry=%v want attempt=1 (elapsed=%s)", result.retry, time.Since(start))
-	}
-	if result.callbackResult != nil {
-		t.Fatal("retry path must not produce callbackResult")
-	}
-	if result.failedSegments != nil {
-		t.Fatalf("retry path must not set failedSegments, got %v", result.failedSegments)
-	}
-}
-
-func TestSemanticQAHandler_ProcessBatch_5xxRetriesAndExhausts(t *testing.T) {
-	doc := semanticQADoc([]string{"translated"}, nil)
-	err500 := &backend.StatusError{StatusCode: 500, Err: errors.New("internal")}
-	fb := &fakeBackend{name: "fake", errs: []error{err500}}
-	h := &SemanticQAHandler{SegmentScope: "all",
-		Backend:  fb,
-		Renderer: newSemanticQARenderer(t),
-		Retry: backend.RetryPolicy{
-			MaxAttempts: 1,
-			Backoff:     time.Millisecond,
-		},
-		Logger: quietLogger(),
-	}
-
-	// attempt 0 → retry（transientBudget=min(1+1,3)=2，预算内重试）
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.retry == nil || result.retry.attempt != 1 {
-		t.Fatalf("attempt0 retry=%v want attempt=1", result.retry)
-	}
-
-	// attempt 1 → 预算耗尽，落 unresolved（交下一池重切）
-	fb2 := &fakeBackend{name: "fake", errs: []error{err500}}
-	h.Backend = fb2
-	result = h.ProcessBatch(context.Background(), doc, []int{0}, 1, quietLogger())
-	if result.retry != nil {
-		t.Fatalf("exhausted must not retry, got %v", result.retry)
-	}
-	if !reflect.DeepEqual(result.unresolved, []int{0}) {
-		t.Fatalf("unresolved=%v want [0]", result.unresolved)
-	}
-	if result.failedSegments != nil {
-		t.Fatalf("unresolved path must not set failedSegments, got %v", result.failedSegments)
-	}
-	if result.callbackResult != nil {
-		t.Fatal("exhausted must not produce callbackResult (would write back empty issues)")
-	}
-}
-
-func TestSemanticQAHandler_ProcessBatch_401Terminal(t *testing.T) {
-	doc := semanticQADoc([]string{"translated"}, nil)
-	err401 := &backend.StatusError{StatusCode: 401, Err: errors.New("unauthorized")}
-	fb := &fakeBackend{name: "fake", errs: []error{err401}}
-	h := &SemanticQAHandler{SegmentScope: "all",
-		Backend:  fb,
-		Renderer: newSemanticQARenderer(t),
-		Retry:    backend.RetryPolicy{MaxAttempts: 5},
-		Logger:   quietLogger(),
-	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.retry != nil {
-		t.Fatalf("401 must not retry, got %v", result.retry)
-	}
-	// 401/403 → fatalUnresolved（跳池 + 跨轮传播换 backend），不再计入扫描失败软警告。
-	if !reflect.DeepEqual(result.fatalUnresolved, []int{0}) {
-		t.Fatalf("fatalUnresolved=%v want [0]", result.fatalUnresolved)
-	}
-	if result.failedSegments != nil {
-		t.Fatalf("401 must not set failedSegments (now fatalUnresolved), got %v", result.failedSegments)
-	}
-}
-
-func TestSemanticQAHandler_ProcessBatch_CtxCancelNotCounted(t *testing.T) {
-	doc := semanticQADoc([]string{"translated"}, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	fb := &fakeBackend{name: "fake", errs: []error{context.Canceled}}
-	h := &SemanticQAHandler{SegmentScope: "all",
-		Backend:  fb,
-		Renderer: newSemanticQARenderer(t),
-		Retry:    backend.RetryPolicy{MaxAttempts: 2},
-		Logger:   quietLogger(),
-	}
-	result := h.ProcessBatch(ctx, doc, []int{0}, 0, quietLogger())
-	if result.retry != nil {
-		t.Fatalf("ctx cancel must not retry, got %v", result.retry)
-	}
-	if result.failedSegments != nil {
-		t.Fatalf("ctx cancel must not count as scan failure, failedSegments=%v", result.failedSegments)
-	}
-	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
-		t.Fatal("ctx cancel must preserve with nil issues")
-	}
-	_ = cancel
-}
-
-func TestSemanticQAHandler_ProcessBatch_LocalTimeoutRetries(t *testing.T) {
-	doc := semanticQADoc([]string{"translated"}, nil)
-	fb := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
-	h := &SemanticQAHandler{SegmentScope: "all",
-		Backend:  fb,
-		Renderer: newSemanticQARenderer(t),
-		Retry: backend.RetryPolicy{
-			MaxAttempts: 2,
-			Backoff:     time.Millisecond, // minRateLimitBackoff 仍生效，接受 ~5s 等待
-		},
-		Logger: quietLogger(),
-	}
-	// 父 ctx 仍活：本地 backend timeout 应按可重试处理。
-	start := time.Now()
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.retry == nil || result.retry.attempt != 1 {
-		t.Fatalf("local timeout retry=%v want attempt=1 (elapsed=%s)", result.retry, time.Since(start))
-	}
-	if result.callbackResult != nil {
-		t.Fatal("retry path must not produce callbackResult")
-	}
-	if result.failedSegments != nil {
-		t.Fatalf("retry path must not set failedSegments, got %v", result.failedSegments)
-	}
-}
-
-func TestSemanticQAHandler_ProcessBatch_LocalTimeoutExhausts(t *testing.T) {
-	doc := semanticQADoc([]string{"translated"}, nil)
-	fb := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
-	h := &SemanticQAHandler{SegmentScope: "all",
-		Backend:  fb,
-		Renderer: newSemanticQARenderer(t),
-		Retry: backend.RetryPolicy{
-			MaxAttempts: 1,
-			Backoff:     time.Millisecond,
-		},
-		Logger: quietLogger(),
-	}
-
-	// attempt 0 → retry（会等 minRateLimitBackoff ~5s）
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.retry == nil || result.retry.attempt != 1 {
-		t.Fatalf("attempt0 retry=%v want attempt=1", result.retry)
-	}
-
-	// attempt 1 → 预算耗尽（transientBudget=2），落 unresolved（交下一池，不触发第二次 5s 等待）
-	fb2 := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
-	h.Backend = fb2
-	result = h.ProcessBatch(context.Background(), doc, []int{0}, 1, quietLogger())
-	if result.retry != nil {
-		t.Fatalf("exhausted must not retry, got %v", result.retry)
-	}
-	if !reflect.DeepEqual(result.unresolved, []int{0}) {
-		t.Fatalf("unresolved=%v want [0]", result.unresolved)
-	}
-	if result.failedSegments != nil {
-		t.Fatalf("unresolved path must not set failedSegments, got %v", result.failedSegments)
-	}
-	if result.callbackResult != nil {
-		t.Fatal("exhausted must not produce callbackResult (would write back empty issues)")
-	}
-}
-
-func TestSemanticQAHandler_ProcessBatch_ParentDeadlineNotCounted(t *testing.T) {
-	doc := semanticQADoc([]string{"translated"}, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
-	defer cancel()
-	// Windows 定时器分辨率可能 >1ms，轮询直至父 deadline 过期。
-	deadline := time.Now().Add(200 * time.Millisecond)
-	for ctx.Err() == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("parent ctx should already be expired")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	fb := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
-	h := &SemanticQAHandler{SegmentScope: "all",
-		Backend:  fb,
-		Renderer: newSemanticQARenderer(t),
-		Retry:    backend.RetryPolicy{MaxAttempts: 2},
-		Logger:   quietLogger(),
-	}
-	result := h.ProcessBatch(ctx, doc, []int{0}, 0, quietLogger())
-	if result.retry != nil {
-		t.Fatalf("parent deadline must not retry, got %v", result.retry)
-	}
-	if result.failedSegments != nil {
-		t.Fatalf("parent deadline must not count as scan failure, failedSegments=%v", result.failedSegments)
-	}
-	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
-		t.Fatal("parent deadline must preserve with nil issues")
-	}
-}
-
-func TestSemanticQAHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_NonTextAttachesSchema(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{
 		name:      "fake",
@@ -538,7 +338,7 @@ func TestSemanticQAHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	runCapturedQualityTest(t, h, doc, nil)
 	if len(fb.requests) != 1 {
 		t.Fatalf("requests=%d want 1", len(fb.requests))
 	}
@@ -550,7 +350,7 @@ func TestSemanticQAHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
 	}
 }
 
-func TestSemanticQAHandler_ProcessBatch_TextMode(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_TextMode(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{
 		name:      "fake",
@@ -563,8 +363,8 @@ func TestSemanticQAHandler_ProcessBatch_TextMode(t *testing.T) {
 		ResponseMode: "text",
 		Logger:       quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.callbackResult == nil {
+	_, batch := runCapturedQualityTest(t, h, doc, nil)
+	if batch == nil {
 		t.Fatal("expected callbackResult")
 	}
 	if len(fb.requests) != 1 {
@@ -583,13 +383,13 @@ func TestSemanticQAHandler_ProcessBatch_TextMode(t *testing.T) {
 	if !strings.Contains(req.User, "[segment]") {
 		t.Fatalf("text user missing [segment]:\n%s", req.User)
 	}
-	if len(result.callbackResult.Segments[0].Issues) != 1 ||
-		result.callbackResult.Segments[0].Issues[0].Code != "calque" {
-		t.Fatalf("callback issues=%v", result.callbackResult.Segments[0].Issues)
+	if len(batch.Segments[0].Issues) != 1 ||
+		batch.Segments[0].Issues[0].Code != "calque" {
+		t.Fatalf("callback issues=%v", batch.Segments[0].Issues)
 	}
 }
 
-func TestSemanticQAHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_TextModeJSONFallback(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{
 		name:      "fake",
@@ -602,20 +402,20 @@ func TestSemanticQAHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
 		ResponseMode: "text",
 		Logger:       quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.callbackResult == nil || len(result.callbackResult.Segments[0].Issues) != 1 {
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
+	if result.callbackResult == nil || len(decodeCapturedQualityBatch(t, result).Segments[0].Issues) != 1 {
 		t.Fatalf("want 1 issue via JSON fallback, got %#v", result.callbackResult)
 	}
-	if result.callbackResult.Segments[0].Issues[0].Code != "naturalness" {
-		t.Fatalf("code=%q", result.callbackResult.Segments[0].Issues[0].Code)
+	if decodeCapturedQualityBatch(t, result).Segments[0].Issues[0].Code != "naturalness" {
+		t.Fatalf("code=%q", decodeCapturedQualityBatch(t, result).Segments[0].Issues[0].Code)
 	}
 }
 
-// TestSemanticQAHandler_ProcessBatch_TextModeTruncatedRefused fail-closed stage
+// TestSemanticQAHandler_CapturedResponse_TextModeTruncatedRefused fail-closed stage
 // 对截断响应恒不采纳（text 协议逐行解析无完整性信号，截断的已完成行会被当作
 // 完整质检结果形成假阴性）：后端标记 Truncated 时即使 text 协议命中也必须
 // 报 parse_error 走重试，事件携带截断信号。
-func TestSemanticQAHandler_ProcessBatch_TextModeTruncatedRefused(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_TextModeTruncatedRefused(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	rec := &recordingBatchObserver{}
 	fb := &truncatedFakeBackend{
@@ -632,10 +432,10 @@ func TestSemanticQAHandler_ProcessBatch_TextModeTruncatedRefused(t *testing.T) {
 		Reporter:     rec,
 		Logger:       quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.callbackResult != nil {
+	_, batch := runCapturedQualityTest(t, h, doc, rec)
+	if batch != nil {
 		t.Fatalf("truncated text response must not be accepted as complete issues, got %#v",
-			result.callbackResult)
+			batch)
 	}
 	if len(rec.events) == 0 {
 		t.Fatal("expected parse_error event")
@@ -646,11 +446,11 @@ func TestSemanticQAHandler_ProcessBatch_TextModeTruncatedRefused(t *testing.T) {
 	}
 }
 
-// TestSemanticQAHandler_ProcessBatch_TruncatedCompleteJSONRefused 同一 fail-closed
+// TestSemanticQAHandler_CapturedResponse_TruncatedCompleteJSONRefused 同一 fail-closed
 // 规则封住「截断点恰在完整边界、解析成功」的残余通道：JSON 本身完整可解析
 // （对照 TextModeJSONFallback 的成功路径），但后端标记 Truncated 即拒绝——
 // 无法排除模型还想输出更多 issue。
-func TestSemanticQAHandler_ProcessBatch_TruncatedCompleteJSONRefused(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_TruncatedCompleteJSONRefused(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	rec := &recordingBatchObserver{}
 	fb := &truncatedFakeBackend{
@@ -666,10 +466,10 @@ func TestSemanticQAHandler_ProcessBatch_TruncatedCompleteJSONRefused(t *testing.
 		Reporter:  rec,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-	if result.callbackResult != nil {
+	_, batch := runCapturedQualityTest(t, h, doc, rec)
+	if batch != nil {
 		t.Fatalf("truncated response must not be accepted even when JSON parses cleanly, got %#v",
-			result.callbackResult)
+			batch)
 	}
 	if len(rec.events) == 0 || rec.events[0].ErrorType != "parse_error" || !rec.events[0].Truncated {
 		t.Fatalf("want parse_error event with truncated=true, got %+v", rec.events)
@@ -737,7 +537,7 @@ func TestSemanticQAHandler_BuildBatches_CountsSourceAndTargetWords(t *testing.T)
 	}
 }
 
-func TestSemanticQAHandler_ProcessBatch_MultipleIssuesPerSegment(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_MultipleIssuesPerSegment(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{
 		name: "fake",
@@ -753,17 +553,17 @@ func TestSemanticQAHandler_ProcessBatch_MultipleIssuesPerSegment(t *testing.T) {
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
 	if result.callbackResult == nil {
 		t.Fatal("expected callbackResult")
 	}
 	// 相同 (code, matched_text) 去重后剩 2 条
-	if len(result.callbackResult.Segments[0].Issues) != 2 {
-		t.Fatalf("want 2 issues after dedup, got %v", result.callbackResult.Segments[0].Issues)
+	if len(decodeCapturedQualityBatch(t, result).Segments[0].Issues) != 2 {
+		t.Fatalf("want 2 issues after dedup, got %v", decodeCapturedQualityBatch(t, result).Segments[0].Issues)
 	}
 }
 
-func TestSemanticQAHandler_ProcessBatch_SameCodeDifferentSnippets(t *testing.T) {
+func TestSemanticQAHandler_CapturedResponse_SameCodeDifferentSnippets(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	doc.Segments[0].Target = "foo bar baz"
 	fb := &fakeBackend{
@@ -779,11 +579,11 @@ func TestSemanticQAHandler_ProcessBatch_SameCodeDifferentSnippets(t *testing.T) 
 		BatchSize: 10,
 		Logger:    quietLogger(),
 	}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	result := h.processStoredResponse(t.Context(), doc, []int{0}, &backend.Response{Text: fb.responses[0]}, 0, quietLogger())
 	if result.callbackResult == nil {
 		t.Fatal("expected callbackResult")
 	}
-	issues := result.callbackResult.Segments[0].Issues
+	issues := decodeCapturedQualityBatch(t, result).Segments[0].Issues
 	if len(issues) != 2 {
 		t.Fatalf("want 2 distinct calque issues, got %v", issues)
 	}

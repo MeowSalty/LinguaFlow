@@ -286,6 +286,11 @@ func (s *MemoryRoundStore) reserveMembers(ctx context.Context, in RequestIntent)
 		}
 		m.Allocation = nil
 		m.Release = nil
+		if in.Mode == RoundModeSemanticQA || in.Mode == RoundModeAdjudicate || in.Mode == RoundModeExtract {
+			// The frozen digest owns the baseline, so a retained memory capture
+			// never keeps the original document alive through a target pointer.
+			m.BaselineTarget = nil
+		}
 		r.inputs[i] = m
 		r.memberBackings[i] = backing
 		backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "freeze", Operation: "input_write", Bytes: m.Bytes, Rows: 1})

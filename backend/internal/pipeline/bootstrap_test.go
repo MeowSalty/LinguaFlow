@@ -86,6 +86,16 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+func runMemoryExtractTestRound(t *testing.T, round Round, h *ExtractHandler, doc *Document) (RunRoundResult, error) {
+	t.Helper()
+	round.Runtime = memoryTestRuntime(t, round.Concurrency, nil)
+	round.Handler = h
+	raw := h.Backend
+	defer func() { h.Backend = raw }()
+	h.Backend = BindRequestBackend(raw, 1, h.RoundIndex, round.Runtime)
+	return RunRound(t.Context(), round, doc, nil, discardLogger(), nil)
+}
+
 func TestExtractHandler_AddsExtractedTermsToGlossary(t *testing.T) {
 	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
@@ -102,7 +112,7 @@ func TestExtractHandler_AddsExtractedTermsToGlossary(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            10,
@@ -116,7 +126,7 @@ func TestExtractHandler_AddsExtractedTermsToGlossary(t *testing.T) {
 		Handler:     h,
 	}
 
-	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	_, err := runMemoryExtractTestRound(t, round, h, doc)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -139,7 +149,7 @@ func TestExtractHandler_FiltersTooShortTerms(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            10,
@@ -153,7 +163,7 @@ func TestExtractHandler_FiltersTooShortTerms(t *testing.T) {
 		Handler:     h,
 	}
 
-	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	_, err := runMemoryExtractTestRound(t, round, h, doc)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -183,7 +193,7 @@ func TestExtractHandler_BatchFailureDoesNotAbortStage(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            1,
@@ -198,7 +208,7 @@ func TestExtractHandler_BatchFailureDoesNotAbortStage(t *testing.T) {
 		Handler:     h,
 	}
 
-	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	_, err := runMemoryExtractTestRound(t, round, h, doc)
 	if err != nil {
 		t.Fatalf("run should not fail on single batch error, got: %v", err)
 	}
@@ -222,7 +232,7 @@ func TestExtractHandler_AllBatchesFailed(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            1,
@@ -237,7 +247,7 @@ func TestExtractHandler_AllBatchesFailed(t *testing.T) {
 		Handler:     h,
 	}
 
-	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	_, err := runMemoryExtractTestRound(t, round, h, doc)
 	if err == nil {
 		t.Fatal("expected error when all batches fail, got nil")
 	}
@@ -252,7 +262,7 @@ func TestExtractHandler_NoSegments(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:  []backend.Backend{fb},
+		Backend:   fb,
 		Renderer:  newBootstrapRenderer(t),
 		Glossary:  g,
 		BatchSize: 10,
@@ -264,7 +274,7 @@ func TestExtractHandler_NoSegments(t *testing.T) {
 		Handler:     h,
 	}
 
-	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	_, err := runMemoryExtractTestRound(t, round, h, doc)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -291,7 +301,7 @@ func TestExtractHandler_SendAll_BothZero(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            0,
@@ -306,7 +316,7 @@ func TestExtractHandler_SendAll_BothZero(t *testing.T) {
 		Handler:     h,
 	}
 
-	result, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	result, err := runMemoryExtractTestRound(t, round, h, doc)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -338,7 +348,7 @@ func TestExtractHandler_JSONRequestShape(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            10,
@@ -349,7 +359,7 @@ func TestExtractHandler_JSONRequestShape(t *testing.T) {
 	}
 
 	round := Round{Concurrency: 1, Handler: h}
-	if _, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil); err != nil {
+	if _, err := runMemoryExtractTestRound(t, round, h, doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if len(fb.requests) != 1 {
@@ -383,7 +393,7 @@ func TestExtractHandler_TextModeRequestAndParse(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            10,
@@ -394,7 +404,7 @@ func TestExtractHandler_TextModeRequestAndParse(t *testing.T) {
 	}
 
 	round := Round{Concurrency: 1, Handler: h}
-	if _, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil); err != nil {
+	if _, err := runMemoryExtractTestRound(t, round, h, doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if len(fb.requests) != 1 {
@@ -430,7 +440,7 @@ func TestExtractHandler_TextModeEmptyGlossary(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            10,
@@ -441,7 +451,7 @@ func TestExtractHandler_TextModeEmptyGlossary(t *testing.T) {
 	}
 
 	round := Round{Concurrency: 1, Handler: h}
-	if _, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil); err != nil {
+	if _, err := runMemoryExtractTestRound(t, round, h, doc); err != nil {
 		t.Fatalf("empty glossary should succeed, got: %v", err)
 	}
 	if g.Len() != 0 {
@@ -466,7 +476,7 @@ func TestExtractHandler_TextModeJSONFallback(t *testing.T) {
 	g := glossary.NewMemory()
 
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            10,
@@ -477,7 +487,7 @@ func TestExtractHandler_TextModeJSONFallback(t *testing.T) {
 	}
 
 	round := Round{Concurrency: 1, Handler: h}
-	if _, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil); err != nil {
+	if _, err := runMemoryExtractTestRound(t, round, h, doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if g.Len() != 1 {
@@ -506,7 +516,7 @@ func TestExtractHandler_MaxWordsPerBatch(t *testing.T) {
 	// MaxWordsPerBatch=10 means each batch can have at most 10 words
 	// With ~6, ~5, ~5 words per segment, this should produce 2-3 batches
 	h := &ExtractHandler{
-		Backends:             []backend.Backend{fb},
+		Backend:              fb,
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            0,  // no segment count limit
@@ -521,7 +531,7 @@ func TestExtractHandler_MaxWordsPerBatch(t *testing.T) {
 		Handler:     h,
 	}
 
-	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	_, err := runMemoryExtractTestRound(t, round, h, doc)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}

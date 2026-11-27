@@ -2,17 +2,11 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
-	"strings"
-	"sync/atomic"
-	"time"
+	"slices"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/markup"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
@@ -20,8 +14,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
-// ReviseHandler 实现 RoundHandler，对带待处理语义问题的译文做 LLM 修订。
-// 不改译文、不改段落状态；内存与数据库写回由批次处理器负责。
+// ReviseHandler 对带待处理语义问题的译文做 LLM 修订。
+// 正式执行器先暂存候选结果，再由轮次存储确认译文。
 //
 // 输入保护与 translate 轮同构：修订 prompt 中的 target 为占位符化、注音剥离形态，
 // LLM 返回后经占位符完整性校验 → 还原 → 注音对齐还原，最终译文才进入 callback。
@@ -42,11 +36,7 @@ type ReviseHandler struct {
 	Reporter          progress.Reporter
 	Logger            *slog.Logger
 
-	// Gate 是任务级暂停闸门（退避重试等待中止信号）；nil 时无暂停语义。
-	Gate *PauseGate
-
 	RoundIndex          int // execution plan round index, set by caller
-	prepareOnly         bool
 	buildBounds         *backend.BuildBounds
 	RubyProtocolVersion int
 
@@ -64,6 +54,8 @@ type ReviseHandler struct {
 
 func (h *ReviseHandler) ModeName() string { return RoundModeRevise }
 
+func (*ReviseHandler) stagedRound() {}
+
 func (h *ReviseHandler) Finalize(_ context.Context, _ *Document, _ []int) error { return nil }
 
 func (h *ReviseHandler) logger() *slog.Logger {
@@ -71,16 +63,6 @@ func (h *ReviseHandler) logger() *slog.Logger {
 		return slog.Default()
 	}
 	return h.Logger
-}
-
-func (h *ReviseHandler) emitBatchOutcome(evt progress.BatchEvent) {
-	if h.Reporter == nil {
-		return
-	}
-	obs, ok := h.Reporter.(progress.BatchObserver)
-	if ok {
-		obs.OnBatchEvent(evt)
-	}
 }
 
 func (h *ReviseHandler) issueCodeSet() map[string]struct{} {
@@ -107,8 +89,6 @@ func reviseSegmentInScope(seg Segment, codes map[string]struct{}) bool {
 type reviseProtectState struct {
 	mapping   map[string]string // target 侧「占位符 → 原片段」映射
 	rubyItems []ruby.Item       // 从 target 提取的注音条目（尚无 LLM 回填）
-	// strippedSource 是剥离注音标签后的 source，供注音对齐定向重试引用原文。
-	strippedSource string
 }
 
 // buildProtectedInputs 构建修订 prompt 的输入段：target 经注音剥离 + 占位符化，
@@ -145,6 +125,7 @@ func (h *ReviseHandler) buildProtectedInputs(
 			if extractErr != nil {
 				return nil, nil, nil, extractErr
 			}
+			items = slices.DeleteFunc(items, func(item ruby.Item) bool { return !item.Restorable() })
 			if len(items) > 0 {
 				st.rubyItems = items
 				if err := backend.ReserveSlice[prompt.RubyAnnotation](b, int64(len(items))); err != nil {
@@ -174,7 +155,6 @@ func (h *ReviseHandler) buildProtectedInputs(
 			if stripErr != nil {
 				return nil, nil, nil, stripErr
 			}
-			st.strippedSource = source
 		}
 
 		issues := make([]prompt.ReviseIssue, 0)
@@ -201,140 +181,6 @@ func (h *ReviseHandler) buildProtectedInputs(
 		segments = append(segments, prompt.ReviseSegment{ID: seg.ID, Source: source, Target: protectedTarget, Issues: issues})
 	}
 	return segments, states, rubyAnns, nil
-}
-
-// finalizeRevision 对单条修订结果做占位符完整性校验与两级还原：
-// 变体归一 → PlaceholderViolations（违规即拒绝，由调用方计入 unresolved）→
-// RestoreText 还原保护片段 → 注音对齐还原（复用 restoreSegmentRuby，获得与
-// translate 轮一致的 inline 标记容错与定向对齐重试）。
-// format 是文档格式，供最终的结构守卫做格式门禁（见函数尾注）。
-// 返回最终译文；ok=false 表示占位符守恒被破坏、注音回填不完整或译文结构退化，
-// 该段不可采信。
-func (h *ReviseHandler) finalizeRevision(
-	ctx context.Context,
-	seg *Segment,
-	revision prompt.ReviseRevision,
-	st *reviseProtectState,
-	rubyOutput map[string][]ruby.OutputEntry,
-	isTextMode bool,
-	format string,
-	logger *slog.Logger,
-) (string, bool) {
-	text := revision.Target
-	if h.Repair.PlaceholderNormalize {
-		if normText, normalized := repair.NormalizePlaceholders(text, st.mapping); len(normalized) > 0 {
-			logger.Info("revise placeholders normalized", "seg", seg.ID, "normalized", normalized)
-			text = normText
-		}
-	}
-	vseg := &model.Segment{Target: text, Protected: st.mapping}
-	missingPH, duplicatedPH, inventedPH := protect.PlaceholderViolations(vseg)
-	if len(missingPH) > 0 || len(duplicatedPH) > 0 || len(inventedPH) > 0 {
-		logger.Warn("revise segment placeholder integrity violation",
-			"seg", seg.ID,
-			"missing", missingPH,
-			"duplicated", duplicatedPH,
-			"invented", inventedPH)
-		return "", false
-	}
-	text = protect.RestoreText(text, st.mapping)
-
-	if h.RubyEnabled && len(st.rubyItems) > 0 {
-		// 协议禁止在 target 中内联 ⟦ruby:...⟧ 标记：translate 轮将其作为容错通道，
-		// 但标记计数由 LLM 自证、无法与存量条目交叉核验，容忍即开放守卫绕过
-		// （伪造标记凑数丢弃存量注音）——检测到即按占位符违规同语义拒绝。
-		if strings.Contains(text, "⟦ruby:") {
-			logger.Warn("revise segment returned forbidden inline ruby marker", "seg", seg.ID)
-			return "", false
-		}
-		items := append([]ruby.Item(nil), st.rubyItems...)
-		if ro, ok := rubyOutput[revision.ID]; ok && len(ro) > 0 {
-			ruby.MergeByOutput(items, ro)
-		}
-		// 临时段副本驱动 restoreSegmentRuby：Meta 用全新 map，不共享/污染原段。
-		tmp := &Segment{
-			ID:             seg.ID,
-			Source:         st.strippedSource,
-			OriginalSource: st.strippedSource,
-			Target:         text,
-			Meta:           map[string]any{"ruby_items": items},
-		}
-		// keepSet 传字面 nil（不过滤）：存量注音无 kind 属性、不参与 preserve_kinds
-		// ——LLM 重分类（含幻觉 kind）既不得剥离存量注音，也不得触发整段拒绝
-		// （消除「重分类到集合外 → 永久 unresolved」的尖锐边界）；Want 与还原器
-		// Total 单一来源，无需在调用方重复计算。
-		outcome := restoreSegmentRuby(ctx, tmp, nil,
-			h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode, h.RoundIndex, h.Repair,
-			h.RubyRetryAttempts, h.RubyTemplates)
-		// 注音守恒守卫：修订前的 target 带注音，剥离后必须完整回填后才能采信。
-		// 判据用还原器实际插入数而非子串计数，LLM 写字面量 <ruby> 文本或
-		// ⟦ruby:⟧ 标记均无法凑数（后者直接在上方拒绝）。不完整即拒绝该段修订
-		// （计入 unresolved），防止剥离形态译文被静默写回导致存量注音丢失
-		// （translate 轮无此守卫：其注音为新增而非存量）。
-		if outcome.Restored < outcome.Want {
-			logger.Warn("revise segment ruby realignment incomplete",
-				"seg", seg.ID, "expected", outcome.Want, "restored", outcome.Restored)
-			return "", false
-		}
-		text = tmp.Target
-	}
-
-	// 结构守卫：revise 与 translate 轮同为 LLM 直写译文，可能违反协议直写裸标签、
-	// 或按子串回填把既有标签劈开。与 correct 轮同一口径——判据是「不要把已经
-	// 合法的译文改坏」，基线取改写前的译文（doc 原始 Target，未被本函数污染）。
-	// 守卫位于占位符还原与注音还原之后，因为它们是坏结构的制造者之一。
-	// 违规按占位符守恒分支同语义 fail-closed：拒绝本次改写（ok=false → 该段计入
-	// unresolved），交由下一池重试或跨轮传播。
-	if markup.RequiresWellFormedTargets(format) {
-		if err := markup.TargetRegression(seg.Target, text); err != nil {
-			logger.Warn("revise segment target markup regression",
-				"seg", seg.ID, "err", err)
-			return "", false
-		}
-	}
-	return text, true
-}
-
-// extractTargetRuby 提取译文中的注音条目并返回剥离标签后的译文。
-// 委托纯函数 ruby.Extract，与 translate 轮对 source 的提取同源；
-// 文本不含 ruby 标签时原样返回（快速路径：正则不命中即原样返回，无额外开销）。
-func extractTargetRuby(target string) (string, []ruby.Item) {
-	items, stripped := ruby.Extract(target)
-	return stripped, items
-}
-
-// mapSnippetToProtectedForm 把 issue snippet（原始文本片段）映射到与 prompt 内
-// target 一致的形态：剥离注音标签后，把已被保护的原文片段替换回占位符。
-// 按「原片段长度降序」替换：映射值之间可能存在包含关系（如 "code" 与 "encode"），
-// 先替换更长原片段可避免误替换（restoreAll 的 key 长降序同理，方向相反）。
-func mapSnippetToProtectedForm(snippet string, mapping map[string]string) string {
-	if snippet == "" {
-		return snippet
-	}
-	if strings.Contains(snippet, "<ruby>") {
-		snippet = ruby.StripRubyTags(snippet)
-	}
-	if len(mapping) == 0 {
-		return snippet
-	}
-	keys := make([]string, 0, len(mapping))
-	for k := range mapping {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		vi, vj := mapping[keys[i]], mapping[keys[j]]
-		if len(vi) != len(vj) {
-			return len(vi) > len(vj)
-		}
-		return keys[i] > keys[j]
-	})
-	for _, k := range keys {
-		v := mapping[k]
-		if v != "" && strings.Contains(snippet, v) {
-			snippet = strings.ReplaceAll(snippet, v, k)
-		}
-	}
-	return snippet
 }
 
 // BuildBatches 选 Translate 标记、status∈{translated,edited}、Target 非空且含待修订
@@ -393,227 +239,4 @@ func (h *ReviseHandler) BuildBatches(_ context.Context, doc *Document, pending [
 		"batch_size", h.BatchSize, "max_words_per_batch", h.MaxWordsPerBatch,
 		"max_batch_index_span", h.MaxBatchIndexSpan)
 	return batches, nil
-}
-
-// ProcessBatch 渲染修订 prompt → 调用 LLM → 解析整段修订译文。
-// target 与 translate 轮同构地先行保护：注音剥离 + 占位符化后下发；LLM 返回经
-// 占位符完整性校验、还原与注音对齐还原，最终译文才进入 callback。
-// 失败时不产出 callbackResult；成功时 callback 仅包含 LLM 返回的合法段。
-func (h *ReviseHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
-	batchStart := time.Now()
-	tried := []string{h.Backend.Name()}
-	codes := h.issueCodeSet()
-	proto := prompt.ProtocolFromResponseMode(h.ResponseMode)
-	isTextMode := proto.IsText()
-
-	segments, states, rubyAnns, protectErr := h.buildProtectedInputs(doc, idxs, codes)
-	if protectErr != nil {
-		logger.Error("revise protect failed", "err", protectErr)
-		h.emitBatchOutcome(progress.BatchEvent{
-			Stage: RoundModeRevise, SegmentIDs: segmentIDStringsFromDoc(doc, idxs), SegmentCount: len(idxs),
-			BackendName: h.Backend.Name(), Status: "failed", DurationMs: time.Since(batchStart).Milliseconds(),
-			TriedBackends: tried, ErrorType: "protect_error", ErrorMessage: protectErr.Error(), RoundIndex: h.RoundIndex,
-		})
-		return h.terminalFailure(doc, idxs)
-	}
-
-	sys, usr, renderErr := h.Renderer.Render(prompt.ReviseData{
-		SourceLang:      doc.SourceLang,
-		TargetLang:      doc.TargetLang,
-		Segments:        segments,
-		Protocol:        proto,
-		RubyAnnotations: rubyAnns,
-		RubyMode:        h.RubyMode,
-	})
-	if renderErr != nil {
-		logger.Error("revise render failed", "err", renderErr)
-		h.emitBatchOutcome(progress.BatchEvent{
-			Stage: RoundModeRevise, SegmentIDs: segmentIDStringsFromDoc(doc, idxs), SegmentCount: len(idxs),
-			BackendName: h.Backend.Name(), Status: "failed", DurationMs: time.Since(batchStart).Milliseconds(),
-			TriedBackends: tried, ErrorType: "render_error", ErrorMessage: renderErr.Error(), RoundIndex: h.RoundIndex,
-		})
-		return h.terminalFailure(doc, idxs)
-	}
-
-	req := backend.Request{System: sys, User: usr}
-	if isTextMode {
-		req.ResponseFormat = "none"
-	} else {
-		revisionIDs := make([]string, len(segments))
-		for i, s := range segments {
-			revisionIDs[i] = s.ID
-		}
-		req.JSONSchema = prompt.ReviseRevisionSchema(h.RubyMode != "", revisionIDs, h.RubyProtocolVersion)
-	}
-
-	callStart := time.Now()
-	resp, callErr := h.Backend.Translate(ctx, req)
-	if storageFailure(callErr) {
-		return batchResult{err: callErr}
-	}
-	if d := workDeferred(callErr); d != nil {
-		return batchResult{waitCapacity: d, deferred: true}
-	}
-	if callErr != nil {
-		isExternalInterrupt := errors.Is(callErr, context.Canceled) ||
-			(errors.Is(callErr, context.DeadlineExceeded) && ctx.Err() != nil)
-		if isExternalInterrupt {
-			logger.Info("revise backend interrupted by context", "backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-			h.emitBatchOutcome(backendErrorBatchEvent(RoundModeRevise, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-			return h.preserveResult(doc, idxs)
-		}
-		isLocalTimeout := errors.Is(callErr, context.DeadlineExceeded) && ctx.Err() == nil
-		if isFatalBackendError(callErr) {
-			logger.Warn("revise backend fatal error, deferring to cross-round", "backend", h.Backend.Name(), "batch_size", len(idxs), "attempt", attempt, "err", callErr)
-			h.emitBatchOutcome(backendErrorBatchEvent(RoundModeRevise, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-			return batchResult{fatalUnresolved: idxs}
-		}
-		h.emitBatchOutcome(backendErrorBatchEvent(RoundModeRevise, doc, idxs, h.Backend.Name(), tried, callErr, attempt, h.RoundIndex, time.Since(callStart).Milliseconds(), sys, usr, req))
-		if (isLocalTimeout || backend.IsRetryable(callErr)) && attempt+1 < transientBudgetFor(h.Retry) {
-			logger.Warn("revise backend error, will backoff and retry", "backend", h.Backend.Name(), "batch_size", len(idxs), "attempt", attempt, "err", callErr)
-			wait := backoffDuration(attempt, h.Retry, callErr)
-			if h.prepareOnly {
-				return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1, notBefore: time.Now().Add(wait)}}
-			}
-			timer := time.NewTimer(wait)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				// 退避期间取消：段保持未解决（不 preserve——preserve 会把
-				// 未修订段计入 resolved 断点，retry 后被永久跳过）。
-				return batchResult{unresolved: idxs}
-			case <-h.Gate.Done():
-				// 暂停时中止退避等待：段保持未解决，由断点集合覆盖。
-				timer.Stop()
-				return batchResult{unresolved: idxs}
-			case <-timer.C:
-			}
-			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
-		}
-		logger.Warn("revise backend failed terminally, deferring to next pool", "backend", h.Backend.Name(), "batch_size", len(idxs), "attempt", attempt, "err", callErr)
-		return batchResult{unresolved: idxs}
-	}
-
-	if resp.Truncated {
-		logTruncatedResponse(logger, h.Backend.Name())
-	}
-	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
-	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
-	revisions, rubyOutput, parseRepaired, parseErr := repair.ParseReviseByMode(resp.Text, isTextMode, h.Repair)
-	if parseErr != nil {
-		logger.Warn("revise parse failed", "backend", h.Backend.Name(), "batch_size", len(idxs), "err", parseErr, "attempt", attempt, "resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
-		h.emitBatchOutcome(progress.BatchEvent{
-			Stage: RoundModeRevise, SegmentIDs: segmentIDStringsFromDoc(doc, idxs), SegmentCount: len(idxs), BackendName: h.Backend.Name(), Status: "failed",
-			DurationMs: time.Since(callStart).Milliseconds(), InputTokens: resp.Usage.PromptTokens, OutputTokens: resp.Usage.CompletionTokens,
-			SentContent: usr, ReceivedContent: resp.Text, TriedBackends: tried, ErrorType: "parse_error", ErrorMessage: parseErr.Error(), RoundIndex: h.RoundIndex,
-			Attempt: attempt, SystemPrompt: sys, UserMessage: usr, ResponseFormat: req.ResponseFormat, JSONSchema: req.JSONSchema, ResponseContent: resp.Text,
-			Truncated: resp.Truncated, Repaired: parseRepaired,
-		})
-		if attempt+1 < transientBudgetFor(h.Retry) {
-			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
-		}
-		return batchResult{unresolved: idxs}
-	}
-	if len(parseRepaired) > 0 {
-		logger.Info("revise response repaired", "backend", h.Backend.Name(), "ops", parseRepaired)
-	}
-
-	segByID := make(map[string]*Segment, len(idxs))
-	stateByID := make(map[string]*reviseProtectState, len(idxs))
-	for k, idx := range idxs {
-		segByID[doc.Segments[idx].ID] = &doc.Segments[idx]
-		stateByID[doc.Segments[idx].ID] = &states[k]
-	}
-	callbackSegs := make([]TranslatedSegment, 0, len(idxs))
-	var candidates []*Candidate
-	returned := make(map[int]struct{}, len(idxs))
-	seen := make(map[string]struct{}, len(revisions))
-	for _, revision := range revisions {
-		seg, ok := segByID[revision.ID]
-		if !ok {
-			continue
-		}
-		if _, duplicate := seen[revision.ID]; duplicate {
-			continue
-		}
-		seen[revision.ID] = struct{}{}
-		if h.prepareOnly {
-			for _, idx := range idxs {
-				if doc.Segments[idx].ID != revision.ID {
-					continue
-				}
-				candidate, err := h.prepareRevisionCandidate(seg, idx, revision, stateByID[revision.ID], rubyOutput, doc.Format)
-				if err != nil {
-					return batchResult{err: err}
-				}
-				if candidate != nil {
-					candidates = append(candidates, candidate)
-					returned[idx] = struct{}{}
-				}
-				break
-			}
-			continue
-		}
-		text, ok := h.finalizeRevision(ctx, seg, revision, stateByID[revision.ID], rubyOutput, isTextMode, doc.Format, logger)
-		if !ok {
-			// 占位符守恒被破坏：不进入 callback，落入 missing 计入 unresolved，
-			// 与 translate 轮违规即拒的语义一致。
-			continue
-		}
-		for _, idx := range idxs {
-			if doc.Segments[idx].ID == revision.ID {
-				callbackSegs = append(callbackSegs, TranslatedSegment{Index: idx, ID: seg.ID, SourceText: seg.Source, TargetText: text})
-				returned[idx] = struct{}{}
-				break
-			}
-		}
-	}
-	// LLM 漏返的段计入 unresolved（与 translate 轮 trans 缺失即 unresolved 的约定
-	// 一致），交由下一池重试、末轮跨轮传播并触发软警告。若只按返回段回调，
-	// computeResolved 会把漏返段计为已解决，后续同模式轮将跳过它们，pending
-	// issue 无人修订且不产生任何失败信号。
-	missing := make([]int, 0)
-	for _, idx := range idxs {
-		if _, ok := returned[idx]; ok {
-			continue
-		}
-		missing = append(missing, idx)
-	}
-	if len(missing) > 0 {
-		logger.Warn("revise response missing segment revisions", "backend", h.Backend.Name(), "batch_size", len(idxs), "missing", len(missing))
-	}
-
-	logger.Info("revise batch ok", "backend", h.Backend.Name(), "segments", len(idxs), "revised", len(callbackSegs),
-		"missing", len(missing),
-		"prompt_tokens", resp.Usage.PromptTokens, "completion_tokens", resp.Usage.CompletionTokens)
-	h.emitBatchOutcome(progress.BatchEvent{
-		Stage: RoundModeRevise, SegmentIDs: segmentIDStringsFromDoc(doc, idxs), SegmentCount: len(idxs), BackendName: h.Backend.Name(), Status: "success",
-		DurationMs: time.Since(batchStart).Milliseconds(), InputTokens: resp.Usage.PromptTokens, OutputTokens: resp.Usage.CompletionTokens,
-		SentContent: usr, ReceivedContent: resp.Text, TriedBackends: tried, RoundIndex: h.RoundIndex, Attempt: attempt,
-		SystemPrompt: sys, UserMessage: usr, ResponseFormat: req.ResponseFormat, JSONSchema: req.JSONSchema, ResponseContent: resp.Text,
-		Truncated: resp.Truncated, Repaired: parseRepaired,
-	})
-	if h.prepareOnly {
-		return batchResult{candidates: candidates, unresolved: missing}
-	}
-	return batchResult{callbackResult: &BatchResult{Segments: callbackSegs}, unresolved: missing}
-}
-
-// preserveResult 保留原译文；修订 handler 不在内存中改写段落。
-// 注意：ctx 取消时本 result 经 cleanup 路径被丢弃，不进入计数/断点登记。
-func (h *ReviseHandler) preserveResult(doc *Document, idxs []int) batchResult {
-	callbackSegs := make([]TranslatedSegment, 0, len(idxs))
-	for _, idx := range idxs {
-		seg := &doc.Segments[idx]
-		callbackSegs = append(callbackSegs, TranslatedSegment{Index: idx, ID: seg.ID, SourceText: seg.Source, TargetText: seg.Target})
-	}
-	return batchResult{callbackResult: &BatchResult{Segments: callbackSegs}}
-}
-
-// terminalFailure 在 preserveResult 基础上标记 failedSegments，供 RunRound 累计为软警告。
-// failedSegments 段不计数（executor 将其从 resolved 子集排除——未解决，软警告承担可见性）。
-func (h *ReviseHandler) terminalFailure(doc *Document, idxs []int) batchResult {
-	result := h.preserveResult(doc, idxs)
-	result.failedSegments = idxs
-	return result
 }

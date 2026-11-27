@@ -38,6 +38,20 @@ func reviseDoc() *Document {
 	}
 }
 
+func runMemoryReviseTestRound(t *testing.T, h *ReviseHandler, doc *Document) (RunRoundResult, []TranslatedSegment) {
+	t.Helper()
+	var segments []TranslatedSegment
+	result, err := runMemoryTestRound(t, t.Context(), Round{Handler: h, Retry: h.Retry, Concurrency: 1}, doc,
+		func(_ context.Context, batch BatchResult) error {
+			segments = append(segments, batch.Segments...)
+			return nil
+		}, discardLogger(), h.Reporter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result, segments
+}
+
 func TestReviseHandler_BuildBatchesFiltersPendingCodesAndResolved(t *testing.T) {
 	doc := reviseDoc()
 	doc.ResolvedIndices = map[int]struct{}{0: {}}
@@ -64,23 +78,24 @@ func TestReviseHandler_BuildBatchesFiltersPendingCodesAndResolved(t *testing.T) 
 
 func TestReviseHandler_ProcessBatchReturnsKnownRevisionsAndMarksMissingUnresolved(t *testing.T) {
 	doc := reviseDoc()
+	doc.Segments[1].Issues[0].Disposition = qa.DispositionPending
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"你好啊"},{"id":"unknown","target":"丢弃"}]}`}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
-	result := h.ProcessBatch(context.Background(), doc, []int{0, 1}, 0, discardLogger())
-	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
-		t.Fatalf("callback=%#v want one known revision", result.callbackResult)
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 {
+		t.Fatalf("callback=%#v want one known revision", confirmed)
 	}
-	if got := result.callbackResult.Segments[0]; got.TargetText != "你好啊" || got.Issues != nil {
-		t.Fatalf("segment=%+v want revised text and nil issues", got)
+	if got := confirmed[0]; got.TargetText != "你好啊" || !reflect.DeepEqual(got.Issues, doc.Segments[0].Issues) {
+		t.Fatalf("segment=%+v want revised text and original issues for the callback to review", got)
 	}
 	// 段 1 未被 LLM 返回：必须进 unresolved 交由下一池重试。executor 对终态批次
 	// 按 idxs−unresolved 计数（handler 不触碰进度计数），resolved 子集={0}、
 	// missing={1}，两序列的配对断言在 executor 层测试覆盖。
-	if !reflect.DeepEqual(result.unresolved, []int{1}) {
-		t.Fatalf("unresolved=%v want [1]", result.unresolved)
+	if !reflect.DeepEqual(result.Unresolved, []int{1}) {
+		t.Fatalf("unresolved=%v want [1]", result.Unresolved)
 	}
-	if doc.Segments[0].Target != "你好" {
-		t.Fatal("handler must not mutate document target")
+	if doc.Segments[0].Target != "你好啊" || doc.Segments[1].Target != "世界" {
+		t.Fatal("round must install exactly the accepted revision")
 	}
 }
 
@@ -88,22 +103,19 @@ func TestReviseHandler_ProcessBatchSameTextIsReturned(t *testing.T) {
 	doc := reviseDoc()
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"你好"}]}`}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.callbackResult == nil || result.callbackResult.Segments[0].TargetText != "你好" {
-		t.Fatalf("result=%#v want same target returned", result.callbackResult)
+	_, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 || confirmed[0].TargetText != "你好" {
+		t.Fatalf("result=%#v want same target returned", confirmed)
 	}
 }
 
 func TestReviseHandler_ParseFailureRetries(t *testing.T) {
 	doc := reviseDoc()
-	fb := &fakeBackend{name: "fake", responses: []string{"bad json"}}
+	fb := &fakeBackend{name: "fake", responses: []string{"bad json", `{"revisions":[{"id":"0","target":"你好啊"}]}`}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Retry: backend.RetryPolicy{MaxAttempts: 2}, Logger: discardLogger()}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.retry == nil || result.retry.attempt != 1 {
-		t.Fatalf("retry=%+v want attempt 1", result.retry)
-	}
-	if result.callbackResult != nil || result.unresolved != nil {
-		t.Fatalf("parse retry result=%+v", result)
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(fb.requests) != 2 || len(confirmed) != 1 || !reflect.DeepEqual(result.Resolved, []int{0}) {
+		t.Fatalf("requests=%d confirmed=%v result=%+v", len(fb.requests), confirmed, result)
 	}
 }
 
@@ -111,9 +123,9 @@ func TestReviseHandler_TextMode(t *testing.T) {
 	doc := reviseDoc()
 	fb := &fakeBackend{name: "fake", responses: []string{"[revisions]\n0 | 你好啊"}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), ResponseMode: "text", Logger: discardLogger()}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if result.callbackResult == nil || result.callbackResult.Segments[0].TargetText != "你好啊" {
-		t.Fatalf("result=%#v", result.callbackResult)
+	_, confirmed := runMemoryReviseTestRound(t, h, doc)
+	if len(confirmed) != 1 || confirmed[0].TargetText != "你好啊" {
+		t.Fatalf("result=%#v", confirmed)
 	}
 	if fb.requests[0].ResponseFormat != "none" || fb.requests[0].JSONSchema != nil {
 		t.Fatalf("request=%+v want text mode", fb.requests[0])
@@ -138,9 +150,9 @@ func TestReviseHandler_IssueCodesEmptyFallsBackToSemanticCodes(t *testing.T) {
 func TestReviseHandler_BackendErrorUnresolved(t *testing.T) {
 	doc := reviseDoc()
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: &fakeBackend{name: "fake", errs: []error{errors.New("down")}}, Renderer: newReviseRenderer(t), Logger: discardLogger()}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
-	if !reflect.DeepEqual(result.unresolved, []int{0}) {
-		t.Fatalf("unresolved=%v want [0]", result.unresolved)
+	result, _ := runMemoryReviseTestRound(t, h, doc)
+	if !reflect.DeepEqual(result.Unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v want [0]", result.Unresolved)
 	}
 }
 
@@ -165,13 +177,13 @@ func TestReviseMarkupGuard_BrokenRevisionGoesUnresolved(t *testing.T) {
 	doc := reviseMarkupDoc("epub")
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"<p>你好</rt>"}]}`}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
 
-	if result.callbackResult != nil && len(result.callbackResult.Segments) != 0 {
-		t.Fatalf("callback=%#v, want no segments（坏译文不得采信）", result.callbackResult)
+	if len(confirmed) != 0 {
+		t.Fatalf("callback=%#v, want no segments（坏译文不得采信）", confirmed)
 	}
-	if !reflect.DeepEqual(result.unresolved, []int{0}) {
-		t.Fatalf("unresolved=%v, want [0]", result.unresolved)
+	if !reflect.DeepEqual(result.Unresolved, []int{0}) {
+		t.Fatalf("unresolved=%v, want [0]", result.Unresolved)
 	}
 	if doc.Segments[0].Target != "<p>你好</p>" {
 		t.Errorf("Target=%q, want original kept", doc.Segments[0].Target)
@@ -183,16 +195,16 @@ func TestReviseMarkupGuard_WellFormedRevisionPasses(t *testing.T) {
 	doc := reviseMarkupDoc("epub")
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"<p>你好啊</p>"}]}`}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
 
-	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
-		t.Fatalf("callback=%#v, want one revised segment", result.callbackResult)
+	if len(confirmed) != 1 {
+		t.Fatalf("callback=%#v, want one revised segment", confirmed)
 	}
-	if got := result.callbackResult.Segments[0]; got.TargetText != "<p>你好啊</p>" {
+	if got := confirmed[0]; got.TargetText != "<p>你好啊</p>" {
 		t.Fatalf("TargetText=%q, want revised text", got.TargetText)
 	}
-	if len(result.unresolved) != 0 {
-		t.Fatalf("unresolved=%v, want empty", result.unresolved)
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("unresolved=%v, want empty", result.Unresolved)
 	}
 }
 
@@ -201,15 +213,15 @@ func TestReviseMarkupGuard_FormatGateSkipsNonEpub(t *testing.T) {
 	doc := reviseMarkupDoc("txt")
 	fb := &fakeBackend{name: "fake", responses: []string{`{"revisions":[{"id":"0","target":"<p>你好</rt>"}]}`}}
 	h := &ReviseHandler{IssueCodes: qa.SemanticQACodes(), Backend: fb, Renderer: newReviseRenderer(t), Logger: discardLogger()}
-	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, discardLogger())
+	result, confirmed := runMemoryReviseTestRound(t, h, doc)
 
-	if result.callbackResult == nil || len(result.callbackResult.Segments) != 1 {
-		t.Fatalf("callback=%#v, want one revised segment（txt 不判违规）", result.callbackResult)
+	if len(confirmed) != 1 {
+		t.Fatalf("callback=%#v, want one revised segment（txt 不判违规）", confirmed)
 	}
-	if got := result.callbackResult.Segments[0]; got.TargetText != "<p>你好</rt>" {
+	if got := confirmed[0]; got.TargetText != "<p>你好</rt>" {
 		t.Fatalf("TargetText=%q, want revised text", got.TargetText)
 	}
-	if len(result.unresolved) != 0 {
-		t.Fatalf("unresolved=%v, want empty", result.unresolved)
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("unresolved=%v, want empty", result.Unresolved)
 	}
 }

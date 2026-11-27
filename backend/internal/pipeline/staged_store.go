@@ -502,8 +502,10 @@ func (s *MemoryRoundStore) Commit(ctx context.Context, c *Candidate, result Tran
 	record.stored = true
 	s.confirmations[c.Index] = record
 	s.confirmed[c.ID] = true
+	if c.Mode != RoundModeCorrect || c.Segment.Target != result.TargetText {
+		c.Segment.TargetIsNull = false
+	}
 	c.Segment.Target, c.Segment.Issues = result.TargetText, result.Issues
-	c.Segment.TargetIsNull = false
 	if c.Mode == RoundModeTranslate {
 		c.Segment.Status = "translated"
 	}

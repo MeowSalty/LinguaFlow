@@ -39,23 +39,9 @@ func TestTranslateHandler_ProcessBatch_BackendErrorEmitsBatch(t *testing.T) {
 		Logger:    quietLogger(),
 	}
 
-	// BuildBatches to get the batch structure
-	batches, err := h.BuildBatches(context.Background(), doc, nil, 0)
-	if err != nil {
-		t.Fatalf("build batches: %v", err)
-	}
-	if len(batches) == 0 {
-		t.Fatal("expected at least one batch")
-	}
-
-	result := h.ProcessBatch(context.Background(), doc, batches[0], 0, quietLogger())
-
-	// 429 error triggers retry (not unresolved)
-	if result.retry == nil {
-		t.Fatal("expected retry for 429 error")
-	}
-	if result.retry.attempt != 1 {
-		t.Fatalf("retry.attempt=%d want 1", result.retry.attempt)
+	result, err := runMemoryTestRound(t, t.Context(), Round{Handler: h, Concurrency: 1}, doc, nil, quietLogger(), rep)
+	if err != nil || len(result.Unresolved) != 1 {
+		t.Fatalf("provider failure: result=%+v err=%v", result, err)
 	}
 	if len(rep.events) != 1 {
 		t.Fatalf("batch events=%d want 1", len(rep.events))
@@ -128,25 +114,29 @@ func TestTranslateHandler_ProcessBatch_RubyConservationIssues(t *testing.T) {
 			doc.Segments[0].Meta = map[string]any{"ruby_items": tc.items}
 			doc.Segments[0].Issues = tc.staleIssues
 
-			fb := &fakeBackend{name: "fake", responses: []string{`{"translations":{"1":"I want"}}`}}
+			var entries []map[string]any
+			for _, item := range tc.items {
+				if item.Aligned {
+					entries = append(entries, map[string]any{"id": item.ID, "base": item.TargetBase, "text": item.TargetText, "kind": item.Kind, "occurrence": 1})
+				}
+			}
+			fb := &fakeBackend{name: "fake", responses: []string{mustJSON(t, map[string]any{
+				"translations": map[string]string{"1": "I want"}, "ruby_output": map[string]any{"1": entries},
+			})}}
 			h := &TranslateHandler{
-				Backend:           fb,
-				BatchSize:         1,
-				Renderer:          newTestRenderer(t),
-				Repair:            defaultRepairOpts(),
-				Logger:            quietLogger(),
-				RubyEnabled:       true,
-				RubyPreserveKinds: tc.preserveKinds,
+				Backend: fb, BatchSize: 1, Renderer: newTestRenderer(t), Repair: defaultRepairOpts(),
+				Logger: quietLogger(), RubyEnabled: true, RubyPreserveKinds: tc.preserveKinds, RubyProtocolVersion: 2,
 			}
-
-			res := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
-			if len(res.unresolved) != 0 {
-				t.Fatalf("segment unexpectedly unresolved: %v", res.unresolved)
+			var confirmed []TranslatedSegment
+			res, err := runMemoryTestRound(t, t.Context(), Round{Handler: h, Concurrency: 1}, doc,
+				func(_ context.Context, batch BatchResult) error {
+					confirmed = append(confirmed, batch.Segments...)
+					return nil
+				}, quietLogger(), nil)
+			if err != nil || len(res.Unresolved) != 0 || len(confirmed) != 1 {
+				t.Fatalf("result=%+v confirmed=%+v err=%v", res, confirmed, err)
 			}
-			if res.callbackResult == nil {
-				t.Fatal("expected callbackResult from BuildBatchResult")
-			}
-			ts := res.callbackResult.Segments[0]
+			ts := confirmed[0]
 			if len(ts.Issues) != tc.wantCount {
 				t.Fatalf("issues = %+v, want %d issue(s)", ts.Issues, tc.wantCount)
 			}

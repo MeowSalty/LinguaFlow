@@ -19,6 +19,7 @@ type memoryConfirmation struct {
 	version          int64
 	targetIsNull     bool
 	stored           bool
+	issuesOnly       bool
 	transferredBytes int64
 	retired          *memoryConfirmation
 	candidateID      string
@@ -183,12 +184,21 @@ func (s *MemoryRoundStore) restoreMemoryConfirmation(ctx context.Context, doc *D
 		if result.Index != index || result.ID != "" && result.ID != previous.ID || result.SourceText != "" && result.SourceText != rawSource(&previous) {
 			return fmt.Errorf("memory confirmation does not match canonical member %d", index)
 		}
+		if record.issuesOnly {
+			if previous.ContentVersion != record.version || previous.Status != record.status {
+				return fmt.Errorf("stored quality confirmation baseline changed for member %d", index)
+			}
+			result.TargetText, result.Meta, result.Protected = previous.Target, previous.Meta, previous.Protected
+		}
 		meta := Segment{Meta: result.Meta}
-		if err = restoreMetadataTypes(&meta, metadataTypes(previous.Meta), b); err != nil {
+		if !record.issuesOnly {
+			err = restoreMetadataTypes(&meta, metadataTypes(previous.Meta), b)
+		}
+		if err != nil {
 			return err
 		}
 		result.Meta = meta.Meta
-		plan, borrowed, err := prepareConfirmedFields(ctx, b, result, true, previous)
+		plan, borrowed, err := prepareConfirmedFields(ctx, b, result, !record.issuesOnly, previous)
 		if err != nil {
 			return err
 		}

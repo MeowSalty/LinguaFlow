@@ -57,7 +57,7 @@ func TestRunRound_Adjudicate_NonRetryableError_AdvancesAllPools(t *testing.T) {
 	// MaxAttempts=3 → maxPools=4（对应 SSE 显示"池 1/4"）
 	round := adjudicateReproRound(t, fb, rep, 3)
 
-	result, err := RunRound(context.Background(), round, doc, nil, quietLogger(), rep)
+	result, err := runMemoryTestRound(t, context.Background(), round, doc, nil, quietLogger(), rep)
 	if err != nil {
 		t.Fatalf("RunRound: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestRunRound_Adjudicate_FatalError_SinglePoolOnly(t *testing.T) {
 	}
 	round := adjudicateReproRound(t, fb, rep, 3)
 
-	result, err := RunRound(context.Background(), round, doc, nil, quietLogger(), rep)
+	result, err := runMemoryTestRound(t, context.Background(), round, doc, nil, quietLogger(), rep)
 	if err != nil {
 		t.Fatalf("RunRound: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestRunRound_Adjudicate_RetryableError_ExhaustsBudgetThenAdvances(t *testin
 	// MaxAttempts=1 → maxPools=2，transientBudget=min(2,3)=2（池内尝试 attempt 0、1）
 	round := adjudicateReproRound(t, fb, rep, 1)
 
-	result, err := RunRound(context.Background(), round, doc, nil, quietLogger(), rep)
+	result, err := runMemoryTestRound(t, context.Background(), round, doc, nil, quietLogger(), rep)
 	if err != nil {
 		t.Fatalf("RunRound: %v", err)
 	}

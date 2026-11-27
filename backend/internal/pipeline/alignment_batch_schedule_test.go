@@ -229,7 +229,10 @@ func TestAlignmentBatchSchedulingBoundaries(t *testing.T) {
 }
 
 func TestAlignmentBatchControlledHTTP(t *testing.T) {
-	for _, tc := range controlledCases[9:] {
+	for _, tc := range controlledCases {
+		if tc.batch <= 0 && tc.words <= 0 {
+			continue
+		}
 		for _, same := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/same_backend=%v", tc.name, same), func(t *testing.T) {
 				f := newControlledHTTP(t, same, 0)

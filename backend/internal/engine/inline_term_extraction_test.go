@@ -117,3 +117,48 @@ func TestInlineTermExtractionCannotOverrideDisabledGlossary(t *testing.T) {
 		t.Fatal("applying the runtime switch mutated the saved round configuration")
 	}
 }
+
+func TestInMemoryEngineConfirmsRubyTranslation(t *testing.T) {
+	renderer, err := prompt.NewRenderer("Translate.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &inlineExtractionBackend{response: `{"translations":{"1":"漢字"},"ruby_output":{"1":[{"id":"1","base":"漢","text":"かん","kind":"phonetic","occurrence":1}]}}`}
+	eng, err := NewWithOptions(Options{
+		Config: &Config{SourceLang: "ja", TargetLang: "zh"},
+		Rounds: []Round{{Backend: provider, Renderer: renderer, Concurrency: 1, BatchSize: 1, RubyEnabled: true}},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := eng.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	const want = "<ruby>漢<rt>かん</rt></ruby>字"
+	doc := &pipeline.Document{Format: "text", Segments: []pipeline.Segment{
+		{ID: "1", Source: want, Translate: true},
+	}}
+	store := pipeline.NewMemoryRoundStore(nil)
+	defer store.Close()
+	called := false
+	_, err = eng.ExecuteRound(t.Context(), 0, doc, WithRoundStore(store), WithBatchHandler(func(context.Context, pipeline.BatchResult) error {
+		called = true
+		return nil
+	}))
+	if err == nil || called || len(provider.requests) != 0 {
+		t.Fatalf("conflicting store and callback started a request: calls=%d callback=%t err=%v", len(provider.requests), called, err)
+	}
+
+	var confirmed []pipeline.TranslatedSegment
+	result, err := eng.ExecuteRound(t.Context(), 0, doc, WithBatchHandler(func(_ context.Context, batch pipeline.BatchResult) error {
+		confirmed = append(confirmed, batch.Segments...)
+		return nil
+	}))
+	if err != nil || len(result.Resolved) != 1 || len(provider.requests) != 1 || doc.Segments[0].Target != want ||
+		len(confirmed) != 1 || confirmed[0].TargetText != want || len(confirmed[0].Issues) != 0 {
+		t.Fatalf("result=%+v confirmed=%+v requests=%d err=%v", result, confirmed, len(provider.requests), err)
+	}
+}

@@ -12,13 +12,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 )
 
-func canonicalStoredHandler(h RoundHandler) bool {
-	switch h.(type) {
-	case *ExtractHandler, *SemanticQAHandler, *AdjudicateHandler:
-		return true
-	}
-	return false
-}
 func prepareStoredCanonicalMembership(h RoundHandler, doc *Document) int {
 	count := 0
 	for i := range doc.Segments {
@@ -33,8 +26,10 @@ func prepareStoredCanonicalMembership(h RoundHandler, doc *Document) int {
 			continue
 		}
 		switch h := h.(type) {
+		case *CorrectHandler:
+			seg.RoundWork.Member = h.Rules != nil && h.Rules.Enabled() && correctEligible(seg)
 		case *ExtractHandler:
-			seg.RoundWork.Member = h.Renderer != nil && len(h.Backends) > 0 && h.Glossary != nil && !seg.Skip && strings.TrimSpace(rawSource(seg)) != ""
+			seg.RoundWork.Member = h.Renderer != nil && h.Backend != nil && h.Glossary != nil && !seg.Skip && strings.TrimSpace(rawSource(seg)) != ""
 		case *SemanticQAHandler:
 			if h.Renderer == nil || h.Backend == nil || !seg.Translate || (seg.Status != "translated" && seg.Status != "edited") || seg.Target == "" {
 				continue
@@ -93,9 +88,29 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 	if err != nil {
 		return RunRoundResult{}, &StorageError{Err: err}
 	}
+	_, localCorrect := round.Handler.(*CorrectHandler)
+	seal := canonical.SealCanonical
+	if localCorrect {
+		local, ok := round.Store.(CorrectRoundStore)
+		if !ok {
+			return RunRoundResult{}, fmt.Errorf("round store does not support local correction")
+		}
+		seal = local.SealCorrectCanonical
+	}
 	if !sealed {
 		total = prepareStoredCanonicalMembership(round.Handler, doc)
-		err = round.Runtime.SaveNamed(ctx, persistence.Metadata{Operation: "seal", Class: persistence.Normal, ResourceID: storeResourceID(round.Store)}, func(saveCtx context.Context) error { return canonical.SealCanonical(saveCtx, doc) })
+		pausedBeforeSeal := false
+		err = round.Runtime.SaveNamed(ctx, persistence.Metadata{Operation: "seal", Class: persistence.Normal, ResourceID: storeResourceID(round.Store)}, func(saveCtx context.Context) error {
+			if localCorrect && round.Gate.Paused() {
+				pausedBeforeSeal = true
+				return nil
+			}
+			return seal(saveCtx, doc)
+		})
+		if localCorrect && (pausedBeforeSeal || errors.Is(err, backend.ErrDispatchPaused)) {
+			round.Gate.Pause()
+			return canonicalStoredResult(doc, 0), ctx.Err()
+		}
 		if err != nil {
 			return RunRoundResult{}, err
 		}
@@ -113,9 +128,39 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 		}
 	}
 	defer reporter.StageDone()
+	if localCorrect {
+		return runCorrectMembers(ctx, round, doc, total, batchHandler, logger, reporter)
+	}
 	maxPools, budget := max(1, round.Retry.MaxAttempts+1), transientBudgetFor(round.Retry)
 	_, observePools := reporter.(progress.PoolObserver)
 	failedBatches := 0
+	handler := round.Handler.(capturedRoundHandler)
+	if _, ok := round.Store.(StoredResponseStore); !ok {
+		return RunRoundResult{}, fmt.Errorf("%s requires a capture settlement store", round.Handler.ModeName())
+	}
+	if prepareIntent(round.Handler, round.Store, backend.RequestStageMain).BackendID == 0 {
+		return RunRoundResult{}, fmt.Errorf("%s requires a runtime-bound backend", round.Handler.ModeName())
+	}
+	consumer := round.Runtime.Window.EnterScope(storeResourceID(round.Store), storeRoundID(round.Store), handlerRoundIndex(round.Handler))
+	defer consumer.Leave()
+	ctx = context.WithValue(ctx, storedWindowConsumerKey{}, consumer)
+	failedBatches, err = recoverStoredResponses(ctx, round, doc, batchHandler, logger, reporter, consumer)
+	if err != nil || round.Gate.Paused() {
+		return canonicalStoredResult(doc, failedBatches), err
+	}
+	if owner, ok := round.Store.(interface {
+		RecoverStoredOwnership(context.Context, *WindowConsumer) error
+	}); ok {
+		if err := owner.RecoverStoredOwnership(ctx, consumer); err != nil {
+			return canonicalStoredResult(doc, failedBatches), &StorageError{Operation: "load_stored_member_ownership", Err: err}
+		}
+	}
+	consumer.RecoveryComplete()
+	for _, seg := range doc.Segments {
+		if seg.RoundWork.Member && !seg.RoundWork.Completed && seg.RoundWork.Cursor.State == "response_pending" {
+			return canonicalStoredResult(doc, failedBatches), fmt.Errorf("stored member has no recoverable capture")
+		}
+	}
 	for pool := 0; pool < maxPools; pool++ {
 		poolEvent := progress.PoolEvent{Mode: round.Handler.ModeName(), PoolIndex: pool, MaxPools: maxPools, ShrinkRate: round.Shrink, Phase: "pool_start"}
 		nextPending := 0
@@ -204,6 +249,11 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 				}
 				for _, t := range advances {
 					doc.Segments[t.Index].RoundWork.Cursor = t.Cursor
+					if t.Cursor.State == "unresolved" {
+						for _, id := range memberReservationKeys(round.Store, round.Handler.ModeName(), []int{t.Index}) {
+							round.Runtime.Window.Release(id)
+						}
+					}
 				}
 				nextPending += len(advances)
 			}
@@ -253,6 +303,17 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 						return e
 					}
 					for _, batch := range built {
+						size := max(1, round.Runtime.Window.mainBatchLimit(round.Concurrency)-1)
+						if fixed := round.Runtime.Window.fixedBatchLimit(consumer); fixed > 0 {
+							size = min(size, fixed)
+						}
+						for len(batch) > size {
+							batches, e = backend.AppendNode(b, batches, batch[:size:size])
+							if e != nil {
+								return e
+							}
+							batch = batch[size:]
+						}
 						batches, e = backend.AppendNode(b, batches, batch)
 						if e != nil {
 							return e
@@ -284,7 +345,9 @@ func runCanonicalStoredRound(ctx context.Context, round Round, doc *Document, ba
 				}
 				emitPoolEvent(reporter, poolEvent)
 			}
-			result, e := runPool(ctx, round, round.Handler, doc, batches, budget, batchHandler, logger, reporter, pool, nil)
+			result, e := runPool(ctx, round, doc, batches, budget, reporter, func(ctx context.Context, job batchJob) batchResult {
+				return processCapturedStoredBatch(ctx, round, handler, doc, job, pool, batchHandler, logger, reporter)
+			})
 			batches, advances, plans = nil, nil, nil
 			_ = round.Runtime.Admission.ReleaseBuild(activePlanOwner)
 			activePlanOwner = ""

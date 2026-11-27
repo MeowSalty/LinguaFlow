@@ -25,21 +25,12 @@ const controlledTarget = "<ruby>alpha<rt>reading</rt></ruby> beta"
 type controlledCase struct {
 	name         string
 	main, align  int
-	legacy       bool
-	serial       bool
-	shared       bool
 	batch, words int
 	wait         time.Duration
 }
 
 var controlledCases = []controlledCase{
-	{name: "legacy_serial_C1", main: 1, legacy: true, serial: true, shared: true},
-	{name: "corrected_serial_C1", main: 1, serial: true, shared: true},
-	{name: "job_pipeline_C1_A1", main: 1, align: 1},
 	{name: "independent_pipeline_C1_A1", main: 1, align: 1},
-	{name: "legacy_serial_C2", main: 2, legacy: true, serial: true, shared: true},
-	{name: "corrected_serial_C2", main: 2, serial: true, shared: true},
-	{name: "job_pipeline_C2_A2", main: 2, align: 2},
 	{name: "independent_pipeline_C2_A2", main: 2, align: 2},
 	{name: "independent_pipeline_C2_A4", main: 2, align: 4},
 	{name: "batch_C1_A1_B4", main: 1, align: 1, batch: 4, wait: 25 * time.Millisecond},
@@ -314,10 +305,7 @@ func runControlledPipeline(ctx context.Context, f *controlledHTTP, tc controlled
 		limiter, _ := f.pool.Lookup(id)
 		var b backend.Backend = &controlledBackend{client: backend.LimitResponseClient(f.server.Client(), backend.DefaultMaxResponseBytes), endpoint: f.server.URL + "/" + stage}
 		b = backend.NewRateLimitedBackend(b, limiter)
-		if !tc.legacy {
-			b = BindRequestBackend(b, id, 0, runtime)
-		}
-		return b
+		return BindRequestBackend(b, id, 0, runtime)
 	}
 	alignID := 2
 	if f.sameBackend {
@@ -331,92 +319,14 @@ func runControlledPipeline(ctx context.Context, f *controlledHTTP, tc controlled
 	}
 	round := Round{Concurrency: tc.main, Handler: h, Runtime: runtime}
 	store := &controlledStore{MemoryRoundStore: NewMemoryRoundStore(nil), fixture: f}
-	if !tc.serial {
-		result, err := RunStagedRound(ctx, round, doc, store, runtime, quietLogger(), progress.Nop{})
-		if err != nil {
-			return nil, err
-		}
-		if len(result.Unresolved) > 0 {
-			return nil, fmt.Errorf("staged unresolved: %v", result.Unresolved)
-		}
-		return doc, nil
-	}
-	// Reconstruct batch-worker serialization for the two control groups. The
-	// legacy path uses the retained original inline restorer; corrected serial
-	// uses production candidate preparation/finalization without stage overlap.
-	batches, err := h.BuildBatches(ctx, doc, nil, 0)
+	defer store.Close()
+	round.Store = store
+	result, err := RunRound(ctx, round, doc, nil, quietLogger(), progress.Nop{})
 	if err != nil {
 		return nil, err
 	}
-	type serialBatch struct {
-		indices  []int
-		snapshot *Document
-	}
-	jobs := make(chan serialBatch, len(batches))
-	for _, ids := range batches {
-		jobs <- serialBatch{ids, snapshotDocument(doc, ids)}
-	}
-	close(jobs)
-	var wg sync.WaitGroup
-	errs := make(chan error, tc.main)
-	for range tc.main {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for batch := range jobs {
-				if tc.legacy {
-					result := h.ProcessBatch(ctx, batch.snapshot, batch.indices, 0, quietLogger())
-					if result.err != nil || len(result.unresolved) > 0 || result.callbackResult == nil {
-						errs <- fmt.Errorf("legacy batch failed: %v", result.err)
-						return
-					}
-					for _, idx := range batch.indices {
-						doc.Segments[idx] = batch.snapshot.Segments[idx]
-					}
-					f.mu.Lock()
-					if f.metrics.firstVisible.IsZero() {
-						f.metrics.firstVisible = time.Now()
-					}
-					f.mu.Unlock()
-					continue
-				}
-				reservation := NewWorkID()
-				for {
-					changed := runtime.Window.Changed()
-					if runtime.Window.TryReserve(reservation, len(batch.indices)) {
-						break
-					}
-					select {
-					case <-changed:
-					case <-ctx.Done():
-						errs <- ctx.Err()
-						return
-					}
-				}
-				event := prepareMain(ctx, round, h, batch.snapshot, batch.indices, 0, 0, reservation, store, runtime, quietLogger())
-				if event.err != nil || len(event.candidates) != len(batch.indices) {
-					errs <- fmt.Errorf("corrected batch failed: %v", event.err)
-					return
-				}
-				for _, c := range event.candidates {
-					result := processCandidate(ctx, round, c, store, runtime, quietLogger(), progress.Nop{})
-					if result.err != nil || result.completed == nil {
-						errs <- fmt.Errorf("corrected candidate failed: %v", result.err)
-						return
-					}
-					doc.Segments[c.Index].Target = result.completed.TargetText
-					doc.Segments[c.Index].Issues = result.completed.Issues
-					runtime.Window.Release(c.ID)
-				}
-			}
-		}()
-	}
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		if err != nil {
-			return nil, err
-		}
+	if len(result.Unresolved) > 0 {
+		return nil, fmt.Errorf("staged unresolved: %v", result.Unresolved)
 	}
 	return doc, nil
 }
@@ -441,22 +351,20 @@ func checkControlledRun(tb testing.TB, f *controlledHTTP, doc *Document, tc cont
 	if tc.batch > 0 && m.maxAlignmentBatch > tc.batch {
 		tb.Fatalf("batch exceeded configured segment limit: %+v", m)
 	}
-	if m.mainPeak > tc.main || (tc.shared && m.totalPeak > tc.main) || (!tc.shared && m.alignmentPeak > tc.align) {
+	if m.mainPeak > tc.main || m.alignmentPeak > tc.align {
 		tb.Fatalf("%s exceeded HTTP budgets: %+v", tc.name, m)
 	}
 	return m
 }
 
 func TestRubyAlignmentControlledHTTPBudgets(t *testing.T) {
-	for _, tc := range []controlledCase{controlledCases[2], controlledCases[3], controlledCases[6], controlledCases[8]} {
+	for _, tc := range controlledCases[:3] {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newControlledHTTP(t, true, 0)
-			if !tc.shared {
-				f.mainBeforeAlignment = tc.main
-				f.alignmentBarrier = make(chan struct{})
-				f.alignmentBarrierTarget = min(tc.align, 2)
-				t.Cleanup(func() { f.alignmentBarrierOnce.Do(func() { close(f.alignmentBarrier) }) })
-			}
+			f.mainBeforeAlignment = tc.main
+			f.alignmentBarrier = make(chan struct{})
+			f.alignmentBarrierTarget = min(tc.align, 2)
+			t.Cleanup(func() { f.alignmentBarrierOnce.Do(func() { close(f.alignmentBarrier) }) })
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			doc, err := runControlledPipeline(ctx, f, tc)
@@ -464,7 +372,7 @@ func TestRubyAlignmentControlledHTTPBudgets(t *testing.T) {
 				t.Fatal(err)
 			}
 			m := checkControlledRun(t, f, doc, tc)
-			if !tc.shared && !m.stageOverlap {
+			if !m.stageOverlap {
 				t.Fatalf("independent stages failed to overlap: %+v", m)
 			}
 			if tc.align > 1 && m.alignmentPeak < 2 {
@@ -519,11 +427,9 @@ func TestControlledHTTPBarrierCallerCancellation(t *testing.T) {
 
 // BenchmarkRubyAlignmentPipeline uses 24 fixed one-item paragraphs, main batch
 // size 4, 4 ms main and 12 ms alignment latency, 6000 RPM per backend, a 256/16 MiB
-// candidate window, 1 MiB item/response limits, no errors or retries, and identical
-// verified output. "legacy" reconstructs the old scheduling/protocol with the
-// current single-attempt HTTP transport; it is not a historical binary benchmark.
-// P2 cases fix C/A and capacity, varying only content batching. Fake usage is
-// fixed per invocation and measures accounting, not real model token savings.
+// candidate window and identical verified output. Cases vary main and alignment
+// capacity and the alignment batching configuration. Fake usage is fixed per
+// invocation and measures accounting, independent of model token savings.
 func BenchmarkRubyAlignmentPipeline(b *testing.B) {
 	for _, same := range []bool{true, false} {
 		name := "separate_backends"
