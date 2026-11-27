@@ -324,6 +324,10 @@ linguaflow admin authentication-recovery revoke --config ./server.yaml \
 迁移操作文件的格式已升至 v2。此前版本（v0.16）创建的迁移操作目录（v1 格式）只会被 `status` 只读识别并显示当年的构建号，`resume` / `verify` / `rollback` 一律拒绝执行——请改用**当年执行该操作的构建**对应的迁移二进制完成或回退那批操作，新工具不会接手中途的旧操作。
 :::
 
+::: warning 升级前先跑完或取消进行中的任务
+当前版本按任务快照格式校验执行兼容性（响应格式 2）。旧格式任务的**继续执行与断点恢复会被拒绝**，任务冻结为历史记录——仍可查看、取消与删除，但不会重跑。因此升级前请先在旧版本上把进行中的翻译任务跑完或取消；升级后需要重译的内容请新建任务。
+:::
+
 ### 获取与编译
 
 ::: warning 迁移工具不随 Release 与 Docker 镜像分发
@@ -369,7 +373,7 @@ task -t backend/Taskfile.yml migrate:release
 | `inplace`（默认） | 直接在源库上转换并发布：SQLite 沿用原数据库路径（发布中断可续跑恢复），PostgreSQL 原地升级 schema | 无 |
 | `clone` | 在独立目标上转换，源数据保持不动：SQLite 发布到一个**完全不存在的新数据目录**，PostgreSQL 写入独立空目标库 | SQLite 用 `--target-data-dir`；PostgreSQL 用 `--target-config` |
 
-数据库保护由 `--database-backup auto|external` 控制，缺省自动：SQLite 与 clone 策略固定为 `auto`（工具自行留存恢复材料）；**PostgreSQL 原地升级默认 `external`**，要求你先自行备份数据库，并在首次 `apply` 时用 `--backup-reference <备份标识>` 声明备份出处（如备份文件路径或备份系统中的任务号），续跑时沿用计划中的记录。PostgreSQL 的 clone 升级与演练还依赖与主版本匹配的 `pg_dump` / `pg_restore`，不在 PATH 时用环境变量 `LINGUAFLOW_MIGRATION_POSTGRES_BIN` 指定包含它们的目录。演练（`rehearse`）用 `--rehearsal-config` 指定独立演练库（仅 PostgreSQL）。
+数据库保护由 `--database-backup auto|external` 控制，缺省自动：SQLite 与 clone 策略固定为 `auto`（工具自行留存恢复材料）；**PostgreSQL 原地升级默认 `external`**，要求你先自行备份数据库，并在首次 `apply` 时用 `--backup-reference <备份标识>` 声明备份出处（如备份文件路径或备份系统中的任务号），续跑时沿用计划中的记录。PostgreSQL 的 clone 升级与演练依赖与主版本匹配的 `pg_dump` 生成基线快照，执行回退 / 恢复时还需要 `pg_restore`；两者不在 PATH 时用环境变量 `LINGUAFLOW_MIGRATION_POSTGRES_BIN` 指定包含它们的目录。演练（`rehearse`）用 `--rehearsal-config` 指定独立演练库（仅 PostgreSQL）。
 
 ### 命令速查
 

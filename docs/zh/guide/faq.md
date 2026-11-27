@@ -70,7 +70,7 @@ docker logs linguaflow  # 查看日志
 
 ### 从源码构建失败？
 
-1. 确认 Go 版本 >= 1.26.10（见 [安装部署 · 系统要求](/zh/guide/installation#系统要求)）
+1. 确认 Go 版本 >= 1.26（跟随 `backend/go.mod` 的要求，见 [安装部署 · 系统要求](/zh/guide/installation#系统要求)）
 2. 确认 Node.js 版本满足 `^20.19.0` 或 `>=22.12.0`(见 `frontend/package.json` 的 engines)
 3. 确认已安装 pnpm 与 [Task](https://taskfile.dev)
 4. 运行 `task backend:install` 和 `task frontend:install` 安装依赖
@@ -220,6 +220,11 @@ cp ./data/linguaflow.db ./backup/linguaflow_backup.db
 - **v0.15.0 数据**使用离线迁移工具 `linguaflow-migrate` 升级（该工具不随 Release 与 Docker 镜像分发，需从对应版本源码编译，详见 [CLI 命令参考 · linguaflow-migrate](/zh/guide/cli#linguaflow-migrate-命令)）
 
 迁移前请停止旧服务并确认已有备份；迁移后按工具输出的变量与文件路径启动新版本，无需重新初始化账户。迁移中断后服务会拒绝启动并提示恢复，按工具的 `status` → `resume` 流程续跑即可，不要删库重来。
+
+另外两点升级注意：
+
+- 启动时会做**已发布数据格式预检**：数据来自更新的版本或已损坏时，同样会在写入前拒绝启动，不会带病运行
+- 升级后**旧格式的进行中任务会被冻结为历史**（可查看、取消与删除，但不能断点续跑）——建议升级前先在旧版本上跑完或取消进行中的任务，详见 [CLI 命令参考 · linguaflow-migrate](/zh/guide/cli#linguaflow-migrate-命令)
 
 ## 性能与限制
 
