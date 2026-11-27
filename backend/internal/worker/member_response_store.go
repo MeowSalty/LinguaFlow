@@ -2,6 +2,9 @@ package worker
 
 import (
 	"context"
+	"time"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	responsecontract "github.com/MeowSalty/LinguaFlow/backend/internal/execution/response"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
@@ -79,7 +82,7 @@ func (s *roundStore) LoadCapture(ctx context.Context, id string, limit int64) (p
 	if err != nil {
 		return pipeline.CapturedResponse{}, s.classify(err)
 	}
-	return pipeline.CapturedResponse{MainResponseHeader: pipelineResponseHeader(m.ResponseHeader), Payload: m.Payload, Release: m.Release}, nil
+	return pipeline.CapturedResponse{MainResponseHeader: pipelineResponseHeader(m.ResponseHeader), Payload: m.Payload, Record: pipeline.RequestRecord{State: m.Result.State, UsageKnown: m.Result.UsageKnown, Usage: backend.Usage{PromptTokens: m.Result.InputTokens, CompletionTokens: m.Result.OutputTokens}, Duration: time.Duration(m.Result.DurationMS) * time.Millisecond}, Release: m.Release}, nil
 }
 func (s *roundStore) PublishOutputs(ctx context.Context, in pipeline.OutputPublication) (pipeline.MainResponseHeader, error) {
 	out := workstate.OutputPublication{Key: storageMemberKey(in.Key), Next: in.Next, Digest: in.Digest, Glossary: in.Glossary, Complete: in.Complete, ParseDiagnostic: in.ParseDiagnostic}

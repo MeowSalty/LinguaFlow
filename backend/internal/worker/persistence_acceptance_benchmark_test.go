@@ -201,7 +201,7 @@ func persistenceRunResources(t *testing.T, fixtures []*pa.Fixture, model *persis
 		if err != nil {
 			t.Fatal(err)
 		}
-		handler := &pipeline.ExtractHandler{Backends: []backend.Backend{pipeline.BindRequestBackend(model, 1, 0, r)}, Renderer: renderer, Glossary: glossary.NewMemory(), BatchSize: batchSize, MinSourceLen: 1, Logger: logger, Reporter: reporter}
+		handler := &pipeline.ExtractHandler{Backend: pipeline.BindRequestBackend(model, 1, 0, r), Renderer: renderer, Glossary: glossary.NewMemory(), BatchSize: batchSize, MinSourceLen: 1, Logger: logger, Reporter: reporter}
 		doc := &pipeline.Document{SourceLang: "en", TargetLang: "zh"}
 		for i, id := range f.IDs {
 			doc.Segments = append(doc.Segments, pipeline.Segment{ID: fmt.Sprint(id), DBID: id, Source: fmt.Sprintf("synthetic source %d", i), Translate: true})

@@ -7,6 +7,16 @@ import (
 	"unsafe"
 )
 
+func mergeSemanticQAIssues(existing, fresh []qa.QualityIssue) []qa.QualityIssue {
+	merged := make([]qa.QualityIssue, 0, len(existing)+len(fresh))
+	for _, issue := range existing {
+		if !prompt.IsSemanticQACode(issue.Code) {
+			merged = append(merged, issue)
+		}
+	}
+	return append(merged, fresh...)
+}
+
 func mergeSemanticQAIssuesBounded(b *backend.BuildBounds, existing, fresh []qa.QualityIssue) ([]qa.QualityIssue, error) {
 	n := len(fresh)
 	for _, e := range existing {

@@ -293,10 +293,6 @@ func CollectMeterMetrics(e *engine.Engine) []backend.MeterMetrics {
 			for _, b := range h.RubyRetryBackends {
 				collect(b)
 			}
-		case *pipeline.ExtractHandler:
-			for _, b := range h.Backends {
-				collect(b)
-			}
 		}
 	}
 	return metrics
@@ -307,9 +303,7 @@ func extractBackend(handler pipeline.RoundHandler) backend.Backend {
 	case *pipeline.TranslateHandler:
 		return h.Backend
 	case *pipeline.ExtractHandler:
-		if len(h.Backends) > 0 {
-			return h.Backends[0]
-		}
+		return h.Backend
 	case *pipeline.AdjudicateHandler:
 		return h.Backend
 	case *pipeline.SemanticQAHandler:

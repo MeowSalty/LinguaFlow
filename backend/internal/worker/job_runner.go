@@ -17,7 +17,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/credential"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
@@ -29,7 +28,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/resourcebudget"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
@@ -53,8 +51,7 @@ type JobRunner struct {
 	credentialReader  credential.Reader
 	credentialChecker credential.Checker
 	resMutex          *ResourceMutex
-	// dbDriver 标识数据库驱动（config.DatabaseDriverPostgres /
-	// DatabaseDriverSQLite），用于 batchHandler 中的写入错误分级。
+	// dbDriver is used by the round store to classify persistence failures.
 	dbDriver string
 
 	// pipeCfg 流水线准入预算（字节配额与资源数上限）。
@@ -512,12 +509,6 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 		}
 		sort.SliceStable(pending, func(i, j int) bool { return hasDraft(pending[i]) && !hasDraft(pending[j]) })
 
-		// 站位信号量：round_index → Station（容量 = 该轮快照 concurrency）。
-		stations := make([]*pipeline.Station, len(snapshot.Rounds))
-		for i := range snapshot.Rounds {
-			stations[i] = pipeline.NewStation(roundConcurrency(snapshot, i))
-		}
-
 		type resourceExit struct {
 			item *ent.JobResource
 			err  error
@@ -541,7 +532,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) (returnErr error)
 				queue = queue[1:]
 				active++
 				go func() {
-					exits <- resourceExit{item: item, err: r.runPipelineResource(jobCtx, exec, snapshot, item, registry, gate, adm, stations)}
+					exits <- resourceExit{item: item, err: r.runPipelineResource(jobCtx, exec, snapshot, item, registry, gate, adm)}
 				}()
 			}
 			if active == 0 {
@@ -701,7 +692,6 @@ func (r *JobRunner) runPipelineResource(
 	registry *roundRegistry,
 	gate *pipeline.PauseGate,
 	adm *admission,
-	stations []*pipeline.Station,
 ) error {
 	// 动态选择资源：首次入线加载选择集时回填 work_weight（准入从首次入线起算）。
 	// 权重计算/回填失败时资源以最小单元（weightAllow(0)=1）准入——绕过字节
@@ -768,7 +758,7 @@ func (r *JobRunner) runPipelineResource(
 	}
 	defer adm.release(weight)
 
-	return r.processJobResource(jobCtx, exec, snapshot, item, registry, gate, stations)
+	return r.processJobResource(jobCtx, exec, snapshot, item, registry, gate)
 }
 
 // computeWorkWeight 聚合动态选择资源（segment_ids 为空）全部段落的
@@ -818,8 +808,7 @@ func (r *JobRunner) Pause(taskID int) bool {
 }
 
 // processJobResource 处理单个翻译资源：从 DB 加载段落、轮次循环翻译、写回 DB。
-// registry/gate/stations 为流水线编排注入物（nil 时退化为单资源直跑，
-// 供测试与 CLI 路径复用）。
+// registry 持有轮次记录，gate 让资源在轮次切换时响应任务暂停。
 func (r *JobRunner) processJobResource(
 	ctx context.Context,
 	exec *service.JobExecution,
@@ -827,7 +816,6 @@ func (r *JobRunner) processJobResource(
 	item *ent.JobResource,
 	registry *roundRegistry,
 	gate *pipeline.PauseGate,
-	stations []*pipeline.Station,
 ) (retErr error) {
 	job := exec.Job
 	ctx = context.WithValue(ctx, jobWriteScopeKey{}, jobWriteScope{jobID: job.ID, epoch: job.RetryEpoch})
@@ -888,7 +876,6 @@ func (r *JobRunner) processJobResource(
 	}
 
 	engineCfg := BuildEngineConfig(snapshot)
-	autoApprove := snapshot.AutoApprove
 
 	runtimeGlossary, err := r.buildRuntimeGlossary(ctx, exec.Project, engineCfg.Glossary.Enabled)
 	if err != nil {
@@ -922,17 +909,10 @@ func (r *JobRunner) processJobResource(
 	completedCount := 0
 	var lastResult pipeline.TranslateResult
 
-	// 瞬时写入失败追踪：段 docIndex → 待下一轮 pending 过滤拾取。
-	// 每轮 translate 开始时重置（瞬态段已在下一轮被 pending 过滤拾取并重试，
-	// 清空避免跨轮累积误判）。最后一轮后非空则 fail-fast（避免 limbo 段）。
-	var persistFailedMu sync.Mutex
-	persistFailedIndices := make(map[int]struct{})
-
 	// 段落来源标记：仅 segment_ids 手动选择时跳过默认过滤
 	isExplicitSelection := snapshot.ExplicitSegmentSelection
 	firstTranslateRoundIdx := -1
 	lastTranslateRoundIdx := -1
-	translateRoundCount := 0
 	// lastRoundIdxByMode：模式 → 计划内最后一轮的 index，覆盖快照中出现的
 	// 全部模式（含未知模式，保证承接者判定对任何模式都成立）。轮次终态与
 	// 资源收尾都以「是否存在后续同模式轮」为界：最后一轮的欠账无人承接，
@@ -946,7 +926,6 @@ func (r *JobRunner) processJobResource(
 				firstTranslateRoundIdx = i
 			}
 			lastTranslateRoundIdx = i
-			translateRoundCount++
 		}
 	}
 
@@ -999,28 +978,25 @@ func (r *JobRunner) processJobResource(
 		round := snapshot.Rounds[roundIdx]
 
 		// 轮次行流转：跳过已完成的轮（断点续传核心——completed 轮直接跳过）。
-		roundRowID := 0
-		if registry != nil {
-			roundRowID, err = registry.ensureLoaded(ctx, r.client, item.ID, roundIdx, round.Mode)
-			if err != nil {
-				_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
-				return nil
-			}
-			roundRow, statErr := r.client.JobRound.Query().Where(jobround.IDEQ(roundRowID)).
-				Select(jobround.FieldStatus, jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted).Only(ctx)
-			if statErr != nil {
-				_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, statErr)
-				return nil
-			}
-			rowStatus := roundRow.Status
-			if usesStagedRound(round.Mode) {
-				stagedResiduals[round.Mode] = append(stagedResiduals[round.Mode], stagedRoundResidual{
-					rowID: roundRowID, hasResidual: rowStatus == service.JobRoundStatusCompleted && roundRow.SegmentCompleted < roundRow.SegmentTotal,
-				})
-			}
-			if rowStatus == service.JobRoundStatusCompleted || rowStatus == service.JobRoundStatusSkipped {
-				continue // 断点续传：已完成/跳过轮不再执行
-			}
+		roundRowID, err := registry.ensureLoaded(ctx, r.client, item.ID, roundIdx, round.Mode)
+		if err != nil {
+			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+			return nil
+		}
+		roundRow, err := r.client.JobRound.Query().Where(jobround.IDEQ(roundRowID)).
+			Select(jobround.FieldStatus, jobround.FieldSegmentTotal, jobround.FieldSegmentCompleted).Only(ctx)
+		if err != nil {
+			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+			return nil
+		}
+		rowStatus := roundRow.Status
+		if usesStagedRound(round.Mode) {
+			stagedResiduals[round.Mode] = append(stagedResiduals[round.Mode], stagedRoundResidual{
+				rowID: roundRowID, hasResidual: rowStatus == service.JobRoundStatusCompleted && roundRow.SegmentCompleted < roundRow.SegmentTotal,
+			})
+		}
+		if rowStatus == service.JobRoundStatusCompleted || rowStatus == service.JobRoundStatusSkipped {
+			continue // 断点续传：已完成/跳过轮不再执行
 		}
 
 		if reason := eng.RoundSkipReason(roundIdx); reason != "" {
@@ -1120,398 +1096,14 @@ func (r *JobRunner) processJobResource(
 			continue
 		}
 
-		docIndexToDBID := func(index int) (int, bool) { return canonicalDBIdentity(doc, index) }
-
-		// 每轮刷新 reporter 目标行，并同点注入当轮断点映射。
-		// 顺序约束由 SwitchRound 内部保证：先 flush 上一轮残留缓冲（写入旧行），
-		// 再切换目标行——否则上一轮残留登记会按新映射落行，把错误轮次的断点
-		// 写进上一轮行。
-		//
-		// 全部模式（含 translate）都登记断点：轮次行的 segment_completed 由断点
-		// 集合基数派生，是恢复/重试时唯一精确的进度基线（见 DBReporter 注释）。
-		// translate 轮的跨轮增量仍由 Segment.status 驱动——resolvedByMode 不含
-		// translate，loadResolved 也不加载其断点行，断点只承担记账与恢复语义。
-		// docIndexToDBID 每轮整体重建，闭包捕获的是当轮快照，无需加锁。
 		reporter.SwitchBoundedRound(roundRowID, func(docIndex int) (int, bool) {
-			dbID, ok := docIndexToDBID(docIndex)
-			return dbID, ok
+			return canonicalDBIdentity(doc, docIndex)
 		})
 
-		// 构建 BatchHandler（翻译/裁决轮次用于持久化，抽取轮次不需要）
-		var batchHandler func(_ context.Context, batchResult pipeline.BatchResult) error
-		switch round.Mode {
-		case "translate":
-			// 每轮 translate 开始时重置瞬态失败追踪（瞬态段已在下一轮被
-			// pending 过滤拾取并重试，清空避免跨轮累积误判）。
-			persistFailedMu.Lock()
-			persistFailedIndices = make(map[int]struct{})
-			persistFailedMu.Unlock()
-
-			batchHandler = func(ctx context.Context, batchResult pipeline.BatchResult) error {
-				defaultStatus := service.SegmentStatusTranslated
-				if autoApprove {
-					defaultStatus = service.SegmentStatusApproved
-				}
-
-				// --- QA 规则检测 ---
-				var allIssues []qa.QualityIssue
-				if qaEngine != nil {
-					inputs := buildQACheckInputs(batchResult)
-					allIssues = qaEngine.Run(ctx, inputs)
-				}
-
-				localCompleted := 0
-				for _, ts := range batchResult.Segments {
-					if ts.TargetText == "" {
-						continue
-					}
-					dbID, ok := docIndexToDBID(ts.Index)
-					if !ok {
-						continue
-					}
-
-					// 合并 pipeline 产出的守恒 issue（如注音还原不完整）与 QA 扫描结果。
-					// 新建切片避免对 QA 内部切片的别名依赖；ts.Issues 为 nil 时 append 跳过。
-					segIssues := make([]qa.QualityIssue, 0, len(ts.Issues)+4)
-					segIssues = append(segIssues, ts.Issues...)
-					segIssues = append(segIssues, qa.IssuesFor(ts.Index, allIssues)...)
-
-					segStatus := defaultStatus
-					if qa.HasErrors(segIssues) && engineCfg.QA.AutoReject {
-						segStatus = service.SegmentStatusRejected
-					}
-
-					persistErr := withJobResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
-						update := client.Segment.UpdateOneID(dbID).
-							Where(segment.ContentVersionEQ(doc.Segments[ts.Index].ContentVersion)).
-							SetTargetText(ts.TargetText).
-							SetStatus(segStatus)
-						if autoApprove {
-							update.ClearReviewComment()
-						}
-						// --- 写入 QA 结果（if/else 二选一，避免 ent mutation
-						// 对同一列既 Clear 又 Set 导致 PostgreSQL 42601 重复赋值）---
-						// 不对账：新译文导致指纹基本全变，旧裁决不跨文本存活；
-						// 若未来引入同译文手动重算，须接入 qa.ReconcileIssues。
-						if len(segIssues) > 0 {
-							update.SetQualityIssues(segIssues)
-						} else {
-							update.ClearQualityIssues()
-						}
-						return update.Exec(ctx)
-					})
-					if err := persistErr; err != nil {
-						if errors.Is(err, service.ErrSourceRevisionConflict) {
-							return err
-						}
-						// 取消/超时交由 round_executor 的 ctx 检查接管，不归类重试。
-						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							continue
-						}
-						classified := database.Classify(r.dbDriver, err)
-						r.logger.Warn("persist segment failed",
-							"segment_id", dbID, "err", err,
-							"category", classified.Category, "sqlstate", classified.SQLState)
-						switch classified.Category {
-						case database.CategoryTransient:
-							// 瞬时：DB 状态因原子 UPDATE 失败仍为 pending，
-							// 记录 docIndex 供终端态兜底，不计入 completed，不返回 error。
-							// 下一轮 pending_only 过滤自动拾取重试。
-							persistFailedMu.Lock()
-							persistFailedIndices[ts.Index] = struct{}{}
-							persistFailedMu.Unlock()
-							continue
-						default: // Structural 或 Unknown：fail-fast（命中首段即终止当前轮）
-							// 对外消息仅含分级摘要，避免把原始驱动错误（可能内嵌
-							// 连接元数据）经 error_message → SSE → API 暴露给客户端。
-							return fmt.Errorf("persist segment %d failed (structural DB write error, sqlstate %s)",
-								dbID, classified.SQLState)
-						}
-					}
-					localCompleted++
-				}
-				mu.Lock()
-				completedCount += localCompleted
-				mu.Unlock()
-				return nil
-			}
-		case "correct":
-			batchHandler = func(ctx context.Context, batchResult pipeline.BatchResult) error {
-				for _, ts := range batchResult.Segments {
-					dbID, ok := docIndexToDBID(ts.Index)
-					if !ok {
-						continue
-					}
-					// correct 改写译文并重写 quality_issues（ResolvedCodes 已剔除）。
-					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
-					// 不对账：新译文导致指纹基本全变，旧裁决不跨文本存活；
-					// 若未来引入同译文手动重算，须接入 qa.ReconcileIssues。
-					persistErr := withJobResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
-						update := client.Segment.UpdateOneID(dbID).
-							Where(segment.ContentVersionEQ(doc.Segments[ts.Index].ContentVersion)).
-							SetTargetText(ts.TargetText)
-						if len(ts.Issues) > 0 {
-							update.SetQualityIssues(ts.Issues)
-						} else {
-							update.ClearQualityIssues()
-						}
-						return update.Exec(ctx)
-					})
-					if err := persistErr; err != nil {
-						if errors.Is(err, service.ErrSourceRevisionConflict) {
-							return err
-						}
-						// 取消/超时交由 round_executor 的 ctx 检查接管，不归类重试。
-						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							continue
-						}
-						classified := database.Classify(r.dbDriver, err)
-						r.logger.Warn("persist correct rewrite failed",
-							"segment_id", dbID, "err", err,
-							"category", classified.Category, "sqlstate", classified.SQLState)
-						// correct 无重试机制（改写结果一次性写入，失败即丢失），
-						// fail-fast 当前轮，避免末轮静默丢失。
-						return fmt.Errorf("persist correct rewrite for segment %d failed (DB write error, category %s, sqlstate %s)",
-							dbID, classified.Category, classified.SQLState)
-					}
-				}
-				return nil
-			}
-		case "adjudicate":
-			batchHandler = func(ctx context.Context, batchResult pipeline.BatchResult) error {
-				if batchResult.PreparedPayload != nil {
-					_, err := r.persistStoredEncodedBatch(ctx, "adjudicate", batchResult.PreparedPayload, doc, nil, nil, res.ID, item.SourceGeneration)
-					return err
-				}
-				completed := 0
-				for _, ts := range batchResult.Segments {
-					dbID, ok := docIndexToDBID(ts.Index)
-					if !ok {
-						continue
-					}
-					// 仅重写 quality_issues，不改 status / target。
-					// if/else 二选一避免同一列既 Clear 又 Set（PostgreSQL 42601）。
-					// 不对账：adjudicate 不产生新 issue，只是标记已有的
-					// （applyVerdicts 写 dismissed）；新译文场景下指纹全变，无需对账。
-					persistErr := withJobResourceTranslation(ctx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
-						update := client.Segment.UpdateOneID(dbID).Where(segment.ContentVersionEQ(doc.Segments[ts.Index].ContentVersion))
-						if len(ts.Issues) > 0 {
-							update.SetQualityIssues(ts.Issues)
-						} else {
-							update.ClearQualityIssues()
-						}
-						return update.Exec(ctx)
-					})
-					if err := persistErr; err != nil {
-						if errors.Is(err, service.ErrSourceRevisionConflict) {
-							return err
-						}
-						// 取消/超时交由 round_executor 的 ctx 检查接管，不归类重试。
-						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							continue
-						}
-						classified := database.Classify(r.dbDriver, err)
-						r.logger.Warn("persist adjudicated issues failed",
-							"segment_id", dbID, "err", err,
-							"category", classified.Category, "sqlstate", classified.SQLState)
-						switch classified.Category {
-						case database.CategoryTransient:
-							// adjudicate 无跨轮重试机制（裁决结果一次性写入，失败即丢失），
-							// 即使瞬时错误也 fail-fast 当前轮，避免末轮静默丢失导致
-							// COMPLETED 时陈旧 quality_issues 被保留且零信号。
-							fallthrough
-						default: // Structural 或 Unknown：fail-fast
-							return fmt.Errorf("persist adjudicated issues for segment %d failed (DB write error, category %s, sqlstate %s)",
-								dbID, classified.Category, classified.SQLState)
-						}
-					}
-					completed++
-				}
-				return nil
-			}
-		case "semantic_qa":
-			batchHandler = func(batchCtx context.Context, batchResult pipeline.BatchResult) error {
-				if batchResult.PreparedPayload != nil {
-					_, err := r.persistStoredEncodedBatch(batchCtx, "semantic_qa", batchResult.PreparedPayload, doc, nil, nil, res.ID, item.SourceGeneration)
-					return err
-				}
-				resultsByDBID := make(map[int]pipeline.TranslatedSegment, len(batchResult.Segments))
-				dbIDs := make([]int, 0, len(batchResult.Segments))
-				for _, ts := range batchResult.Segments {
-					if ts.Issues == nil {
-						continue
-					}
-					dbID, ok := docIndexToDBID(ts.Index)
-					if !ok {
-						continue
-					}
-					resultsByDBID[dbID] = ts
-					dbIDs = append(dbIDs, dbID)
-				}
-				if len(dbIDs) == 0 {
-					return nil
-				}
-
-				rows, err := r.client.Segment.Query().Where(segment.IDIn(dbIDs...)).All(batchCtx)
-				if err != nil {
-					return fmt.Errorf("load semantic_qa batch segments: %w", err)
-				}
-
-				completed := 0
-				for _, row := range rows {
-					ts, ok := resultsByDBID[row.ID]
-					if !ok {
-						continue
-					}
-					var updated int
-					if row.ContentVersion != doc.Segments[ts.Index].ContentVersion {
-						continue
-					}
-					err := withJobResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
-						var err error
-						updated, err = persistSemanticQASegmentIssues(batchCtx, client, row, ts.TargetText, ts.Issues)
-						return err
-					})
-					if err != nil {
-						if errors.Is(err, service.ErrSourceRevisionConflict) {
-							return err
-						}
-						// 取消/超时交由 round_executor 的 ctx 检查接管，不计入统计。
-						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							continue
-						}
-						classified := database.Classify(r.dbDriver, err)
-						r.logger.Warn("persist semantic_qa issues failed",
-							"segment_id", row.ID, "err", err,
-							"category", classified.Category, "sqlstate", classified.SQLState)
-						// semantic_qa 没有跨轮重试机制（裁决/质检结果一次性写入，
-						// 失败即丢失），无论瞬时还是结构性都 fail-fast 当前轮，
-						// 由上层 soft warning 路径接管，避免静默吞没导致 COMPLETED
-						// 时 QA 结果丢失且零信号。
-						return fmt.Errorf("persist semantic_qa issues for segment %d failed (DB write error, category %s, sqlstate %s)",
-							row.ID, classified.Category, classified.SQLState)
-					}
-					if updated == 0 {
-						r.logger.Info("skip stale semantic_qa result", "segment_id", row.ID)
-						continue
-					}
-					completed++
-				}
-				return nil
-			}
-
-		case "revise":
-			// 写回时移除的 issue 集合与送进 prompt 的目标集合严格一致
-			//（计划校验保证只能是语义 code）。
-			var reviseCodes []string
-			if round.Revise != nil {
-				reviseCodes = round.Revise.IssueCodes
-			}
-			batchHandler = func(batchCtx context.Context, batchResult pipeline.BatchResult) error {
-				resultsByDBID := make(map[int]pipeline.TranslatedSegment, len(batchResult.Segments))
-				dbIDs := make([]int, 0, len(batchResult.Segments))
-				for _, ts := range batchResult.Segments {
-					dbID, ok := docIndexToDBID(ts.Index)
-					if !ok {
-						continue
-					}
-					resultsByDBID[dbID] = ts
-					dbIDs = append(dbIDs, dbID)
-				}
-				if len(dbIDs) == 0 {
-					return nil
-				}
-				rows, err := r.client.Segment.Query().Where(segment.IDIn(dbIDs...)).All(batchCtx)
-				if err != nil {
-					return fmt.Errorf("load revise batch segments: %w", err)
-				}
-				// 仅对译文确有变化的段构造确定性 QA 输入：no-op 段的 QA 结果
-				// 本就会在写回循环中被跳过，整批跑是纯浪费。
-				changed := make([]pipeline.TranslatedSegment, 0, len(rows))
-				for _, row := range rows {
-					ts, ok := resultsByDBID[row.ID]
-					if !ok {
-						continue
-					}
-					if ts.TargetText != doc.Segments[ts.Index].Target {
-						changed = append(changed, ts)
-					}
-				}
-				var allIssues []qa.QualityIssue
-				qaRan := qaEngine != nil && len(changed) > 0
-				if qaRan {
-					allIssues = qaEngine.Run(batchCtx, buildQACheckInputs(pipeline.BatchResult{Segments: changed}))
-				}
-				completed := 0
-				for _, row := range rows {
-					ts, ok := resultsByDBID[row.ID]
-					if !ok {
-						continue
-					}
-					baseline := doc.Segments[ts.Index].Target
-					if ts.TargetText == baseline {
-						completed++
-						continue
-					}
-					fresh := qa.IssuesFor(ts.Index, allIssues)
-					var updated int
-					if row.ContentVersion != doc.Segments[ts.Index].ContentVersion {
-						continue
-					}
-					err := withJobResourceTranslation(batchCtx, r.client, res.ID, item.SourceGeneration, func(client *ent.Client) error {
-						var err error
-						updated, err = persistReviseSegmentResult(batchCtx, client, row, baseline, ts.TargetText, fresh, reviseCodes, qaRan)
-						return err
-					})
-					if err != nil {
-						if errors.Is(err, service.ErrSourceRevisionConflict) {
-							return err
-						}
-						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-							continue
-						}
-						classified := database.Classify(r.dbDriver, err)
-						r.logger.Warn("persist revise result failed", "segment_id", row.ID, "err", err,
-							"category", classified.Category, "sqlstate", classified.SQLState)
-						return fmt.Errorf("persist revise result for segment %d failed (DB write error, category %s, sqlstate %s)", row.ID, classified.Category, classified.SQLState)
-					}
-					if updated == 0 {
-						r.logger.Info("skip stale revise result", "segment_id", row.ID)
-						continue
-					}
-					completed++
-				}
-				mu.Lock()
-				completedCount += completed
-				mu.Unlock()
-				return nil
-			}
-		}
-
-		roundIdx := roundIdx // 为闭包捕获当前轮次值
-		// 所有轮次统一用 SegmentFilter 限定任务级段落范围；
-		// adjudicate handler 的 BuildBatches 在已过滤 doc 上按 status∈{translated,edited}
-		// 且含可裁决 issue 进一步筛选，无需清空共享 doc 的 Status/Issues。
-		execOpts := []engine.ExecuteOption{
-			engine.WithBatchHandler(batchHandler),
-		}
-		if roundRowID > 0 {
-			scope := workstate.Scope{JobID: job.ID, ResourceID: res.ID, JobResourceID: item.ID, RoundID: roundRowID, RetryEpoch: job.RetryEpoch, SourceGeneration: item.SourceGeneration, SourceRevisionID: item.SourceRevisionID}
-			store := newRoundStore(r.client, scope, nil, snapshot, roundIdx, qaEngine, engineCfg.QA.AutoReject, r.dbDriver, memory, func() { mu.Lock(); completedCount++; mu.Unlock() })
-			store.bindCanonical(doc)
-			execOpts = append(execOpts, engine.WithRoundStore(store))
-		}
-		// 非翻译轮注入跨轮增量载体：BuildBatches 据此排除上一同模式轮已解决的段。
-
-		// 流水线注入：站位信号量（同轮资源共享并发预算）与暂停闸门
-		//（退避重试等待中止信号）。单资源路径（stations/gate 为 nil）跳过。
-		if stations != nil && roundIdx < len(stations) {
-			execOpts = append(execOpts, engine.WithStation(stations[roundIdx]))
-		}
-		if gate != nil {
-			execOpts = append(execOpts, engine.WithPauseGate(gate))
-		}
-		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
+		scope := workstate.Scope{JobID: job.ID, ResourceID: res.ID, JobResourceID: item.ID, RoundID: roundRowID, RetryEpoch: job.RetryEpoch, SourceGeneration: item.SourceGeneration, SourceRevisionID: item.SourceRevisionID}
+		store := newRoundStore(r.client, scope, nil, snapshot, roundIdx, qaEngine, engineCfg.QA.AutoReject, r.dbDriver, memory, func() { mu.Lock(); completedCount++; mu.Unlock() })
+		store.bindCanonical(doc)
+		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, engine.WithRoundStore(store))
 		if roundErr == nil {
 			lastResult = result
 			// 累加本轮成功段到对应模式的 resolved 集合（跨轮增量，仅内存）。
@@ -1633,34 +1225,6 @@ func (r *JobRunner) processJobResource(
 		return err
 	}
 
-	// 最后一轮 translate 后，检查仍有瞬时写入失败的段（历经所有翻译轮仍写不进去）。
-	// 这些段既不在 lastResult.UnresolvedCount（那是 LLM 失败）也不在 completed 中，
-	// 不处理会被误判 COMPLETED 而静默丢失。无论单轮还是多轮，凡存在持久化失败的段
-	// 都必须 fail-fast，避免静默丢失；错误消息按轮数区分"首次失败"与"重试耗尽"，
-	// 防止单轮任务被误报为已重试。
-	if lastTranslateRoundIdx >= 0 {
-		persistFailedMu.Lock()
-		persistFailedCount := len(persistFailedIndices)
-		persistFailedMu.Unlock()
-		if persistFailedCount > 0 {
-			r.logger.Warn("segments failed to persist after all translate rounds",
-				"resource_id", item.ID, "count", persistFailedCount,
-				"translate_rounds", translateRoundCount)
-			_ = r.client.JobResource.UpdateOneID(item.ID).
-				SetCompletedSegments(completedCount).SetSkippedSegments(skippedCount).Exec(ctx)
-			var err error
-			if translateRoundCount > 1 {
-				err = fmt.Errorf("%d segments failed to persist to database after %d translate rounds (transient DB errors exhausted retries): consider retrying the job",
-					persistFailedCount, translateRoundCount)
-			} else {
-				err = fmt.Errorf("%d segments failed to persist to database (transient DB write error, no subsequent retry round): consider retrying the job",
-					persistFailedCount)
-			}
-			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
-			return nil
-		}
-	}
-
 	eng.SaveGlossary(ctx)
 
 	// translate 残留判定读残留账本而非 lastResult：doc 每轮重建，
@@ -1773,73 +1337,6 @@ func residualWarning(mode string, residual roundResidual) string {
 		return fmt.Sprintf("术语抽取未完全成功：%d 个段落未能完成（本次结果已保留，可调整参数后重新发起任务）", residual.total())
 	}
 	return ""
-}
-
-func mergeSemanticQAIssues(existing, fresh []qa.QualityIssue) []qa.QualityIssue {
-	merged := make([]qa.QualityIssue, 0, len(existing)+len(fresh))
-	for _, issue := range existing {
-		if !prompt.IsSemanticQACode(issue.Code) {
-			merged = append(merged, issue)
-		}
-	}
-	return append(merged, fresh...)
-}
-
-// persistSemanticQASegmentIssues 对单个段落执行 CAS 写入语义质检结果。
-//
-// CAS 保护：仅当段落仍处于可质检状态（translated/edited）且译文未被改动
-// （当前 targetText 仍等于扫描时看到的 targetText）时才写入，避免覆盖
-// 审核态（approved/rejected）或已被改写的新译文。
-//
-// 不使用 UpdatedAtEQ：SQLite TEXT 时间列在 ent/modernc 往返时存在精度/
-// 格式差异，会导致 WHERE 恒匹配 0 行而静默丢弃所有结果。
-//
-// 返回实际更新行数（0 表示 CAS 未命中，调用方据此跳过并记日志）。
-func persistSemanticQASegmentIssues(ctx context.Context, c *ent.Client, row *ent.Segment, targetText string, fresh []qa.QualityIssue) (int, error) {
-	// 对账：retry/崩溃恢复时 semantic_qa 会重扫同一译文，fresh 语义 issues 需继承
-	// 已有同指纹 issue 的裁决（dismissed 等），避免静默冲掉用户/LLM 的裁决。
-	reconciled := qa.ReconcileIssues(fresh, row.QualityIssues)
-	merged := mergeSemanticQAIssues(row.QualityIssues, reconciled)
-	return c.Segment.Update().
-		Where(
-			segment.IDEQ(row.ID),
-			segment.ContentVersionEQ(row.ContentVersion),
-			segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
-			segment.TargetTextEQ(targetText),
-		).
-		SetQualityIssues(merged).
-		Save(ctx)
-}
-
-// persistReviseSegmentResult 对单个段落执行 LLM 修订结果的 CAS 写入。
-//
-// CAS 保护：仅当段落仍处于 translated/edited 且译文仍等于扫描时的 baseline
-// 时写入，避免覆盖审核态或并发产生的新译文。
-//
-// 写回契约（与 correct 轮一致："声明修什么，就移除什么，其余判决不动"）：
-//   - targetedCodes 命中且仍 pending 的 issue 视为本轮已修复而移除；
-//   - 范围外 pending 与 dismissed 记录一律保留；
-//   - qaRan=true 时确定性 issue 以 fresh 重算（ReconcileIssues 按指纹继承旧裁决）；
-//     qaRan=false（计划未启用确定性 QA）时确定性 issue 不重算、原样保留。
-//
-// 修订是声明性修复，无法自证 LLM 实际修复了目标问题：若实际未修复，仅当后续
-// semantic_qa 轮会重扫该段（scope=all；with_issues/with_issue_codes 作用域会跳过
-// 已无 issue 的段落，且轮次顺序无约束、revise 可为末轮）时才会重新检出；否则与
-// 手动编辑/重译清除旧语义 issue 的既有语义一致——译文已变更，旧 issue 视为失效。
-func persistReviseSegmentResult(ctx context.Context, c *ent.Client, row *ent.Segment, baseline, revised string, fresh []qa.QualityIssue, targetedCodes []string, qaRan bool) (int, error) {
-	final := qa.ReviseFinalIssues(row.QualityIssues, fresh, targetedCodes, qaRan)
-	update := c.Segment.Update().Where(
-		segment.IDEQ(row.ID),
-		segment.ContentVersionEQ(row.ContentVersion),
-		segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
-		segment.TargetTextEQ(baseline),
-	).SetTargetText(revised)
-	if len(final) > 0 {
-		update.SetQualityIssues(final)
-	} else {
-		update.ClearQualityIssues()
-	}
-	return update.Save(ctx)
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。
