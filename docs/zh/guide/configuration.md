@@ -88,6 +88,10 @@ linguaflow serve --config server.yaml
 启用 `auto_migrate`（默认开启）时，PostgreSQL 实例会通过 `pg_advisory_lock` 串行化 schema 迁移，多个 LinguaFlow 实例可同时连接同一数据库而不会在启动阶段产生冲突。
 :::
 
+::: tip SQLite 的并发行为
+SQLite 连接池为每条物理连接配备独占的执行队列，并发语句在连接内排队执行；超时或取消后该连接上语句的结果视为未知，连接会被隔离、相关操作按需重试，从而降低高并发下的锁冲突影响。池大小仍由 `max_open_conns` 控制（SQLite 默认 `0`，即不限制打开连接数）。
+:::
+
 ### 配置文件中的环境变量引用
 
 配置文件中的字符串值支持 `${VAR_NAME}` 与 `${VAR_NAME:-default}` 两种引用，在解析阶段展开：
@@ -594,10 +598,11 @@ bootstrap:
 
 ##### server.execution_budget — 执行预算（serve / local 可选）
 
-控制单个用户（`actor`）与整个实例（`instance`）执行翻译任务时可占用的资源上限。**逐维度可选**：省略的维度表示不限制；显式配置的值必须为正整数，写 `0`、负数或非法数字会在配置解析阶段报错，形如 `server.execution_budget.actor.max_unconfirmed_members must be positive when configured`。`config explain` 对省略的维度显示 `not configured (unlimited)`。预算按**逻辑额度**记账（正在处理的对象数与字节数），不是进程内存上限；已配置的各维度独立生效，一个维度超限不会挪用其他维度的余量。
+控制单个用户（`actor`）与整个实例（`instance`）执行翻译任务时可占用的资源上限。**逐维度可选**：省略的维度表示不限制；显式配置的值必须为正整数，写 `0`、负数或非法数字会在配置解析阶段报错，形如 `server.execution_budget.actor.max_unconfirmed_members must be positive when configured`。`config explain` 对省略的维度显示 `not configured (unlimited)`。预算按**逻辑额度**记账（正在处理的对象数与字节数），不是进程内存上限；已配置的各维度独立生效，一个维度超限不会挪用其他维度的余量。除 actor / instance 两组维度外，顶层另有一个独立的单值键 `max_build_allocation_bytes`（同样可选、显式配置必须为正整数），见下表首行。
 
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
+| `max_build_allocation_bytes` | int64（顶层，可选） | 省略 = 不限制 | 输入构建（解析、保护、对齐）阶段的分配额度上限。独立于 actor / instance 共享账本：只作上限策略，不改变共享账本记账、也不会额外提供构建额度 |
 | `actor.max_unconfirmed_members` / `instance.…` | int64（可选） | 省略 = 不限制 | 未确认（未落库提交）的段落数上限 |
 | `actor.max_payload_bytes` / `instance.…` | int64（可选） | 省略 = 不限制 | 同时持有的输入/输出载荷字节上限 |
 | `actor.max_prepare_owners` / `instance.…` | int64（可选） | 省略 = 不限制 | 准备阶段（切段、提示词构造等前置工作）的所有权数上限 |
@@ -607,7 +612,7 @@ bootstrap:
 | `actor.max_queued_descriptors` / `instance.…` | int64（可选） | 省略 = 不限制 | 排队等待的条目描述符数上限 |
 | `actor.max_logical_storage_bytes` / `instance.…` | int64（可选） | 省略 = 不限制 | 任务运行期占用的逻辑存储字节上限 |
 
-每个字段都有同名环境变量，形如 `LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES` / `LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES`（把字段路径转大写蛇形即可）。优先级与其他部署字段一致：文档 < 环境变量 < 显式 flags——环境变量与文档可以只覆盖部分维度，未覆盖的维度保持不限制。
+每个字段都有同名环境变量，形如 `LINGUAFLOW_EXECUTION_BUDGET_ACTOR_MAX_PAYLOAD_BYTES` / `LINGUAFLOW_EXECUTION_BUDGET_INSTANCE_MAX_LOGICAL_STORAGE_BYTES`（把字段路径转大写蛇形即可）；顶层键对应 `LINGUAFLOW_EXECUTION_BUDGET_MAX_BUILD_ALLOCATION_BYTES`。优先级与其他部署字段一致：文档 < 环境变量 < 显式 flags——环境变量与文档可以只覆盖部分维度，未覆盖的维度保持不限制。
 
 ::: tip 怎么取值
 参考起点：单人本地实例可给 `actor` 每项几十到几百、`instance` 略高于 `actor`（计数类）与单任务字节数的若干倍（字节类）；多用户实例按「单用户额度 × 并发用户数」放大 `instance`。也可以只配最关心的几个维度（如载荷字节与逻辑存储），其余保持不限制。内存另受 `server.pipeline` 的准入窗口与 `rss_limit_mb` 保险丝约束。
@@ -629,7 +634,7 @@ bootstrap:
 | `max_inflight_resources` | int | `8` | 每任务同时在途的资源数上限，兜住每资源的句柄开销 |
 | `candidate_window_segments` | int | `256` | 候选窗口的段数上限：一个任务同时持有的「已预留 + 已存草稿 + 待注音 + 待提交」候选段数，达到上限即暂停生产、等下游消费腾出空间 |
 | `candidate_window_mb` | int | `16` | 候选窗口的总字节预算（MB），与段数上限共同约束窗口体积 |
-| `max_candidate_mb` | int | `1` | 单段候选载荷上限（MB）。超限的段落判为**永久容量失败**、不重试 |
+| `max_candidate_mb` | int | `1` | 单段候选载荷上限（MB）。超限的段落判为**永久容量失败**、不重试；只隔离该段，同批其余段落的确认与用量统计不受影响 |
 | `max_response_mb` | int | `1` | 单次后端调用解压后响应字节上限（MB）。超限返回 `ResponseLimitError`、**不重试**，对所有后端与 SSE 流生效 |
 | `response_handoff_mb` | int | `64` | 原始响应交接通道的字节上限（MB）：响应在准入与持久化之间交接时的独立保存预算 |
 | `rss_limit_mb` | int | `0` | **进程级** RSS（常驻内存）保险丝，单位 MB；`0` = 关闭。启用后双水位：内存达到 85% 暂停所有任务的新资源准入（在途请求继续），回落到 70% 恢复 |
@@ -643,7 +648,7 @@ bootstrap:
 
 执行期每个资源（文件）也有硬性边界：段落数上限 65,536，输入字节（源文、译文、元数据与质检记录之和）上限取 `response_handoff_mb` 与 64MiB 中的较小值。段落元数据与质检记录按段落各自独立记账，段落数量不产生累计预算惩罚，数千段的整本电子书（长篇 EPUB 等）在默认配置下可直接执行；超限的资源按永久容量失败处理并给出错误信息，可通过重试入口重新入队，任务其余资源不受影响。
 
-若显式配置了 `server.execution_budget.*.max_payload_bytes`，注意资源加载会按「确定性分配上限」预占逻辑额度：约为该资源输入字节的 30~50 倍，另加每段约 6KB（远大于真实内存占用），设置该值时需按此口径预留，过小会导致资源无法开始执行。
+若显式配置了 `server.execution_budget.*.max_payload_bytes`，注意资源加载会按「确定性分配上限」预占逻辑额度：约为该资源输入字节的 30~50 倍，另加每段约 6KB（远大于真实内存占用），设置该值时需按此口径预留，过小会导致资源无法开始执行。该构建分配上限也可用顶层 `server.execution_budget.max_build_allocation_bytes` 显式设定（同样可选、正整数）。
 :::
 
 ##### server.preview — 单段预览（试译 / 修订）

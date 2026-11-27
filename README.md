@@ -306,6 +306,7 @@ export LINGUAFLOW_BOOTSTRAP_ADMIN_PASSWORD="<强密码>"
 - [使用模式](https://meowsalty.github.io/LinguaFlow/zh/guide/modes)
 - [项目管理](https://meowsalty.github.io/LinguaFlow/zh/guide/projects)
 - [格式支持](https://meowsalty.github.io/LinguaFlow/zh/guide/formats)
+- [账号与认证](https://meowsalty.github.io/LinguaFlow/zh/guide/authentication)（服务器模式 · 预览）
 - [存储管理](https://meowsalty.github.io/LinguaFlow/zh/guide/storage)（服务器模式 · 预览）
 - [翻译配置 · 使用](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config)
 - [翻译配置 · 参考](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config-reference)
