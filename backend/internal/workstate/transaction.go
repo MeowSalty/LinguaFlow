@@ -34,7 +34,18 @@ func (e *TransactionError) Unwrap() []error {
 	}
 	return result
 }
-func (e *TransactionError) Permanent() bool { return e.Outcome == "unknown" }
+func (e *TransactionError) Permanent() bool {
+	if e.Outcome == "unknown" {
+		return true
+	}
+	if e.Phase != "execute" || e.Outcome != "not_committed" {
+		return false
+	}
+	// A successful rollback preserves the callback's retry classification.
+	var cause interface{ Permanent() bool }
+	return errors.As(e.Primary, &cause) && cause.Permanent()
+}
+
 func (e *TransactionError) Uncertain() bool { return e.Outcome == "unknown" }
 
 func unknownCommit(err error) bool {
