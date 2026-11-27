@@ -368,7 +368,7 @@ func (s *Store) captureResponse(ctx context.Context, in CapturedResponse) error 
 	return s.finishUnknown(ctx, identity.JobID, err, check)
 }
 func (s *Store) LoadCapture(ctx context.Context, id string, limit int64) (CapturedResponse, error) {
-	h, err := responseContinuationQuery(s.client.WorkRequest.Query().Where(workrequest.IdentityEQ(id), func(sel *sql.Selector) { sel.Where(requestMetadataBounds(sel)) })).Only(ctx)
+	h, err := responseContinuationQuery(s.client.WorkRequest.Query().Where(workrequest.IdentityEQ(id), func(sel *sql.Selector) { sel.Where(requestMetadataBounds(sel)) })).Select(workrequest.FieldUsageKnown, workrequest.FieldInputTokens, workrequest.FieldOutputTokens, workrequest.FieldDurationMs).Only(ctx)
 	if err != nil {
 		return CapturedResponse{}, err
 	}
@@ -397,7 +397,7 @@ func (s *Store) LoadCapture(ctx context.Context, id string, limit int64) (Captur
 	}
 	backend.ObserveMemberWork(ctx, backend.MemberWorkEvent{Phase: "capture", Operation: "capture_read", Bytes: int64(len(row.CapturePayload)), Rows: 1})
 	installed = true
-	return CapturedResponse{ResponseHeader: responseHeader(h), Payload: row.CapturePayload, Release: reservation.release}, nil
+	return CapturedResponse{ResponseHeader: responseHeader(h), Payload: row.CapturePayload, Result: RequestResult{State: h.State, UsageKnown: h.UsageKnown, InputTokens: h.InputTokens, OutputTokens: h.OutputTokens, DurationMS: h.DurationMs}, Release: reservation.release}, nil
 }
 func (s *Store) publishOutputs(ctx context.Context, in OutputPublication) error {
 	if len(in.Members) > 16 || len(in.ParseDiagnostic) > responsecontract.MainParseDiagnosticLimit || in.ParseDiagnostic != "" && !in.Complete {

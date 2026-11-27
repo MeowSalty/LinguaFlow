@@ -262,8 +262,16 @@ func (s *Store) recordRequest(ctx context.Context, scope *Scope, id string, resu
 			return ErrStopped
 		}
 		expected, err = recordRequestAccountingTx(ctx, tx, row, result)
-		if err != nil || result.MainFailure == nil {
+		if err != nil {
 			return err
+		}
+		if expected.State == "failed" {
+			if err := retireUncapturedStoredInputs(ctx, tx, jobID, workrequest.IDEQ(row.ID)); err != nil {
+				return err
+			}
+		}
+		if result.MainFailure == nil {
+			return nil
 		}
 		if scope == nil || expected.State != "failed" || row.Stage != "main" && row.Stage != MainPromptUpgradeStage {
 			return ErrManifest
@@ -364,6 +372,9 @@ func usageInt(n int64) int {
 // MarkUnknown is called only while the lifecycle claim is inactive, before
 // resumed dispatch. An uncertain request keeps its already debited attempts.
 func MarkUnknown(ctx context.Context, tx *ent.Client, jobID int) error {
+	if err := retireUncapturedStoredInputs(ctx, tx, jobID, workrequest.StateIn("reserved", "sent", "received")); err != nil {
+		return err
+	}
 	_, err := tx.WorkRequest.Update().Where(workrequest.JobIDEQ(jobID), workrequest.StateIn("reserved", "sent", "received")).SetState("unknown").Save(ctx)
 	return err
 }

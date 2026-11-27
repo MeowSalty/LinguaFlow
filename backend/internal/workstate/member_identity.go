@@ -75,6 +75,12 @@ func pendingMemberResponse(ctx context.Context, tx *ent.Client, w *ent.WorkItem)
 	if m.SourceGeneration != source.SourceGeneration || !sameInt(m.SourceRevisionID, source.CurrentSourceRevisionID) {
 		return false, ErrStale
 	}
+	// Stored response settlement records a stale disposition for each member.
+	// Preserve the capture across RetryJob so a translation edit can retire
+	// that response without disabling retry of the rest of the round.
+	if r.MemberMode == "semantic_qa" || r.MemberMode == "adjudicate" || r.MemberMode == "extract" {
+		return true, nil
+	}
 	segmentMatches, err := tx.Segment.Query().Where(segment.IDEQ(w.SegmentID), segment.ContentVersionEQ(m.BaselineVersion), segment.StatusEQ(segment.Status(m.BaselineStatus))).Exist(ctx)
 	if err != nil {
 		return false, err

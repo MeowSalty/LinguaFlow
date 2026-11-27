@@ -60,7 +60,7 @@ func (s *Store) Commit(ctx context.Context, in CommitInput) (CommitResult, error
 		if !ent.IsNotFound(err) {
 			return err
 		}
-		round, err := guardLockedScope(ctx, tx, in.Scope, false, true)
+		round, err := guardLockedScope(ctx, tx, in.Scope, false, true, in.DeferIfPaused)
 		if err != nil {
 			return err
 		}

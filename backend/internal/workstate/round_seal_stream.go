@@ -12,6 +12,15 @@ import (
 // SealRoundStream freezes membership directly from canonical input. Only 16
 // builders are retained; verification replays fixed IDs without copying them.
 func (s *Store) SealRoundStream(ctx context.Context, scope Scope, total int, walk func(func(int) error) error) error {
+	return s.sealRoundStream(ctx, scope, total, walk, false)
+}
+
+// SealLocalRoundStream distinguishes a persisted pause from a stopped scope.
+func (s *Store) SealLocalRoundStream(ctx context.Context, scope Scope, total int, walk func(func(int) error) error) error {
+	return s.sealRoundStream(ctx, scope, total, walk, true)
+}
+
+func (s *Store) sealRoundStream(ctx context.Context, scope Scope, total int, walk func(func(int) error) error, local bool) error {
 	verify := func(ctx context.Context, tx *ent.Client) (bool, error) {
 		r, err := tx.JobRound.Query().Where(jobround.IDEQ(scope.RoundID), jobround.JobIDEQ(scope.JobID)).Select(jobround.FieldID, jobround.FieldManifestSealed, jobround.FieldSegmentTotal).Only(ctx)
 		if err != nil {
@@ -41,7 +50,10 @@ func (s *Store) SealRoundStream(ctx context.Context, scope Scope, total int, wal
 	}
 	ctx = operationContext(ctx)
 	err := Transaction(ctx, s.client, func(tx *ent.Client) error {
-		if err := guardScope(ctx, tx, scope, true); err != nil {
+		if err := LockJob(ctx, tx, scope.JobID); err != nil {
+			return err
+		}
+		if _, err := guardLockedScope(ctx, tx, scope, true, false, local); err != nil {
 			return err
 		}
 		r, err := tx.JobRound.Get(ctx, scope.RoundID)
